@@ -1,0 +1,40 @@
+{
+  "summary": "P1 hardening verified end-to-end. New suite test_p1_hardening.py (12 tests) all PASS. Regression test_multi_company.py (43 tests) all PASS — including TestTenantPortal::test_tenant_login which was SKIPPED in iter6 and is now green thanks to the idempotent Jan PIN re-seed. Total 55/55 green. Verified: (1) Jan de Vries PIN '5678' works directly after server start with no manual DB reset, (2) /api/auth/kiosk-pin returns 429 after 8 bad attempts from same IP with Dutch lockout message, (3) /api/tenant-portal/login same behaviour keyed on IP+identifier, (4) locked IP also blocks a subsequent CORRECT PIN (proves throttle runs before verify), (5) counter clears after a successful login — 7 bad + 1 success + 8 bad → only the 9th bad locks, (6) /api/auth/tenant-set-pin from Admin A targeting an Admin B tenant returns 404 (scope leak fixed), (7) kiosk PIN 1234 still resolves to SuriRent, (8) Companies CRUD for superadmin still works, (9) all 10 admin CRUD list endpoints (apartments, tenants, payments, contracts, invoices, employees, salaries, deposits, maintenance, kasgeld) return 200.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/payments/{id}/pdf, /api/contracts/{id}/pdf, /api/invoices/{id}/pdf", "issue": "Still public (no auth). UUID enumeration risk for cross-company PDF disclosure remains from prior iterations — NOT addressed in P1 batch (carry-over)."},
+      {"endpoint": "Brute-force counter (in-memory)", "issue": "Per-process dict — won't survive restart and won't sync across multiple workers. Acceptable for single-worker uvicorn but worth noting; consider Redis/Mongo TTL collection if backend is ever scaled out."},
+      {"endpoint": "POST /api/auth/kiosk-pin throttle key", "issue": "Keyed only on client IP — a NAT'd attacker network shares one counter (could DoS legitimate kiosk by exhausting attempts). Acceptable trade-off; consider IP+device or sliding window if abuse seen."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_p1_hardening.py",
+    "/app/backend/tests/test_multi_company.py",
+    "/app/test_reports/pytest/iteration7_p1_hardening.xml",
+    "/app/test_reports/pytest/iteration7_multicompany.xml"
+  ],
+  "action_items": [
+    "OPTIONAL (HIGH, carry-over): Lock down public PDF endpoints (signed token or auth-gate) — last cross-company info-disclosure surface.",
+    "OPTIONAL (LOW): If backend ever scaled to multiple workers, move _PIN_ATTEMPTS to Redis or a TTL Mongo collection.",
+    "OPTIONAL (REFACTOR): server.py is 2207 lines — split into routers/."
+  ],
+  "critical_code_review_comments": [
+    "Brute-force helpers (_pin_throttle_check / _pin_throttle_fail / _pin_throttle_clear) are clean and correctly placed BEFORE the password verify, so locked clients cannot probe via timing — verified by 'lockout blocks correct PIN' tests.",
+    "On successful kiosk login _pin_throttle_clear(throttle_key) is called — verified empirically (counter reset test passes).",
+    "/api/auth/tenant-set-pin now does db.tenants.find_one({'id': body.tenant_id, **scope(user)}) — correctly returns 404 for cross-company. Verified.",
+    "Idempotent Jan PIN re-seed in lifespan() only rewrites pin_hash when verify_password(demo_pin, ...) fails — safe, idempotent, no-op if already correct. Verified by skipped→passing tenant portal test.",
+    "Tenant throttle key includes identifier (.lower()[:40]) — good: prevents one attacker exhausting attempts for a single legitimate tenant from blocking other tenants on same IP.",
+    "Minor: _client_ip uses raw x-forwarded-for first value which is spoofable by clients hitting the backend directly; behind ingress this is fine, but if exposed elsewhere consider trusting only ingress-set headers.",
+    "server.py size (2207 lines) still exceeds 700-line guideline — non-blocking."
+  ],
+  "updated_files": ["/app/backend/tests/test_p1_hardening.py"],
+  "success_rate": {"backend": "55/55 = 100% (12 P1 hardening + 43 multi-company regression)", "frontend": "not tested per request"},
+  "test_credentials": "All working as documented in /app/memory/test_credentials.md. Jan de Vries PIN 5678 now self-heals on every server start.",
+  "seed_data_creation": "Test data is created+cleaned in try/finally within each test class. No persistent side-effects beyond Admin B's kiosk PIN remaining at the value set by test_multi_company (carry-over, not introduced by this run).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "P1 hardening is fully verified. Canonical regression suites: /app/backend/tests/test_multi_company.py (43 tests, multi-company isolation) and /app/backend/tests/test_p1_hardening.py (12 tests, brute-force + PIN re-seed + tenant-set-pin scope). Re-run with: pytest backend/tests/test_p1_hardening.py backend/tests/test_multi_company.py -v --junitxml=/app/test_reports/pytest/iteration{N}.xml. IMPORTANT: brute-force counters are in-memory per process; backend restart clears them, otherwise use unique X-Forwarded-For per lockout test (the P1 suite already does this with IPs 10.99.0.1/2/3 and 10.50.0.1). Open carry-over items: PDF endpoint auth-gating, server.py refactor. Frontend (Companies admin tab + company switcher + x-active-company injection) was NOT tested per request — main agent validated via screenshots.",
+  "rca of the issue": "N/A — no failures this iteration. All P1 hardening features behave as specified."
+}

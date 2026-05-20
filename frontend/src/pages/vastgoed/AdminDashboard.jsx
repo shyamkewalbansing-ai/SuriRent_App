@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Building2, Users, Receipt, LayoutDashboard, LogOut, Plus, Trash2, Pencil,
   X, Check, Loader2, Search, Home, Banknote, KeySquare, ChevronRight, Wallet,
-  FileText, ShieldCheck, Wrench, FileSignature, Sparkles, Bell,
+  FileText, ShieldCheck, Wrench, FileSignature, Sparkles, Bell, Briefcase,
 } from 'lucide-react';
 import { api, formatError, fmtMoney, MONTHS_NL } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
@@ -15,8 +15,9 @@ import Maintenance from './admin/Maintenance';
 import Kasgeld from './admin/Kasgeld';
 import AIChat from './admin/AIChat';
 import Notifications from './admin/Notifications';
+import Companies from './admin/Companies';
 
-const TABS = [
+const BASE_TABS = [
   { id: 'overview', label: 'Overzicht', icon: LayoutDashboard },
   { id: 'ai', label: 'AI Assistent', icon: Sparkles },
   { id: 'apartments', label: 'Appartementen', icon: Building2 },
@@ -31,11 +32,16 @@ const TABS = [
   { id: 'notifications', label: 'Notificaties', icon: Bell },
   { id: 'settings', label: 'Kiosk PIN', icon: KeySquare },
 ];
+const SUPER_TAB = { id: 'companies', label: 'Bedrijven', icon: Briefcase };
 
-function Sidebar({ active, onChange, onLogout, userName }) {
+function getTabsFor(user) {
+  return user?.role === 'superadmin' ? [SUPER_TAB, ...BASE_TABS] : BASE_TABS;
+}
+
+function Sidebar({ active, onChange, onLogout, user, activeCompany, tabs }) {
   return (
     <aside className="hidden md:flex flex-col w-64 bg-white border-r border-orange-100 p-5">
-      <div className="flex items-center gap-3 mb-8">
+      <div className="flex items-center gap-3 mb-4">
         <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-[#FF8A3D] to-[#C74600] p-1.5 shadow-[0_8px_20px_-5px_rgba(255,92,0,0.55)]">
           <img src="/kiosk-icons/kiosk-512.png" alt="SuriRent" className="w-full h-full object-contain" />
         </div>
@@ -45,8 +51,21 @@ function Sidebar({ active, onChange, onLogout, userName }) {
         </div>
       </div>
 
-      <nav className="flex-1 space-y-1">
-        {TABS.map((t) => {
+      <div data-testid="active-company-badge"
+        className={`rounded-xl px-3 py-2.5 mb-6 border ${user?.role === 'superadmin' ? 'bg-amber-50 border-amber-200' : 'bg-orange-50 border-orange-100'}`}>
+        <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
+          {user?.role === 'superadmin' ? 'Actief bedrijf' : 'Bedrijf'}
+        </p>
+        <p className="text-sm font-black text-slate-900 truncate" data-testid="active-company-name">
+          {activeCompany?.name || (user?.role === 'superadmin' ? 'Alle bedrijven' : '—')}
+        </p>
+        {activeCompany?.plan && (
+          <p className="text-[10px] text-slate-500 mt-0.5">/{activeCompany.slug} • {activeCompany.plan}</p>
+        )}
+      </div>
+
+      <nav className="flex-1 space-y-1 overflow-y-auto">
+        {tabs.map((t) => {
           const Icon = t.icon;
           const isActive = active === t.id;
           return (
@@ -63,7 +82,7 @@ function Sidebar({ active, onChange, onLogout, userName }) {
       </nav>
 
       <div className="border-t border-orange-100 pt-4 mt-4 space-y-2">
-        <p className="text-xs text-slate-500 px-3 truncate">{userName}</p>
+        <p className="text-xs text-slate-500 px-3 truncate">{user?.email}</p>
         <button onClick={onLogout} data-testid="logout-btn"
           className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold text-slate-600 hover:bg-red-50 hover:text-red-600 transition-all">
           <LogOut className="w-4 h-4" /> Uitloggen
@@ -73,11 +92,11 @@ function Sidebar({ active, onChange, onLogout, userName }) {
   );
 }
 
-function MobileTabBar({ active, onChange }) {
+function MobileTabBar({ active, onChange, tabs }) {
   return (
     <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white border-t border-orange-100 overflow-x-auto no-scrollbar">
       <div className="flex min-w-max">
-        {TABS.map((t) => {
+        {tabs.map((t) => {
           const Icon = t.icon;
           const isActive = active === t.id;
           return (
@@ -891,8 +910,9 @@ function Settings() {
 }
 
 export default function AdminDashboard() {
-  const [tab, setTab] = useState('overview');
-  const { user, logout } = useAuth();
+  const { user, logout, activeCompany } = useAuth();
+  const tabs = getTabsFor(user);
+  const [tab, setTab] = useState(() => (user?.role === 'superadmin' ? 'companies' : 'overview'));
   const navigate = useNavigate();
   useEffect(() => { document.title = 'SuriRent - Beheer'; }, []);
   useEffect(() => {
@@ -903,8 +923,9 @@ export default function AdminDashboard() {
   const doLogout = async () => { await logout(); navigate('/vastgoed/login'); };
   return (
     <div className="min-h-screen bg-[#FFF7F0] flex">
-      <Sidebar active={tab} onChange={setTab} onLogout={doLogout} userName={user?.email} />
+      <Sidebar active={tab} onChange={setTab} onLogout={doLogout} user={user} activeCompany={activeCompany} tabs={tabs} />
       <main className="flex-1 p-5 md:p-8 pb-20 md:pb-8 max-w-7xl">
+        {tab === 'companies' && <Companies />}
         {tab === 'overview' && <Overview />}
         {tab === 'ai' && <AIChat />}
         {tab === 'apartments' && <Apartments />}
@@ -919,7 +940,7 @@ export default function AdminDashboard() {
         {tab === 'notifications' && <Notifications />}
         {tab === 'settings' && <Settings />}
       </main>
-      <MobileTabBar active={tab} onChange={setTab} />
+      <MobileTabBar active={tab} onChange={setTab} tabs={tabs} />
     </div>
   );
 }

@@ -76,6 +76,45 @@ def new_id() -> str:
 
 
 # =====================================================================
+# Brute-force lockout for PIN endpoints (in-memory, per process)
+# =====================================================================
+# key -> {"attempts": int, "locked_until": float (epoch seconds)}
+_PIN_ATTEMPTS: dict = {}
+PIN_MAX_ATTEMPTS = int(os.environ.get("PIN_MAX_ATTEMPTS", "8"))
+PIN_LOCKOUT_SECONDS = int(os.environ.get("PIN_LOCKOUT_SECONDS", "300"))  # 5 minutes
+
+
+def _pin_throttle_check(key: str) -> None:
+    import time
+    rec = _PIN_ATTEMPTS.get(key)
+    if rec and rec.get("locked_until", 0) > time.time():
+        wait = int(rec["locked_until"] - time.time())
+        raise HTTPException(
+            status_code=429,
+            detail=f"Te veel mislukte pogingen. Probeer opnieuw over {wait} seconden.",
+        )
+
+
+def _pin_throttle_fail(key: str) -> None:
+    import time
+    rec = _PIN_ATTEMPTS.get(key, {"attempts": 0, "locked_until": 0})
+    rec["attempts"] = rec.get("attempts", 0) + 1
+    if rec["attempts"] >= PIN_MAX_ATTEMPTS:
+        rec["locked_until"] = time.time() + PIN_LOCKOUT_SECONDS
+        rec["attempts"] = 0
+    _PIN_ATTEMPTS[key] = rec
+
+
+def _pin_throttle_clear(key: str) -> None:
+    _PIN_ATTEMPTS.pop(key, None)
+
+
+def _client_ip(request: Request) -> str:
+    return (request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+            or (request.client.host if request.client else "unknown"))
+
+
+# =====================================================================
 # Auth Dependencies
 # =====================================================================
 def extract_token(request: Request, cookie_name: str = "access_token") -> Optional[str]:
@@ -352,6 +391,16 @@ async def lifespan(app: FastAPI):
             "updated_at": iso(now_utc()),
         })
 
+    # --- Idempotent re-seed of demo tenant Jan de Vries PIN (avoid drift) ---
+    if os.environ.get("RESEED_DEMO_TENANT_PIN", "1") == "1":
+        demo_pin = os.environ.get("DEMO_TENANT_PIN", "5678")
+        jan = await db.tenants.find_one({"email": "jan@example.sr"})
+        if jan and not verify_password(demo_pin, jan.get("pin_hash", "")):
+            await db.tenants.update_one(
+                {"id": jan["id"]},
+                {"$set": {"pin_hash": hash_password(demo_pin)}},
+            )
+
     yield
     client.close()
 
@@ -567,8 +616,10 @@ async def seed_company_admin(cid: str, body: RegisterIn, user=Depends(require_ro
 
 # Kiosk PIN
 @api.post("/auth/kiosk-pin")
-async def kiosk_pin(body: PinIn, response: Response):
+async def kiosk_pin(body: PinIn, request: Request, response: Response):
     """Try the PIN against every company. Each company has unique pin."""
+    throttle_key = f"kiosk:{_client_ip(request)}"
+    _pin_throttle_check(throttle_key)
     pin_docs = await db.kiosk_pins.find({}, {"_id": 0}).to_list(1000)
     matched_company_id = None
     for d in pin_docs:
@@ -576,7 +627,9 @@ async def kiosk_pin(body: PinIn, response: Response):
             matched_company_id = d["company_id"]
             break
     if not matched_company_id:
+        _pin_throttle_fail(throttle_key)
         raise HTTPException(status_code=401, detail="Ongeldige PIN code")
+    _pin_throttle_clear(throttle_key)
     c = await db.companies.find_one({"id": matched_company_id}, {"_id": 0})
     token = create_token({
         "sub": "kiosk", "type": "kiosk", "company_id": matched_company_id,
@@ -640,7 +693,9 @@ class TenantSetPinIn(BaseModel):
 
 
 @api.post("/tenant-portal/login")
-async def tenant_portal_login(body: TenantLoginIn, response: Response):
+async def tenant_portal_login(body: TenantLoginIn, request: Request, response: Response):
+    throttle_key = f"tenant:{_client_ip(request)}:{body.identifier.strip().lower()[:40]}"
+    _pin_throttle_check(throttle_key)
     ident = body.identifier.strip().lower()
     # Find by email or phone (normalize phone by stripping non-digits)
     digits = "".join(ch for ch in body.identifier if ch.isdigit())
@@ -652,9 +707,12 @@ async def tenant_portal_login(body: TenantLoginIn, response: Response):
         query["$or"].append({"phone_digits": digits})
     tenant = await db.tenants.find_one(query)
     if not tenant or not tenant.get("pin_hash"):
+        _pin_throttle_fail(throttle_key)
         raise HTTPException(status_code=401, detail="Onjuiste gegevens of PIN niet ingesteld")
     if not verify_password(body.pin, tenant.get("pin_hash", "")):
+        _pin_throttle_fail(throttle_key)
         raise HTTPException(status_code=401, detail="Onjuiste PIN")
+    _pin_throttle_clear(throttle_key)
     token = create_token({"sub": tenant["id"], "type": "tenant"}, TENANT_TOKEN_MIN)
     _set_access_cookie(response, token, name="tenant_token", minutes=TENANT_TOKEN_MIN)
     return {
@@ -668,11 +726,11 @@ async def admin_set_tenant_pin(body: TenantSetPinIn, user=Depends(get_current_us
     """Admin sets/resets a tenant's portal PIN."""
     if not body.pin.isdigit():
         raise HTTPException(status_code=400, detail="PIN moet 4 cijfers zijn")
-    t = await db.tenants.find_one({"id": body.tenant_id}, {"_id": 0})
+    t = await db.tenants.find_one({"id": body.tenant_id, **scope(user)}, {"_id": 0})
     if not t:
         raise HTTPException(status_code=404, detail="Huurder niet gevonden")
     await db.tenants.update_one(
-        {"id": body.tenant_id},
+        {"id": body.tenant_id, **scope(user)},
         {"$set": {
             "pin_hash": hash_password(body.pin),
             "phone_digits": "".join(ch for ch in (t.get("phone") or "") if ch.isdigit()),

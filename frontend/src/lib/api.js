@@ -12,6 +12,7 @@ api.interceptors.request.use((config) => {
   const adminToken = localStorage.getItem('admin_token');
   const kioskToken = localStorage.getItem('kiosk_token');
   const tenantToken = localStorage.getItem('tenant_token');
+  const activeCompanyId = localStorage.getItem('active_company_id');
   const url = config.url || '';
   if (url.startsWith('/tenant-portal/') && tenantToken) {
     config.headers.Authorization = `Bearer ${tenantToken}`;
@@ -23,6 +24,10 @@ api.interceptors.request.use((config) => {
     config.headers.Authorization = `Bearer ${kioskToken}`;
   } else if (tenantToken) {
     config.headers.Authorization = `Bearer ${tenantToken}`;
+  }
+  // Superadmin company scope: only set for admin-authenticated calls
+  if (activeCompanyId && adminToken) {
+    config.headers['x-active-company'] = activeCompanyId;
   }
   return config;
 });
