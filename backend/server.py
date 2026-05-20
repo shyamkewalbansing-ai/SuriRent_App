@@ -103,7 +103,33 @@ async def get_current_user(request: Request) -> dict:
     user = await db.users.find_one({"id": payload["sub"]}, {"_id": 0, "password_hash": 0})
     if not user:
         raise HTTPException(status_code=401, detail="Gebruiker niet gevonden")
+    # Superadmin can simulate company via header x-active-company
+    if user.get("role") == "superadmin":
+        active = request.headers.get("x-active-company") or request.query_params.get("company_id")
+        user["active_company_id"] = active or user.get("company_id")
+    else:
+        user["active_company_id"] = user.get("company_id")
     return user
+
+
+def require_role(*roles: str):
+    async def _dep(user=Depends(get_current_user)):
+        if user.get("role") not in roles:
+            raise HTTPException(status_code=403, detail="Onvoldoende rechten")
+        return user
+    return _dep
+
+
+def scope(user: dict) -> dict:
+    """Mongo filter for current company scope."""
+    cid = user.get("active_company_id")
+    if not cid:
+        return {}
+    return {"company_id": cid}
+
+
+def company_id_of(user: dict) -> Optional[str]:
+    return user.get("active_company_id")
 
 
 async def get_kiosk_session(request: Request) -> dict:
@@ -118,7 +144,12 @@ async def get_kiosk_session(request: Request) -> dict:
         raise HTTPException(status_code=401, detail="Kiosk sessie verlopen")
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Ongeldig kiosk token")
-    return payload
+    return {"company_id": payload.get("company_id"), "type": "kiosk"}
+
+
+def kiosk_scope(session: dict) -> dict:
+    cid = session.get("company_id")
+    return {"company_id": cid} if cid else {}
 
 
 # =====================================================================
@@ -214,6 +245,17 @@ class PaymentOut(BaseModel):
 # =====================================================================
 # Lifespan & seed
 # =====================================================================
+DEFAULT_COMPANY_SLUG = "surirent"
+DEFAULT_COMPANY_NAME = "SuriRent N.V."
+
+# Collections that hold per-company business data
+TENANT_SCOPED_COLLECTIONS = [
+    "apartments", "tenants", "payments", "contracts", "invoices",
+    "employees", "salaries", "deposits", "maintenance", "kasgeld",
+    "ai_sessions", "push_subs",
+]
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await db.users.create_index("email", unique=True)
@@ -221,8 +263,34 @@ async def lifespan(app: FastAPI):
     await db.tenants.create_index("name")
     await db.payments.create_index("paid_at")
     await db.payments.create_index("receipt_number", unique=True)
+    await db.companies.create_index("slug", unique=True)
 
-    # Seed admin
+    # --- Seed default company ---
+    default = await db.companies.find_one({"slug": DEFAULT_COMPANY_SLUG})
+    if not default:
+        company_id = new_id()
+        default = {
+            "id": company_id,
+            "slug": DEFAULT_COMPANY_SLUG,
+            "name": DEFAULT_COMPANY_NAME,
+            "contact_email": "info@surirent.sr",
+            "contact_phone": "+597 881 5993",
+            "address": "Paramaribo, Suriname",
+            "plan": "pro",
+            "active": True,
+            "created_at": iso(now_utc()),
+        }
+        await db.companies.insert_one(default)
+    DEFAULT_COMPANY_ID = default["id"]
+
+    # --- Backfill existing data with default company_id ---
+    for coll in TENANT_SCOPED_COLLECTIONS:
+        await db[coll].update_many(
+            {"company_id": {"$exists": False}},
+            {"$set": {"company_id": DEFAULT_COMPANY_ID}},
+        )
+
+    # --- Seed admin (with company_id) ---
     admin_email = os.environ.get("ADMIN_EMAIL", "admin@vastgoed.sr")
     admin_password = os.environ.get("ADMIN_PASSWORD", "admin123")
     existing = await db.users.find_one({"email": admin_email})
@@ -232,22 +300,54 @@ async def lifespan(app: FastAPI):
             "email": admin_email,
             "name": "Admin",
             "role": "admin",
+            "company_id": DEFAULT_COMPANY_ID,
             "password_hash": hash_password(admin_password),
             "created_at": iso(now_utc()),
         })
     else:
+        update = {}
         if not verify_password(admin_password, existing.get("password_hash", "")):
-            await db.users.update_one(
-                {"email": admin_email},
-                {"$set": {"password_hash": hash_password(admin_password)}},
-            )
+            update["password_hash"] = hash_password(admin_password)
+        if "company_id" not in existing:
+            update["company_id"] = DEFAULT_COMPANY_ID
+        if update:
+            await db.users.update_one({"email": admin_email}, {"$set": update})
 
-    # Seed kiosk PIN
-    s = await db.settings.find_one({"_id": "kiosk"})
-    if s is None:
+    # --- Seed superadmin ---
+    super_email = "super@surirent.sr"
+    super_pw = "super123"
+    sa = await db.users.find_one({"email": super_email})
+    if sa is None:
+        await db.users.insert_one({
+            "id": new_id(),
+            "email": super_email,
+            "name": "Superadmin",
+            "role": "superadmin",
+            "company_id": None,
+            "password_hash": hash_password(super_pw),
+            "created_at": iso(now_utc()),
+        })
+
+    # --- Seed kiosk PIN per company (legacy 'kiosk' settings doc → migrate) ---
+    legacy_kiosk = await db.settings.find_one({"_id": "kiosk"})
+    if legacy_kiosk:
+        # migrate legacy single-PIN to default company kiosk PIN
+        await db.kiosk_pins.update_one(
+            {"company_id": DEFAULT_COMPANY_ID},
+            {"$set": {
+                "company_id": DEFAULT_COMPANY_ID,
+                "pin_hash": legacy_kiosk.get("pin_hash"),
+                "updated_at": iso(now_utc()),
+            }},
+            upsert=True,
+        )
+        await db.settings.delete_one({"_id": "kiosk"})
+    # Ensure default company has a kiosk PIN
+    cur_pin = await db.kiosk_pins.find_one({"company_id": DEFAULT_COMPANY_ID})
+    if not cur_pin:
         default_pin = os.environ.get("DEFAULT_KIOSK_PIN", "1234")
-        await db.settings.insert_one({
-            "_id": "kiosk",
+        await db.kiosk_pins.insert_one({
+            "company_id": DEFAULT_COMPANY_ID,
             "pin_hash": hash_password(default_pin),
             "updated_at": iso(now_utc()),
         })
@@ -295,20 +395,28 @@ async def register(body: RegisterIn, response: Response):
     existing = await db.users.find_one({"email": email})
     if existing:
         raise HTTPException(status_code=400, detail="E-mailadres is al in gebruik")
+    # New self-registrations join the default company
+    default = await db.companies.find_one({"slug": DEFAULT_COMPANY_SLUG}, {"_id": 0})
     user_doc = {
         "id": new_id(),
         "email": email,
         "name": body.name.strip(),
         "role": "admin",
+        "company_id": default["id"] if default else None,
         "password_hash": hash_password(body.password),
         "created_at": iso(now_utc()),
     }
     await db.users.insert_one(user_doc)
-    token = create_token({"sub": user_doc["id"], "email": email, "type": "access"}, ACCESS_MIN)
+    token = create_token({
+        "sub": user_doc["id"], "email": email, "type": "access",
+        "company_id": user_doc["company_id"], "role": "admin",
+    }, ACCESS_MIN)
     _set_access_cookie(response, token)
+    company = default and {k: default[k] for k in ("id", "slug", "name", "plan")}
     return {
         "token": token,
-        "user": {k: user_doc[k] for k in ("id", "email", "name", "role", "created_at")},
+        "user": {k: user_doc[k] for k in ("id", "email", "name", "role", "company_id", "created_at")},
+        "company": company,
     }
 
 
@@ -318,11 +426,24 @@ async def login(body: LoginIn, response: Response):
     user = await db.users.find_one({"email": email})
     if not user or not verify_password(body.password, user.get("password_hash", "")):
         raise HTTPException(status_code=401, detail="Onjuiste inloggegevens")
-    token = create_token({"sub": user["id"], "email": email, "type": "access"}, ACCESS_MIN)
+    token = create_token({
+        "sub": user["id"], "email": email, "type": "access",
+        "company_id": user.get("company_id"), "role": user.get("role", "admin"),
+    }, ACCESS_MIN)
     _set_access_cookie(response, token)
+    company = None
+    if user.get("company_id"):
+        c = await db.companies.find_one({"id": user["company_id"]}, {"_id": 0})
+        if c:
+            company = {k: c[k] for k in ("id", "slug", "name", "plan")}
     return {
         "token": token,
-        "user": {k: user[k] for k in ("id", "email", "name", "role", "created_at")},
+        "user": {
+            "id": user["id"], "email": user["email"], "name": user["name"],
+            "role": user.get("role", "admin"), "company_id": user.get("company_id"),
+            "created_at": user["created_at"],
+        },
+        "company": company,
     }
 
 
@@ -335,27 +456,150 @@ async def logout(response: Response):
 
 @api.get("/auth/me")
 async def me(user=Depends(get_current_user)):
-    return user
+    company = None
+    active_id = user.get("active_company_id")
+    if active_id:
+        c = await db.companies.find_one({"id": active_id}, {"_id": 0})
+        if c:
+            company = {k: c[k] for k in ("id", "slug", "name", "plan")}
+    return {**user, "active_company": company}
+
+
+# =====================================================================
+# Companies (superadmin)
+# =====================================================================
+class CompanyIn(BaseModel):
+    name: str
+    slug: str
+    contact_email: Optional[str] = ""
+    contact_phone: Optional[str] = ""
+    address: Optional[str] = ""
+    plan: Literal["free", "starter", "pro"] = "starter"
+    active: bool = True
+
+
+class CompanyOut(CompanyIn):
+    id: str
+    created_at: str
+    stats: Optional[dict] = None
+
+
+@api.get("/companies", response_model=List[CompanyOut])
+async def list_companies(user=Depends(require_role("superadmin"))):
+    docs = await db.companies.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    # Add stats
+    out = []
+    for c in docs:
+        apt_count = await db.apartments.count_documents({"company_id": c["id"]})
+        tenant_count = await db.tenants.count_documents({"company_id": c["id"]})
+        admin_count = await db.users.count_documents({"company_id": c["id"]})
+        out.append({**c, "stats": {
+            "apartments": apt_count, "tenants": tenant_count, "admins": admin_count,
+        }})
+    return out
+
+
+@api.post("/companies", response_model=CompanyOut)
+async def create_company(body: CompanyIn, user=Depends(require_role("superadmin"))):
+    slug = body.slug.lower().strip()
+    if not slug.isidentifier() and not all(c.isalnum() or c == '-' for c in slug):
+        raise HTTPException(status_code=400, detail="Slug mag alleen letters, cijfers en streepjes bevatten")
+    existing = await db.companies.find_one({"slug": slug})
+    if existing:
+        raise HTTPException(status_code=400, detail="Slug is al in gebruik")
+    doc = {"id": new_id(), **body.model_dump(), "slug": slug, "created_at": iso(now_utc())}
+    await db.companies.insert_one(doc)
+    doc.pop("_id", None)
+    return {**doc, "stats": {"apartments": 0, "tenants": 0, "admins": 0}}
+
+
+@api.put("/companies/{cid}", response_model=CompanyOut)
+async def update_company(cid: str, body: CompanyIn, user=Depends(require_role("superadmin"))):
+    from pymongo import ReturnDocument
+    payload = body.model_dump()
+    payload["slug"] = payload["slug"].lower().strip()
+    res = await db.companies.find_one_and_update(
+        {"id": cid}, {"$set": payload},
+        projection={"_id": 0}, return_document=ReturnDocument.AFTER,
+    )
+    if not res:
+        raise HTTPException(status_code=404, detail="Bedrijf niet gevonden")
+    return {**res, "stats": None}
+
+
+@api.delete("/companies/{cid}")
+async def delete_company(cid: str, user=Depends(require_role("superadmin"))):
+    # Refuse to delete default company
+    default = await db.companies.find_one({"slug": DEFAULT_COMPANY_SLUG})
+    if default and default["id"] == cid:
+        raise HTTPException(status_code=400, detail="Standaard bedrijf kan niet worden verwijderd")
+    # Refuse if it has data
+    for coll in TENANT_SCOPED_COLLECTIONS:
+        cnt = await db[coll].count_documents({"company_id": cid})
+        if cnt:
+            raise HTTPException(status_code=400, detail=f"Bedrijf heeft nog {cnt} records in {coll}, verwijder eerst")
+    await db.companies.delete_one({"id": cid})
+    await db.users.delete_many({"company_id": cid})
+    await db.kiosk_pins.delete_one({"company_id": cid})
+    return {"ok": True}
+
+
+@api.post("/companies/{cid}/seed-admin")
+async def seed_company_admin(cid: str, body: RegisterIn, user=Depends(require_role("superadmin"))):
+    """Create the first admin for a company."""
+    c = await db.companies.find_one({"id": cid}, {"_id": 0})
+    if not c:
+        raise HTTPException(status_code=404, detail="Bedrijf niet gevonden")
+    email = body.email.lower().strip()
+    if await db.users.find_one({"email": email}):
+        raise HTTPException(status_code=400, detail="E-mailadres is al in gebruik")
+    udoc = {
+        "id": new_id(), "email": email, "name": body.name.strip(),
+        "role": "admin", "company_id": cid,
+        "password_hash": hash_password(body.password),
+        "created_at": iso(now_utc()),
+    }
+    await db.users.insert_one(udoc)
+    udoc.pop("_id", None)
+    udoc.pop("password_hash", None)
+    return udoc
 
 
 # Kiosk PIN
 @api.post("/auth/kiosk-pin")
 async def kiosk_pin(body: PinIn, response: Response):
-    s = await db.settings.find_one({"_id": "kiosk"})
-    if not s or not verify_password(body.pin, s.get("pin_hash", "")):
+    """Try the PIN against every company. Each company has unique pin."""
+    pin_docs = await db.kiosk_pins.find({}, {"_id": 0}).to_list(1000)
+    matched_company_id = None
+    for d in pin_docs:
+        if verify_password(body.pin, d.get("pin_hash", "")):
+            matched_company_id = d["company_id"]
+            break
+    if not matched_company_id:
         raise HTTPException(status_code=401, detail="Ongeldige PIN code")
-    token = create_token({"sub": "kiosk", "type": "kiosk"}, KIOSK_TOKEN_MIN)
+    c = await db.companies.find_one({"id": matched_company_id}, {"_id": 0})
+    token = create_token({
+        "sub": "kiosk", "type": "kiosk", "company_id": matched_company_id,
+    }, KIOSK_TOKEN_MIN)
     _set_access_cookie(response, token, name="kiosk_token", minutes=KIOSK_TOKEN_MIN)
-    return {"token": token}
+    return {"token": token, "company": c and {k: c[k] for k in ("id", "slug", "name")}}
 
 
 @api.post("/auth/kiosk-set-pin")
 async def set_kiosk_pin(body: SetPinIn, user=Depends(get_current_user)):
     if not body.pin.isdigit():
         raise HTTPException(status_code=400, detail="PIN moet 4 cijfers zijn")
-    await db.settings.update_one(
-        {"_id": "kiosk"},
-        {"$set": {"pin_hash": hash_password(body.pin), "updated_at": iso(now_utc())}},
+    cid = company_id_of(user)
+    if not cid:
+        raise HTTPException(status_code=400, detail="Geen actief bedrijf geselecteerd")
+    # Check uniqueness against other companies
+    others = await db.kiosk_pins.find({"company_id": {"$ne": cid}}, {"_id": 0, "pin_hash": 1}).to_list(1000)
+    for o in others:
+        if verify_password(body.pin, o.get("pin_hash", "")):
+            raise HTTPException(status_code=400, detail="Deze PIN is al in gebruik door een ander bedrijf, kies een andere")
+    await db.kiosk_pins.update_one(
+        {"company_id": cid},
+        {"$set": {"company_id": cid, "pin_hash": hash_password(body.pin), "updated_at": iso(now_utc())}},
         upsert=True,
     )
     return {"ok": True}
@@ -537,14 +781,18 @@ async def _enrich_apartment(apt: dict) -> dict:
 
 @api.get("/apartments", response_model=List[ApartmentOut])
 async def list_apartments(user=Depends(get_current_user)):
-    docs = await db.apartments.find({}, {"_id": 0}).sort("number", 1).to_list(1000)
+    docs = await db.apartments.find(scope(user), {"_id": 0}).sort("number", 1).to_list(1000)
     return [await _enrich_apartment(d) for d in docs]
 
 
 @api.post("/apartments", response_model=ApartmentOut)
 async def create_apartment(body: ApartmentIn, user=Depends(get_current_user)):
+    cid = company_id_of(user)
+    if not cid:
+        raise HTTPException(status_code=400, detail="Geen actief bedrijf geselecteerd")
     doc = {
         "id": new_id(),
+        "company_id": cid,
         **body.model_dump(),
         "status": "vacant",
         "tenant_id": None,
@@ -559,7 +807,7 @@ async def create_apartment(body: ApartmentIn, user=Depends(get_current_user)):
 async def update_apartment(apt_id: str, body: ApartmentIn, user=Depends(get_current_user)):
     from pymongo import ReturnDocument
     res = await db.apartments.find_one_and_update(
-        {"id": apt_id}, {"$set": body.model_dump()},
+        {"id": apt_id, **scope(user)}, {"$set": body.model_dump()},
         projection={"_id": 0}, return_document=ReturnDocument.AFTER,
     )
     if not res:
@@ -569,8 +817,7 @@ async def update_apartment(apt_id: str, body: ApartmentIn, user=Depends(get_curr
 
 @api.delete("/apartments/{apt_id}")
 async def delete_apartment(apt_id: str, user=Depends(get_current_user)):
-    # Unassign tenant
-    apt = await db.apartments.find_one({"id": apt_id}, {"_id": 0})
+    apt = await db.apartments.find_one({"id": apt_id, **scope(user)}, {"_id": 0})
     if not apt:
         raise HTTPException(status_code=404, detail="Appartement niet gevonden")
     if apt.get("tenant_id"):
@@ -584,16 +831,14 @@ async def assign_tenant(apt_id: str, body: dict, user=Depends(get_current_user))
     tenant_id = body.get("tenant_id")
     if not tenant_id:
         raise HTTPException(status_code=400, detail="tenant_id is verplicht")
-    apt = await db.apartments.find_one({"id": apt_id}, {"_id": 0})
+    apt = await db.apartments.find_one({"id": apt_id, **scope(user)}, {"_id": 0})
     if not apt:
         raise HTTPException(status_code=404, detail="Appartement niet gevonden")
-    tenant = await db.tenants.find_one({"id": tenant_id}, {"_id": 0})
+    tenant = await db.tenants.find_one({"id": tenant_id, **scope(user)}, {"_id": 0})
     if not tenant:
         raise HTTPException(status_code=404, detail="Huurder niet gevonden")
-    # Free previous tenant of this apartment
     if apt.get("tenant_id"):
         await db.tenants.update_one({"id": apt["tenant_id"]}, {"$set": {"apartment_id": None}})
-    # Free previous apartment of this tenant
     if tenant.get("apartment_id") and tenant["apartment_id"] != apt_id:
         await db.apartments.update_one(
             {"id": tenant["apartment_id"]},
@@ -608,7 +853,7 @@ async def assign_tenant(apt_id: str, body: dict, user=Depends(get_current_user))
 
 @api.post("/apartments/{apt_id}/remove-tenant")
 async def remove_tenant(apt_id: str, user=Depends(get_current_user)):
-    apt = await db.apartments.find_one({"id": apt_id}, {"_id": 0})
+    apt = await db.apartments.find_one({"id": apt_id, **scope(user)}, {"_id": 0})
     if not apt:
         raise HTTPException(status_code=404, detail="Appartement niet gevonden")
     if apt.get("tenant_id"):
@@ -640,22 +885,25 @@ async def _enrich_tenant(t: dict) -> dict:
 
 @api.get("/tenants", response_model=List[TenantOut])
 async def list_tenants(user=Depends(get_current_user)):
-    docs = await db.tenants.find({}, {"_id": 0}).sort("name", 1).to_list(1000)
+    docs = await db.tenants.find(scope(user), {"_id": 0}).sort("name", 1).to_list(1000)
     return [await _enrich_tenant(d) for d in docs]
 
 
 @api.post("/tenants", response_model=TenantOut)
 async def create_tenant(body: TenantIn, user=Depends(get_current_user)):
+    cid = company_id_of(user)
+    if not cid:
+        raise HTTPException(status_code=400, detail="Geen actief bedrijf geselecteerd")
     payload = body.model_dump()
     if payload.get("email"):
         payload["email"] = payload["email"].strip().lower()
     payload["phone_digits"] = "".join(ch for ch in (payload.get("phone") or "") if ch.isdigit())
-    doc = {"id": new_id(), **payload, "created_at": iso(now_utc())}
+    doc = {"id": new_id(), "company_id": cid, **payload, "created_at": iso(now_utc())}
     await db.tenants.insert_one(doc)
     doc.pop("_id", None)
     if doc.get("apartment_id"):
         await db.apartments.update_one(
-            {"id": doc["apartment_id"]},
+            {"id": doc["apartment_id"], **scope(user)},
             {"$set": {"tenant_id": doc["id"], "status": "occupied"}},
         )
     return await _enrich_tenant(doc)
@@ -669,7 +917,7 @@ async def update_tenant(tenant_id: str, body: TenantIn, user=Depends(get_current
         payload["email"] = payload["email"].strip().lower()
     payload["phone_digits"] = "".join(ch for ch in (payload.get("phone") or "") if ch.isdigit())
     res = await db.tenants.find_one_and_update(
-        {"id": tenant_id}, {"$set": payload},
+        {"id": tenant_id, **scope(user)}, {"$set": payload},
         projection={"_id": 0}, return_document=ReturnDocument.AFTER,
     )
     if not res:
@@ -679,7 +927,7 @@ async def update_tenant(tenant_id: str, body: TenantIn, user=Depends(get_current
 
 @api.delete("/tenants/{tenant_id}")
 async def delete_tenant(tenant_id: str, user=Depends(get_current_user)):
-    t = await db.tenants.find_one({"id": tenant_id}, {"_id": 0})
+    t = await db.tenants.find_one({"id": tenant_id, **scope(user)}, {"_id": 0})
     if not t:
         raise HTTPException(status_code=404, detail="Huurder niet gevonden")
     if t.get("apartment_id"):
@@ -719,14 +967,18 @@ async def _enrich_payment(p: dict) -> dict:
     return {**p, "tenant_name": tenant_name, "apartment_number": apt_number}
 
 
-async def _create_payment_doc(body: PaymentIn) -> dict:
-    tenant = await db.tenants.find_one({"id": body.tenant_id}, {"_id": 0})
+async def _create_payment_doc(body: PaymentIn, company_id: Optional[str] = None) -> dict:
+    q = {"id": body.tenant_id}
+    if company_id:
+        q["company_id"] = company_id
+    tenant = await db.tenants.find_one(q, {"_id": 0})
     if not tenant:
         raise HTTPException(status_code=404, detail="Huurder niet gevonden")
     apt_id = body.apartment_id or tenant.get("apartment_id")
     receipt_no = await _next_receipt_number()
     doc = {
         "id": new_id(),
+        "company_id": company_id or tenant.get("company_id"),
         "tenant_id": body.tenant_id,
         "apartment_id": apt_id,
         "amount": body.amount,
@@ -750,7 +1002,7 @@ async def list_payments(
     tenant_id: Optional[str] = Query(None),
     limit: int = Query(200),
 ):
-    q = {}
+    q = dict(scope(user))
     if tenant_id:
         q["tenant_id"] = tenant_id
     docs = await db.payments.find(q, {"_id": 0}).sort("paid_at", -1).to_list(limit)
@@ -759,13 +1011,13 @@ async def list_payments(
 
 @api.post("/payments", response_model=PaymentOut)
 async def create_payment(body: PaymentIn, user=Depends(get_current_user)):
-    doc = await _create_payment_doc(body)
+    doc = await _create_payment_doc(body, company_id_of(user))
     return await _enrich_payment(doc)
 
 
 @api.get("/tenants/{tenant_id}/balance")
 async def tenant_balance(tenant_id: str, user=Depends(get_current_user)):
-    t = await db.tenants.find_one({"id": tenant_id}, {"_id": 0})
+    t = await db.tenants.find_one({"id": tenant_id, **scope(user)}, {"_id": 0})
     if not t:
         raise HTTPException(status_code=404, detail="Huurder niet gevonden")
     return await _calc_balance(t)
@@ -850,9 +1102,9 @@ async def _calc_balance(tenant: dict) -> dict:
 # Kiosk public endpoints (no auth, but expects kiosk session for payments)
 # =====================================================================
 @api.get("/kiosk/apartments")
-async def kiosk_list_apartments():
-    """Public: list of apartments with current tenant for selection."""
-    docs = await db.apartments.find({}, {"_id": 0}).sort("number", 1).to_list(1000)
+async def kiosk_list_apartments(_session=Depends(get_kiosk_session)):
+    """List apartments for the kiosk's company."""
+    docs = await db.apartments.find(kiosk_scope(_session), {"_id": 0}).sort("number", 1).to_list(1000)
     out = []
     for a in docs:
         tenant_name = None
@@ -873,8 +1125,8 @@ async def kiosk_list_apartments():
 
 
 @api.get("/kiosk/tenants/{tenant_id}/overview")
-async def kiosk_tenant_overview(tenant_id: str):
-    t = await db.tenants.find_one({"id": tenant_id}, {"_id": 0})
+async def kiosk_tenant_overview(tenant_id: str, _session=Depends(get_kiosk_session)):
+    t = await db.tenants.find_one({"id": tenant_id, **kiosk_scope(_session)}, {"_id": 0})
     if not t:
         raise HTTPException(status_code=404, detail="Huurder niet gevonden")
     apt = None
@@ -901,7 +1153,7 @@ async def kiosk_tenant_overview(tenant_id: str):
 
 @api.post("/kiosk/payments", response_model=PaymentOut)
 async def kiosk_create_payment(body: PaymentIn, _session=Depends(get_kiosk_session)):
-    doc = await _create_payment_doc(body)
+    doc = await _create_payment_doc(body, _session.get("company_id"))
     return await _enrich_payment(doc)
 
 
