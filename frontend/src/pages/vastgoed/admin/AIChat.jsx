@@ -85,7 +85,7 @@ export default function AIChat() {
             </div>
           ) : (
             messages.map((m, i) => (
-              <div key={i} data-testid={`ai-msg-${i}`}
+              <div key={`${m.at || 'msg'}-${i}`} data-testid={`ai-msg-${i}`}
                 className={`flex gap-3 ${m.role === 'user' ? 'flex-row-reverse' : ''}`}>
                 <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
                   m.role === 'user' ? 'bg-slate-100 text-slate-600' : 'bg-gradient-to-br from-[#FF8A3D] to-[#C74600] text-white'

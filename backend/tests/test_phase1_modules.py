@@ -10,8 +10,8 @@ import requests
 BASE_URL = os.environ["REACT_APP_BACKEND_URL"].rstrip("/")
 API = f"{BASE_URL}/api"
 
-ADMIN_EMAIL = "admin@vastgoed.sr"
-ADMIN_PASSWORD = "admin123"
+ADMIN_EMAIL = os.environ.get("TEST_ADMIN_EMAIL", "admin@vastgoed.sr")
+ADMIN_PASSWORD = os.environ.get("TEST_ADMIN_PASSWORD", "admin123")
 
 
 @pytest.fixture(scope="session")

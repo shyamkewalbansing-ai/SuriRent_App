@@ -64,7 +64,7 @@ export function AuthProvider({ children }) {
   };
 
   const logout = async () => {
-    try { await api.post('/auth/logout'); } catch { /* noop */ }
+    try { await api.post('/auth/logout'); } catch (err) { console.warn('Admin logout API failed (continuing client-side):', err); }
     localStorage.removeItem('admin_token');
     localStorage.removeItem('kiosk_token');
     localStorage.removeItem(ACTIVE_COMPANY_KEY);

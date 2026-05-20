@@ -164,7 +164,7 @@ export default function TenantDashboard() {
   }, [loadAll, navigate]);
 
   const logout = async () => {
-    try { await api.post('/tenant-portal/logout'); } catch { /* noop */ }
+    try { await api.post('/tenant-portal/logout'); } catch (err) { console.warn('Tenant logout API failed (continuing client-side):', err); }
     localStorage.removeItem('tenant_token');
     navigate('/huurder', { replace: true });
   };

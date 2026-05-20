@@ -127,7 +127,7 @@ export default function TenantLoginPage() {
 
               <div className="flex justify-center gap-3 mb-6">
                 {pin.map((digit, i) => (
-                  <div key={i} data-testid={`tenant-pin-input-${i}`}
+                  <div key={`tenant-pin-slot-${i}`} data-testid={`tenant-pin-input-${i}`}
                     className={`text-center font-bold rounded-xl border-2 transition-all w-14 h-16 text-2xl flex items-center justify-center ${
                       error ? 'border-red-400 bg-red-50 text-red-600'
                         : digit ? 'border-[#FF5C00] bg-orange-50 text-[#FF5C00]'

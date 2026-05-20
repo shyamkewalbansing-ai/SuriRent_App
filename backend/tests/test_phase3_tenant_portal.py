@@ -21,9 +21,9 @@ BASE_URL = os.environ.get("REACT_APP_BACKEND_URL") or "https://vastgoed-app.prev
 BASE_URL = BASE_URL.rstrip("/")
 API = f"{BASE_URL}/api"
 
-ADMIN_EMAIL = "admin@vastgoed.sr"
-ADMIN_PASSWORD = "admin123"
-TEST_PIN = "5678"
+ADMIN_EMAIL = os.environ.get("TEST_ADMIN_EMAIL", "admin@vastgoed.sr")
+ADMIN_PASSWORD = os.environ.get("TEST_ADMIN_PASSWORD", "admin123")
+TEST_PIN = os.environ.get("TEST_TENANT_PIN", "5678")
 
 
 @pytest.fixture(scope="module")

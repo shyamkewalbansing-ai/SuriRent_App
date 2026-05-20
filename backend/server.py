@@ -175,6 +175,7 @@ async def get_kiosk_session(request: Request) -> dict:
     token = extract_token(request, "kiosk_token")
     if not token:
         raise HTTPException(status_code=401, detail="Kiosk niet ontgrendeld")
+    payload: dict = {}
     try:
         payload = decode_token(token)
         if payload.get("type") != "kiosk":
@@ -2029,6 +2030,7 @@ async def ai_chat(body: AIChatIn, user=Depends(get_current_user)):
     history_doc = await db.ai_sessions.find_one({"session_id": session_id}, {"_id": 0})
     history = history_doc.get("messages", []) if history_doc else []
     context = await _collect_context(user) if body.include_context else None
+    reply = ""
     try:
         reply = await ai_chat_send(session_id, body.message, history, context)
     except Exception as e:

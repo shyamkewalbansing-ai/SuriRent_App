@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Plus, X, Check, Loader2, FileText, Users as UsersIcon, Trash2, Pencil, Receipt } from 'lucide-react';
 import { api, formatError, fmtMoney, MONTHS_NL } from '../../../lib/api';
 
@@ -115,6 +115,8 @@ function SalaryForm({ employees, onCancel, onSaved }) {
     }
   }, [data.employee_id, data.gross, employees]);
 
+  const activeEmployees = useMemo(() => employees.filter((e) => e.active), [employees]);
+
   const net = (parseFloat(data.gross) || 0) - (parseFloat(data.advance) || 0) - (parseFloat(data.deductions) || 0);
 
   const save = async () => {
@@ -147,7 +149,7 @@ function SalaryForm({ employees, onCancel, onSaved }) {
               data-testid="sal-employee" required
               className="w-full mt-1 h-12 px-3 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] outline-none bg-white">
               <option value="">— Kies werknemer —</option>
-              {employees.filter((e) => e.active).map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
+              {activeEmployees.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
             </select>
           </div>
           <div className="grid grid-cols-2 gap-3">

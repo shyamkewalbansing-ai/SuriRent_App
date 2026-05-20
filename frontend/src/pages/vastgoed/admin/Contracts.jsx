@@ -136,7 +136,13 @@ export default function Contracts() {
   const apiBase = `${process.env.REACT_APP_BACKEND_URL}/api`;
   const signLink = (token) => `${window.location.origin}/onderteken/${token}`;
   const copyLink = async (token) => {
-    try { await navigator.clipboard.writeText(signLink(token)); alert('Link gekopieerd'); } catch { /* noop */ }
+    try {
+      await navigator.clipboard.writeText(signLink(token));
+      alert('Link gekopieerd');
+    } catch (err) {
+      console.error('Clipboard copy failed:', err);
+      alert('Kopieren mislukt — kopieer de link handmatig');
+    }
   };
 
   return (

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
@@ -97,9 +97,12 @@ function ApartmentSelect({ onSelect, onBack }) {
       .catch((e) => setErr(formatError(e)))
       .finally(() => setLoading(false));
   }, []);
-  const filtered = apts.filter((a) => !q ||
-    a.number.toLowerCase().includes(q.toLowerCase()) ||
-    (a.tenant_name || '').toLowerCase().includes(q.toLowerCase())
+  const filtered = useMemo(
+    () => apts.filter((a) => !q ||
+      a.number.toLowerCase().includes(q.toLowerCase()) ||
+      (a.tenant_name || '').toLowerCase().includes(q.toLowerCase())
+    ),
+    [apts, q]
   );
   return (
     <div className="h-full overflow-y-auto p-4 sm:p-8">

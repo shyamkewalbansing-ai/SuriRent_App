@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Plus, X, Check, Loader2, FileText, Wand2, Trash2 } from 'lucide-react';
 import { api, formatError, fmtMoney, MONTHS_NL } from '../../../lib/api';
 
@@ -23,6 +23,7 @@ function InvoiceForm({ tenants, onCancel, onSaved }) {
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const tenantsWithApt = useMemo(() => tenants.filter((t) => t.apartment_id), [tenants]);
   const save = async () => {
     setLoading(true); setError('');
     try {
