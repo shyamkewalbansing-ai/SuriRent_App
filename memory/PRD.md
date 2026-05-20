@@ -76,10 +76,31 @@ User koos voor **Optie C — minimale herbouw** (kern eerst), dan vroeg om **Fas
 ## Test Results
 - Iteration 1 (Fase 0): 100% backend & frontend ✅
 - Iteration 2 (Fase 1): 100% backend (8/8 nieuwe + 10/11 regression met PIN reset) & frontend (alle 11 tabs) ✅
+- Iteration 5 (Multi-Company audit): 25/34 — vond 8 critical data leak bugs
+- Iteration 6 (Multi-Company regression): 42/43 ✅ — alle leaks gefixed, data isolation sealed
 
-## Prioritized Backlog
+### Fase 3 deel 2 (Multi-Company SaaS — 2026-05-20) ✅
+- ✅ **Multi-Company architectuur volledig stabiel** — alle 12+ tenant-scoped resources gefilterd via `scope(user)` op list/get/put/delete + `company_id` op create
+- ✅ **Superadmin role** met `/api/companies` CRUD (create/update/delete + seed-admin)
+- ✅ **Header-based company switching** voor superadmin: `x-active-company: <company_id>` of `?company_id=...`
+- ✅ **Kiosk PIN per company** — unique-PIN enforced cross-company, PIN matches naar correcte company's scope
+- ✅ **Admin stats + AI context + push notify-overdue** alle scoped per company
+- ✅ **Data isolation geverifieerd**: 42/43 tests pass (iteration_6), zero cross-company leakage
+- ✅ Test suite `/app/backend/tests/test_multi_company.py` (43 tests) is canonical regressie
 
-### Fase 2 (volgende sessie — integraties)
+## Prioritized Backlog (post-multi-company)
+
+### P1 — Frontend Multi-Company UI
+- Companies tab voor superadmin (lijst, CRUD, stats per company)
+- Company badge/switcher in admin header voor superadmin
+- AdminDashboard: tonen welke company actief is
+
+### P1 — Hardening (uit iteration_6)
+- 📧 PDF endpoints (payments/contracts/invoices) auth-gate of signed-token (UUID enumeration risico)
+- 🔒 Brute-force lockout op PIN endpoints (kiosk-pin + tenant-portal/login)
+- 🌱 Idempotent re-seed Jan de Vries PIN (5678) in `lifespan()`
+
+### P2 — Externe integraties (wacht op credentials)
 - 📧 **Email notificaties** — wacht op SendGrid / Resend credentials van user
 - 📱 **WhatsApp/SMS herinneringen** — wacht op Twilio credentials
 - 💳 **Payment gateways** (SumUp/Mope/Uni5Pay) — wacht op credentials
