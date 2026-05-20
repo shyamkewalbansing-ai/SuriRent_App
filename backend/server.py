@@ -646,7 +646,11 @@ async def list_tenants(user=Depends(get_current_user)):
 
 @api.post("/tenants", response_model=TenantOut)
 async def create_tenant(body: TenantIn, user=Depends(get_current_user)):
-    doc = {"id": new_id(), **body.model_dump(), "created_at": iso(now_utc())}
+    payload = body.model_dump()
+    if payload.get("email"):
+        payload["email"] = payload["email"].strip().lower()
+    payload["phone_digits"] = "".join(ch for ch in (payload.get("phone") or "") if ch.isdigit())
+    doc = {"id": new_id(), **payload, "created_at": iso(now_utc())}
     await db.tenants.insert_one(doc)
     doc.pop("_id", None)
     if doc.get("apartment_id"):
@@ -660,8 +664,12 @@ async def create_tenant(body: TenantIn, user=Depends(get_current_user)):
 @api.put("/tenants/{tenant_id}", response_model=TenantOut)
 async def update_tenant(tenant_id: str, body: TenantIn, user=Depends(get_current_user)):
     from pymongo import ReturnDocument
+    payload = body.model_dump()
+    if payload.get("email"):
+        payload["email"] = payload["email"].strip().lower()
+    payload["phone_digits"] = "".join(ch for ch in (payload.get("phone") or "") if ch.isdigit())
     res = await db.tenants.find_one_and_update(
-        {"id": tenant_id}, {"$set": body.model_dump()},
+        {"id": tenant_id}, {"$set": payload},
         projection={"_id": 0}, return_document=ReturnDocument.AFTER,
     )
     if not res:

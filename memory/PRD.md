@@ -41,6 +41,15 @@ User koos voor **Optie C — minimale herbouw** (kern eerst), dan vroeg om **Fas
 - ✅ **PWA push notificaties** — VAPID keys gegenereerd, service worker `/sw.js`, subscribe/unsubscribe + test/overdue push
 - ✅ **AES-256 versleutelde PDFs** met QR overlay + signed verify token (`/api/verify/{token}` voor publieke verificatie)
 
+### Fase 3a (uitgebreid — 2026-05-20)
+- ✅ **Tenant portal** — `/huurder` mobile-first login (email/telefoon + PIN), `/huurder/portaal` dashboard met:
+  - Eigen appartement + maandhuur + saldo (openstaand/positief)
+  - Betalingsgeschiedenis met PDF kwitanties
+  - Contracten met PDF
+  - Onderhoudsmeldingen (lijst + zelf aanmaken met prioriteit)
+- ✅ Admin kan tenant PIN instellen via KeySquare-knop in Huurders tab
+- ✅ Mixed-case email + flexible phone matching (full string en digits-only)
+
 ## Routes
 | Route | Description |
 |-------|-------------|

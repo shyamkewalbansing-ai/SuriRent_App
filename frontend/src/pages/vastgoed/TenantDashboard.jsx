@@ -204,7 +204,7 @@ export default function TenantDashboard() {
               </div>
               <div className={`rounded-xl p-3 border ${hasBalance ? 'bg-amber-50 border-amber-200' : 'bg-emerald-50 border-emerald-200'}`}>
                 <p className={`text-xs font-bold uppercase tracking-widest ${hasBalance ? 'text-amber-700' : 'text-emerald-700'}`}>
-                  {hasBalance ? 'Openstaand' : 'Voorraad'}
+                  {hasBalance ? 'Openstaand' : 'Saldo'}
                 </p>
                 <p className="text-xl font-black text-slate-900 tracking-tight mt-1">{fmtMoney(Math.abs(balance.balance), balance.currency)}</p>
               </div>

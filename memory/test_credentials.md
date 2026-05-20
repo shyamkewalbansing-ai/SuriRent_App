@@ -51,4 +51,19 @@ Returns JSON `{token}` + sets `kiosk_token` httpOnly cookie.
 - `POST /api/kiosk/payments` (kiosk session) — create payment from kiosk
 - `GET /api/kiosk/receipts/{id}` — receipt
 
+## Tenant Portal
+- Login URL: `/huurder`
+- Dashboard URL: `/huurder/portaal`
+- Auth: 4-cijferige PIN ingesteld door admin via `POST /api/auth/tenant-set-pin`
+- Test tenant: `Jan de Vries` (email `jan@example.sr`, phone `+597 8001234`, PIN `5678`)
+- Login accepteert email of telefoon (volledig string OF alleen cijfers) — case-insensitive voor email
+- Endpoints (Bearer tenant_token):
+  - `POST /api/tenant-portal/login` `{identifier, pin}` → `{token, tenant}`
+  - `GET /api/tenant-portal/me`
+  - `GET /api/tenant-portal/overview` — tenant + apartment + balance
+  - `GET /api/tenant-portal/payments` — alleen eigen betalingen
+  - `GET /api/tenant-portal/contracts` — alleen eigen contracten
+  - `GET/POST /api/tenant-portal/maintenance` — eigen tickets
+  - `POST /api/tenant-portal/logout`
+
 Frontend sends Bearer token from localStorage (`admin_token` and `kiosk_token`).
