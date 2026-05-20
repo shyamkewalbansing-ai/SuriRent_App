@@ -2,11 +2,54 @@
 <html lang="nl">
   <head>
     <meta charset="utf-8" />
-    <link rel="icon" href="/kiosk-icons/kiosk-favicon.ico" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=5" />
     <meta name="theme-color" content="#FF5C00" />
     <meta name="description" content="SuriRent - Complete huurbeheer & kiosk oplossing voor vastgoed" />
+    <meta name="application-name" content="SuriRent" />
+
+    <!-- PWA -->
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="icon" href="/kiosk-icons/kiosk-favicon.ico" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/kiosk-icons/kiosk-192.png" />
+    <link rel="icon" type="image/png" sizes="512x512" href="/kiosk-icons/kiosk-512.png" />
+
+    <!-- iOS PWA -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="SuriRent" />
+    <meta name="format-detection" content="telephone=no" />
     <link rel="apple-touch-icon" href="/kiosk-icons/kiosk-192.png" />
+    <link rel="apple-touch-icon" sizes="144x144" href="/kiosk-icons/kiosk-144.png" />
+    <link rel="apple-touch-icon" sizes="192x192" href="/kiosk-icons/kiosk-192.png" />
+    <link rel="apple-touch-icon" sizes="512x512" href="/kiosk-icons/kiosk-512.png" />
+
+    <!-- iOS Splash Screens -->
+    <link rel="apple-touch-startup-image" href="/kiosk-icons/splash/iphone-15-promax-portrait.png" media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" />
+    <link rel="apple-touch-startup-image" href="/kiosk-icons/splash/iphone-15-promax-landscape.png" media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3) and (orientation: landscape)" />
+    <link rel="apple-touch-startup-image" href="/kiosk-icons/splash/iphone-15-pro-portrait.png" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" />
+    <link rel="apple-touch-startup-image" href="/kiosk-icons/splash/iphone-15-pro-landscape.png" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3) and (orientation: landscape)" />
+    <link rel="apple-touch-startup-image" href="/kiosk-icons/splash/iphone-13-portrait.png" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" />
+    <link rel="apple-touch-startup-image" href="/kiosk-icons/splash/iphone-13-landscape.png" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3) and (orientation: landscape)" />
+    <link rel="apple-touch-startup-image" href="/kiosk-icons/splash/iphone-xs-max-portrait.png" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" />
+    <link rel="apple-touch-startup-image" href="/kiosk-icons/splash/iphone-xs-max-landscape.png" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 3) and (orientation: landscape)" />
+    <link rel="apple-touch-startup-image" href="/kiosk-icons/splash/iphone-xr-portrait.png" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" />
+    <link rel="apple-touch-startup-image" href="/kiosk-icons/splash/iphone-xr-landscape.png" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 2) and (orientation: landscape)" />
+    <link rel="apple-touch-startup-image" href="/kiosk-icons/splash/iphone-x-portrait.png" media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" />
+    <link rel="apple-touch-startup-image" href="/kiosk-icons/splash/iphone-x-landscape.png" media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3) and (orientation: landscape)" />
+    <link rel="apple-touch-startup-image" href="/kiosk-icons/splash/iphone-8-portrait.png" media="(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" />
+    <link rel="apple-touch-startup-image" href="/kiosk-icons/splash/iphone-8-landscape.png" media="(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2) and (orientation: landscape)" />
+    <link rel="apple-touch-startup-image" href="/kiosk-icons/splash/ipad-pro-12-portrait.png" media="(device-width: 1024px) and (device-height: 1366px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" />
+    <link rel="apple-touch-startup-image" href="/kiosk-icons/splash/ipad-pro-12-landscape.png" media="(device-width: 1024px) and (device-height: 1366px) and (-webkit-device-pixel-ratio: 2) and (orientation: landscape)" />
+    <link rel="apple-touch-startup-image" href="/kiosk-icons/splash/ipad-pro-11-portrait.png" media="(device-width: 834px) and (device-height: 1194px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" />
+    <link rel="apple-touch-startup-image" href="/kiosk-icons/splash/ipad-pro-11-landscape.png" media="(device-width: 834px) and (device-height: 1194px) and (-webkit-device-pixel-ratio: 2) and (orientation: landscape)" />
+    <link rel="apple-touch-startup-image" href="/kiosk-icons/splash/ipad-portrait.png" media="(device-width: 768px) and (device-height: 1024px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" />
+    <link rel="apple-touch-startup-image" href="/kiosk-icons/splash/ipad-landscape.png" media="(device-width: 768px) and (device-height: 1024px) and (-webkit-device-pixel-ratio: 2) and (orientation: landscape)" />
+
+    <!-- Microsoft Tiles -->
+    <meta name="msapplication-TileColor" content="#FF5C00" />
+    <meta name="msapplication-TileImage" content="/kiosk-icons/kiosk-144.png" />
+
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />

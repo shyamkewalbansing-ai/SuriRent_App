@@ -17,7 +17,25 @@ body {
   -moz-osx-font-smoothing: grayscale;
   background-color: #FFF7F0;
   color: #0f172a;
+  /* iOS PWA safe-area defaults — applied at body so all pages benefit. */
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+  /* Prevent iOS overscroll bounce on body (kiosk feel). */
+  overscroll-behavior-y: contain;
 }
+
+/* In standalone (installed PWA) mode, kiosk fullscreen overrides body padding
+   because the kiosk itself manages safe-area. */
+@media (display-mode: standalone) {
+  body { background-color: #FF5C00; }
+}
+
+/* Utility for screens that should respect safe area manually. */
+.safe-top { padding-top: env(safe-area-inset-top); }
+.safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+.safe-x { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right); }
 
 ::selection { background: #FF5C00; color: #fff; }
 
@@ -32,6 +50,11 @@ html { scroll-behavior: smooth; }
 .kiosk-fullscreen {
   position: fixed; inset: 0; background: #FF5C00;
   overflow: hidden;
+  /* Respect iPhone notch / iPad home indicator inside kiosk too. */
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
 }
 
 /* Subtle grain noise overlay (data URL) */

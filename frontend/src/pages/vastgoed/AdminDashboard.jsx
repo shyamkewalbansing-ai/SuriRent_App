@@ -94,7 +94,8 @@ function Sidebar({ active, onChange, onLogout, user, activeCompany, tabs }) {
 
 function MobileTabBar({ active, onChange, tabs }) {
   return (
-    <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white border-t border-orange-100 overflow-x-auto no-scrollbar">
+    <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white border-t border-orange-100 overflow-x-auto no-scrollbar"
+      style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
       <div className="flex min-w-max">
         {tabs.map((t) => {
           const Icon = t.icon;

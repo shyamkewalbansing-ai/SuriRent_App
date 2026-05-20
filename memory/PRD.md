@@ -99,7 +99,18 @@ User koos voor **Optie C — minimale herbouw** (kern eerst), dan vroeg om **Fas
 - ✅ **Tenant set-PIN scope** — Admin A kan geen PIN zetten voor tenant van Admin B (404)
 - ✅ 55/55 tests pass (iteration_7)
 
-## Prioritized Backlog (na P1)
+### Fase 3 deel 4 (PWA — Installable app op iOS & Android — 2026-05-20) ✅
+- ✅ **manifest.json** met name, start_url=`/vastgoed`, scope=`/`, display=`standalone`, theme_color, 4 icons (any+maskable), 3 shortcuts (Kiosk / Beheer / Huurder)
+- ✅ **iOS support**: alle apple-mobile-web-app-* meta tags, apple-touch-icon (144/192/512), 20 apple-touch-startup-images voor alle iPhone/iPad modellen (8/X/XR/XS Max/13/15 Pro/Pro Max + iPad/iPad Pro 11"/12.9", portrait+landscape)
+- ✅ **Android/Chromium**: beforeinstallprompt-handler met "Installeren" CTA
+- ✅ **Service Worker v3** (`/sw.js`): app shell caching (precache + runtime), network-first voor HTML, cache-first voor assets, bypass `/api/*`, push notificaties behouden
+- ✅ **Auto-registratie** van SW in `App.js` via `useRegisterServiceWorker()` hook
+- ✅ **InstallPrompt component** — Android toont native install knop; iOS Safari toont "Tik op Delen → Zet op beginscherm" hint (4s delay, dismissable, 30-dagen cooldown)
+- ✅ **Safe-area support** voor iPhone notch / iPad home indicator: body padding + `.kiosk-fullscreen` padding + admin mobile tab bar padding
+- ✅ **Standalone media query** schakelt naar oranje achtergrond wanneer geinstalleerd
+- ✅ App icon: oranje huis logo (`/kiosk-icons/kiosk-512.png`)
+
+## Prioritized Backlog (na PWA)
 - 📧 **Email notificaties** — wacht op SendGrid / Resend credentials van user
 - 📱 **WhatsApp/SMS herinneringen** — wacht op Twilio credentials
 - 💳 **Payment gateways** (SumUp/Mope/Uni5Pay) — wacht op credentials

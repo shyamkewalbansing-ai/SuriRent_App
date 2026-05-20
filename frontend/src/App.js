@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './lib/auth';
+import { useRegisterServiceWorker, InstallPrompt } from './lib/pwa';
 import MarketingLanding from './pages/vastgoed/MarketingLanding';
 import LoginPage from './pages/vastgoed/LoginPage';
 import AdminDashboard from './pages/vastgoed/AdminDashboard';
@@ -22,6 +23,7 @@ function Protected({ children }) {
 }
 
 export default function App() {
+  useRegisterServiceWorker();
   return (
     <AuthProvider>
       <Routes>
@@ -35,6 +37,7 @@ export default function App() {
         <Route path="/huurder/portaal" element={<TenantDashboard />} />
         <Route path="*" element={<Navigate to="/vastgoed" replace />} />
       </Routes>
+      <InstallPrompt />
     </AuthProvider>
   );
 }
