@@ -61,5 +61,28 @@
       "url": "/huurder",
       "icons": [{ "src": "/kiosk-icons/kiosk-192.png", "sizes": "192x192", "type": "image/png" }]
     }
+  ],
+  "screenshots": [
+    {
+      "src": "/kiosk-icons/screenshots/01_landing.jpg",
+      "sizes": "540x960",
+      "type": "image/jpeg",
+      "form_factor": "narrow",
+      "label": "De complete huurbeheer oplossing voor vastgoed"
+    },
+    {
+      "src": "/kiosk-icons/screenshots/02_kiosk_pin.jpg",
+      "sizes": "540x960",
+      "type": "image/jpeg",
+      "form_factor": "narrow",
+      "label": "Kiosk Terminal — snelle PIN-toegang voor huurders"
+    },
+    {
+      "src": "/kiosk-icons/screenshots/03_tenant_login.jpg",
+      "sizes": "540x960",
+      "type": "image/jpeg",
+      "form_factor": "narrow",
+      "label": "Mijn Huurportaal — saldo, betalingen en onderhoud"
+    }
   ]
 }

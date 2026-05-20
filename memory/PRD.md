@@ -109,6 +109,7 @@ User koos voor **Optie C — minimale herbouw** (kern eerst), dan vroeg om **Fas
 - ✅ **Safe-area support** voor iPhone notch / iPad home indicator: body padding + `.kiosk-fullscreen` padding + admin mobile tab bar padding
 - ✅ **Standalone media query** schakelt naar oranje achtergrond wanneer geinstalleerd
 - ✅ App icon: oranje huis logo (`/kiosk-icons/kiosk-512.png`)
+- ✅ **Screenshot tour** in manifest — 3 mobile screenshots (Landing, Kiosk PIN, Huurder Portaal) op 540×960 JPEG, totaal 89KB. Zichtbaar in Android Chrome + Edge install dialoog als "preview".
 
 ## Prioritized Backlog (na PWA)
 - 📧 **Email notificaties** — wacht op SendGrid / Resend credentials van user
