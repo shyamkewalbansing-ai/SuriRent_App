@@ -36,6 +36,11 @@ User koos voor **Optie C — minimale herbouw** (kern eerst), dan vroeg om **Fas
 - ✅ **PDF kwitanties** per betaling
 - ✅ 11 admin tabs (sidebar + horizontaal scrollbaar mobiel)
 
+### Fase 2 deel 1 (uitgebreid — 2026-05-20, zonder externe credentials)
+- ✅ **AI assistent** (Nederlandse chat) via Emergent LLM key + Claude Sonnet 4.5, met live portefeuille-context (appartementen, bezetting, openstaande huur, maand-inkomsten per valuta)
+- ✅ **PWA push notificaties** — VAPID keys gegenereerd, service worker `/sw.js`, subscribe/unsubscribe + test/overdue push
+- ✅ **AES-256 versleutelde PDFs** met QR overlay + signed verify token (`/api/verify/{token}` voor publieke verificatie)
+
 ## Routes
 | Route | Description |
 |-------|-------------|
