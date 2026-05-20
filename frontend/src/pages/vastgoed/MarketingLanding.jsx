@@ -4,6 +4,7 @@ import {
   Menu, X, ArrowRight, Check, Building2, Receipt, Users, Wallet,
   Shield, Zap, CreditCard, Sparkles, Globe, ScanFace, Phone,
   Mail, MapPin, MessageCircle, Star, ChevronRight, Cpu, Clock,
+  Smartphone, Share, Plus, Download, Apple, ScanLine,
 } from 'lucide-react';
 
 const GRAIN = `data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 0.5  0 0 0 0 0  0 0 0 0.06 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>`;
@@ -47,6 +48,7 @@ function TopNav({ onLogin }) {
             </div>
           </button>
           <nav className="hidden md:flex items-center gap-1 text-sm font-medium">
+            <button onClick={() => scrollTo('install')} data-testid="nav-install" className="px-4 py-2 text-slate-700 hover:text-[#FF5C00] transition-colors">Installeer</button>
             <button onClick={() => scrollTo('features')} data-testid="nav-features" className="px-4 py-2 text-slate-700 hover:text-[#FF5C00] transition-colors">Functies</button>
             <button onClick={() => scrollTo('pricing')} data-testid="nav-pricing" className="px-4 py-2 text-slate-700 hover:text-[#FF5C00] transition-colors">Prijzen</button>
             <button onClick={() => scrollTo('contact')} data-testid="nav-contact" className="px-4 py-2 text-slate-700 hover:text-[#FF5C00] transition-colors">Contact</button>
@@ -65,6 +67,7 @@ function TopNav({ onLogin }) {
         {open && (
           <div className="md:hidden backdrop-blur-xl bg-[#FFF7F0]/95 border-t border-orange-200/60">
             <div className="px-5 py-3 flex flex-col gap-1">
+              <button onClick={() => scrollTo('install')} data-testid="nav-mobile-install" className="text-left py-3 px-2 rounded-md hover:bg-orange-50 text-slate-800 font-semibold">Installeer</button>
               <button onClick={() => scrollTo('features')} data-testid="nav-mobile-features" className="text-left py-3 px-2 rounded-md hover:bg-orange-50 text-slate-800 font-semibold">Functies</button>
               <button onClick={() => scrollTo('pricing')} data-testid="nav-mobile-pricing" className="text-left py-3 px-2 rounded-md hover:bg-orange-50 text-slate-800 font-semibold">Prijzen</button>
               <button onClick={() => scrollTo('contact')} data-testid="nav-mobile-contact" className="text-left py-3 px-2 rounded-md hover:bg-orange-50 text-slate-800 font-semibold">Contact</button>
@@ -197,6 +200,177 @@ function StatsStrip() {
               <p className="text-[10px] sm:text-xs text-white/85 font-bold uppercase tracking-[0.2em] mt-1">{s.label}</p>
             </div>
           ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ============== Install / PWA section ==============
+function PhoneMockup({ src, alt, badge }) {
+  return (
+    <div className="relative mx-auto" style={{ maxWidth: 260 }}>
+      <div className="relative rounded-[40px] p-2.5 bg-slate-900 shadow-[0_30px_60px_-15px_rgba(15,23,42,0.5)]">
+        <div className="rounded-[32px] overflow-hidden border-2 border-slate-800 bg-[#FFF7F0]">
+          <img src={src} alt={alt} className="block w-full h-auto" loading="lazy" />
+        </div>
+        <div className="absolute top-3 left-1/2 -translate-x-1/2 w-24 h-5 bg-slate-900 rounded-b-2xl" />
+      </div>
+      {badge && (
+        <div className="absolute -top-3 -right-3 px-3 py-1.5 rounded-full bg-white border-2 border-[#FF5C00] text-[10px] font-black uppercase tracking-widest text-[#FF5C00] shadow-lg">
+          {badge}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function InstallStep({ num, icon: Icon, title, desc }) {
+  return (
+    <li className="flex gap-4">
+      <div className="shrink-0 w-10 h-10 rounded-xl bg-gradient-to-br from-[#FF8A3D] to-[#C74600] text-white flex items-center justify-center font-black shadow-[0_6px_15px_-3px_rgba(255,92,0,0.5)]">
+        {num}
+      </div>
+      <div className="flex-1">
+        <div className="flex items-center gap-2 text-sm font-black text-slate-900">
+          {Icon && <Icon className="w-4 h-4 text-[#FF5C00]" strokeWidth={2.4} />}
+          {title}
+        </div>
+        <p className="text-xs text-slate-600 leading-snug mt-0.5">{desc}</p>
+      </div>
+    </li>
+  );
+}
+
+function InstallSection() {
+  return (
+    <section id="install" className="relative py-20 md:py-28 bg-[#FFF7F0] overflow-hidden">
+      <div className="absolute -top-32 -left-32 w-96 h-96 rounded-full bg-[#FF8A3D]/10 blur-3xl pointer-events-none" />
+      <div className="absolute -bottom-32 -right-32 w-96 h-96 rounded-full bg-[#C74600]/10 blur-3xl pointer-events-none" />
+
+      <div className="relative max-w-7xl mx-auto px-5 sm:px-8">
+        <div className="text-center max-w-2xl mx-auto mb-14">
+          <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-orange-100 border border-orange-200 text-[#FF5C00] text-xs font-black uppercase tracking-[0.2em]">
+            <Smartphone className="w-3.5 h-3.5" /> Installeer als app
+          </span>
+          <h2 className="mt-5 text-3xl sm:text-4xl md:text-5xl font-black tracking-tight text-slate-900 leading-tight">
+            Kiosk én Huurportaal,<br />
+            <span className="bg-gradient-to-r from-[#FF8A3D] via-[#FF5C00] to-[#C74600] bg-clip-text text-transparent">direct op je telefoon.</span>
+          </h2>
+          <p className="mt-5 text-base sm:text-lg text-slate-600 leading-relaxed">
+            Geen App Store of Play Store nodig. SuriRent is een Progressive Web App — installeer in 10 seconden vanuit je browser en open hem als een echte app, met eigen icoon en fullscreen.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12">
+          {/* iOS card */}
+          <div data-testid="install-card-ios"
+            className="relative rounded-3xl bg-white border-2 border-orange-100 p-6 md:p-8 shadow-[0_20px_50px_-20px_rgba(255,92,0,0.25)]">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-12 h-12 rounded-2xl bg-slate-900 flex items-center justify-center">
+                <Apple className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">iOS — iPhone & iPad</p>
+                <p className="text-lg font-black text-slate-900">Open in Safari</p>
+              </div>
+            </div>
+
+            <PhoneMockup
+              src="/kiosk-icons/screenshots/02_kiosk_pin.jpg"
+              alt="Kiosk PIN scherm op iOS"
+              badge="iPhone"
+            />
+
+            <ol className="mt-8 space-y-4">
+              <InstallStep num={1} icon={Globe} title="Open in Safari"
+                desc="Bezoek deze pagina op je iPhone of iPad via Safari (niet Chrome — Apple staat alleen Safari toe)." />
+              <InstallStep num={2} icon={Share} title="Tik op het Delen icoon"
+                desc="Tik op het vierkantje met de pijl omhoog in de adresbalk onderaan." />
+              <InstallStep num={3} icon={Plus} title="Kies 'Zet op beginscherm'"
+                desc="Scroll naar beneden en tik op 'Zet op beginscherm'. Bevestig met 'Voeg toe'." />
+              <InstallStep num={4} icon={Check} title="Klaar — open vanaf homescreen"
+                desc="Het oranje SuriRent icoon staat op je homescherm. Open ervan voor fullscreen kiosk-modus." />
+            </ol>
+          </div>
+
+          {/* Android card */}
+          <div data-testid="install-card-android"
+            className="relative rounded-3xl bg-gradient-to-br from-[#FF8A3D] via-[#FF5C00] to-[#C74600] p-6 md:p-8 shadow-[0_25px_60px_-15px_rgba(255,92,0,0.55)] text-white overflow-hidden">
+            <Noise opacity={0.12} />
+            <div className="absolute -top-24 -right-24 w-64 h-64 bg-white/15 rounded-full blur-3xl pointer-events-none" />
+
+            <div className="relative flex items-center gap-3 mb-6">
+              <div className="w-12 h-12 rounded-2xl bg-white/95 flex items-center justify-center">
+                <ScanLine className="w-6 h-6 text-[#FF5C00]" />
+              </div>
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/80">Android — Chrome of Edge</p>
+                <p className="text-lg font-black">1-tap installatie</p>
+              </div>
+            </div>
+
+            <div className="relative">
+              <PhoneMockup
+                src="/kiosk-icons/screenshots/03_tenant_login.jpg"
+                alt="Huurportaal op Android"
+                badge="Android"
+              />
+            </div>
+
+            <ol className="relative mt-8 space-y-4">
+              <li className="flex gap-4">
+                <div className="shrink-0 w-10 h-10 rounded-xl bg-white text-[#FF5C00] flex items-center justify-center font-black shadow-lg">1</div>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 text-sm font-black">
+                    <Globe className="w-4 h-4" strokeWidth={2.4} /> Open in Chrome of Edge
+                  </div>
+                  <p className="text-xs text-white/85 leading-snug mt-0.5">Bezoek deze pagina op je Android telefoon.</p>
+                </div>
+              </li>
+              <li className="flex gap-4">
+                <div className="shrink-0 w-10 h-10 rounded-xl bg-white text-[#FF5C00] flex items-center justify-center font-black shadow-lg">2</div>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 text-sm font-black">
+                    <Download className="w-4 h-4" strokeWidth={2.4} /> Tik op 'Installeren'
+                  </div>
+                  <p className="text-xs text-white/85 leading-snug mt-0.5">Onderaan verschijnt een prompt, of kies uit het menu 'App installeren'.</p>
+                </div>
+              </li>
+              <li className="flex gap-4">
+                <div className="shrink-0 w-10 h-10 rounded-xl bg-white text-[#FF5C00] flex items-center justify-center font-black shadow-lg">3</div>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 text-sm font-black">
+                    <Check className="w-4 h-4" strokeWidth={2.4} /> Open vanaf homescreen
+                  </div>
+                  <p className="text-xs text-white/85 leading-snug mt-0.5">SuriRent verschijnt als app icoon. Long-press voor snelle shortcuts naar Kiosk of Beheer.</p>
+                </div>
+              </li>
+            </ol>
+          </div>
+        </div>
+
+        {/* Bottom call-out */}
+        <div className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-4 max-w-4xl mx-auto">
+          {[
+            { icon: Zap, title: 'Direct beschikbaar', desc: 'Geen Play Store / App Store wachttijden of review.' },
+            { icon: Shield, title: 'Werkt offline', desc: 'App shell blijft toegankelijk zonder netwerk.' },
+            { icon: ScanFace, title: 'Native gevoel', desc: 'Fullscreen, eigen icoon, push notificaties, en splash screen.' },
+          ].map((b) => {
+            const Icon = b.icon;
+            return (
+              <div key={b.title} data-testid={`install-benefit-${b.title.split(' ')[0].toLowerCase()}`}
+                className="bg-white rounded-2xl border border-orange-100 p-5 flex gap-3 items-start">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-50 to-orange-100 flex items-center justify-center shrink-0">
+                  <Icon className="w-5 h-5 text-[#FF5C00]" strokeWidth={2.3} />
+                </div>
+                <div>
+                  <p className="text-sm font-black text-slate-900">{b.title}</p>
+                  <p className="text-xs text-slate-600 leading-snug mt-0.5">{b.desc}</p>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
     </section>
@@ -467,6 +641,7 @@ export default function MarketingLanding() {
       <TopNav onLogin={goLogin} />
       <Hero onLogin={goLogin} />
       <StatsStrip />
+      <InstallSection />
       <FeaturesSection />
       <PricingSection onLogin={goLogin} />
       <CTASection onLogin={goLogin} />

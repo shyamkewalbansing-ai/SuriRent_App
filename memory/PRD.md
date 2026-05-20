@@ -110,6 +110,7 @@ User koos voor **Optie C — minimale herbouw** (kern eerst), dan vroeg om **Fas
 - ✅ **Standalone media query** schakelt naar oranje achtergrond wanneer geinstalleerd
 - ✅ App icon: oranje huis logo (`/kiosk-icons/kiosk-512.png`)
 - ✅ **Screenshot tour** in manifest — 3 mobile screenshots (Landing, Kiosk PIN, Huurder Portaal) op 540×960 JPEG, totaal 89KB. Zichtbaar in Android Chrome + Edge install dialoog als "preview".
+- ✅ **Install marketing sectie** op landing page tussen Hero en Features — 2 visuele cards (iOS Safari + Android Chrome) met phone mockups, stap-voor-stap instructies, en 3 benefits-callouts ("Direct beschikbaar / Werkt offline / Native gevoel"). Nieuwe "Installeer" link in TopNav.
 
 ## Prioritized Backlog (na PWA)
 - 📧 **Email notificaties** — wacht op SendGrid / Resend credentials van user
