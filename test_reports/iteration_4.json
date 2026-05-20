@@ -1,0 +1,42 @@
+{
+  "summary": "Phase 3a Tenant Portal e2e testing complete. Backend: 20/20 pytest tests pass in test_phase3_tenant_portal.py covering admin set-pin (4 cases: requires admin, invalid format, unknown tenant, success), tenant login (6 cases: email, phone full string, phone digits only, wrong PIN, unknown identifier, tenant without PIN set), /tenant-portal/me (3 cases: with tenant token, no token 401, admin token rejected — token-type isolation works), /overview shape (tenant+apartment+balance), payments+contracts strict tenant_id isolation, maintenance list, maintenance create with apartment_id+created_by_tenant fields, maintenance create returns 400 when tenant has no apartment, and /tenant-portal/logout returns 200 + clears Set-Cookie. Frontend (mobile 414x896): /huurder loads tenant-login-card; email → 'Verder' → 4-digit PIN keypad works; wrong PIN 0000 shows 'Onjuiste PIN' error and clears keypad; correct PIN 5678 logs in + navigates to /huurder/portaal; portal shows header 'Mijn Huurportaal · Jan de Vries', appartement card 'HUIS7A · Kewalbansingweg 7' with MAANDHUUR SRD 7.000,00 and VOORRAAD SRD 119.200,00 (balance), 'Betalingen (24)' list with PDF link per row, contracten list, onderhoudslist; Melden button opens 'Onderhoudsmelding' modal — created TEST_UI ticket appears in list immediately; logout button clears tenant_token from localStorage and redirects to /huurder; /huurder/portaal without tenant_token redirects to /huurder.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/tenants + POST /api/tenant-portal/login", "issue": "Admin POST /api/tenants does NOT lowercase the email field on insert, while tenant-portal/login does `ident = identifier.strip().lower()` for the email lookup. Result: tenants created via admin UI/API with mixed-case email cannot login via email (phone/phone_digits still works). The seed tenant happens to have lowercase email so this is not visible in production today, but is a latent bug for any new tenant created with mixed-case email."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/huurder/portaal apartment card", "issues": ["The second metric label reads 'VOORRAAD' (stock/supply) instead of something like 'SALDO' or 'OPENSTAAND'. Functionally it shows the balance (SRD 119.200,00) but the Dutch label 'Voorraad' is unusual for a financial balance and may confuse tenants. Consider renaming to 'Saldo' or 'Tegoed' / 'Openstaand'."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_phase3_tenant_portal.py",
+    "/app/test_reports/pytest/phase3_results.xml"
+  ],
+  "action_items": [
+    "Lowercase email in POST /api/tenants (and PUT /api/tenants/{id}) before insert/update, OR change tenant-portal/login to use case-insensitive email matching (e.g., regex with i flag, or store an email_lower field). Mirror what /api/auth/login already does for the users collection.",
+    "Reconsider the 'VOORRAAD' label on /huurder/portaal — rename to 'SALDO' or 'OPENSTAAND' for clarity."
+  ],
+  "critical_code_review_comments": [
+    "tenant_portal_login() uses three $or branches: {email: ident_lower}, {phone: original_string}, {phone_digits: digits}. The original-string phone match is brittle (case+spaces+'+' must match exactly). phone_digits is the robust fallback. Consider dropping the raw phone match entirely and rely on phone_digits only — simpler and removes a surprise edge case.",
+    "POST /api/tenants does not normalize email (no .lower()/strip), unlike POST /api/auth/login & /register for users. Inconsistent — root cause of the minor bug above.",
+    "server.py is now ~1850 lines (still growing). Tenant portal block at lines ~365-517 is a natural router boundary; recommend extracting into routers/tenant_portal.py in next refactor pass.",
+    "set_access_cookie has secure=False which is fine in this preview env but should become True (or env-controlled) when going to production HTTPS — applies to all three cookies (access_token, kiosk_token, tenant_token).",
+    "phone_digits is only populated when /auth/tenant-set-pin is called. If admin creates a tenant and assigns PIN via that endpoint everything works, but if the schema ever changes to allow tenants to self-set PIN or if pin_hash is seeded another way, phone_digits will be missing. Safer to compute phone_digits on tenant create/update too.",
+    "Maintenance ticket created by tenant includes created_by_tenant field — verified. Good. Consider also storing tenant_id_at_creation in case the tenant gets unassigned from the apartment later (audit trail)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_phase3_tenant_portal.py"
+  ],
+  "success_rate": {"backend": "100% (20/20 phase3 tests)", "frontend": "100% (login keypad, portal data, maintenance create, logout, auth redirect — all verified at mobile viewport 414x896)"},
+  "test_credentials": "Admin admin@vastgoed.sr / admin123 OK. Tenant Jan de Vries / jan@example.sr / +597 8001234 / PIN 5678 confirmed working. /app/memory/test_credentials.md does NOT yet document the tenant portal login or /auth/tenant-set-pin — recommend adding a 'Tenant Portal' section.",
+  "seed_data_creation": "Tests are idempotent: TestAdminSetPin re-sets PIN 5678 each run. TEST_NoPin and TEST_NoApt temporary tenants are created+deleted within tests. TEST_PH3 maintenance ticket is created+cleaned within test. Frontend UI test left one TEST_UI maintenance ticket — cleanup via admin DELETE /api/maintenance/{id} failed with 403 (endpoint requires admin auth which my inline urllib request did not properly receive); main agent can clean via the admin Onderhoud tab or it will simply persist as visibly TEST-prefixed.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run backend: REACT_APP_BACKEND_URL=$(grep REACT_APP_BACKEND_URL /app/frontend/.env|cut -d=- f2) pytest /app/backend/tests/test_phase3_tenant_portal.py -v. Frontend public URL is https://vastgoed-app.preview.emergentagent.com (NOT the URL in the original review_request which was stale). Test in MOBILE viewport 414x896 — design is mobile-first and the keypad/portal layout assume narrow width. Tenant testids: tenant-login-card, tenant-identifier, tenant-next, tenant-keypad-{0-9,DEL}, tenant-pin-input-{0-3}, tenant-pin-error, tenant-login-error; portal testids: tenant-logout, tenant-maint-new, tenant-maint-modal, tenant-maint-title, tenant-maint-desc, tenant-maint-prio-{low|medium|high}, tenant-maint-save, tenant-payment-{id}, tenant-payment-pdf-{id}, tenant-contract-{id}, tenant-contract-pdf-{id}, tenant-maint-{id}. Admin testids: tenant-pin-{tenant_id} button on Huurders tab opens tenant-pin-modal with tenant-pin-new, tenant-pin-confirm, tenant-pin-save.",
+  "rca of the issue": "Identified one minor backend inconsistency (mixed-case email on POST /api/tenants vs lowercased lookup on /tenant-portal/login). Reproduction: POST /api/tenants {email: 'Foo@Bar.sr'} → stored as 'Foo@Bar.sr' → POST /auth/tenant-set-pin → POST /tenant-portal/login {identifier: 'Foo@Bar.sr', pin} returns 401 because login does identifier.strip().lower() = 'foo@bar.sr' which does NOT match the stored 'Foo@Bar.sr'. Phone-digit login still works. Mitigation: lowercase email at insert in create_tenant() (and update_tenant()), matching what /api/auth/login + /auth/register already do for the users collection."
+}

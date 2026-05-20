@@ -484,11 +484,65 @@ function TenantForm({ initial, apartments, onCancel, onSaved }) {
   );
 }
 
+function TenantPinModal({ tenant, onCancel, onSaved }) {
+  const [pin, setPin] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState('');
+  const save = async () => {
+    setErr('');
+    if (!/^\d{4}$/.test(pin)) { setErr('PIN moet 4 cijfers zijn'); return; }
+    if (pin !== confirm) { setErr('PINs komen niet overeen'); return; }
+    setLoading(true);
+    try {
+      await api.post('/auth/tenant-set-pin', { tenant_id: tenant.id, pin });
+      onSaved();
+    } catch (e) { setErr(formatError(e)); }
+    finally { setLoading(false); }
+  };
+  return (
+    <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4" data-testid="tenant-pin-modal">
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-6 sm:p-8 animate-slide-up">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-xl font-black text-slate-900">Portal PIN voor {tenant.name}</h3>
+          <button onClick={onCancel} className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center"><X className="w-4 h-4" /></button>
+        </div>
+        <p className="text-sm text-slate-500 mb-4">
+          Stel een 4-cijferige PIN in zodat deze huurder kan inloggen op <code className="bg-slate-100 px-1 rounded text-xs">/huurder</code>
+        </p>
+        {err && <div className="mb-3 p-2.5 bg-red-50 border border-red-200 text-red-600 rounded-xl text-sm">{err}</div>}
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs font-bold uppercase tracking-widest text-slate-500">Nieuwe PIN</label>
+            <input type="password" inputMode="numeric" maxLength={4} value={pin}
+              onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
+              data-testid="tenant-pin-new"
+              className="w-full mt-1 h-14 px-4 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] outline-none text-2xl tracking-[0.5em] text-center font-bold" />
+          </div>
+          <div>
+            <label className="text-xs font-bold uppercase tracking-widest text-slate-500">Bevestig</label>
+            <input type="password" inputMode="numeric" maxLength={4} value={confirm}
+              onChange={(e) => setConfirm(e.target.value.replace(/\D/g, '').slice(0, 4))}
+              data-testid="tenant-pin-confirm"
+              className="w-full mt-1 h-14 px-4 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] outline-none text-2xl tracking-[0.5em] text-center font-bold" />
+          </div>
+        </div>
+        <button onClick={save} disabled={loading || !pin || !confirm} data-testid="tenant-pin-save"
+          className="w-full mt-5 h-12 rounded-xl bg-[#FF5C00] hover:bg-[#E05200] text-white font-bold flex items-center justify-center gap-2 disabled:opacity-50">
+          {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+          PIN opslaan
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function Tenants() {
   const [items, setItems] = useState([]);
   const [apts, setApts] = useState([]);
   const [editing, setEditing] = useState(null);
   const [creating, setCreating] = useState(false);
+  const [pinFor, setPinFor] = useState(null);
   const [q, setQ] = useState('');
   const load = useCallback(async () => {
     const [t, a] = await Promise.all([api.get('/tenants'), api.get('/apartments')]);
@@ -549,9 +603,13 @@ function Tenants() {
                   <td className="px-5 py-4 hidden md:table-cell text-slate-700 font-semibold">
                     {t.rent_amount ? fmtMoney(t.rent_amount, t.currency) : '—'}
                   </td>
-                  <td className="px-5 py-4 text-right">
+                  <td className="px-5 py-4 text-right space-x-1">
+                    <button onClick={() => setPinFor(t)} data-testid={`tenant-pin-${t.id}`}
+                      className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-orange-50 hover:bg-orange-100 text-[#FF5C00]" title="Portal PIN instellen">
+                      <KeySquare className="w-3.5 h-3.5" />
+                    </button>
                     <button onClick={() => setEditing(t)} data-testid={`tenant-edit-${t.id}`}
-                      className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 mr-1">
+                      className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600">
                       <Pencil className="w-3.5 h-3.5" />
                     </button>
                     <button onClick={() => del(t.id)} data-testid={`tenant-delete-${t.id}`}
@@ -570,6 +628,8 @@ function Tenants() {
           onCancel={() => { setEditing(null); setCreating(false); }}
           onSaved={() => { setEditing(null); setCreating(false); load(); }} />
       )}
+      {pinFor && <TenantPinModal tenant={pinFor}
+        onCancel={() => setPinFor(null)} onSaved={() => setPinFor(null)} />}
     </div>
   );
 }

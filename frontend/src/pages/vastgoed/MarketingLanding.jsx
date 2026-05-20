@@ -438,6 +438,7 @@ function Footer({ onLogin }) {
             <h4 className="text-xs font-black uppercase tracking-[0.2em] text-[#FF5C00] mb-5">Toegang</h4>
             <ul className="space-y-3.5 text-sm">
               <li><button onClick={onLogin} data-testid="footer-login-btn" className="text-slate-700 hover:text-[#FF5C00] transition-colors font-semibold">Inloggen / PIN</button></li>
+              <li><a href="/huurder" data-testid="footer-tenant-portal" className="text-slate-700 hover:text-[#FF5C00] transition-colors font-semibold">Mijn huurportaal</a></li>
               <li><a href="#pricing" className="text-slate-700 hover:text-[#FF5C00] transition-colors font-semibold">Prijzen</a></li>
               <li><a href="#features" className="text-slate-700 hover:text-[#FF5C00] transition-colors font-semibold">Functies</a></li>
             </ul>

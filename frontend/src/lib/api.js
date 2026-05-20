@@ -11,13 +11,18 @@ export const api = axios.create({
 api.interceptors.request.use((config) => {
   const adminToken = localStorage.getItem('admin_token');
   const kioskToken = localStorage.getItem('kiosk_token');
-  // Prefer kiosk token only for /kiosk/* endpoints that require it
-  if (config.url && config.url.startsWith('/kiosk/payments') && kioskToken) {
+  const tenantToken = localStorage.getItem('tenant_token');
+  const url = config.url || '';
+  if (url.startsWith('/tenant-portal/') && tenantToken) {
+    config.headers.Authorization = `Bearer ${tenantToken}`;
+  } else if (url.startsWith('/kiosk/payments') && kioskToken) {
     config.headers.Authorization = `Bearer ${kioskToken}`;
   } else if (adminToken) {
     config.headers.Authorization = `Bearer ${adminToken}`;
   } else if (kioskToken) {
     config.headers.Authorization = `Bearer ${kioskToken}`;
+  } else if (tenantToken) {
+    config.headers.Authorization = `Bearer ${tenantToken}`;
   }
   return config;
 });

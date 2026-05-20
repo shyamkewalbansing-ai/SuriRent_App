@@ -5,6 +5,8 @@ import LoginPage from './pages/vastgoed/LoginPage';
 import AdminDashboard from './pages/vastgoed/AdminDashboard';
 import KioskLayout from './pages/vastgoed/KioskLayout';
 import ContractSignPage from './pages/vastgoed/ContractSignPage';
+import TenantLoginPage from './pages/vastgoed/TenantLoginPage';
+import TenantDashboard from './pages/vastgoed/TenantDashboard';
 
 function Protected({ children }) {
   const { user, loading } = useAuth();
@@ -29,6 +31,8 @@ export default function App() {
         <Route path="/vastgoed/admin/*" element={<Protected><AdminDashboard /></Protected>} />
         <Route path="/vastgoed/kiosk" element={<KioskLayout />} />
         <Route path="/onderteken/:token" element={<ContractSignPage />} />
+        <Route path="/huurder" element={<TenantLoginPage />} />
+        <Route path="/huurder/portaal" element={<TenantDashboard />} />
         <Route path="*" element={<Navigate to="/vastgoed" replace />} />
       </Routes>
     </AuthProvider>

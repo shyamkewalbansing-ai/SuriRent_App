@@ -362,6 +362,162 @@ async def set_kiosk_pin(body: SetPinIn, user=Depends(get_current_user)):
 
 
 # =====================================================================
+# Tenant portal auth
+# =====================================================================
+TENANT_TOKEN_MIN = 60 * 24  # 24h
+
+
+async def get_tenant_session(request: Request) -> dict:
+    token = extract_token(request, "tenant_token")
+    if not token:
+        raise HTTPException(status_code=401, detail="Niet ingelogd")
+    try:
+        payload = decode_token(token)
+        if payload.get("type") != "tenant":
+            raise HTTPException(status_code=401, detail="Ongeldig token type")
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Sessie verlopen")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Ongeldig token")
+    tenant = await db.tenants.find_one({"id": payload["sub"]}, {"_id": 0, "pin_hash": 0})
+    if not tenant:
+        raise HTTPException(status_code=401, detail="Huurder niet gevonden")
+    return tenant
+
+
+class TenantLoginIn(BaseModel):
+    identifier: str  # phone or email
+    pin: str = Field(min_length=4, max_length=4)
+
+
+class TenantSetPinIn(BaseModel):
+    tenant_id: str
+    pin: str = Field(min_length=4, max_length=4)
+
+
+@api.post("/tenant-portal/login")
+async def tenant_portal_login(body: TenantLoginIn, response: Response):
+    ident = body.identifier.strip().lower()
+    # Find by email or phone (normalize phone by stripping non-digits)
+    digits = "".join(ch for ch in body.identifier if ch.isdigit())
+    query = {"$or": [
+        {"email": ident},
+        {"phone": body.identifier},
+    ]}
+    if digits:
+        query["$or"].append({"phone_digits": digits})
+    tenant = await db.tenants.find_one(query)
+    if not tenant or not tenant.get("pin_hash"):
+        raise HTTPException(status_code=401, detail="Onjuiste gegevens of PIN niet ingesteld")
+    if not verify_password(body.pin, tenant.get("pin_hash", "")):
+        raise HTTPException(status_code=401, detail="Onjuiste PIN")
+    token = create_token({"sub": tenant["id"], "type": "tenant"}, TENANT_TOKEN_MIN)
+    _set_access_cookie(response, token, name="tenant_token", minutes=TENANT_TOKEN_MIN)
+    return {
+        "token": token,
+        "tenant": {"id": tenant["id"], "name": tenant["name"], "email": tenant.get("email"), "phone": tenant.get("phone")},
+    }
+
+
+@api.post("/auth/tenant-set-pin")
+async def admin_set_tenant_pin(body: TenantSetPinIn, user=Depends(get_current_user)):
+    """Admin sets/resets a tenant's portal PIN."""
+    if not body.pin.isdigit():
+        raise HTTPException(status_code=400, detail="PIN moet 4 cijfers zijn")
+    t = await db.tenants.find_one({"id": body.tenant_id}, {"_id": 0})
+    if not t:
+        raise HTTPException(status_code=404, detail="Huurder niet gevonden")
+    await db.tenants.update_one(
+        {"id": body.tenant_id},
+        {"$set": {
+            "pin_hash": hash_password(body.pin),
+            "phone_digits": "".join(ch for ch in (t.get("phone") or "") if ch.isdigit()),
+        }},
+    )
+    return {"ok": True}
+
+
+@api.post("/tenant-portal/logout")
+async def tenant_portal_logout(response: Response):
+    response.delete_cookie("tenant_token", path="/")
+    return {"ok": True}
+
+
+@api.get("/tenant-portal/me")
+async def tenant_portal_me(tenant=Depends(get_tenant_session)):
+    return {
+        "id": tenant["id"],
+        "name": tenant["name"],
+        "email": tenant.get("email"),
+        "phone": tenant.get("phone"),
+    }
+
+
+@api.get("/tenant-portal/overview")
+async def tenant_portal_overview(tenant=Depends(get_tenant_session)):
+    apt = None
+    if tenant.get("apartment_id"):
+        apt = await db.apartments.find_one({"id": tenant["apartment_id"]}, {"_id": 0})
+    bal = await _calc_balance(tenant)
+    return {
+        "tenant": {"id": tenant["id"], "name": tenant["name"], "phone": tenant.get("phone"), "email": tenant.get("email")},
+        "apartment": apt and {
+            "id": apt["id"], "number": apt["number"], "address": apt.get("address", ""),
+            "rent_amount": apt["rent_amount"], "currency": apt["currency"],
+        },
+        "balance": bal,
+    }
+
+
+@api.get("/tenant-portal/payments")
+async def tenant_portal_payments(tenant=Depends(get_tenant_session)):
+    docs = await db.payments.find({"tenant_id": tenant["id"]}, {"_id": 0}).sort("paid_at", -1).to_list(200)
+    return [await _enrich_payment(d) for d in docs]
+
+
+@api.get("/tenant-portal/contracts")
+async def tenant_portal_contracts(tenant=Depends(get_tenant_session)):
+    docs = await db.contracts.find({"tenant_id": tenant["id"]}, {"_id": 0}).sort("created_at", -1).to_list(50)
+    return [await _enrich_contract(d) for d in docs]
+
+
+@api.get("/tenant-portal/maintenance")
+async def tenant_portal_maintenance(tenant=Depends(get_tenant_session)):
+    if not tenant.get("apartment_id"):
+        return []
+    docs = await db.maintenance.find({"apartment_id": tenant["apartment_id"]}, {"_id": 0}).sort("created_at", -1).to_list(100)
+    return [await _enrich_maint(d) for d in docs]
+
+
+class TenantMaintenanceIn(BaseModel):
+    title: str
+    description: Optional[str] = ""
+    priority: Literal["low", "medium", "high"] = "medium"
+
+
+@api.post("/tenant-portal/maintenance")
+async def tenant_portal_maintenance_create(body: TenantMaintenanceIn, tenant=Depends(get_tenant_session)):
+    if not tenant.get("apartment_id"):
+        raise HTTPException(status_code=400, detail="U bent niet gekoppeld aan een appartement")
+    doc = {
+        "id": new_id(),
+        "apartment_id": tenant["apartment_id"],
+        "title": body.title,
+        "description": body.description or "",
+        "priority": body.priority,
+        "cost": 0,
+        "currency": "SRD",
+        "status": "open",
+        "created_at": iso(now_utc()),
+        "resolved_at": None,
+        "created_by_tenant": tenant["id"],
+    }
+    await db.maintenance.insert_one(doc)
+    doc.pop("_id", None)
+    return await _enrich_maint(doc)
+
+
+# =====================================================================
 # Apartment routes (admin)
 # =====================================================================
 def _strip_doc(doc):
