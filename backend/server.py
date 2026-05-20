@@ -1459,5 +1459,238 @@ async def cash_balance(user=Depends(get_current_user)):
     return balances
 
 
+# =====================================================================
+# AI Chat assistant (Emergent LLM key)
+# =====================================================================
+from ai_service import chat_send as ai_chat_send  # noqa: E402
+
+
+class AIChatIn(BaseModel):
+    message: str
+    session_id: Optional[str] = None
+    include_context: bool = True
+
+
+async def _collect_context() -> dict:
+    """Aggregate live data for the AI assistant."""
+    total_apts = await db.apartments.count_documents({})
+    occupied = await db.apartments.count_documents({"status": "occupied"})
+    total_tenants = await db.tenants.count_documents({})
+    today = now_utc()
+    start = datetime(today.year, today.month, 1, tzinfo=timezone.utc).isoformat()
+    by_currency = {}
+    async for r in db.payments.aggregate([
+        {"$match": {"paid_at": {"$gte": start}}},
+        {"$group": {"_id": "$currency", "total": {"$sum": "$amount"}, "count": {"$sum": 1}}},
+    ]):
+        by_currency[r["_id"]] = {"total": r["total"], "count": r["count"]}
+
+    apts_list = await db.apartments.find({}, {"_id": 0}).sort("number", 1).to_list(40)
+    apts_enriched = [await _enrich_apartment(a) for a in apts_list]
+
+    tenants_with_balance = []
+    async for t in db.tenants.find({"apartment_id": {"$ne": None}}, {"_id": 0}).limit(40):
+        bal = await _calc_balance(t)
+        if bal["balance"] > 0:
+            apt = await db.apartments.find_one({"id": t.get("apartment_id")}, {"_id": 0, "number": 1})
+            tenants_with_balance.append({
+                "name": t["name"],
+                "apartment_number": apt["number"] if apt else None,
+                "balance": bal["balance"],
+                "currency": bal["currency"],
+            })
+    return {
+        "stats": {
+            "apartments_total": total_apts,
+            "apartments_occupied": occupied,
+            "apartments_vacant": total_apts - occupied,
+            "tenants_total": total_tenants,
+            "month_payments_by_currency": by_currency,
+        },
+        "apartments": apts_enriched,
+        "tenants_with_balance": tenants_with_balance,
+    }
+
+
+@api.post("/ai/chat")
+async def ai_chat(body: AIChatIn, user=Depends(get_current_user)):
+    session_id = body.session_id or f"{user['id']}-default"
+    # Load history from DB
+    history_doc = await db.ai_sessions.find_one({"session_id": session_id}, {"_id": 0})
+    history = history_doc.get("messages", []) if history_doc else []
+    context = await _collect_context() if body.include_context else None
+    try:
+        reply = await ai_chat_send(session_id, body.message, history, context)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"AI service fout: {e}")
+    new_history = history + [
+        {"role": "user", "text": body.message, "at": iso(now_utc())},
+        {"role": "assistant", "text": reply, "at": iso(now_utc())},
+    ]
+    await db.ai_sessions.update_one(
+        {"session_id": session_id},
+        {"$set": {"user_id": user["id"], "messages": new_history[-40:], "updated_at": iso(now_utc())}},
+        upsert=True,
+    )
+    return {"session_id": session_id, "reply": reply, "history": new_history[-40:]}
+
+
+@api.get("/ai/sessions/{session_id}")
+async def ai_session_history(session_id: str, user=Depends(get_current_user)):
+    doc = await db.ai_sessions.find_one({"session_id": session_id}, {"_id": 0})
+    if not doc:
+        return {"session_id": session_id, "messages": []}
+    return doc
+
+
+@api.delete("/ai/sessions/{session_id}")
+async def ai_session_clear(session_id: str, user=Depends(get_current_user)):
+    await db.ai_sessions.delete_one({"session_id": session_id})
+    return {"ok": True}
+
+
+# =====================================================================
+# AES-256 secure receipt + QR verification
+# =====================================================================
+from pdf_security import secure_pdf, make_verify_token, verify_token  # noqa: E402
+
+
+@api.get("/payments/{payment_id}/secure-pdf")
+async def payment_secure_pdf(payment_id: str, encrypted: bool = False):
+    p = await db.payments.find_one({"id": payment_id}, {"_id": 0})
+    if not p:
+        raise HTTPException(status_code=404, detail="Kwitantie niet gevonden")
+    p = await _enrich_payment(p)
+    base = receipt_pdf(p)
+    token = make_verify_token({
+        "kind": "payment", "id": payment_id, "rn": p["receipt_number"],
+        "amt": p["amount"], "cur": p["currency"], "ts": int(now_utc().timestamp()),
+    })
+    public_base = os.environ.get("PUBLIC_BASE_URL", "")
+    verify_url = f"{public_base}/api/verify/{token}" if public_base else f"/api/verify/{token}"
+    out = secure_pdf(base, verify_url, encrypted=encrypted)
+    return _pdf_response(out, f"kwitantie-{p['receipt_number']}{'-encrypted' if encrypted else ''}.pdf")
+
+
+@api.get("/verify/{token}")
+async def verify_pdf_token(token: str):
+    payload = verify_token(token)
+    if not payload:
+        return {"valid": False, "reason": "Ongeldige of geknoeide handtekening"}
+    kind = payload.get("kind")
+    if kind == "payment":
+        p = await db.payments.find_one({"id": payload.get("id")}, {"_id": 0})
+        if not p:
+            return {"valid": False, "reason": "Kwitantie niet gevonden in database"}
+        if p["receipt_number"] != payload.get("rn") or float(p["amount"]) != float(payload.get("amt", 0)):
+            return {"valid": False, "reason": "Gegevens komen niet overeen met origineel"}
+        return {
+            "valid": True,
+            "type": "Kwitantie",
+            "receipt_number": p["receipt_number"],
+            "amount": p["amount"],
+            "currency": p["currency"],
+            "paid_at": p["paid_at"],
+            "issued_at": datetime.fromtimestamp(payload.get("ts", 0)).isoformat(),
+        }
+    return {"valid": False, "reason": "Onbekend type"}
+
+
+# =====================================================================
+# PWA Push Notifications
+# =====================================================================
+from push_service import send_push  # noqa: E402
+
+VAPID_PUBLIC_KEY = os.environ.get("VAPID_PUBLIC_KEY", "")
+
+
+class PushSubscriptionIn(BaseModel):
+    endpoint: str
+    keys: dict
+    user_label: Optional[str] = ""  # admin label for filtering
+
+
+@api.get("/push/vapid-public-key")
+async def push_vapid_key():
+    return {"public_key": VAPID_PUBLIC_KEY}
+
+
+@api.post("/push/subscribe")
+async def push_subscribe(body: PushSubscriptionIn, user=Depends(get_current_user)):
+    doc = {
+        "id": new_id(),
+        "user_id": user["id"],
+        "endpoint": body.endpoint,
+        "keys": body.keys,
+        "user_label": body.user_label or user.get("email", ""),
+        "created_at": iso(now_utc()),
+    }
+    # Upsert by endpoint
+    await db.push_subs.update_one(
+        {"endpoint": body.endpoint},
+        {"$set": doc},
+        upsert=True,
+    )
+    return {"ok": True}
+
+
+@api.post("/push/unsubscribe")
+async def push_unsubscribe(body: dict, user=Depends(get_current_user)):
+    endpoint = body.get("endpoint")
+    if not endpoint:
+        raise HTTPException(status_code=400, detail="endpoint vereist")
+    await db.push_subs.delete_one({"endpoint": endpoint})
+    return {"ok": True}
+
+
+class PushTestIn(BaseModel):
+    title: str = "SuriRent test"
+    body: str = "Push notificatie werkt!"
+
+
+@api.post("/push/test")
+async def push_test(body: PushTestIn, user=Depends(get_current_user)):
+    """Send a test push to all subscriptions of current admin."""
+    sent = 0
+    failed = 0
+    cursor = db.push_subs.find({"user_id": user["id"]}, {"_id": 0})
+    async for sub in cursor:
+        sub_info = {"endpoint": sub["endpoint"], "keys": sub["keys"]}
+        ok = send_push(sub_info, body.title, body.body, {"kind": "test"})
+        if ok:
+            sent += 1
+        else:
+            failed += 1
+            await db.push_subs.delete_one({"endpoint": sub["endpoint"]})
+    return {"sent": sent, "failed": failed}
+
+
+@api.post("/push/notify-overdue")
+async def push_notify_overdue(user=Depends(get_current_user)):
+    """Send admin a summary push of overdue tenants."""
+    overdue = []
+    async for t in db.tenants.find({"apartment_id": {"$ne": None}}, {"_id": 0}):
+        bal = await _calc_balance(t)
+        if bal["balance"] > 0:
+            overdue.append((t["name"], bal["balance"], bal["currency"]))
+    if not overdue:
+        msg = "Geen openstaande betalingen — alles is voldaan! 🎉"
+    else:
+        top = overdue[:3]
+        names = ", ".join(n for n, _, _ in top)
+        extra = f" +{len(overdue) - 3} anderen" if len(overdue) > 3 else ""
+        msg = f"{len(overdue)} huurders openstaand: {names}{extra}"
+    sent = 0
+    async for sub in db.push_subs.find({"user_id": user["id"]}, {"_id": 0}):
+        if send_push(
+            {"endpoint": sub["endpoint"], "keys": sub["keys"]},
+            "Openstaande huur",
+            msg,
+            {"kind": "overdue", "count": len(overdue)},
+        ):
+            sent += 1
+    return {"sent": sent, "overdue_count": len(overdue), "message": msg}
+
+
 app.include_router(api)
 

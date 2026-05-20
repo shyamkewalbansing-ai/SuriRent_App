@@ -10,3 +10,9 @@ email-validator==2.3.0
 python-multipart==0.0.21
 reportlab==4.4.9
 pillow==12.2.0
+emergentintegrations
+qrcode[pil]==8.2
+cryptography==46.0.5
+pypdf==6.11.0
+py-vapid==1.9.4
+pywebpush==2.3.0

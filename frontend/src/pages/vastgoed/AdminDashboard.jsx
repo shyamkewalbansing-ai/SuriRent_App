@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Building2, Users, Receipt, LayoutDashboard, LogOut, Plus, Trash2, Pencil,
   X, Check, Loader2, Search, Home, Banknote, KeySquare, ChevronRight, Wallet,
-  FileText, ShieldCheck, Wrench, FileSignature,
+  FileText, ShieldCheck, Wrench, FileSignature, Sparkles, Bell,
 } from 'lucide-react';
 import { api, formatError, fmtMoney, MONTHS_NL } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
@@ -13,9 +13,12 @@ import Employees from './admin/Employees';
 import Deposits from './admin/Deposits';
 import Maintenance from './admin/Maintenance';
 import Kasgeld from './admin/Kasgeld';
+import AIChat from './admin/AIChat';
+import Notifications from './admin/Notifications';
 
 const TABS = [
   { id: 'overview', label: 'Overzicht', icon: LayoutDashboard },
+  { id: 'ai', label: 'AI Assistent', icon: Sparkles },
   { id: 'apartments', label: 'Appartementen', icon: Building2 },
   { id: 'tenants', label: 'Huurders', icon: Users },
   { id: 'contracts', label: 'Contracten', icon: FileSignature },
@@ -25,6 +28,7 @@ const TABS = [
   { id: 'maintenance', label: 'Onderhoud', icon: Wrench },
   { id: 'kasgeld', label: 'Kasgeld', icon: Wallet },
   { id: 'employees', label: 'Werknemers', icon: Users },
+  { id: 'notifications', label: 'Notificaties', icon: Bell },
   { id: 'settings', label: 'Kiosk PIN', icon: KeySquare },
 ];
 
@@ -757,8 +761,13 @@ function Payments() {
                   <td className="px-5 py-3 text-right">
                     <a href={`${apiBase}/payments/${p.id}/pdf`} target="_blank" rel="noreferrer"
                       data-testid={`payment-pdf-${p.id}`}
-                      className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600" title="Kwitantie PDF">
+                      className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 mr-1" title="Kwitantie PDF">
                       <FileText className="w-3.5 h-3.5" />
+                    </a>
+                    <a href={`${apiBase}/payments/${p.id}/secure-pdf`} target="_blank" rel="noreferrer"
+                      data-testid={`payment-secure-pdf-${p.id}`}
+                      className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-orange-50 hover:bg-orange-100 text-[#FF5C00]" title="Beveiligde PDF met QR verificatie">
+                      <ShieldCheck className="w-3.5 h-3.5" />
                     </a>
                   </td>
                 </tr>
@@ -837,6 +846,7 @@ export default function AdminDashboard() {
       <Sidebar active={tab} onChange={setTab} onLogout={doLogout} userName={user?.email} />
       <main className="flex-1 p-5 md:p-8 pb-20 md:pb-8 max-w-7xl">
         {tab === 'overview' && <Overview />}
+        {tab === 'ai' && <AIChat />}
         {tab === 'apartments' && <Apartments />}
         {tab === 'tenants' && <Tenants />}
         {tab === 'contracts' && <Contracts />}
@@ -846,6 +856,7 @@ export default function AdminDashboard() {
         {tab === 'maintenance' && <Maintenance />}
         {tab === 'kasgeld' && <Kasgeld />}
         {tab === 'employees' && <Employees />}
+        {tab === 'notifications' && <Notifications />}
         {tab === 'settings' && <Settings />}
       </main>
       <MobileTabBar active={tab} onChange={setTab} />
