@@ -78,6 +78,7 @@ User koos voor **Optie C — minimale herbouw** (kern eerst), dan vroeg om **Fas
 - Iteration 2 (Fase 1): 100% backend (8/8 nieuwe + 10/11 regression met PIN reset) & frontend (alle 11 tabs) ✅
 - Iteration 5 (Multi-Company audit): 25/34 — vond 8 critical data leak bugs
 - Iteration 6 (Multi-Company regression): 42/43 ✅ — alle leaks gefixed, data isolation sealed
+- Iteration 7 (P1 hardening + regression): 55/55 ✅ — brute force lockout, Jan PIN re-seed, tenant set-pin scope, alle vorige tests blijven groen
 
 ### Fase 3 deel 2 (Multi-Company SaaS — 2026-05-20) ✅
 - ✅ **Multi-Company architectuur volledig stabiel** — alle 12+ tenant-scoped resources gefilterd via `scope(user)` op list/get/put/delete + `company_id` op create
@@ -88,19 +89,17 @@ User koos voor **Optie C — minimale herbouw** (kern eerst), dan vroeg om **Fas
 - ✅ **Data isolation geverifieerd**: 42/43 tests pass (iteration_6), zero cross-company leakage
 - ✅ Test suite `/app/backend/tests/test_multi_company.py` (43 tests) is canonical regressie
 
-## Prioritized Backlog (post-multi-company)
+### Fase 3 deel 3 (P1 — Frontend Multi-Company UI + Hardening — 2026-05-20) ✅
+- ✅ **Companies admin tab** voor superadmin (`/app/frontend/src/pages/vastgoed/admin/Companies.jsx`): CRUD + stats per company + actief-status badge + optionele seed-admin bij create
+- ✅ **Company switcher** — superadmin kan met één klik wisselen tussen "Alle bedrijven" en specifiek bedrijf; selectie persisteert in `localStorage.active_company_id`
+- ✅ **`x-active-company` header injectie** in axios interceptor (`api.js`) — backend ontvangt automatisch de actieve company scope
+- ✅ **Sidebar company badge** — toont "Actief bedrijf" met naam + slug/plan
+- ✅ **PIN brute-force lockout** — 8 mislukte pogingen → 429 voor 5 minuten op `/api/auth/kiosk-pin` en `/api/tenant-portal/login`
+- ✅ **Idempotent re-seed Jan de Vries PIN** in `lifespan()` — geen handmatige DB reset meer nodig
+- ✅ **Tenant set-PIN scope** — Admin A kan geen PIN zetten voor tenant van Admin B (404)
+- ✅ 55/55 tests pass (iteration_7)
 
-### P1 — Frontend Multi-Company UI
-- Companies tab voor superadmin (lijst, CRUD, stats per company)
-- Company badge/switcher in admin header voor superadmin
-- AdminDashboard: tonen welke company actief is
-
-### P1 — Hardening (uit iteration_6)
-- 📧 PDF endpoints (payments/contracts/invoices) auth-gate of signed-token (UUID enumeration risico)
-- 🔒 Brute-force lockout op PIN endpoints (kiosk-pin + tenant-portal/login)
-- 🌱 Idempotent re-seed Jan de Vries PIN (5678) in `lifespan()`
-
-### P2 — Externe integraties (wacht op credentials)
+## Prioritized Backlog (na P1)
 - 📧 **Email notificaties** — wacht op SendGrid / Resend credentials van user
 - 📱 **WhatsApp/SMS herinneringen** — wacht op Twilio credentials
 - 💳 **Payment gateways** (SumUp/Mope/Uni5Pay) — wacht op credentials
