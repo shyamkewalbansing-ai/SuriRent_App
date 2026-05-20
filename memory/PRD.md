@@ -1,66 +1,90 @@
 # Vastgoed Kiosk - PRD
 
 ## Original Problem Statement
-"Ik wil de /vastgoed en de KIOSK van dit https://github.com/shyamkewalbansing-ai/erp.git hierop zetten met backend en frontend alleen de /vastgoed en de KIOSK, NIET DE ERP OF ANDERE DINGEN ALLEEN DE /vastgoed heb ik nodig en de kiosk"
+"Ik wil de /vastgoed en de KIOSK van dit https://github.com/shyamkewalbansing-ai/erp.git hierop zetten met backend en frontend alleen de /vastgoed en de KIOSK..."
 
-User choice: Optie C — minimale herbouw (alleen vastgoed CRUD + kiosk flow, geen overige ERP modules).
+User koos voor **Optie C — minimale herbouw** (kern eerst), dan vroeg om **Fase 1 uitbreiding** met 7 modules.
 
 ## Architecture
-- Backend: FastAPI + Motor (MongoDB), single `server.py`
-- Auth: JWT (httpOnly cookies + Bearer header fallback) via bcrypt
+- Backend: FastAPI + Motor (MongoDB) + ReportLab (PDFs), single `server.py` (~1460 regels)
+- Auth: JWT (Bearer + httpOnly cookies optioneel) via bcrypt
 - Frontend: React 19 + React Router 7 + Tailwind + framer-motion + lucide-react
-- Database: MongoDB collections — `users`, `settings` (kiosk PIN), `apartments`, `tenants`, `payments`, `counters`
+- PDF: ReportLab Platypus, eigen SuriRent-stijl
+- Database: MongoDB — collecties: `users`, `settings`, `apartments`, `tenants`, `payments`, `contracts`, `invoices`, `employees`, `salaries`, `deposits`, `maintenance`, `kasgeld`, `counters`
 
 ## User Personas
-1. **Beheerder (Admin)** — Beheert appartementen, huurders en betalingen; logt in via email + wachtwoord.
-2. **Huurder / Kiosk gebruiker** — Doet zelf-service betalingen via een fysieke kiosk; ontgrendelt met 4-cijferige PIN.
+1. **Beheerder (Admin)** — Email + wachtwoord login
+2. **Huurder / Kiosk gebruiker** — 4-cijferige PIN
+3. **Contracttekenaar** — Publieke link `/onderteken/:token`
 
-## Core Requirements (static)
-- Marketing landing op `/vastgoed` (oranje/cream stijl uit originele repo)
-- 4-cijferige PIN login flow voor kiosk
-- JWT email/wachtwoord login voor beheerder
-- CRUD voor appartementen, huurders en betalingen
-- Kiosk flow: Welcome → Apartment Select → Tenant Overview → Payment Select → Confirm → Receipt
-- Multi-valuta support (SRD, USD, EUR)
-- Genummerde digitale kwitanties (KW{jaar}-{seq})
+## What's Implemented
 
-## What's Been Implemented (2026-05-20)
-- ✅ Backend (`/app/backend/server.py`) — alle endpoints uit `/app/memory/test_credentials.md`
-- ✅ Frontend pages: MarketingLanding, LoginPage, AdminDashboard (5 tabs), KioskLayout (6 screens)
-- ✅ Seeded admin (`admin@vastgoed.sr`/`admin123`) en kiosk PIN `1234`
-- ✅ Auth provider met localStorage + httpOnly cookie fallback
-- ✅ Multi-valuta + maandelijks huur-saldo berekening
-- ✅ Kiosk PIN change vanuit admin Settings tab
-- ✅ data-testid op alle interactieve elementen
-- ✅ Testing agent: 100% pass (backend pytest + frontend playwright)
+### Fase 0 (initial — 2026-05-20)
+- ✅ Marketing landing, JWT auth, kiosk PIN flow
+- ✅ CRUD Appartementen, Huurders, Betalingen
+- ✅ Kiosk flow Welcome → Select → Overview → Pay → Confirm → Receipt
+- ✅ Multi-valuta SRD/USD/EUR + maandelijks saldo berekening
+
+### Fase 1 (uitgebreid — 2026-05-20)
+- ✅ **Contracten** (CRUD, contract_number `HC{year}-NNNN`, ondertekenlink, PDF)
+- ✅ **Digitaal ondertekenen** publieke pagina `/onderteken/:token` met IP + naam + tijdstempel
+- ✅ **Facturen** (factuurnummer `F{year}-NNNNN`, maand-generator, PDF)
+- ✅ **Werknemers + Loonstroken** (CRUD, auto-fill salaris, payslip PDF)
+- ✅ **Borg / Deposits** (held → refunded met aftrek, refund PDF)
+- ✅ **Onderhoud tickets** (CRUD per appartement, status workflow open/in_progress/done)
+- ✅ **Kasgeld** (in/out, saldo per valuta)
+- ✅ **PDF kwitanties** per betaling
+- ✅ 11 admin tabs (sidebar + horizontaal scrollbaar mobiel)
 
 ## Routes
 | Route | Description |
 |-------|-------------|
-| `/vastgoed` | Marketing landing (publiek) |
-| `/vastgoed/login` | PIN keypad + admin login toggle |
-| `/vastgoed/admin/*` | Beheer dashboard (JWT protected) |
-| `/vastgoed/kiosk` | Kiosk flow (kiosk_token in localStorage) |
+| `/vastgoed` | Marketing landing |
+| `/vastgoed/login` | PIN keypad + admin login |
+| `/vastgoed/admin/*` | Beheer dashboard (11 tabs, JWT protected) |
+| `/vastgoed/kiosk` | Kiosk flow |
+| `/onderteken/:token` | Publieke contract signing |
+
+## API Endpoints (samenvatting)
+- Auth: `/auth/login` `/auth/register` `/auth/me` `/auth/kiosk-pin` `/auth/kiosk-set-pin`
+- Apartments: `/apartments` (CRUD) `/apartments/{id}/assign-tenant` `/apartments/{id}/remove-tenant`
+- Tenants: `/tenants` (CRUD) `/tenants/{id}/balance`
+- Payments: `/payments` (GET/POST) `/payments/{id}/pdf` (public)
+- Contracts: `/contracts` (CRUD) `/contracts/{id}/pdf` `/contracts/sign/{token}` (GET+POST public)
+- Invoices: `/invoices` (CRUD) `/invoices/generate-month` `/invoices/{id}/pdf`
+- Employees: `/employees` (CRUD)
+- Salaries: `/salaries` (GET/POST/DELETE) `/salaries/{id}/pdf`
+- Deposits: `/deposits` (CRUD) `/deposits/{id}/refund` `/deposits/{id}/refund-pdf`
+- Maintenance: `/maintenance` (CRUD) `/maintenance/{id}/status`
+- Kasgeld: `/kasgeld` (CRUD) `/kasgeld/balance`
+- Kiosk: `/kiosk/apartments` `/kiosk/tenants/{id}/overview` `/kiosk/payments`
+
+## Test Results
+- Iteration 1 (Fase 0): 100% backend & frontend ✅
+- Iteration 2 (Fase 1): 100% backend (8/8 nieuwe + 10/11 regression met PIN reset) & frontend (alle 11 tabs) ✅
 
 ## Prioritized Backlog
-### P0 (next)
-- Geen blocking items
 
-### P1 (nice to have)
-- PDF kwitantie download/print
-- Huurder portal (eigen login + betalingsgeschiedenis)
-- Periode-betalingen rapport / export naar Excel
-- Email/SMS herinneringen voor openstaande huur
+### Fase 2 (volgende sessie — integraties)
+- 📧 **Email notificaties** — wacht op SendGrid / Resend credentials van user
+- 📱 **WhatsApp/SMS herinneringen** — wacht op Twilio credentials
+- 💳 **Payment gateways** (SumUp/Mope/Uni5Pay) — wacht op credentials
+- 🤖 **AI assistent Nederlandse chat** — via Emergent LLM key
+- 🔔 **PWA push notificaties** — geen externe key, VAPID generen
+- 🔐 **AES-256 versleutelde PDFs** + QR verificatie
 
-### P2 (future)
-- Multi-bedrijf (multi-tenant) zoals het originele systeem
-- Foto upload bij appartement
-- Onderhoud-tickets module
-- Meterstanden module (gas/water/elektra)
-- Splitsen `server.py` in routers (auth, apartments, tenants, payments, kiosk)
-- CORS lock-down naar exacte frontend URL i.p.v. wildcard
+### Fase 3 (multi-bedrijf)
+- Multi-bedrijf SaaS (companies, subscription, superadmin)
+- Tenant portal (huurder login + betalingsgeschiedenis)
+- Custom domein per bedrijf
 
-## Tech Notes
-- `_set_access_cookie` gebruikt `secure=False` (preview); productie zou `secure=True` moeten zijn (https)
-- Receipt counter per jaar (`db.counters._id = "receipt_{year}"`); atomic via `find_one_and_update`
-- `_calc_balance` rekent maanden vanaf `tenant.created_at`; geen aparte move-in date (kan later toegevoegd)
+### Fase 4 (hardware)
+- Shelly smart breakers per appartement
+- Tenda router koppeling (internet plannen)
+- Eigen domein + SSL deployment
+
+### Tech debt (van code review)
+- Splits `server.py` (~1460 regels) in routers per resource
+- PDF endpoints zijn public via UUID — voor productie: signed/expiring tokens
+- Deposit `deduction <= amount` validatie strenger maken
+- Maintenance reopen `resolved_at` clearen
