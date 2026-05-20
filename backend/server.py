@@ -1170,14 +1170,15 @@ async def kiosk_receipt(payment_id: str):
 # =====================================================================
 @api.get("/admin/stats")
 async def admin_stats(user=Depends(get_current_user)):
-    total_apts = await db.apartments.count_documents({})
-    occupied = await db.apartments.count_documents({"status": "occupied"})
-    total_tenants = await db.tenants.count_documents({})
+    sc = scope(user)
+    total_apts = await db.apartments.count_documents({**sc})
+    occupied = await db.apartments.count_documents({**sc, "status": "occupied"})
+    total_tenants = await db.tenants.count_documents({**sc})
     # Sum payments this month
     today = now_utc()
     start = datetime(today.year, today.month, 1, tzinfo=timezone.utc).isoformat()
     pipeline = [
-        {"$match": {"paid_at": {"$gte": start}}},
+        {"$match": {**sc, "paid_at": {"$gte": start}}},
         {"$group": {"_id": "$currency", "total": {"$sum": "$amount"}, "count": {"$sum": 1}}},
     ]
     by_currency = {}
@@ -1277,7 +1278,7 @@ async def _enrich_contract(c: dict) -> dict:
 
 @api.get("/contracts", response_model=List[ContractOut])
 async def list_contracts(user=Depends(get_current_user), tenant_id: Optional[str] = None):
-    q = {}
+    q = dict(scope(user))
     if tenant_id:
         q["tenant_id"] = tenant_id
     docs = await db.contracts.find(q, {"_id": 0}).sort("created_at", -1).to_list(500)
@@ -1286,16 +1287,20 @@ async def list_contracts(user=Depends(get_current_user), tenant_id: Optional[str
 
 @api.post("/contracts", response_model=ContractOut)
 async def create_contract(body: ContractIn, user=Depends(get_current_user)):
-    tenant = await db.tenants.find_one({"id": body.tenant_id}, {"_id": 0})
+    cid = company_id_of(user)
+    if not cid:
+        raise HTTPException(status_code=400, detail="Geen actief bedrijf geselecteerd")
+    tenant = await db.tenants.find_one({"id": body.tenant_id, **scope(user)}, {"_id": 0})
     if not tenant:
         raise HTTPException(status_code=404, detail="Huurder niet gevonden")
-    apt = await db.apartments.find_one({"id": body.apartment_id}, {"_id": 0})
+    apt = await db.apartments.find_one({"id": body.apartment_id, **scope(user)}, {"_id": 0})
     if not apt:
         raise HTTPException(status_code=404, detail="Appartement niet gevonden")
     year = now_utc().year
     seq = await _next_seq(f"contract_{year}")
     doc = {
         "id": new_id(),
+        "company_id": cid,
         "contract_number": f"HC{year}-{seq:04d}",
         "tenant_id": body.tenant_id,
         "apartment_id": body.apartment_id,
@@ -1319,7 +1324,7 @@ async def create_contract(body: ContractIn, user=Depends(get_current_user)):
 
 @api.delete("/contracts/{contract_id}")
 async def delete_contract(contract_id: str, user=Depends(get_current_user)):
-    res = await db.contracts.delete_one({"id": contract_id})
+    res = await db.contracts.delete_one({"id": contract_id, **scope(user)})
     if res.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Contract niet gevonden")
     return {"ok": True}
@@ -1418,21 +1423,25 @@ async def _enrich_invoice(i: dict) -> dict:
 
 @api.get("/invoices", response_model=List[InvoiceOut])
 async def list_invoices(user=Depends(get_current_user)):
-    docs = await db.invoices.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    docs = await db.invoices.find(scope(user), {"_id": 0}).sort("created_at", -1).to_list(500)
     return [await _enrich_invoice(d) for d in docs]
 
 
 @api.post("/invoices", response_model=InvoiceOut)
 async def create_invoice(body: InvoiceCreate, user=Depends(get_current_user)):
-    t = await db.tenants.find_one({"id": body.tenant_id}, {"_id": 0})
+    cid = company_id_of(user)
+    if not cid:
+        raise HTTPException(status_code=400, detail="Geen actief bedrijf geselecteerd")
+    t = await db.tenants.find_one({"id": body.tenant_id, **scope(user)}, {"_id": 0})
     if not t:
         raise HTTPException(status_code=404, detail="Huurder niet gevonden")
     apt_id = t.get("apartment_id")
-    apt = await db.apartments.find_one({"id": apt_id}, {"_id": 0}) if apt_id else None
+    apt = await db.apartments.find_one({"id": apt_id, **scope(user)}, {"_id": 0}) if apt_id else None
     if not apt:
         raise HTTPException(status_code=400, detail="Huurder heeft geen appartement")
     # Prevent duplicate invoice for same tenant + period
     dup = await db.invoices.find_one({
+        **scope(user),
         "tenant_id": body.tenant_id, "period_month": body.period_month,
         "period_year": body.period_year,
     })
@@ -1442,6 +1451,7 @@ async def create_invoice(body: InvoiceCreate, user=Depends(get_current_user)):
     seq = await _next_seq(f"invoice_{year}")
     doc = {
         "id": new_id(),
+        "company_id": cid,
         "invoice_number": f"F{year}-{seq:05d}",
         "tenant_id": body.tenant_id,
         "apartment_id": apt_id,
@@ -1465,15 +1475,19 @@ class GenerateMonthIn(BaseModel):
 @api.post("/invoices/generate-month")
 async def generate_month_invoices(body: GenerateMonthIn, user=Depends(get_current_user)):
     """Generate invoice for every occupied apartment for the period."""
-    apts = await db.apartments.find({"status": "occupied"}, {"_id": 0}).to_list(1000)
+    cid = company_id_of(user)
+    if not cid:
+        raise HTTPException(status_code=400, detail="Geen actief bedrijf geselecteerd")
+    apts = await db.apartments.find({**scope(user), "status": "occupied"}, {"_id": 0}).to_list(1000)
     created = 0
     skipped = 0
     for a in apts:
-        t = await db.tenants.find_one({"id": a.get("tenant_id")}, {"_id": 0}) if a.get("tenant_id") else None
+        t = await db.tenants.find_one({"id": a.get("tenant_id"), **scope(user)}, {"_id": 0}) if a.get("tenant_id") else None
         if not t:
             skipped += 1
             continue
         dup = await db.invoices.find_one({
+            **scope(user),
             "tenant_id": t["id"], "period_month": body.period_month, "period_year": body.period_year
         })
         if dup:
@@ -1482,6 +1496,7 @@ async def generate_month_invoices(body: GenerateMonthIn, user=Depends(get_curren
         seq = await _next_seq(f"invoice_{body.period_year}")
         await db.invoices.insert_one({
             "id": new_id(),
+            "company_id": cid,
             "invoice_number": f"F{body.period_year}-{seq:05d}",
             "tenant_id": t["id"], "apartment_id": a["id"],
             "amount": a["rent_amount"], "currency": a.get("currency", "SRD"),
@@ -1494,7 +1509,7 @@ async def generate_month_invoices(body: GenerateMonthIn, user=Depends(get_curren
 
 @api.delete("/invoices/{invoice_id}")
 async def delete_invoice(invoice_id: str, user=Depends(get_current_user)):
-    res = await db.invoices.delete_one({"id": invoice_id})
+    res = await db.invoices.delete_one({"id": invoice_id, **scope(user)})
     if res.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Factuur niet gevonden")
     return {"ok": True}
@@ -1538,13 +1553,16 @@ class EmployeeOut(EmployeeIn):
 
 @api.get("/employees", response_model=List[EmployeeOut])
 async def list_employees(user=Depends(get_current_user)):
-    docs = await db.employees.find({}, {"_id": 0}).sort("name", 1).to_list(500)
+    docs = await db.employees.find(scope(user), {"_id": 0}).sort("name", 1).to_list(500)
     return docs
 
 
 @api.post("/employees", response_model=EmployeeOut)
 async def create_employee(body: EmployeeIn, user=Depends(get_current_user)):
-    doc = {"id": new_id(), **body.model_dump(), "created_at": iso(now_utc())}
+    cid = company_id_of(user)
+    if not cid:
+        raise HTTPException(status_code=400, detail="Geen actief bedrijf geselecteerd")
+    doc = {"id": new_id(), "company_id": cid, **body.model_dump(), "created_at": iso(now_utc())}
     await db.employees.insert_one(doc)
     doc.pop("_id", None)
     return doc
@@ -1554,7 +1572,7 @@ async def create_employee(body: EmployeeIn, user=Depends(get_current_user)):
 async def update_employee(eid: str, body: EmployeeIn, user=Depends(get_current_user)):
     from pymongo import ReturnDocument
     res = await db.employees.find_one_and_update(
-        {"id": eid}, {"$set": body.model_dump()},
+        {"id": eid, **scope(user)}, {"$set": body.model_dump()},
         projection={"_id": 0}, return_document=ReturnDocument.AFTER,
     )
     if not res:
@@ -1564,7 +1582,7 @@ async def update_employee(eid: str, body: EmployeeIn, user=Depends(get_current_u
 
 @api.delete("/employees/{eid}")
 async def delete_employee(eid: str, user=Depends(get_current_user)):
-    await db.employees.delete_one({"id": eid})
+    await db.employees.delete_one({"id": eid, **scope(user)})
     return {"ok": True}
 
 
@@ -1601,7 +1619,7 @@ async def _enrich_salary(s: dict) -> dict:
 
 @api.get("/salaries", response_model=List[SalaryOut])
 async def list_salaries(user=Depends(get_current_user), employee_id: Optional[str] = None):
-    q = {}
+    q = dict(scope(user))
     if employee_id:
         q["employee_id"] = employee_id
     docs = await db.salaries.find(q, {"_id": 0}).sort("paid_at", -1).to_list(500)
@@ -1610,12 +1628,16 @@ async def list_salaries(user=Depends(get_current_user), employee_id: Optional[st
 
 @api.post("/salaries", response_model=SalaryOut)
 async def create_salary(body: SalaryIn, user=Depends(get_current_user)):
-    e = await db.employees.find_one({"id": body.employee_id}, {"_id": 0})
+    cid = company_id_of(user)
+    if not cid:
+        raise HTTPException(status_code=400, detail="Geen actief bedrijf geselecteerd")
+    e = await db.employees.find_one({"id": body.employee_id, **scope(user)}, {"_id": 0})
     if not e:
         raise HTTPException(status_code=404, detail="Werknemer niet gevonden")
     net = body.gross - body.advance - body.deductions
     doc = {
         "id": new_id(),
+        "company_id": cid,
         "employee_id": body.employee_id,
         "gross": body.gross, "advance": body.advance, "deductions": body.deductions,
         "net": net, "currency": body.currency,
@@ -1629,7 +1651,7 @@ async def create_salary(body: SalaryIn, user=Depends(get_current_user)):
 
 @api.delete("/salaries/{sid}")
 async def delete_salary(sid: str, user=Depends(get_current_user)):
-    await db.salaries.delete_one({"id": sid})
+    await db.salaries.delete_one({"id": sid, **scope(user)})
     return {"ok": True}
 
 
@@ -1683,17 +1705,21 @@ async def _enrich_deposit(d: dict) -> dict:
 
 @api.get("/deposits", response_model=List[DepositOut])
 async def list_deposits(user=Depends(get_current_user)):
-    docs = await db.deposits.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    docs = await db.deposits.find(scope(user), {"_id": 0}).sort("created_at", -1).to_list(500)
     return [await _enrich_deposit(d) for d in docs]
 
 
 @api.post("/deposits", response_model=DepositOut)
 async def create_deposit(body: DepositIn, user=Depends(get_current_user)):
-    t = await db.tenants.find_one({"id": body.tenant_id}, {"_id": 0})
+    cid = company_id_of(user)
+    if not cid:
+        raise HTTPException(status_code=400, detail="Geen actief bedrijf geselecteerd")
+    t = await db.tenants.find_one({"id": body.tenant_id, **scope(user)}, {"_id": 0})
     if not t:
         raise HTTPException(status_code=404, detail="Huurder niet gevonden")
     doc = {
         "id": new_id(),
+        "company_id": cid,
         "tenant_id": body.tenant_id,
         "amount": body.amount, "currency": body.currency,
         "status": "held", "deduction": 0, "refund_amount": 0,
@@ -1712,7 +1738,7 @@ class DepositRefundIn(BaseModel):
 
 @api.post("/deposits/{did}/refund", response_model=DepositOut)
 async def refund_deposit(did: str, body: DepositRefundIn, user=Depends(get_current_user)):
-    d = await db.deposits.find_one({"id": did}, {"_id": 0})
+    d = await db.deposits.find_one({"id": did, **scope(user)}, {"_id": 0})
     if not d:
         raise HTTPException(status_code=404, detail="Borg niet gevonden")
     if d["status"] != "held":
@@ -1720,7 +1746,7 @@ async def refund_deposit(did: str, body: DepositRefundIn, user=Depends(get_curre
     refund_amount = max(d["amount"] - body.deduction, 0)
     from pymongo import ReturnDocument
     updated = await db.deposits.find_one_and_update(
-        {"id": did},
+        {"id": did, **scope(user)},
         {"$set": {
             "status": "refunded", "deduction": body.deduction,
             "refund_amount": refund_amount,
@@ -1734,7 +1760,7 @@ async def refund_deposit(did: str, body: DepositRefundIn, user=Depends(get_curre
 
 @api.delete("/deposits/{did}")
 async def delete_deposit(did: str, user=Depends(get_current_user)):
-    await db.deposits.delete_one({"id": did})
+    await db.deposits.delete_one({"id": did, **scope(user)})
     return {"ok": True}
 
 
@@ -1777,7 +1803,7 @@ async def _enrich_maint(m: dict) -> dict:
 
 @api.get("/maintenance", response_model=List[MaintenanceOut])
 async def list_maintenance(user=Depends(get_current_user), apartment_id: Optional[str] = None):
-    q = {}
+    q = dict(scope(user))
     if apartment_id:
         q["apartment_id"] = apartment_id
     docs = await db.maintenance.find(q, {"_id": 0}).sort("created_at", -1).to_list(500)
@@ -1786,10 +1812,13 @@ async def list_maintenance(user=Depends(get_current_user), apartment_id: Optiona
 
 @api.post("/maintenance", response_model=MaintenanceOut)
 async def create_maintenance(body: MaintenanceIn, user=Depends(get_current_user)):
-    a = await db.apartments.find_one({"id": body.apartment_id}, {"_id": 0})
+    cid = company_id_of(user)
+    if not cid:
+        raise HTTPException(status_code=400, detail="Geen actief bedrijf geselecteerd")
+    a = await db.apartments.find_one({"id": body.apartment_id, **scope(user)}, {"_id": 0})
     if not a:
         raise HTTPException(status_code=404, detail="Appartement niet gevonden")
-    doc = {"id": new_id(), **body.model_dump(),
+    doc = {"id": new_id(), "company_id": cid, **body.model_dump(),
            "status": "open", "created_at": iso(now_utc()), "resolved_at": None}
     await db.maintenance.insert_one(doc)
     doc.pop("_id", None)
@@ -1806,8 +1835,10 @@ async def update_maintenance_status(mid: str, body: MaintenanceUpdateStatus, use
     update = {"status": body.status}
     if body.status == "done":
         update["resolved_at"] = iso(now_utc())
+    else:
+        update["resolved_at"] = None
     res = await db.maintenance.find_one_and_update(
-        {"id": mid}, {"$set": update},
+        {"id": mid, **scope(user)}, {"$set": update},
         projection={"_id": 0}, return_document=ReturnDocument.AFTER,
     )
     if not res:
@@ -1817,7 +1848,7 @@ async def update_maintenance_status(mid: str, body: MaintenanceUpdateStatus, use
 
 @api.delete("/maintenance/{mid}")
 async def delete_maintenance(mid: str, user=Depends(get_current_user)):
-    await db.maintenance.delete_one({"id": mid})
+    await db.maintenance.delete_one({"id": mid, **scope(user)})
     return {"ok": True}
 
 
@@ -1839,13 +1870,16 @@ class CashEntryOut(CashEntryIn):
 
 @api.get("/kasgeld", response_model=List[CashEntryOut])
 async def list_cash(user=Depends(get_current_user)):
-    docs = await db.kasgeld.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    docs = await db.kasgeld.find(scope(user), {"_id": 0}).sort("created_at", -1).to_list(500)
     return docs
 
 
 @api.post("/kasgeld", response_model=CashEntryOut)
 async def create_cash(body: CashEntryIn, user=Depends(get_current_user)):
-    doc = {"id": new_id(), **body.model_dump(), "created_at": iso(now_utc())}
+    cid = company_id_of(user)
+    if not cid:
+        raise HTTPException(status_code=400, detail="Geen actief bedrijf geselecteerd")
+    doc = {"id": new_id(), "company_id": cid, **body.model_dump(), "created_at": iso(now_utc())}
     await db.kasgeld.insert_one(doc)
     doc.pop("_id", None)
     return doc
@@ -1853,7 +1887,7 @@ async def create_cash(body: CashEntryIn, user=Depends(get_current_user)):
 
 @api.delete("/kasgeld/{cid}")
 async def delete_cash(cid: str, user=Depends(get_current_user)):
-    await db.kasgeld.delete_one({"id": cid})
+    await db.kasgeld.delete_one({"id": cid, **scope(user)})
     return {"ok": True}
 
 
@@ -1861,6 +1895,7 @@ async def delete_cash(cid: str, user=Depends(get_current_user)):
 async def cash_balance(user=Depends(get_current_user)):
     """Compute per-currency cash balance."""
     pipeline = [
+        {"$match": scope(user)},
         {"$group": {
             "_id": {"currency": "$currency", "type": "$type"},
             "total": {"$sum": "$amount"},
@@ -1887,28 +1922,29 @@ class AIChatIn(BaseModel):
     include_context: bool = True
 
 
-async def _collect_context() -> dict:
-    """Aggregate live data for the AI assistant."""
-    total_apts = await db.apartments.count_documents({})
-    occupied = await db.apartments.count_documents({"status": "occupied"})
-    total_tenants = await db.tenants.count_documents({})
+async def _collect_context(user: dict) -> dict:
+    """Aggregate live data for the AI assistant (scoped to user's company)."""
+    sc = scope(user)
+    total_apts = await db.apartments.count_documents({**sc})
+    occupied = await db.apartments.count_documents({**sc, "status": "occupied"})
+    total_tenants = await db.tenants.count_documents({**sc})
     today = now_utc()
     start = datetime(today.year, today.month, 1, tzinfo=timezone.utc).isoformat()
     by_currency = {}
     async for r in db.payments.aggregate([
-        {"$match": {"paid_at": {"$gte": start}}},
+        {"$match": {**sc, "paid_at": {"$gte": start}}},
         {"$group": {"_id": "$currency", "total": {"$sum": "$amount"}, "count": {"$sum": 1}}},
     ]):
         by_currency[r["_id"]] = {"total": r["total"], "count": r["count"]}
 
-    apts_list = await db.apartments.find({}, {"_id": 0}).sort("number", 1).to_list(40)
+    apts_list = await db.apartments.find({**sc}, {"_id": 0}).sort("number", 1).to_list(40)
     apts_enriched = [await _enrich_apartment(a) for a in apts_list]
 
     tenants_with_balance = []
-    async for t in db.tenants.find({"apartment_id": {"$ne": None}}, {"_id": 0}).limit(40):
+    async for t in db.tenants.find({**sc, "apartment_id": {"$ne": None}}, {"_id": 0}).limit(40):
         bal = await _calc_balance(t)
         if bal["balance"] > 0:
-            apt = await db.apartments.find_one({"id": t.get("apartment_id")}, {"_id": 0, "number": 1})
+            apt = await db.apartments.find_one({"id": t.get("apartment_id"), **sc}, {"_id": 0, "number": 1})
             tenants_with_balance.append({
                 "name": t["name"],
                 "apartment_number": apt["number"] if apt else None,
@@ -1934,7 +1970,7 @@ async def ai_chat(body: AIChatIn, user=Depends(get_current_user)):
     # Load history from DB
     history_doc = await db.ai_sessions.find_one({"session_id": session_id}, {"_id": 0})
     history = history_doc.get("messages", []) if history_doc else []
-    context = await _collect_context() if body.include_context else None
+    context = await _collect_context(user) if body.include_context else None
     try:
         reply = await ai_chat_send(session_id, body.message, history, context)
     except Exception as e:
@@ -2085,7 +2121,7 @@ async def push_test(body: PushTestIn, user=Depends(get_current_user)):
 async def push_notify_overdue(user=Depends(get_current_user)):
     """Send admin a summary push of overdue tenants."""
     overdue = []
-    async for t in db.tenants.find({"apartment_id": {"$ne": None}}, {"_id": 0}):
+    async for t in db.tenants.find({**scope(user), "apartment_id": {"$ne": None}}, {"_id": 0}):
         bal = await _calc_balance(t)
         if bal["balance"] > 0:
             overdue.append((t["name"], bal["balance"], bal["currency"]))

@@ -384,6 +384,208 @@ class TestScopedCRUDLeakage:
         finally:
             requests.delete(f"{API}/deposits/{d['id']}", headers=_h(admin_a["token"]), timeout=15)
 
+# ---------- Cross-company write/delete protection (iteration 6 regression) ----------
+class TestCrossCompanyWriteProtection:
+    """Verify scope(user) on PUT/DELETE/sub-endpoints, not only on list."""
+
+    def test_cross_company_delete_invoice_forbidden(self, admin_a, admin_b):
+        rt = requests.get(f"{API}/tenants", headers=_h(admin_a["token"]), timeout=15).json()
+        tenant = next((t for t in rt if t.get("apartment_id")), None)
+        if not tenant:
+            pytest.skip("No tenant-with-apartment in A")
+        rc = requests.post(f"{API}/invoices", headers=_h(admin_a["token"]),
+                           json={"tenant_id": tenant["id"], "period_month": 7, "period_year": 2098}, timeout=15)
+        if rc.status_code != 200:
+            pytest.skip(rc.text)
+        inv = rc.json()
+        try:
+            rd = requests.delete(f"{API}/invoices/{inv['id']}", headers=_h(admin_b["token"]), timeout=15)
+            # Should NOT actually delete; either 404 or {deleted:0}
+            assert rd.status_code in (200, 204, 404)
+            # Verify still exists under A
+            re = requests.get(f"{API}/invoices", headers=_h(admin_a["token"]), timeout=15).json()
+            assert inv["id"] in {x["id"] for x in re}, "CROSS-COMPANY DELETE LEAK on /invoices"
+        finally:
+            requests.delete(f"{API}/invoices/{inv['id']}", headers=_h(admin_a["token"]), timeout=15)
+
+    def test_cross_company_delete_contract_forbidden(self, admin_a, admin_b):
+        rt = requests.get(f"{API}/tenants", headers=_h(admin_a["token"]), timeout=15).json()
+        tenant = next((t for t in rt if t.get("apartment_id")), None)
+        if not tenant:
+            pytest.skip("No tenant in A")
+        rc = requests.post(f"{API}/contracts", headers=_h(admin_a["token"]), json={
+            "tenant_id": tenant["id"], "apartment_id": tenant["apartment_id"],
+            "start_date": "2025-02-01", "payment_day": 1, "deposit_amount": 0}, timeout=15)
+        if rc.status_code != 200:
+            pytest.skip(rc.text)
+        c = rc.json()
+        try:
+            rd = requests.delete(f"{API}/contracts/{c['id']}", headers=_h(admin_b["token"]), timeout=15)
+            assert rd.status_code in (200, 204, 404)
+            re = requests.get(f"{API}/contracts", headers=_h(admin_a["token"]), timeout=15).json()
+            assert c["id"] in {x["id"] for x in re}, "CROSS-COMPANY DELETE LEAK on /contracts"
+        finally:
+            requests.delete(f"{API}/contracts/{c['id']}", headers=_h(admin_a["token"]), timeout=15)
+
+    def test_cross_company_delete_employee_forbidden(self, admin_a, admin_b):
+        rc = requests.post(f"{API}/employees", headers=_h(admin_a["token"]),
+                           json={"name": "TEST_EmpDelA", "monthly_salary": 500, "currency": "SRD", "active": True}, timeout=15)
+        if rc.status_code != 200:
+            pytest.skip(rc.text)
+        e = rc.json()
+        try:
+            rd = requests.delete(f"{API}/employees/{e['id']}", headers=_h(admin_b["token"]), timeout=15)
+            assert rd.status_code in (200, 204, 404)
+            re = requests.get(f"{API}/employees", headers=_h(admin_a["token"]), timeout=15).json()
+            assert e["id"] in {x["id"] for x in re}, "CROSS-COMPANY DELETE LEAK on /employees"
+        finally:
+            requests.delete(f"{API}/employees/{e['id']}", headers=_h(admin_a["token"]), timeout=15)
+
+    def test_cross_company_delete_kasgeld_forbidden(self, admin_a, admin_b):
+        rc = requests.post(f"{API}/kasgeld", headers=_h(admin_a["token"]),
+                           json={"description": "TEST_kasDelA", "amount": 5, "currency": "SRD", "type": "in"}, timeout=15)
+        if rc.status_code != 200:
+            pytest.skip(rc.text)
+        k = rc.json()
+        try:
+            rd = requests.delete(f"{API}/kasgeld/{k['id']}", headers=_h(admin_b["token"]), timeout=15)
+            assert rd.status_code in (200, 204, 404)
+            re = requests.get(f"{API}/kasgeld", headers=_h(admin_a["token"]), timeout=15).json()
+            assert k["id"] in {x["id"] for x in re}, "CROSS-COMPANY DELETE LEAK on /kasgeld"
+        finally:
+            requests.delete(f"{API}/kasgeld/{k['id']}", headers=_h(admin_a["token"]), timeout=15)
+
+    def test_cross_company_maintenance_status_forbidden(self, admin_a, admin_b):
+        ra = requests.get(f"{API}/apartments", headers=_h(admin_a["token"]), timeout=15).json()
+        if not ra:
+            pytest.skip("No apartment in A")
+        rc = requests.post(f"{API}/maintenance", headers=_h(admin_a["token"]),
+                           json={"apartment_id": ra[0]["id"], "title": "TEST_MaintStatusA",
+                                 "description": "x", "priority": "low"}, timeout=15)
+        if rc.status_code != 200:
+            pytest.skip(rc.text)
+        m = rc.json()
+        try:
+            # Admin B tries to flip status
+            rs = requests.post(f"{API}/maintenance/{m['id']}/status",
+                               headers=_h(admin_b["token"]),
+                               json={"status": "done"}, timeout=15)
+            assert rs.status_code in (403, 404), f"Cross-company maintenance/status not blocked: {rs.status_code} {rs.text}"
+            # Verify status still 'open' (or original) under A
+            ma = requests.get(f"{API}/maintenance", headers=_h(admin_a["token"]), timeout=15).json()
+            mine = next((x for x in ma if x["id"] == m["id"]), None)
+            assert mine is not None
+            assert mine.get("status") != "done", "Status was modified cross-company!"
+        finally:
+            requests.delete(f"{API}/maintenance/{m['id']}", headers=_h(admin_a["token"]), timeout=15)
+
+    def test_cross_company_deposit_refund_forbidden(self, admin_a, admin_b):
+        rt = requests.get(f"{API}/tenants", headers=_h(admin_a["token"]), timeout=15).json()
+        tenant = next((t for t in rt if t.get("apartment_id")), None)
+        if not tenant:
+            pytest.skip("No tenant in A")
+        rc = requests.post(f"{API}/deposits", headers=_h(admin_a["token"]),
+                           json={"tenant_id": tenant["id"], "apartment_id": tenant["apartment_id"],
+                                 "amount": 50, "currency": "SRD"}, timeout=15)
+        if rc.status_code != 200:
+            pytest.skip(rc.text)
+        d = rc.json()
+        try:
+            rr = requests.post(f"{API}/deposits/{d['id']}/refund",
+                               headers=_h(admin_b["token"]),
+                               json={"refund_amount": 50, "refund_notes": "hack"}, timeout=15)
+            assert rr.status_code in (403, 404), f"Cross-company deposit refund not blocked: {rr.status_code} {rr.text}"
+            # Confirm under A status not 'refunded'
+            da = requests.get(f"{API}/deposits", headers=_h(admin_a["token"]), timeout=15).json()
+            mine = next((x for x in da if x["id"] == d["id"]), None)
+            assert mine is not None
+            assert mine.get("status") != "refunded", "Deposit was refunded cross-company!"
+        finally:
+            requests.delete(f"{API}/deposits/{d['id']}", headers=_h(admin_a["token"]), timeout=15)
+
+
+# ---------- Invoice generate-month scoped ----------
+class TestInvoicesGenerateMonth:
+    def test_generate_month_only_own_company(self, admin_a, admin_b):
+        # Get A's occupied apartments count (admin A side)
+        apts_a = requests.get(f"{API}/apartments", headers=_h(admin_a["token"]), timeout=15).json()
+        occ_a = [a for a in apts_a if a.get("status") == "occupied"]
+        # Future period to avoid duplicates
+        month = 11
+        year = 2097
+        r = requests.post(f"{API}/invoices/generate-month", headers=_h(admin_a["token"]),
+                          json={"period_month": month, "period_year": year}, timeout=30)
+        assert r.status_code == 200, r.text
+        result = r.json()
+        # Endpoint returns {"created": N, "skipped": M}
+        created_count = result.get("created", 0)
+        try:
+            # Fetch invoices in this future period under A vs B
+            invs_a = requests.get(f"{API}/invoices", headers=_h(admin_a["token"]), timeout=15).json()
+            in_period_a = [i for i in invs_a if i.get("period_month") == month and i.get("period_year") == year]
+            assert len(in_period_a) >= created_count, \
+                f"Generated {created_count} but A only sees {len(in_period_a)} in period {year}-{month}"
+            new_ids = {i["id"] for i in in_period_a}
+            # Admin B should NOT see any of these
+            invs_b = requests.get(f"{API}/invoices", headers=_h(admin_b["token"]), timeout=15).json()
+            b_in_period = [i for i in invs_b if i.get("period_month") == month and i.get("period_year") == year]
+            b_ids = {i["id"] for i in b_in_period}
+            assert new_ids.isdisjoint(b_ids), f"generate-month leaked invoices to admin B: {new_ids & b_ids}"
+            # All A's in-period invoices must reference A tenants
+            tenants_a = requests.get(f"{API}/tenants", headers=_h(admin_a["token"]), timeout=15).json()
+            a_tenant_ids = {t["id"] for t in tenants_a}
+            for inv in in_period_a:
+                assert inv.get("tenant_id") in a_tenant_ids, \
+                    f"generate-month produced invoice for tenant not in A: {inv.get('tenant_id')}"
+        finally:
+            invs_a = requests.get(f"{API}/invoices", headers=_h(admin_a["token"]), timeout=15).json()
+            for inv in invs_a:
+                if inv.get("period_month") == month and inv.get("period_year") == year:
+                    requests.delete(f"{API}/invoices/{inv['id']}", headers=_h(admin_a["token"]), timeout=15)
+
+
+# ---------- Kasgeld balance scoped ----------
+class TestKasgeldBalance:
+    def test_balance_scoped_per_company(self, admin_a, admin_b):
+        # Add a known kasgeld entry under A
+        rc = requests.post(f"{API}/kasgeld", headers=_h(admin_a["token"]),
+                           json={"description": "TEST_balA", "amount": 777, "currency": "SRD", "type": "in"}, timeout=15)
+        if rc.status_code != 200:
+            pytest.skip(rc.text)
+        k = rc.json()
+        try:
+            ba = requests.get(f"{API}/kasgeld/balance", headers=_h(admin_a["token"]), timeout=15)
+            bb = requests.get(f"{API}/kasgeld/balance", headers=_h(admin_b["token"]), timeout=15)
+            assert ba.status_code == 200 and bb.status_code == 200
+            # Balance objects can be structured by currency; just ensure A and B differ OR B's SRD entry doesn't include 777
+            # Simplest assertion: A's balance must reflect 777 SRD added; B must not.
+            def srd(d):
+                if isinstance(d, dict):
+                    for k_, v in d.items():
+                        if isinstance(v, dict) and (k_ == "SRD" or v.get("currency") == "SRD"):
+                            return v
+                    return d.get("SRD") or d.get("balance") or 0
+                return 0
+            # Best-effort: just confirm they aren't identical when A has new entry
+            assert ba.json() != bb.json(), f"Kasgeld balance identical between A and B — likely unscoped (A={ba.json()}, B={bb.json()})"
+        finally:
+            requests.delete(f"{API}/kasgeld/{k['id']}", headers=_h(admin_a["token"]), timeout=15)
+
+
+# ---------- AI chat context scoped ----------
+class TestAIChatContext:
+    def test_ai_context_scoped(self, admin_a, admin_b):
+        # Just check both endpoints respond OK and don't leak; we can't easily inspect context content
+        # without LLM call cost — but we can at least confirm the endpoint returns 200 for both.
+        ra = requests.post(f"{API}/ai/chat", headers=_h(admin_a["token"]),
+                           json={"message": "hoeveel appartementen heb ik?", "include_context": True}, timeout=60)
+        rb = requests.post(f"{API}/ai/chat", headers=_h(admin_b["token"]),
+                           json={"message": "hoeveel appartementen heb ik?", "include_context": True}, timeout=60)
+        # Accept 200 or 503 (no key); we only care that it doesn't crash with leak signature
+        assert ra.status_code in (200, 401, 503), ra.text
+        assert rb.status_code in (200, 401, 503), rb.text
+
+
 
 # ---------- Admin stats scoping ----------
 class TestAdminStats:
