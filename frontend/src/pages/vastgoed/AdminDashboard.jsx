@@ -1,0 +1,824 @@
+import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
+import {
+  Building2, Users, Receipt, LayoutDashboard, LogOut, Plus, Trash2, Pencil,
+  X, Check, Loader2, Search, Home, Banknote, KeySquare, ChevronRight, Wallet,
+} from 'lucide-react';
+import { api, formatError, fmtMoney, MONTHS_NL } from '../../lib/api';
+import { useAuth } from '../../lib/auth';
+
+const TABS = [
+  { id: 'overview', label: 'Overzicht', icon: LayoutDashboard },
+  { id: 'apartments', label: 'Appartementen', icon: Building2 },
+  { id: 'tenants', label: 'Huurders', icon: Users },
+  { id: 'payments', label: 'Betalingen', icon: Receipt },
+  { id: 'settings', label: 'Kiosk PIN', icon: KeySquare },
+];
+
+function Sidebar({ active, onChange, onLogout, userName }) {
+  return (
+    <aside className="hidden md:flex flex-col w-64 bg-white border-r border-orange-100 p-5">
+      <div className="flex items-center gap-3 mb-8">
+        <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-[#FF8A3D] to-[#C74600] p-1.5 shadow-[0_8px_20px_-5px_rgba(255,92,0,0.55)]">
+          <img src="/kiosk-icons/kiosk-512.png" alt="SuriRent" className="w-full h-full object-contain" />
+        </div>
+        <div>
+          <p className="text-base font-black text-slate-900 tracking-tight">SuriRent</p>
+          <p className="text-[10px] text-[#FF5C00] font-bold tracking-[0.2em] uppercase">Beheer</p>
+        </div>
+      </div>
+
+      <nav className="flex-1 space-y-1">
+        {TABS.map((t) => {
+          const Icon = t.icon;
+          const isActive = active === t.id;
+          return (
+            <button key={t.id} onClick={() => onChange(t.id)}
+              data-testid={`tab-${t.id}`}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all ${
+                isActive ? 'bg-[#FF5C00] text-white shadow-[0_8px_20px_-5px_rgba(255,92,0,0.55)]'
+                  : 'text-slate-600 hover:bg-orange-50 hover:text-[#FF5C00]'
+              }`}>
+              <Icon className="w-4 h-4" /> {t.label}
+            </button>
+          );
+        })}
+      </nav>
+
+      <div className="border-t border-orange-100 pt-4 mt-4 space-y-2">
+        <p className="text-xs text-slate-500 px-3 truncate">{userName}</p>
+        <button onClick={onLogout} data-testid="logout-btn"
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold text-slate-600 hover:bg-red-50 hover:text-red-600 transition-all">
+          <LogOut className="w-4 h-4" /> Uitloggen
+        </button>
+      </div>
+    </aside>
+  );
+}
+
+function MobileTabBar({ active, onChange }) {
+  return (
+    <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white border-t border-orange-100 flex">
+      {TABS.map((t) => {
+        const Icon = t.icon;
+        const isActive = active === t.id;
+        return (
+          <button key={t.id} onClick={() => onChange(t.id)} data-testid={`tab-mobile-${t.id}`}
+            className={`flex-1 flex flex-col items-center gap-1 py-2.5 text-[10px] font-bold uppercase tracking-wider ${
+              isActive ? 'text-[#FF5C00]' : 'text-slate-400'
+            }`}>
+            <Icon className="w-5 h-5" /> {t.label}
+          </button>
+        );
+      })}
+    </nav>
+  );
+}
+
+function PageHeader({ title, subtitle, action }) {
+  return (
+    <div className="flex flex-wrap items-end justify-between gap-3 mb-6">
+      <div>
+        <h1 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">{title}</h1>
+        {subtitle && <p className="text-sm text-slate-500 mt-1">{subtitle}</p>}
+      </div>
+      {action}
+    </div>
+  );
+}
+
+// ============== Overview ==============
+function Overview() {
+  const [stats, setStats] = useState(null);
+  const navigate = useNavigate();
+  useEffect(() => {
+    api.get('/admin/stats').then((r) => setStats(r.data)).catch(() => setStats(null));
+  }, []);
+  if (!stats) return <div className="text-slate-400 text-sm">Laden...</div>;
+
+  const cards = [
+    { label: 'Appartementen', value: stats.apartments_total, icon: Building2, accent: 'bg-orange-50 text-[#FF5C00]' },
+    { label: 'Bezet', value: stats.apartments_occupied, icon: Home, accent: 'bg-emerald-50 text-emerald-600' },
+    { label: 'Vacant', value: stats.apartments_vacant, icon: KeySquare, accent: 'bg-slate-50 text-slate-600' },
+    { label: 'Huurders', value: stats.tenants_total, icon: Users, accent: 'bg-amber-50 text-amber-600' },
+  ];
+
+  const byCur = stats.month_payments_by_currency || {};
+
+  return (
+    <div>
+      <PageHeader title="Overzicht" subtitle="Snelle blik op uw vastgoedportefeuille" />
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+        {cards.map((c) => {
+          const Icon = c.icon;
+          return (
+            <div key={c.label} className="bg-white rounded-2xl border border-orange-100 p-5 hover:border-[#FF5C00]/30 transition-colors">
+              <div className={`w-10 h-10 rounded-xl ${c.accent} flex items-center justify-center mb-3`}>
+                <Icon className="w-5 h-5" />
+              </div>
+              <p className="text-3xl font-black text-slate-900 tracking-tight">{c.value}</p>
+              <p className="text-xs text-slate-500 font-semibold mt-1">{c.label}</p>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="bg-white rounded-2xl border border-orange-100 p-6">
+        <div className="flex items-center gap-2 mb-4">
+          <Wallet className="w-5 h-5 text-[#FF5C00]" />
+          <h3 className="text-lg font-black text-slate-900">Inkomsten deze maand</h3>
+        </div>
+        {Object.keys(byCur).length === 0 ? (
+          <p className="text-sm text-slate-400">Nog geen betalingen deze maand.</p>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {['SRD', 'USD', 'EUR'].map((cur) => {
+              const data = byCur[cur];
+              return (
+                <div key={cur} className="bg-gradient-to-br from-[#FFF7F0] to-[#FFEAD3] border border-orange-200 rounded-xl p-4">
+                  <p className="text-xs font-bold text-[#FF5C00] uppercase tracking-widest">{cur}</p>
+                  <p className="text-2xl font-black text-slate-900 tracking-tight mt-1">
+                    {fmtMoney(data?.total || 0, cur)}
+                  </p>
+                  <p className="text-xs text-slate-500 mt-1">{data?.count || 0} betalingen</p>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      <div className="mt-8 grid sm:grid-cols-2 gap-4">
+        <button onClick={() => navigate('/vastgoed/kiosk')} data-testid="quick-kiosk"
+          className="bg-gradient-to-br from-[#FF8A3D] via-[#FF5C00] to-[#C74600] rounded-2xl p-6 text-white text-left hover:shadow-[0_20px_40px_-10px_rgba(255,92,0,0.5)] transition-shadow">
+          <div className="flex items-center justify-between mb-3">
+            <Building2 className="w-7 h-7" />
+            <ChevronRight className="w-5 h-5" />
+          </div>
+          <p className="text-lg font-black">Open Kiosk</p>
+          <p className="text-sm text-white/80 mt-1">Selfservice terminal voor huurders</p>
+        </button>
+        <button onClick={() => window.dispatchEvent(new CustomEvent('go-tab', { detail: 'payments' }))}
+          data-testid="quick-payments"
+          className="bg-white border border-orange-100 rounded-2xl p-6 text-left hover:border-[#FF5C00]/30 transition-colors">
+          <div className="flex items-center justify-between mb-3">
+            <div className="w-12 h-12 rounded-xl bg-orange-50 flex items-center justify-center">
+              <Receipt className="w-5 h-5 text-[#FF5C00]" />
+            </div>
+            <ChevronRight className="w-5 h-5 text-slate-300" />
+          </div>
+          <p className="text-lg font-black text-slate-900">Betalingen bekijken</p>
+          <p className="text-sm text-slate-500 mt-1">Alle kwitanties en transacties</p>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ============== Apartments ==============
+function ApartmentForm({ initial, onCancel, onSaved }) {
+  const [data, setData] = useState(initial || { number: '', address: '', rent_amount: 0, currency: 'SRD', description: '' });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const save = async () => {
+    setLoading(true); setError('');
+    try {
+      const payload = { ...data, rent_amount: parseFloat(data.rent_amount) || 0 };
+      if (initial?.id) {
+        const { data: r } = await api.put(`/apartments/${initial.id}`, payload);
+        onSaved(r);
+      } else {
+        const { data: r } = await api.post('/apartments', payload);
+        onSaved(r);
+      }
+    } catch (e) { setError(formatError(e)); }
+    finally { setLoading(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4" data-testid="apartment-modal">
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg p-6 sm:p-8 animate-slide-up">
+        <div className="flex items-center justify-between mb-5">
+          <h3 className="text-xl font-black text-slate-900">{initial ? 'Appartement bewerken' : 'Nieuw appartement'}</h3>
+          <button onClick={onCancel} className="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center"><X className="w-4 h-4" /></button>
+        </div>
+        {error && <div className="mb-4 p-2.5 bg-red-50 border border-red-200 text-red-600 rounded-xl text-sm">{error}</div>}
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs font-bold uppercase tracking-widest text-slate-500">Nummer / Naam *</label>
+            <input value={data.number} onChange={(e) => setData({ ...data, number: e.target.value })}
+              data-testid="apt-number" required
+              className="w-full mt-1 h-12 px-4 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] outline-none" />
+          </div>
+          <div>
+            <label className="text-xs font-bold uppercase tracking-widest text-slate-500">Adres</label>
+            <input value={data.address} onChange={(e) => setData({ ...data, address: e.target.value })}
+              data-testid="apt-address"
+              className="w-full mt-1 h-12 px-4 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] outline-none" />
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <div className="col-span-2">
+              <label className="text-xs font-bold uppercase tracking-widest text-slate-500">Maandhuur *</label>
+              <input type="number" step="0.01" value={data.rent_amount} onChange={(e) => setData({ ...data, rent_amount: e.target.value })}
+                data-testid="apt-rent" required
+                className="w-full mt-1 h-12 px-4 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] outline-none" />
+            </div>
+            <div>
+              <label className="text-xs font-bold uppercase tracking-widest text-slate-500">Valuta</label>
+              <select value={data.currency} onChange={(e) => setData({ ...data, currency: e.target.value })}
+                data-testid="apt-currency"
+                className="w-full mt-1 h-12 px-3 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] outline-none bg-white">
+                <option value="SRD">SRD</option>
+                <option value="USD">USD</option>
+                <option value="EUR">EUR</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="text-xs font-bold uppercase tracking-widest text-slate-500">Beschrijving</label>
+            <textarea value={data.description} onChange={(e) => setData({ ...data, description: e.target.value })}
+              data-testid="apt-description" rows={2}
+              className="w-full mt-1 px-4 py-3 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] outline-none resize-none" />
+          </div>
+        </div>
+        <div className="flex gap-3 mt-6">
+          <button onClick={onCancel} className="flex-1 h-12 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold">Annuleren</button>
+          <button onClick={save} disabled={loading || !data.number || !data.rent_amount}
+            data-testid="apt-save"
+            className="flex-1 h-12 rounded-xl bg-[#FF5C00] hover:bg-[#E05200] text-white font-bold flex items-center justify-center gap-2 disabled:opacity-50">
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+            Opslaan
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Apartments() {
+  const [items, setItems] = useState([]);
+  const [tenants, setTenants] = useState([]);
+  const [editing, setEditing] = useState(null);
+  const [creating, setCreating] = useState(false);
+  const [assignFor, setAssignFor] = useState(null);
+  const [q, setQ] = useState('');
+
+  const load = useCallback(async () => {
+    const [a, t] = await Promise.all([api.get('/apartments'), api.get('/tenants')]);
+    setItems(a.data); setTenants(t.data);
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const del = async (id) => {
+    if (!window.confirm('Appartement verwijderen?')) return;
+    await api.delete(`/apartments/${id}`);
+    load();
+  };
+  const assign = async (tid) => {
+    await api.post(`/apartments/${assignFor.id}/assign-tenant`, { tenant_id: tid });
+    setAssignFor(null); load();
+  };
+  const removeT = async (id) => {
+    if (!window.confirm('Huurder loskoppelen?')) return;
+    await api.post(`/apartments/${id}/remove-tenant`);
+    load();
+  };
+
+  const filtered = items.filter((a) => !q || a.number.toLowerCase().includes(q.toLowerCase()) || (a.tenant_name || '').toLowerCase().includes(q.toLowerCase()));
+
+  return (
+    <div>
+      <PageHeader
+        title="Appartementen"
+        subtitle={`${items.length} appartementen, ${items.filter((a) => a.status === 'occupied').length} bezet`}
+        action={
+          <button onClick={() => setCreating(true)} data-testid="apt-new-btn"
+            className="inline-flex items-center gap-2 px-5 py-3 bg-[#FF5C00] hover:bg-[#E05200] text-white font-bold rounded-xl shadow-[0_10px_25px_-5px_rgba(255,92,0,0.5)]">
+            <Plus className="w-4 h-4" /> Nieuw appartement
+          </button>
+        }
+      />
+      <div className="mb-4 relative max-w-md">
+        <Search className="w-4 h-4 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2" />
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Zoek op nummer of huurder"
+          data-testid="apt-search"
+          className="w-full h-12 pl-11 pr-4 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] outline-none bg-white" />
+      </div>
+
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {filtered.length === 0 && (
+          <div className="col-span-full bg-white rounded-2xl border-2 border-dashed border-orange-200 p-10 text-center">
+            <Building2 className="w-10 h-10 text-orange-300 mx-auto mb-3" />
+            <p className="text-slate-500 font-semibold">Nog geen appartementen.</p>
+            <p className="text-sm text-slate-400 mt-1">Voeg uw eerste appartement toe.</p>
+          </div>
+        )}
+        {filtered.map((a) => (
+          <div key={a.id} data-testid={`apt-card-${a.id}`}
+            className="bg-white rounded-2xl border border-orange-100 p-5 hover:border-[#FF5C00]/30 transition-colors">
+            <div className="flex items-start justify-between mb-3">
+              <div>
+                <p className="text-xs font-black uppercase tracking-widest text-[#FF5C00]">Appt. {a.number}</p>
+                <p className="text-sm text-slate-500 mt-0.5 truncate">{a.address || '—'}</p>
+              </div>
+              <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-1 rounded-full ${
+                a.status === 'occupied' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'
+              }`}>
+                {a.status === 'occupied' ? 'Bezet' : 'Vacant'}
+              </span>
+            </div>
+            <div className="bg-gradient-to-r from-[#FFF4EC] to-[#FFE6D3] border border-[#FF5C00]/20 rounded-xl p-3 mb-3">
+              <p className="text-xs font-bold text-[#C74600]">Maandhuur</p>
+              <p className="text-xl font-black text-slate-900 tracking-tight">{fmtMoney(a.rent_amount, a.currency)}</p>
+            </div>
+            {a.tenant_name ? (
+              <div className="flex items-center justify-between bg-slate-50 rounded-xl p-3 mb-3">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Huurder</p>
+                  <p className="text-sm font-bold text-slate-900 truncate">{a.tenant_name}</p>
+                </div>
+                <button onClick={() => removeT(a.id)} data-testid={`apt-remove-tenant-${a.id}`}
+                  className="text-xs font-bold text-red-500 hover:text-red-700">Loskoppelen</button>
+              </div>
+            ) : (
+              <button onClick={() => setAssignFor(a)} data-testid={`apt-assign-${a.id}`}
+                className="w-full mb-3 py-2.5 rounded-xl bg-orange-50 hover:bg-orange-100 text-[#FF5C00] font-bold text-sm">
+                Huurder toewijzen
+              </button>
+            )}
+            <div className="flex gap-2">
+              <button onClick={() => setEditing(a)} data-testid={`apt-edit-${a.id}`}
+                className="flex-1 h-10 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm flex items-center justify-center gap-1.5">
+                <Pencil className="w-3.5 h-3.5" /> Bewerk
+              </button>
+              <button onClick={() => del(a.id)} data-testid={`apt-delete-${a.id}`}
+                className="w-10 h-10 rounded-xl bg-red-50 hover:bg-red-100 text-red-500 flex items-center justify-center">
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {(creating || editing) && (
+        <ApartmentForm initial={editing} onCancel={() => { setEditing(null); setCreating(false); }}
+          onSaved={() => { setEditing(null); setCreating(false); load(); }} />
+      )}
+
+      {assignFor && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-6 sm:p-8 animate-slide-up">
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="text-xl font-black text-slate-900">Huurder toewijzen aan {assignFor.number}</h3>
+              <button onClick={() => setAssignFor(null)} className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center"><X className="w-4 h-4" /></button>
+            </div>
+            <div className="space-y-2 max-h-96 overflow-auto">
+              {tenants.length === 0 && <p className="text-sm text-slate-400">Geen huurders. Maak eerst een huurder aan.</p>}
+              {tenants.map((t) => (
+                <button key={t.id} onClick={() => assign(t.id)} data-testid={`assign-${t.id}`}
+                  className="w-full flex items-center justify-between p-3 rounded-xl border-2 border-slate-100 hover:border-[#FF5C00] hover:bg-orange-50">
+                  <div className="text-left">
+                    <p className="font-bold text-slate-900">{t.name}</p>
+                    <p className="text-xs text-slate-500">{t.apartment_number ? `Nu in ${t.apartment_number}` : 'Geen appartement'}</p>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-slate-400" />
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============== Tenants ==============
+function TenantForm({ initial, apartments, onCancel, onSaved }) {
+  const [data, setData] = useState(initial || { name: '', phone: '', email: '', apartment_id: '' });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const save = async () => {
+    setLoading(true); setError('');
+    try {
+      const payload = { ...data, apartment_id: data.apartment_id || null };
+      if (initial?.id) {
+        const { data: r } = await api.put(`/tenants/${initial.id}`, payload);
+        onSaved(r);
+      } else {
+        const { data: r } = await api.post('/tenants', payload);
+        onSaved(r);
+      }
+    } catch (e) { setError(formatError(e)); }
+    finally { setLoading(false); }
+  };
+  return (
+    <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4" data-testid="tenant-modal">
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg p-6 sm:p-8 animate-slide-up">
+        <div className="flex items-center justify-between mb-5">
+          <h3 className="text-xl font-black text-slate-900">{initial ? 'Huurder bewerken' : 'Nieuwe huurder'}</h3>
+          <button onClick={onCancel} className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center"><X className="w-4 h-4" /></button>
+        </div>
+        {error && <div className="mb-4 p-2.5 bg-red-50 border border-red-200 text-red-600 rounded-xl text-sm">{error}</div>}
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs font-bold uppercase tracking-widest text-slate-500">Naam *</label>
+            <input value={data.name} onChange={(e) => setData({ ...data, name: e.target.value })} data-testid="tenant-name" required
+              className="w-full mt-1 h-12 px-4 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] outline-none" />
+          </div>
+          <div className="grid sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-bold uppercase tracking-widest text-slate-500">Telefoon</label>
+              <input value={data.phone} onChange={(e) => setData({ ...data, phone: e.target.value })} data-testid="tenant-phone"
+                className="w-full mt-1 h-12 px-4 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] outline-none" />
+            </div>
+            <div>
+              <label className="text-xs font-bold uppercase tracking-widest text-slate-500">E-mail</label>
+              <input type="email" value={data.email} onChange={(e) => setData({ ...data, email: e.target.value })} data-testid="tenant-email"
+                className="w-full mt-1 h-12 px-4 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] outline-none" />
+            </div>
+          </div>
+          <div>
+            <label className="text-xs font-bold uppercase tracking-widest text-slate-500">Appartement</label>
+            <select value={data.apartment_id || ''} onChange={(e) => setData({ ...data, apartment_id: e.target.value })}
+              data-testid="tenant-apartment"
+              className="w-full mt-1 h-12 px-3 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] outline-none bg-white">
+              <option value="">— Geen —</option>
+              {apartments.map((a) => (
+                <option key={a.id} value={a.id} disabled={a.tenant_id && a.tenant_id !== initial?.id}>
+                  {a.number}{a.tenant_name ? ` (bezet door ${a.tenant_name})` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <div className="flex gap-3 mt-6">
+          <button onClick={onCancel} className="flex-1 h-12 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold">Annuleren</button>
+          <button onClick={save} disabled={loading || !data.name} data-testid="tenant-save"
+            className="flex-1 h-12 rounded-xl bg-[#FF5C00] hover:bg-[#E05200] text-white font-bold flex items-center justify-center gap-2 disabled:opacity-50">
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+            Opslaan
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Tenants() {
+  const [items, setItems] = useState([]);
+  const [apts, setApts] = useState([]);
+  const [editing, setEditing] = useState(null);
+  const [creating, setCreating] = useState(false);
+  const [q, setQ] = useState('');
+  const load = useCallback(async () => {
+    const [t, a] = await Promise.all([api.get('/tenants'), api.get('/apartments')]);
+    setItems(t.data); setApts(a.data);
+  }, []);
+  useEffect(() => { load(); }, [load]);
+  const del = async (id) => {
+    if (!window.confirm('Huurder verwijderen?')) return;
+    await api.delete(`/tenants/${id}`);
+    load();
+  };
+  const filtered = items.filter((t) => !q || t.name.toLowerCase().includes(q.toLowerCase()));
+  return (
+    <div>
+      <PageHeader title="Huurders" subtitle={`${items.length} huurders geregistreerd`}
+        action={
+          <button onClick={() => setCreating(true)} data-testid="tenant-new-btn"
+            className="inline-flex items-center gap-2 px-5 py-3 bg-[#FF5C00] hover:bg-[#E05200] text-white font-bold rounded-xl shadow-[0_10px_25px_-5px_rgba(255,92,0,0.5)]">
+            <Plus className="w-4 h-4" /> Nieuwe huurder
+          </button>
+        }
+      />
+      <div className="mb-4 relative max-w-md">
+        <Search className="w-4 h-4 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2" />
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Zoek op naam" data-testid="tenant-search"
+          className="w-full h-12 pl-11 pr-4 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] outline-none bg-white" />
+      </div>
+      <div className="bg-white rounded-2xl border border-orange-100 overflow-hidden">
+        {filtered.length === 0 ? (
+          <div className="p-10 text-center">
+            <Users className="w-10 h-10 text-orange-300 mx-auto mb-3" />
+            <p className="text-slate-500 font-semibold">Geen huurders gevonden.</p>
+          </div>
+        ) : (
+          <table className="w-full text-sm">
+            <thead className="bg-orange-50/50 text-left">
+              <tr className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                <th className="px-5 py-3">Naam</th>
+                <th className="px-5 py-3 hidden md:table-cell">Contact</th>
+                <th className="px-5 py-3">Appartement</th>
+                <th className="px-5 py-3 hidden md:table-cell">Maandhuur</th>
+                <th className="px-5 py-3 text-right">Acties</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((t) => (
+                <tr key={t.id} data-testid={`tenant-row-${t.id}`} className="border-t border-orange-50 hover:bg-orange-50/30">
+                  <td className="px-5 py-4 font-bold text-slate-900">{t.name}</td>
+                  <td className="px-5 py-4 hidden md:table-cell text-slate-500">
+                    <p>{t.phone || '—'}</p>
+                    <p className="text-xs">{t.email || ''}</p>
+                  </td>
+                  <td className="px-5 py-4">
+                    {t.apartment_number ? (
+                      <span className="inline-block px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700 text-xs font-bold">Appt. {t.apartment_number}</span>
+                    ) : <span className="text-slate-400">—</span>}
+                  </td>
+                  <td className="px-5 py-4 hidden md:table-cell text-slate-700 font-semibold">
+                    {t.rent_amount ? fmtMoney(t.rent_amount, t.currency) : '—'}
+                  </td>
+                  <td className="px-5 py-4 text-right">
+                    <button onClick={() => setEditing(t)} data-testid={`tenant-edit-${t.id}`}
+                      className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 mr-1">
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                    <button onClick={() => del(t.id)} data-testid={`tenant-delete-${t.id}`}
+                      className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-red-50 hover:bg-red-100 text-red-500">
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+      {(editing || creating) && (
+        <TenantForm initial={editing} apartments={apts}
+          onCancel={() => { setEditing(null); setCreating(false); }}
+          onSaved={() => { setEditing(null); setCreating(false); load(); }} />
+      )}
+    </div>
+  );
+}
+
+// ============== Payments ==============
+function PaymentForm({ tenants, onCancel, onSaved }) {
+  const [data, setData] = useState({
+    tenant_id: '', amount: 0, currency: 'SRD', method: 'contant', category: 'huur',
+    period_month: new Date().getMonth() + 1, period_year: new Date().getFullYear(), note: '',
+  });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  // Auto-fill rent when tenant selected
+  useEffect(() => {
+    if (data.tenant_id) {
+      const t = tenants.find((x) => x.id === data.tenant_id);
+      if (t && t.rent_amount && data.category === 'huur') {
+        setData((d) => ({ ...d, amount: t.rent_amount, currency: t.currency || 'SRD' }));
+      }
+    }
+  }, [data.tenant_id, data.category, tenants]);
+
+  const save = async () => {
+    setLoading(true); setError('');
+    try {
+      const payload = {
+        ...data,
+        amount: parseFloat(data.amount),
+        period_month: data.category === 'huur' ? parseInt(data.period_month) : null,
+        period_year: data.category === 'huur' ? parseInt(data.period_year) : null,
+      };
+      const { data: r } = await api.post('/payments', payload);
+      onSaved(r);
+    } catch (e) { setError(formatError(e)); }
+    finally { setLoading(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4" data-testid="payment-modal">
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg p-6 sm:p-8 animate-slide-up max-h-[90vh] overflow-auto">
+        <div className="flex items-center justify-between mb-5">
+          <h3 className="text-xl font-black text-slate-900">Nieuwe betaling</h3>
+          <button onClick={onCancel} className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center"><X className="w-4 h-4" /></button>
+        </div>
+        {error && <div className="mb-4 p-2.5 bg-red-50 border border-red-200 text-red-600 rounded-xl text-sm">{error}</div>}
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs font-bold uppercase tracking-widest text-slate-500">Huurder *</label>
+            <select value={data.tenant_id} onChange={(e) => setData({ ...data, tenant_id: e.target.value })} data-testid="pay-tenant" required
+              className="w-full mt-1 h-12 px-3 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] outline-none bg-white">
+              <option value="">— Kies huurder —</option>
+              {tenants.map((t) => (
+                <option key={t.id} value={t.id}>{t.name}{t.apartment_number ? ` (Appt. ${t.apartment_number})` : ''}</option>
+              ))}
+            </select>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-bold uppercase tracking-widest text-slate-500">Categorie</label>
+              <select value={data.category} onChange={(e) => setData({ ...data, category: e.target.value })} data-testid="pay-category"
+                className="w-full mt-1 h-12 px-3 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] outline-none bg-white">
+                <option value="huur">Huur</option>
+                <option value="servicekosten">Servicekosten</option>
+                <option value="borg">Borg</option>
+                <option value="boete">Boete</option>
+                <option value="overig">Overig</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-xs font-bold uppercase tracking-widest text-slate-500">Betaalwijze</label>
+              <select value={data.method} onChange={(e) => setData({ ...data, method: e.target.value })} data-testid="pay-method"
+                className="w-full mt-1 h-12 px-3 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] outline-none bg-white">
+                <option value="contant">Contant</option>
+                <option value="bank">Bank</option>
+                <option value="mope">Mope</option>
+                <option value="sumup">SumUp</option>
+              </select>
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <div className="col-span-2">
+              <label className="text-xs font-bold uppercase tracking-widest text-slate-500">Bedrag *</label>
+              <input type="number" step="0.01" value={data.amount} onChange={(e) => setData({ ...data, amount: e.target.value })} required
+                data-testid="pay-amount"
+                className="w-full mt-1 h-12 px-4 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] outline-none" />
+            </div>
+            <div>
+              <label className="text-xs font-bold uppercase tracking-widest text-slate-500">Valuta</label>
+              <select value={data.currency} onChange={(e) => setData({ ...data, currency: e.target.value })} data-testid="pay-currency"
+                className="w-full mt-1 h-12 px-3 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] outline-none bg-white">
+                <option value="SRD">SRD</option>
+                <option value="USD">USD</option>
+                <option value="EUR">EUR</option>
+              </select>
+            </div>
+          </div>
+          {data.category === 'huur' && (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-bold uppercase tracking-widest text-slate-500">Maand</label>
+                <select value={data.period_month} onChange={(e) => setData({ ...data, period_month: e.target.value })}
+                  data-testid="pay-month"
+                  className="w-full mt-1 h-12 px-3 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] outline-none bg-white">
+                  {MONTHS_NL.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-bold uppercase tracking-widest text-slate-500">Jaar</label>
+                <input type="number" value={data.period_year} onChange={(e) => setData({ ...data, period_year: e.target.value })}
+                  data-testid="pay-year"
+                  className="w-full mt-1 h-12 px-4 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] outline-none" />
+              </div>
+            </div>
+          )}
+          <div>
+            <label className="text-xs font-bold uppercase tracking-widest text-slate-500">Notitie</label>
+            <input value={data.note} onChange={(e) => setData({ ...data, note: e.target.value })} data-testid="pay-note"
+              className="w-full mt-1 h-12 px-4 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] outline-none" />
+          </div>
+        </div>
+        <div className="flex gap-3 mt-6">
+          <button onClick={onCancel} className="flex-1 h-12 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold">Annuleren</button>
+          <button onClick={save} disabled={loading || !data.tenant_id || !data.amount}
+            data-testid="pay-save"
+            className="flex-1 h-12 rounded-xl bg-[#FF5C00] hover:bg-[#E05200] text-white font-bold flex items-center justify-center gap-2 disabled:opacity-50">
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Banknote className="w-4 h-4" />}
+            Registreer betaling
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Payments() {
+  const [items, setItems] = useState([]);
+  const [tenants, setTenants] = useState([]);
+  const [creating, setCreating] = useState(false);
+  const load = useCallback(async () => {
+    const [p, t] = await Promise.all([api.get('/payments'), api.get('/tenants')]);
+    setItems(p.data); setTenants(t.data);
+  }, []);
+  useEffect(() => { load(); }, [load]);
+  return (
+    <div>
+      <PageHeader title="Betalingen" subtitle={`${items.length} kwitanties geregistreerd`}
+        action={
+          <button onClick={() => setCreating(true)} data-testid="payment-new-btn"
+            className="inline-flex items-center gap-2 px-5 py-3 bg-[#FF5C00] hover:bg-[#E05200] text-white font-bold rounded-xl shadow-[0_10px_25px_-5px_rgba(255,92,0,0.5)]">
+            <Plus className="w-4 h-4" /> Nieuwe betaling
+          </button>
+        }
+      />
+      <div className="bg-white rounded-2xl border border-orange-100 overflow-hidden">
+        {items.length === 0 ? (
+          <div className="p-10 text-center">
+            <Receipt className="w-10 h-10 text-orange-300 mx-auto mb-3" />
+            <p className="text-slate-500 font-semibold">Nog geen betalingen.</p>
+          </div>
+        ) : (
+          <table className="w-full text-sm">
+            <thead className="bg-orange-50/50 text-left">
+              <tr className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                <th className="px-5 py-3">Kwitantie</th>
+                <th className="px-5 py-3">Datum</th>
+                <th className="px-5 py-3">Huurder</th>
+                <th className="px-5 py-3 hidden md:table-cell">Categorie</th>
+                <th className="px-5 py-3 hidden md:table-cell">Methode</th>
+                <th className="px-5 py-3 text-right">Bedrag</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((p) => (
+                <tr key={p.id} data-testid={`payment-row-${p.id}`} className="border-t border-orange-50 hover:bg-orange-50/30">
+                  <td className="px-5 py-3 font-mono text-xs font-bold text-slate-900">{p.receipt_number}</td>
+                  <td className="px-5 py-3 text-slate-500 text-xs">{new Date(p.paid_at).toLocaleDateString('nl-NL')}</td>
+                  <td className="px-5 py-3 font-semibold text-slate-900">
+                    {p.tenant_name || '—'}
+                    {p.apartment_number && <span className="block text-xs text-slate-400">Appt. {p.apartment_number}</span>}
+                  </td>
+                  <td className="px-5 py-3 hidden md:table-cell">
+                    <span className="inline-block px-2 py-0.5 rounded-full bg-orange-100 text-[#FF5C00] text-xs font-bold uppercase">{p.category}</span>
+                  </td>
+                  <td className="px-5 py-3 hidden md:table-cell text-slate-500 capitalize">{p.method}</td>
+                  <td className="px-5 py-3 text-right font-black text-slate-900">{fmtMoney(p.amount, p.currency)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+      {creating && <PaymentForm tenants={tenants} onCancel={() => setCreating(false)} onSaved={() => { setCreating(false); load(); }} />}
+    </div>
+  );
+}
+
+// ============== Settings (kiosk PIN) ==============
+function Settings() {
+  const [pin, setPin] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [msg, setMsg] = useState('');
+  const [err, setErr] = useState('');
+
+  const save = async () => {
+    setErr(''); setMsg('');
+    if (pin.length !== 4 || !/^\d{4}$/.test(pin)) { setErr('PIN moet exact 4 cijfers zijn'); return; }
+    if (pin !== confirm) { setErr('PINs komen niet overeen'); return; }
+    setLoading(true);
+    try {
+      await api.post('/auth/kiosk-set-pin', { pin });
+      setMsg('Kiosk PIN bijgewerkt');
+      setPin(''); setConfirm('');
+    } catch (e) { setErr(formatError(e)); }
+    finally { setLoading(false); }
+  };
+
+  return (
+    <div className="max-w-md">
+      <PageHeader title="Kiosk PIN" subtitle="Stel de 4-cijferige PIN in voor toegang tot de Kiosk" />
+      <div className="bg-white rounded-2xl border border-orange-100 p-6 space-y-4">
+        <div>
+          <label className="text-xs font-bold uppercase tracking-widest text-slate-500">Nieuwe PIN</label>
+          <input type="password" inputMode="numeric" maxLength={4} value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
+            data-testid="settings-pin"
+            className="w-full mt-1 h-14 px-4 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] outline-none text-2xl tracking-[0.5em] text-center font-bold" />
+        </div>
+        <div>
+          <label className="text-xs font-bold uppercase tracking-widest text-slate-500">Bevestig PIN</label>
+          <input type="password" inputMode="numeric" maxLength={4} value={confirm} onChange={(e) => setConfirm(e.target.value.replace(/\D/g, '').slice(0, 4))}
+            data-testid="settings-pin-confirm"
+            className="w-full mt-1 h-14 px-4 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] outline-none text-2xl tracking-[0.5em] text-center font-bold" />
+        </div>
+        {err && <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2">{err}</p>}
+        {msg && <p className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2">{msg}</p>}
+        <button onClick={save} disabled={loading || !pin || !confirm} data-testid="settings-save"
+          className="w-full h-12 rounded-xl bg-[#FF5C00] hover:bg-[#E05200] text-white font-bold flex items-center justify-center gap-2 disabled:opacity-50">
+          {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+          Opslaan
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export default function AdminDashboard() {
+  const [tab, setTab] = useState('overview');
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+  useEffect(() => { document.title = 'SuriRent - Beheer'; }, []);
+  useEffect(() => {
+    const handler = (e) => setTab(e.detail);
+    window.addEventListener('go-tab', handler);
+    return () => window.removeEventListener('go-tab', handler);
+  }, []);
+  const doLogout = async () => { await logout(); navigate('/vastgoed/login'); };
+  return (
+    <div className="min-h-screen bg-[#FFF7F0] flex">
+      <Sidebar active={tab} onChange={setTab} onLogout={doLogout} userName={user?.email} />
+      <main className="flex-1 p-5 md:p-8 pb-20 md:pb-8 max-w-7xl">
+        {tab === 'overview' && <Overview />}
+        {tab === 'apartments' && <Apartments />}
+        {tab === 'tenants' && <Tenants />}
+        {tab === 'payments' && <Payments />}
+        {tab === 'settings' && <Settings />}
+      </main>
+      <MobileTabBar active={tab} onChange={setTab} />
+    </div>
+  );
+}
