@@ -1,0 +1,29 @@
+{
+  "summary": "Phase 1 end-to-end testing of Vastgoed Kiosk. Backend: 8/8 new pytest cases pass for contracts (HC2026-NNNN + signing flow + already-signed 400 + public PDF), invoices (F2026-NNNNN + duplicate-period 400 + PDF + generate-month idempotency), employees + salaries (net = gross - advance - deductions + payslip PDF), deposits (held -> refunded with refund_amount = amount - deduction, double-refund 400, refund-pdf), maintenance (open -> in_progress -> done with resolved_at), kasgeld (IN/OUT mutations and per-currency balance) and payment kwitantie PDF (public). Frontend: admin login admin@vastgoed.sr/admin123 lands on /vastgoed/admin and all 11 sidebar tabs (Overzicht, Appartementen, Huurders, Contracten, Betalingen, Facturen, Borg, Onderhoud, Kasgeld, Werknemers, Kiosk PIN) render with correct headers, primary action buttons (Nieuw contract / Nieuwe factuur + Genereer maand / Nieuwe werknemer / Nieuw ticket / Nieuwe mutatie / Nieuwe borg) and sub-tabs (Werknemers: Personeel + Loonstroken; Onderhoud: Alle/Open/In behandeling/Afgerond). Facturen tab shows F2026-00001 created by generate-month test. Public route /onderteken/{token} returns 200 (React app loads). No console errors after login. Regression suite (test_vastgoed_api.py): 10 passed, 1 unrelated failure because kiosk PIN had been changed by prior testing -> reset back to 1234 via /auth/kiosk-set-pin.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_phase1_modules.py",
+    "/app/backend/tests/test_vastgoed_api.py",
+    "/app/test_reports/pytest/phase1_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py grew from ~770 to ~1460 lines covering 10 resources; high time to split into routers (auth, apartments, tenants, payments, contracts, invoices, employees_salaries, deposits, maintenance, kasgeld) with shared deps.py + counters.py.",
+    "Public PDF endpoints (/contracts/{id}/pdf, /invoices/{id}/pdf, /deposits/{id}/refund-pdf, /payments/{id}/pdf, /salaries/{id}/pdf) leak full document contents to anyone who knows the UUID; for production switch to signed/expiring tokens or auth.",
+    "/invoices/generate-month does not validate that body.period_year matches counter year (uses body.period_year for both seq counter and invoice_number) - OK but the receipt seq counter for contracts/invoices/salaries are independent per-year; document this.",
+    "Deposit refund_amount uses max(amount - deduction, 0) but does not validate deduction <= amount nor that deduction >= 0; consider Pydantic Field(ge=0) and an explicit 400 if deduction > amount.",
+    "Maintenance reopen path: schema accepts 'open' status update but does not clear resolved_at on reopen; minor data hygiene issue.",
+    "Kasgeld /balance hardcodes SRD/USD/EUR keys; if a new currency is ever added it will silently drop into balances.get default. Currency literal already enforces but worth a comment."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_phase1_modules.py"
+  ],
+  "success_rate": {"backend": "100% (8/8 new tests; 10/11 regression - 1 unrelated kiosk PIN env issue, fixed by reset)", "frontend": "100% (all 11 tabs render, sign route 200)"},
+  "test_credentials": "admin@vastgoed.sr / admin123 (verified); kiosk PIN was changed by previous testing -> reset back to 1234 via authenticated POST /api/auth/kiosk-set-pin",
+  "seed_data_creation": "Tests create TEST-PH1-* apt + TEST_PH1_* tenant per session and clean up. Generate-month run created/deleted invoices for period 7/2027. Invoice F2026-00001 (Mei 2026, SRD 7000) for Jan de Vries is present in DB from prior UI smoke and was left intact.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Backend regression: `REACT_APP_BACKEND_URL=$(grep REACT_APP_BACKEND_URL /app/frontend/.env|cut -d= -f2) pytest /app/backend/tests/ -v`. Frontend public URL = https://vastgoed-app.preview.emergentagent.com (NOT the URL stated in review_request). Admin tabs use Dutch text-content selectors (Contracten, Facturen, Borg, Onderhoud, Kasgeld, Werknemers, Kiosk PIN). Public sign route is /onderteken/{sign_token}. PDF endpoints are unauthenticated by design. Kiosk PIN must be 1234 - if it gets changed, reset via authenticated POST /api/auth/kiosk-set-pin {\"pin\":\"1234\"}.",
+  "rca of the issue": "Iteration 1 regression test_kiosk_pin_correct failed (401) because kiosk PIN was previously changed away from 1234 in earlier UI testing of the Kiosk PIN admin tab. Not a code bug. Resolved by resetting PIN to 1234. Lifespan seed only sets PIN when settings doc is absent, which is correct (avoids overwriting custom PIN on restart)."
+}

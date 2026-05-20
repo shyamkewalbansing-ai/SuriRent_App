@@ -15,9 +15,16 @@ from typing import List, Optional, Literal
 
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, Response, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, EmailStr, Field
 from motor.motor_asyncio import AsyncIOMotorClient
 from contextlib import asynccontextmanager
+import io
+import secrets
+
+from pdf_gen import (
+    receipt_pdf, contract_pdf, invoice_pdf, deposit_refund_pdf, payslip_pdf,
+)
 
 # =====================================================================
 # Config
@@ -252,13 +259,22 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Vastgoed Kiosk API", lifespan=lifespan)
 
 cors_origins = os.environ.get("CORS_ORIGINS", "*")
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"] if cors_origins == "*" else [o.strip() for o in cors_origins.split(",")],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+if cors_origins == "*":
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origin_regex=".*",
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+else:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[o.strip() for o in cors_origins.split(",")],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 api = APIRouter(prefix="/api")
 
@@ -768,4 +784,680 @@ async def health():
     return {"ok": True, "service": "vastgoed-kiosk-api"}
 
 
+# =====================================================================
+# Receipt PDF
+# =====================================================================
+def _pdf_response(pdf_bytes: bytes, filename: str) -> StreamingResponse:
+    return StreamingResponse(
+        io.BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="{filename}"'},
+    )
+
+
+@api.get("/payments/{payment_id}/pdf")
+async def payment_pdf(payment_id: str):
+    """Public: download PDF receipt by payment id. No auth so we can email/share link."""
+    p = await db.payments.find_one({"id": payment_id}, {"_id": 0})
+    if not p:
+        raise HTTPException(status_code=404, detail="Kwitantie niet gevonden")
+    p = await _enrich_payment(p)
+    pdf = receipt_pdf(p)
+    return _pdf_response(pdf, f"kwitantie-{p['receipt_number']}.pdf")
+
+
+# =====================================================================
+# Contracts
+# =====================================================================
+class ContractIn(BaseModel):
+    tenant_id: str
+    apartment_id: str
+    start_date: str
+    end_date: Optional[str] = ""
+    payment_day: int = 1
+    deposit_amount: float = 0
+    landlord: Optional[str] = "SuriRent N.V."
+    terms: Optional[str] = ""
+
+
+class ContractOut(BaseModel):
+    id: str
+    contract_number: str
+    tenant_id: str
+    tenant_name: Optional[str] = None
+    apartment_id: str
+    apartment_number: Optional[str] = None
+    start_date: str
+    end_date: Optional[str] = ""
+    payment_day: int
+    deposit_amount: float
+    landlord: str
+    terms: str
+    status: str
+    sign_token: Optional[str] = None
+    signed_at: Optional[str] = None
+    signed_by: Optional[str] = None
+    signed_ip: Optional[str] = None
+    created_at: str
+
+
+async def _next_seq(key: str) -> int:
+    from pymongo import ReturnDocument
+    c = await db.counters.find_one_and_update(
+        {"_id": key}, {"$inc": {"seq": 1}}, upsert=True, return_document=ReturnDocument.AFTER
+    )
+    return c.get("seq", 1)
+
+
+async def _enrich_contract(c: dict) -> dict:
+    tn = await db.tenants.find_one({"id": c["tenant_id"]}, {"_id": 0, "name": 1})
+    apt = await db.apartments.find_one({"id": c["apartment_id"]}, {"_id": 0, "number": 1})
+    return {
+        **c,
+        "tenant_name": tn["name"] if tn else None,
+        "apartment_number": apt["number"] if apt else None,
+    }
+
+
+@api.get("/contracts", response_model=List[ContractOut])
+async def list_contracts(user=Depends(get_current_user), tenant_id: Optional[str] = None):
+    q = {}
+    if tenant_id:
+        q["tenant_id"] = tenant_id
+    docs = await db.contracts.find(q, {"_id": 0}).sort("created_at", -1).to_list(500)
+    return [await _enrich_contract(d) for d in docs]
+
+
+@api.post("/contracts", response_model=ContractOut)
+async def create_contract(body: ContractIn, user=Depends(get_current_user)):
+    tenant = await db.tenants.find_one({"id": body.tenant_id}, {"_id": 0})
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Huurder niet gevonden")
+    apt = await db.apartments.find_one({"id": body.apartment_id}, {"_id": 0})
+    if not apt:
+        raise HTTPException(status_code=404, detail="Appartement niet gevonden")
+    year = now_utc().year
+    seq = await _next_seq(f"contract_{year}")
+    doc = {
+        "id": new_id(),
+        "contract_number": f"HC{year}-{seq:04d}",
+        "tenant_id": body.tenant_id,
+        "apartment_id": body.apartment_id,
+        "start_date": body.start_date,
+        "end_date": body.end_date or "",
+        "payment_day": body.payment_day,
+        "deposit_amount": body.deposit_amount,
+        "landlord": body.landlord or "SuriRent N.V.",
+        "terms": body.terms or "",
+        "status": "draft",
+        "sign_token": secrets.token_urlsafe(24),
+        "signed_at": None,
+        "signed_by": None,
+        "signed_ip": None,
+        "created_at": iso(now_utc()),
+    }
+    await db.contracts.insert_one(doc)
+    doc.pop("_id", None)
+    return await _enrich_contract(doc)
+
+
+@api.delete("/contracts/{contract_id}")
+async def delete_contract(contract_id: str, user=Depends(get_current_user)):
+    res = await db.contracts.delete_one({"id": contract_id})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Contract niet gevonden")
+    return {"ok": True}
+
+
+@api.get("/contracts/{contract_id}/pdf")
+async def contract_pdf_admin(contract_id: str):
+    """Public via id (kept simple for share link)."""
+    c = await db.contracts.find_one({"id": contract_id}, {"_id": 0})
+    if not c:
+        raise HTTPException(status_code=404, detail="Contract niet gevonden")
+    t = await db.tenants.find_one({"id": c["tenant_id"]}, {"_id": 0}) or {}
+    a = await db.apartments.find_one({"id": c["apartment_id"]}, {"_id": 0}) or {}
+    pdf = contract_pdf(c, t, a)
+    return _pdf_response(pdf, f"contract-{c['contract_number']}.pdf")
+
+
+# Public signing flow
+@api.get("/contracts/sign/{token}")
+async def contract_sign_info(token: str):
+    c = await db.contracts.find_one({"sign_token": token}, {"_id": 0})
+    if not c:
+        raise HTTPException(status_code=404, detail="Ondertekenlink ongeldig")
+    t = await db.tenants.find_one({"id": c["tenant_id"]}, {"_id": 0}) or {}
+    a = await db.apartments.find_one({"id": c["apartment_id"]}, {"_id": 0}) or {}
+    return {
+        "contract": c,
+        "tenant": {"name": t.get("name"), "phone": t.get("phone")},
+        "apartment": {"number": a.get("number"), "address": a.get("address"),
+                      "rent_amount": a.get("rent_amount"), "currency": a.get("currency")},
+        "already_signed": bool(c.get("signed_at")),
+    }
+
+
+class SignIn(BaseModel):
+    signed_by: str = Field(min_length=2)
+    accept: bool = True
+
+
+@api.post("/contracts/sign/{token}")
+async def contract_do_sign(token: str, body: SignIn, request: Request):
+    if not body.accept:
+        raise HTTPException(status_code=400, detail="U moet akkoord gaan met de voorwaarden")
+    c = await db.contracts.find_one({"sign_token": token}, {"_id": 0})
+    if not c:
+        raise HTTPException(status_code=404, detail="Link ongeldig")
+    if c.get("signed_at"):
+        raise HTTPException(status_code=400, detail="Contract is al ondertekend")
+    ip = request.client.host if request.client else "—"
+    from pymongo import ReturnDocument
+    updated = await db.contracts.find_one_and_update(
+        {"sign_token": token},
+        {"$set": {
+            "signed_at": iso(now_utc()),
+            "signed_by": body.signed_by,
+            "signed_ip": ip,
+            "status": "active",
+        }},
+        projection={"_id": 0}, return_document=ReturnDocument.AFTER,
+    )
+    return await _enrich_contract(updated)
+
+
+# =====================================================================
+# Invoices
+# =====================================================================
+class InvoiceCreate(BaseModel):
+    tenant_id: str
+    period_month: int = Field(ge=1, le=12)
+    period_year: int
+
+
+class InvoiceOut(BaseModel):
+    id: str
+    invoice_number: str
+    tenant_id: str
+    tenant_name: Optional[str] = None
+    apartment_id: Optional[str] = None
+    apartment_number: Optional[str] = None
+    amount: float
+    currency: str
+    period_month: int
+    period_year: int
+    status: str
+    created_at: str
+
+
+async def _enrich_invoice(i: dict) -> dict:
+    t = await db.tenants.find_one({"id": i["tenant_id"]}, {"_id": 0, "name": 1})
+    a = None
+    if i.get("apartment_id"):
+        a = await db.apartments.find_one({"id": i["apartment_id"]}, {"_id": 0, "number": 1})
+    return {**i, "tenant_name": t["name"] if t else None,
+            "apartment_number": a["number"] if a else None}
+
+
+@api.get("/invoices", response_model=List[InvoiceOut])
+async def list_invoices(user=Depends(get_current_user)):
+    docs = await db.invoices.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    return [await _enrich_invoice(d) for d in docs]
+
+
+@api.post("/invoices", response_model=InvoiceOut)
+async def create_invoice(body: InvoiceCreate, user=Depends(get_current_user)):
+    t = await db.tenants.find_one({"id": body.tenant_id}, {"_id": 0})
+    if not t:
+        raise HTTPException(status_code=404, detail="Huurder niet gevonden")
+    apt_id = t.get("apartment_id")
+    apt = await db.apartments.find_one({"id": apt_id}, {"_id": 0}) if apt_id else None
+    if not apt:
+        raise HTTPException(status_code=400, detail="Huurder heeft geen appartement")
+    # Prevent duplicate invoice for same tenant + period
+    dup = await db.invoices.find_one({
+        "tenant_id": body.tenant_id, "period_month": body.period_month,
+        "period_year": body.period_year,
+    })
+    if dup:
+        raise HTTPException(status_code=400, detail="Factuur voor deze periode bestaat al")
+    year = body.period_year
+    seq = await _next_seq(f"invoice_{year}")
+    doc = {
+        "id": new_id(),
+        "invoice_number": f"F{year}-{seq:05d}",
+        "tenant_id": body.tenant_id,
+        "apartment_id": apt_id,
+        "amount": apt["rent_amount"],
+        "currency": apt.get("currency", "SRD"),
+        "period_month": body.period_month,
+        "period_year": body.period_year,
+        "status": "open",
+        "created_at": iso(now_utc()),
+    }
+    await db.invoices.insert_one(doc)
+    doc.pop("_id", None)
+    return await _enrich_invoice(doc)
+
+
+class GenerateMonthIn(BaseModel):
+    period_month: int = Field(ge=1, le=12)
+    period_year: int
+
+
+@api.post("/invoices/generate-month")
+async def generate_month_invoices(body: GenerateMonthIn, user=Depends(get_current_user)):
+    """Generate invoice for every occupied apartment for the period."""
+    apts = await db.apartments.find({"status": "occupied"}, {"_id": 0}).to_list(1000)
+    created = 0
+    skipped = 0
+    for a in apts:
+        t = await db.tenants.find_one({"id": a.get("tenant_id")}, {"_id": 0}) if a.get("tenant_id") else None
+        if not t:
+            skipped += 1
+            continue
+        dup = await db.invoices.find_one({
+            "tenant_id": t["id"], "period_month": body.period_month, "period_year": body.period_year
+        })
+        if dup:
+            skipped += 1
+            continue
+        seq = await _next_seq(f"invoice_{body.period_year}")
+        await db.invoices.insert_one({
+            "id": new_id(),
+            "invoice_number": f"F{body.period_year}-{seq:05d}",
+            "tenant_id": t["id"], "apartment_id": a["id"],
+            "amount": a["rent_amount"], "currency": a.get("currency", "SRD"),
+            "period_month": body.period_month, "period_year": body.period_year,
+            "status": "open", "created_at": iso(now_utc()),
+        })
+        created += 1
+    return {"created": created, "skipped": skipped}
+
+
+@api.delete("/invoices/{invoice_id}")
+async def delete_invoice(invoice_id: str, user=Depends(get_current_user)):
+    res = await db.invoices.delete_one({"id": invoice_id})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Factuur niet gevonden")
+    return {"ok": True}
+
+
+@api.get("/invoices/{invoice_id}/pdf")
+async def invoice_pdf_endpoint(invoice_id: str):
+    inv = await db.invoices.find_one({"id": invoice_id}, {"_id": 0})
+    if not inv:
+        raise HTTPException(status_code=404, detail="Factuur niet gevonden")
+    t = await db.tenants.find_one({"id": inv["tenant_id"]}, {"_id": 0}) or {}
+    a = await db.apartments.find_one({"id": inv.get("apartment_id")}, {"_id": 0}) or {}
+    # Find related huur payments
+    payments = await db.payments.find({
+        "tenant_id": inv["tenant_id"],
+        "category": "huur",
+        "period_month": inv["period_month"],
+        "period_year": inv["period_year"],
+    }, {"_id": 0}).to_list(50)
+    pdf = invoice_pdf(inv, t, a, payments)
+    return _pdf_response(pdf, f"factuur-{inv['invoice_number']}.pdf")
+
+
+# =====================================================================
+# Employees & Salaries
+# =====================================================================
+class EmployeeIn(BaseModel):
+    name: str
+    role: Optional[str] = ""
+    phone: Optional[str] = ""
+    email: Optional[str] = ""
+    monthly_salary: float = 0
+    currency: Literal["SRD", "USD", "EUR"] = "SRD"
+    active: bool = True
+
+
+class EmployeeOut(EmployeeIn):
+    id: str
+    created_at: str
+
+
+@api.get("/employees", response_model=List[EmployeeOut])
+async def list_employees(user=Depends(get_current_user)):
+    docs = await db.employees.find({}, {"_id": 0}).sort("name", 1).to_list(500)
+    return docs
+
+
+@api.post("/employees", response_model=EmployeeOut)
+async def create_employee(body: EmployeeIn, user=Depends(get_current_user)):
+    doc = {"id": new_id(), **body.model_dump(), "created_at": iso(now_utc())}
+    await db.employees.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@api.put("/employees/{eid}", response_model=EmployeeOut)
+async def update_employee(eid: str, body: EmployeeIn, user=Depends(get_current_user)):
+    from pymongo import ReturnDocument
+    res = await db.employees.find_one_and_update(
+        {"id": eid}, {"$set": body.model_dump()},
+        projection={"_id": 0}, return_document=ReturnDocument.AFTER,
+    )
+    if not res:
+        raise HTTPException(status_code=404, detail="Werknemer niet gevonden")
+    return res
+
+
+@api.delete("/employees/{eid}")
+async def delete_employee(eid: str, user=Depends(get_current_user)):
+    await db.employees.delete_one({"id": eid})
+    return {"ok": True}
+
+
+class SalaryIn(BaseModel):
+    employee_id: str
+    gross: float
+    advance: float = 0
+    deductions: float = 0
+    currency: Literal["SRD", "USD", "EUR"] = "SRD"
+    period_month: int = Field(ge=1, le=12)
+    period_year: int
+    note: Optional[str] = ""
+
+
+class SalaryOut(BaseModel):
+    id: str
+    employee_id: str
+    employee_name: Optional[str] = None
+    gross: float
+    advance: float
+    deductions: float
+    net: float
+    currency: str
+    period_month: int
+    period_year: int
+    note: str
+    paid_at: str
+
+
+async def _enrich_salary(s: dict) -> dict:
+    e = await db.employees.find_one({"id": s["employee_id"]}, {"_id": 0, "name": 1})
+    return {**s, "employee_name": e["name"] if e else None}
+
+
+@api.get("/salaries", response_model=List[SalaryOut])
+async def list_salaries(user=Depends(get_current_user), employee_id: Optional[str] = None):
+    q = {}
+    if employee_id:
+        q["employee_id"] = employee_id
+    docs = await db.salaries.find(q, {"_id": 0}).sort("paid_at", -1).to_list(500)
+    return [await _enrich_salary(d) for d in docs]
+
+
+@api.post("/salaries", response_model=SalaryOut)
+async def create_salary(body: SalaryIn, user=Depends(get_current_user)):
+    e = await db.employees.find_one({"id": body.employee_id}, {"_id": 0})
+    if not e:
+        raise HTTPException(status_code=404, detail="Werknemer niet gevonden")
+    net = body.gross - body.advance - body.deductions
+    doc = {
+        "id": new_id(),
+        "employee_id": body.employee_id,
+        "gross": body.gross, "advance": body.advance, "deductions": body.deductions,
+        "net": net, "currency": body.currency,
+        "period_month": body.period_month, "period_year": body.period_year,
+        "note": body.note or "", "paid_at": iso(now_utc()),
+    }
+    await db.salaries.insert_one(doc)
+    doc.pop("_id", None)
+    return await _enrich_salary(doc)
+
+
+@api.delete("/salaries/{sid}")
+async def delete_salary(sid: str, user=Depends(get_current_user)):
+    await db.salaries.delete_one({"id": sid})
+    return {"ok": True}
+
+
+@api.get("/salaries/{sid}/pdf")
+async def salary_pdf_endpoint(sid: str):
+    s = await db.salaries.find_one({"id": sid}, {"_id": 0})
+    if not s:
+        raise HTTPException(status_code=404, detail="Loonstrook niet gevonden")
+    e = await db.employees.find_one({"id": s["employee_id"]}, {"_id": 0}) or {}
+    pdf = payslip_pdf(s, e)
+    return _pdf_response(pdf, f"loonstrook-{e.get('name','employee')}-{s['period_year']}-{s['period_month']:02d}.pdf")
+
+
+# =====================================================================
+# Deposits (Borg)
+# =====================================================================
+class DepositIn(BaseModel):
+    tenant_id: str
+    amount: float
+    currency: Literal["SRD", "USD", "EUR"] = "SRD"
+    note: Optional[str] = ""
+
+
+class DepositOut(BaseModel):
+    id: str
+    tenant_id: str
+    tenant_name: Optional[str] = None
+    apartment_id: Optional[str] = None
+    apartment_number: Optional[str] = None
+    amount: float
+    currency: str
+    status: str  # held | refunded
+    deduction: float
+    refund_amount: float
+    refund_note: Optional[str] = ""
+    note: Optional[str] = ""
+    created_at: str
+    refunded_at: Optional[str] = None
+
+
+async def _enrich_deposit(d: dict) -> dict:
+    t = await db.tenants.find_one({"id": d["tenant_id"]}, {"_id": 0, "name": 1, "apartment_id": 1})
+    apt_number = None
+    if t and t.get("apartment_id"):
+        a = await db.apartments.find_one({"id": t["apartment_id"]}, {"_id": 0, "number": 1})
+        apt_number = a["number"] if a else None
+    return {**d, "tenant_name": t["name"] if t else None,
+            "apartment_id": t.get("apartment_id") if t else None,
+            "apartment_number": apt_number}
+
+
+@api.get("/deposits", response_model=List[DepositOut])
+async def list_deposits(user=Depends(get_current_user)):
+    docs = await db.deposits.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    return [await _enrich_deposit(d) for d in docs]
+
+
+@api.post("/deposits", response_model=DepositOut)
+async def create_deposit(body: DepositIn, user=Depends(get_current_user)):
+    t = await db.tenants.find_one({"id": body.tenant_id}, {"_id": 0})
+    if not t:
+        raise HTTPException(status_code=404, detail="Huurder niet gevonden")
+    doc = {
+        "id": new_id(),
+        "tenant_id": body.tenant_id,
+        "amount": body.amount, "currency": body.currency,
+        "status": "held", "deduction": 0, "refund_amount": 0,
+        "refund_note": "", "note": body.note or "",
+        "created_at": iso(now_utc()), "refunded_at": None,
+    }
+    await db.deposits.insert_one(doc)
+    doc.pop("_id", None)
+    return await _enrich_deposit(doc)
+
+
+class DepositRefundIn(BaseModel):
+    deduction: float = 0
+    refund_note: Optional[str] = ""
+
+
+@api.post("/deposits/{did}/refund", response_model=DepositOut)
+async def refund_deposit(did: str, body: DepositRefundIn, user=Depends(get_current_user)):
+    d = await db.deposits.find_one({"id": did}, {"_id": 0})
+    if not d:
+        raise HTTPException(status_code=404, detail="Borg niet gevonden")
+    if d["status"] != "held":
+        raise HTTPException(status_code=400, detail="Borg is al gerestitueerd")
+    refund_amount = max(d["amount"] - body.deduction, 0)
+    from pymongo import ReturnDocument
+    updated = await db.deposits.find_one_and_update(
+        {"id": did},
+        {"$set": {
+            "status": "refunded", "deduction": body.deduction,
+            "refund_amount": refund_amount,
+            "refund_note": body.refund_note or "",
+            "refunded_at": iso(now_utc()),
+        }},
+        projection={"_id": 0}, return_document=ReturnDocument.AFTER,
+    )
+    return await _enrich_deposit(updated)
+
+
+@api.delete("/deposits/{did}")
+async def delete_deposit(did: str, user=Depends(get_current_user)):
+    await db.deposits.delete_one({"id": did})
+    return {"ok": True}
+
+
+@api.get("/deposits/{did}/refund-pdf")
+async def deposit_refund_pdf_endpoint(did: str):
+    d = await db.deposits.find_one({"id": did}, {"_id": 0})
+    if not d:
+        raise HTTPException(status_code=404, detail="Borg niet gevonden")
+    t = await db.tenants.find_one({"id": d["tenant_id"]}, {"_id": 0}) or {}
+    apt_id = t.get("apartment_id")
+    a = await db.apartments.find_one({"id": apt_id}, {"_id": 0}) if apt_id else {}
+    pdf = deposit_refund_pdf(d, t, a or {})
+    return _pdf_response(pdf, f"borg-restitutie-{d['id'][:8]}.pdf")
+
+
+# =====================================================================
+# Maintenance
+# =====================================================================
+class MaintenanceIn(BaseModel):
+    apartment_id: str
+    title: str
+    description: Optional[str] = ""
+    priority: Literal["low", "medium", "high"] = "medium"
+    cost: float = 0
+    currency: Literal["SRD", "USD", "EUR"] = "SRD"
+
+
+class MaintenanceOut(MaintenanceIn):
+    id: str
+    apartment_number: Optional[str] = None
+    status: str
+    created_at: str
+    resolved_at: Optional[str] = None
+
+
+async def _enrich_maint(m: dict) -> dict:
+    a = await db.apartments.find_one({"id": m["apartment_id"]}, {"_id": 0, "number": 1})
+    return {**m, "apartment_number": a["number"] if a else None}
+
+
+@api.get("/maintenance", response_model=List[MaintenanceOut])
+async def list_maintenance(user=Depends(get_current_user), apartment_id: Optional[str] = None):
+    q = {}
+    if apartment_id:
+        q["apartment_id"] = apartment_id
+    docs = await db.maintenance.find(q, {"_id": 0}).sort("created_at", -1).to_list(500)
+    return [await _enrich_maint(d) for d in docs]
+
+
+@api.post("/maintenance", response_model=MaintenanceOut)
+async def create_maintenance(body: MaintenanceIn, user=Depends(get_current_user)):
+    a = await db.apartments.find_one({"id": body.apartment_id}, {"_id": 0})
+    if not a:
+        raise HTTPException(status_code=404, detail="Appartement niet gevonden")
+    doc = {"id": new_id(), **body.model_dump(),
+           "status": "open", "created_at": iso(now_utc()), "resolved_at": None}
+    await db.maintenance.insert_one(doc)
+    doc.pop("_id", None)
+    return await _enrich_maint(doc)
+
+
+class MaintenanceUpdateStatus(BaseModel):
+    status: Literal["open", "in_progress", "done"]
+
+
+@api.post("/maintenance/{mid}/status", response_model=MaintenanceOut)
+async def update_maintenance_status(mid: str, body: MaintenanceUpdateStatus, user=Depends(get_current_user)):
+    from pymongo import ReturnDocument
+    update = {"status": body.status}
+    if body.status == "done":
+        update["resolved_at"] = iso(now_utc())
+    res = await db.maintenance.find_one_and_update(
+        {"id": mid}, {"$set": update},
+        projection={"_id": 0}, return_document=ReturnDocument.AFTER,
+    )
+    if not res:
+        raise HTTPException(status_code=404, detail="Ticket niet gevonden")
+    return await _enrich_maint(res)
+
+
+@api.delete("/maintenance/{mid}")
+async def delete_maintenance(mid: str, user=Depends(get_current_user)):
+    await db.maintenance.delete_one({"id": mid})
+    return {"ok": True}
+
+
+# =====================================================================
+# Kasgeld (cash)
+# =====================================================================
+class CashEntryIn(BaseModel):
+    type: Literal["in", "out"]
+    amount: float
+    currency: Literal["SRD", "USD", "EUR"] = "SRD"
+    description: str
+    category: Optional[str] = "overig"
+
+
+class CashEntryOut(CashEntryIn):
+    id: str
+    created_at: str
+
+
+@api.get("/kasgeld", response_model=List[CashEntryOut])
+async def list_cash(user=Depends(get_current_user)):
+    docs = await db.kasgeld.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    return docs
+
+
+@api.post("/kasgeld", response_model=CashEntryOut)
+async def create_cash(body: CashEntryIn, user=Depends(get_current_user)):
+    doc = {"id": new_id(), **body.model_dump(), "created_at": iso(now_utc())}
+    await db.kasgeld.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@api.delete("/kasgeld/{cid}")
+async def delete_cash(cid: str, user=Depends(get_current_user)):
+    await db.kasgeld.delete_one({"id": cid})
+    return {"ok": True}
+
+
+@api.get("/kasgeld/balance")
+async def cash_balance(user=Depends(get_current_user)):
+    """Compute per-currency cash balance."""
+    pipeline = [
+        {"$group": {
+            "_id": {"currency": "$currency", "type": "$type"},
+            "total": {"$sum": "$amount"},
+        }},
+    ]
+    balances = {"SRD": 0.0, "USD": 0.0, "EUR": 0.0}
+    async for r in db.kasgeld.aggregate(pipeline):
+        cur = r["_id"]["currency"]
+        t = r["_id"]["type"]
+        sign = 1 if t == "in" else -1
+        balances[cur] = balances.get(cur, 0) + sign * r["total"]
+    return balances
+
+
 app.include_router(api)
+

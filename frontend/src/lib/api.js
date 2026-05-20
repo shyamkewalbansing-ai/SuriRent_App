@@ -4,7 +4,7 @@ const baseURL = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 export const api = axios.create({
   baseURL,
-  withCredentials: true,
+  withCredentials: false,
 });
 
 // Attach bearer token if present (fallback to cookie auth)
