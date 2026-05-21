@@ -175,6 +175,37 @@ User koos voor **Optie C — minimale herbouw** (kern eerst), dan vroeg om **Fas
 - ✅ Frontend: nieuw `Zap` icoon-knop op elke appartement-kaart → `ShellyControlModal` met device binding, Cloud lijst-picker, AAN/UIT knoppen, status (vermogen + kWh)
 - ✅ Tested: 11 nieuwe Shelly-tests (test_shelly.py) + 55 regressie-tests = **66/66 backend pass**
 
+### Mobile dashboard nav (2026-05-21) ✅
+- ✅ Hamburger drawer met alle 14 tabs vervangt de horizontale scrollende bottom-bar die functies verstopte
+- ✅ `MobileHeader` (sticky top), `MobileTabBar` (4 primaire + Meer-knop), `MobileDrawer` (slide-in met alle tabs + actief bedrijf + uitloggen)
+- ✅ Respecteert `safe-area-inset-top/bottom` voor iOS PWA (notch)
+- ✅ SW cache → `surirent-v7`
+
+### Kiosk volledige herbouw — oude ERP-stijl + Locaties (2026-05-21) ✅
+- ✅ **Nieuwe collectie `locations`** (`{id, company_id, name, address, photo_url, created_at}`) met CRUD endpoints:
+  - `GET/POST /api/locations`, `PUT/DELETE /api/locations/{id}` — scope-filtered op bedrijf
+  - DELETE ontkoppelt appartementen (zet `location_id` op null)
+- ✅ **Apartment.location_id** + **Tenant.internet_amount** + **PaymentIn category `internet`** + **method `uni5pay`** + **`received_by`/`approved_by`** velden
+- ✅ **Kiosk endpoints**:
+  - `GET /api/kiosk/locations` (incl. synthetische `_none` bucket voor losse appartementen)
+  - `GET /api/kiosk/apartments?location_id=…` met filter
+  - `GET /api/kiosk/tenants/{id}/overview` returnt nu ook `internet_amount`
+  - `GET /api/kiosk/tenants/{id}/payments` — geschiedenis voor de modal
+- ✅ **Admin UI**: nieuwe **Locaties tab** (CRUD met foto-preview), locatie-dropdown in `ApartmentForm`, internet-bedrag input in `TenantForm`
+- ✅ **Kiosk redesign** (8 stappen, exact zoals oude ERP-screenshots):
+  1. Welcome
+  2. **LocationSelect** — grid met locatie-cards (foto/MapPin + appartementen-count)
+  3. **ApartmentSelect** — grid met grote HUIS-cards + Bezet/Vacant badge, header "Locatie · Kies uw appartement"
+  4. **TenantOverview** — split-screen: Financieel overzicht (Maandhuur, Openstaande huur, Servicekosten, Boetes, Internet) links + "Te betalen" + Volgende + Betalingsgeschiedenis rechts
+  5. **PaymentHistoryModal** — kwitanties met Afdruk-knop
+  6. **PaySelect** — split-screen: checklist (Huur/Service/Boetes/Internet) links + numeriek toetsenbord rechts (typing-mode wist auto-fill bij eerste druk)
+  7. **MethodSelect** — 3 grote cards Contant / Mope / Uni5Pay
+  8. **PaymentConfirm** + **Receipt** met `approved_by` regel
+- ✅ **`KioskFooter`** sticky onderaan met bedrijfsnaam, appt info, Beheerder & Uit knoppen
+- ✅ Auto-skip naar appartement-grid wanneer er ≤1 locatie is
+- ✅ SW cache → `surirent-v8`
+- ✅ Tested: **88/88 backend pass** (22 nieuwe location-tests + 66 regressie) + alle 8 kiosk-stappen + admin Locaties CRUD geverifieerd
+
 ## Prioritized Backlog (Fases E-F)
 - 📧 **Email notificaties** — wacht op SendGrid / Resend credentials van user
 - 📱 **WhatsApp/SMS herinneringen** — wacht op Twilio credentials

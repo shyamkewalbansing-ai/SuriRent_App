@@ -217,7 +217,7 @@ function ApartmentSelect({ location, onSelect, onBack }) {
                   <div className="w-14 h-14 rounded-full bg-white flex items-center justify-center shadow-inner">
                     <Building2 className="w-7 h-7 text-[#FF5C00]" />
                   </div>
-                  <p className="text-xl font-black text-slate-900 tracking-tight">HUIS {a.number}</p>
+                  <p className="text-xl font-black text-slate-900 tracking-tight">{a.number}</p>
                   {a.tenant_name && (
                     <p className="text-xs text-slate-500 truncate w-full px-1">{a.tenant_name}</p>
                   )}
@@ -454,13 +454,14 @@ function PaySelect({ overview, onBack, onConfirm }) {
 
   const [selected, setSelected] = useState(() => new Set(['huur']));
   const [amount, setAmount] = useState(items[0].amount.toFixed(2));
+  const [typing, setTyping] = useState(false);  // true zodra gebruiker zelf op keypad drukt
 
   // Whenever selection changes, sync amount to selected total (user can override on keypad).
   const selectedTotal = useMemo(
     () => items.filter((i) => selected.has(i.key)).reduce((s, i) => s + (Number(i.amount) || 0), 0),
     [items, selected]
   );
-  useEffect(() => { setAmount(selectedTotal.toFixed(2)); }, [selectedTotal]);
+  useEffect(() => { setAmount(selectedTotal.toFixed(2)); setTyping(false); }, [selectedTotal]);
 
   const toggle = (key) => {
     setSelected((cur) => {
@@ -472,11 +473,14 @@ function PaySelect({ overview, onBack, onConfirm }) {
 
   const press = (k) => {
     setAmount((cur) => {
-      if (k === 'DEL') return cur.length <= 1 ? '0' : cur.slice(0, -1);
-      if (k === '.') return cur.includes('.') ? cur : cur + '.';
-      if (cur === '0' || cur === '0.00') return k;
-      return cur + k;
+      // Eerste keypad-druk na auto-fill wist het bedrag.
+      const base = typing ? cur : '0';
+      if (k === 'DEL') return base.length <= 1 ? '0' : base.slice(0, -1);
+      if (k === '.') return base.includes('.') ? base : base + '.';
+      if (base === '0' || base === '0.00') return k;
+      return base + k;
     });
+    setTyping(true);
   };
 
   const amountNum = parseFloat(amount) || 0;
