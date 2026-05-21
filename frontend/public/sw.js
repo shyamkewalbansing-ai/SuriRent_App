@@ -6,7 +6,7 @@
  * - Bypass /api/* (always go to network)
  * - Push notifications + click handler
  */
-const CACHE_VERSION = 'surirent-v3';
+const CACHE_VERSION = 'surirent-v4';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 
@@ -80,7 +80,25 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Static assets (JS, CSS, images): cache-first then network.
+  // Static assets — use stale-while-revalidate so new builds load on next visit
+  // without users getting permanently stuck on old JS bundles.
+  if (url.pathname.startsWith('/static/') || url.pathname.endsWith('.js') || url.pathname.endsWith('.css')) {
+    event.respondWith(
+      caches.open(RUNTIME_CACHE).then(async (cache) => {
+        const cached = await cache.match(req);
+        const networkPromise = fetch(req).then((res) => {
+          if (res && res.status === 200 && res.type === 'basic') {
+            cache.put(req, res.clone()).catch(() => {});
+          }
+          return res;
+        }).catch(() => cached);
+        return cached || networkPromise;
+      })
+    );
+    return;
+  }
+
+  // Other static assets (images, fonts): cache-first then network.
   event.respondWith(
     caches.match(req).then((cached) =>
       cached ||
