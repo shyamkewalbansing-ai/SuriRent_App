@@ -16,6 +16,7 @@ import Kasgeld from './admin/Kasgeld';
 import AIChat from './admin/AIChat';
 import Notifications from './admin/Notifications';
 import Companies from './admin/Companies';
+import SettingsPage from './admin/Settings';
 
 const BASE_TABS = [
   { id: 'overview', label: 'Overzicht', icon: LayoutDashboard },
@@ -30,7 +31,7 @@ const BASE_TABS = [
   { id: 'kasgeld', label: 'Kasgeld', icon: Wallet },
   { id: 'employees', label: 'Werknemers', icon: Users },
   { id: 'notifications', label: 'Notificaties', icon: Bell },
-  { id: 'settings', label: 'Kiosk PIN', icon: KeySquare },
+  { id: 'settings', label: 'Instellingen', icon: KeySquare },
 ];
 const SUPER_TAB = { id: 'companies', label: 'Bedrijven', icon: Briefcase };
 
@@ -863,51 +864,8 @@ function Payments() {
 
 // ============== Settings (kiosk PIN) ==============
 function Settings() {
-  const [pin, setPin] = useState('');
-  const [confirm, setConfirm] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [msg, setMsg] = useState('');
-  const [err, setErr] = useState('');
-
-  const save = async () => {
-    setErr(''); setMsg('');
-    if (pin.length !== 4 || !/^\d{4}$/.test(pin)) { setErr('PIN moet exact 4 cijfers zijn'); return; }
-    if (pin !== confirm) { setErr('PINs komen niet overeen'); return; }
-    setLoading(true);
-    try {
-      await api.post('/auth/kiosk-set-pin', { pin });
-      setMsg('Kiosk PIN bijgewerkt');
-      setPin(''); setConfirm('');
-    } catch (e) { setErr(formatError(e)); }
-    finally { setLoading(false); }
-  };
-
-  return (
-    <div className="max-w-md">
-      <PageHeader title="Kiosk PIN" subtitle="Stel de 4-cijferige PIN in voor toegang tot de Kiosk" />
-      <div className="bg-white rounded-2xl border border-orange-100 p-6 space-y-4">
-        <div>
-          <label className="text-xs font-bold uppercase tracking-widest text-slate-500">Nieuwe PIN</label>
-          <input type="password" inputMode="numeric" maxLength={4} value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
-            data-testid="settings-pin"
-            className="w-full mt-1 h-14 px-4 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] outline-none text-2xl tracking-[0.5em] text-center font-bold" />
-        </div>
-        <div>
-          <label className="text-xs font-bold uppercase tracking-widest text-slate-500">Bevestig PIN</label>
-          <input type="password" inputMode="numeric" maxLength={4} value={confirm} onChange={(e) => setConfirm(e.target.value.replace(/\D/g, '').slice(0, 4))}
-            data-testid="settings-pin-confirm"
-            className="w-full mt-1 h-14 px-4 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] outline-none text-2xl tracking-[0.5em] text-center font-bold" />
-        </div>
-        {err && <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2">{err}</p>}
-        {msg && <p className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2">{msg}</p>}
-        <button onClick={save} disabled={loading || !pin || !confirm} data-testid="settings-save"
-          className="w-full h-12 rounded-xl bg-[#FF5C00] hover:bg-[#E05200] text-white font-bold flex items-center justify-center gap-2 disabled:opacity-50">
-          {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-          Opslaan
-        </button>
-      </div>
-    </div>
-  );
+  // Replaced by `SettingsPage` from ./admin/Settings.jsx — kept as a no-op for safety.
+  return null;
 }
 
 export default function AdminDashboard() {
@@ -939,7 +897,7 @@ export default function AdminDashboard() {
         {tab === 'kasgeld' && <Kasgeld />}
         {tab === 'employees' && <Employees />}
         {tab === 'notifications' && <Notifications />}
-        {tab === 'settings' && <Settings />}
+        {tab === 'settings' && <SettingsPage />}
       </main>
       <MobileTabBar active={tab} onChange={setTab} tabs={tabs} />
     </div>

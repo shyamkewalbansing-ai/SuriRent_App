@@ -113,7 +113,15 @@ User koos voor **Optie C — minimale herbouw** (kern eerst), dan vroeg om **Fas
 - ✅ **Install marketing sectie** op landing page tussen Hero en Features — 2 visuele cards (iOS Safari + Android Chrome) met phone mockups, stap-voor-stap instructies, en 3 benefits-callouts ("Direct beschikbaar / Werkt offline / Native gevoel"). Nieuwe "Installeer" link in TopNav.
 - ✅ **QR-code panel** (alleen desktop/tablet zichtbaar): genereerd als statisch SVG (`/kiosk-icons/install-qr.svg`) met SuriRent oranje, link naar productie URL `vastgoed-app.emergent.host/vastgoed`. Perfect voor demo's en pitches op een PC.
 
-## Prioritized Backlog (na PWA)
+### Fase 3 deel 5 (Instellingen-infrastructuur — 2026-05-21) ✅
+- ✅ **`company_settings` collectie** per company met 6 secties: SMTP, Twilio, Mope, Uni5Pay, Shelly, Domain
+- ✅ **Fernet AES encryption** (`settings_service.py`) voor alle secrets (wachtwoorden, API keys, tokens, webhook secrets)
+- ✅ **Mask pattern**: GET retourneert secrets als `•••••`; PUT met mask of leeg behoudt encrypted blob
+- ✅ **API**: `GET/PUT /api/settings`, `PUT /api/settings/{section}`, `POST /api/settings/{section}/test` (placeholder)
+- ✅ **Frontend Settings page** (`/app/frontend/src/pages/vastgoed/admin/Settings.jsx`) met sub-nav: 6 integraties + Kiosk PIN. Per sectie: ingeschakeld-toggle, alle velden, "Bewaar" + "Test verbinding" knoppen, DNS-instructies voor custom domain
+- ✅ 55/55 backend regressie pass
+
+## Prioritized Backlog (Fases B-F)
 - 📧 **Email notificaties** — wacht op SendGrid / Resend credentials van user
 - 📱 **WhatsApp/SMS herinneringen** — wacht op Twilio credentials
 - 💳 **Payment gateways** (SumUp/Mope/Uni5Pay) — wacht op credentials

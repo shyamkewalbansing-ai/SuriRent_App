@@ -2204,5 +2204,99 @@ async def push_notify_overdue(user=Depends(get_current_user)):
     return {"sent": sent, "overdue_count": len(overdue), "message": msg}
 
 
+# =====================================================================
+# Company settings (SMTP, Twilio, Mope, Uni5Pay, Shelly, custom domain)
+# =====================================================================
+from settings_service import (
+    empty_section as _empty_section,
+    mask_section as _mask_section,
+    merge_section as _merge_section,
+    reveal_section as _reveal_section,
+    SECTION_SECRETS as _SECTION_SECRETS,
+)
+
+VALID_SETTINGS_SECTIONS = ["smtp", "twilio", "mope", "uni5pay", "shelly", "domain"]
+
+
+async def _get_company_settings_doc(company_id: str) -> dict:
+    """Fetch full raw settings doc (encrypted secrets intact). Creates empty if missing."""
+    doc = await db.company_settings.find_one({"company_id": company_id}, {"_id": 0})
+    if not doc:
+        doc = {"company_id": company_id}
+        for s in VALID_SETTINGS_SECTIONS:
+            doc[s] = _empty_section(s)
+    else:
+        # Backfill any new section keys that didn't exist before.
+        for s in VALID_SETTINGS_SECTIONS:
+            if s not in doc or not doc[s]:
+                doc[s] = _empty_section(s)
+    return doc
+
+
+async def get_company_section(company_id: str, section: str) -> dict:
+    """Internal helper for other services (e.g. mail/twilio sender). Returns DECRYPTED."""
+    if section not in VALID_SETTINGS_SECTIONS:
+        return {}
+    doc = await _get_company_settings_doc(company_id)
+    return _reveal_section(section, doc.get(section) or {})
+
+
+@api.get("/settings")
+async def get_settings(user=Depends(get_current_user)):
+    """Return all settings sections with secrets MASKED."""
+    cid = company_id_of(user)
+    if not cid:
+        raise HTTPException(status_code=400, detail="Geen actief bedrijf geselecteerd")
+    doc = await _get_company_settings_doc(cid)
+    out = {"company_id": cid}
+    for s in VALID_SETTINGS_SECTIONS:
+        out[s] = _mask_section(s, doc.get(s) or {})
+    return out
+
+
+@api.put("/settings/{section}")
+async def update_settings_section(section: str, body: dict, user=Depends(get_current_user)):
+    """Update a single section. Sends secrets back masked."""
+    if section not in VALID_SETTINGS_SECTIONS:
+        raise HTTPException(status_code=404, detail="Onbekende instellingen sectie")
+    cid = company_id_of(user)
+    if not cid:
+        raise HTTPException(status_code=400, detail="Geen actief bedrijf geselecteerd")
+    doc = await _get_company_settings_doc(cid)
+    existing_section = doc.get(section) or {}
+    merged = _merge_section(section, existing_section, body or {})
+
+    update = {
+        f"{section}": merged,
+        "updated_at": iso(now_utc()),
+        "updated_by": user.get("email"),
+    }
+    await db.company_settings.update_one(
+        {"company_id": cid},
+        {"$set": update, "$setOnInsert": {"company_id": cid, "created_at": iso(now_utc())}},
+        upsert=True,
+    )
+    return {"section": section, "data": _mask_section(section, merged)}
+
+
+# Placeholder test endpoints — actual implementations come in Fases B-F.
+@api.post("/settings/{section}/test")
+async def test_settings_section(section: str, user=Depends(get_current_user)):
+    if section not in VALID_SETTINGS_SECTIONS:
+        raise HTTPException(status_code=404, detail="Onbekende sectie")
+    cid = company_id_of(user)
+    if not cid:
+        raise HTTPException(status_code=400, detail="Geen actief bedrijf geselecteerd")
+    cfg = await get_company_section(cid, section)
+    if not cfg.get("enabled"):
+        raise HTTPException(status_code=400, detail="Sectie is uitgeschakeld — vink 'Ingeschakeld' aan en bewaar eerst.")
+    # Each section's actual test logic will be added in its own Fase.
+    return {
+        "section": section,
+        "ok": False,
+        "detail": "Test endpoint nog niet geïmplementeerd voor deze sectie. Wordt in een volgende fase toegevoegd.",
+    }
+
+
 app.include_router(api)
 
