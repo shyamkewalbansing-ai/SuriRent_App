@@ -153,18 +153,30 @@ function PasswordView({ initialMode = 'login', onBack }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
+  const [companyName, setCompanyName] = useState('');
+  const [telefoon, setTelefoon] = useState('');
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   const submit = async (e) => {
     e?.preventDefault();
+    if (mode === 'register' && !companyName.trim()) {
+      setError('Vul de bedrijfsnaam in — uw eigen omgeving wordt aangemaakt.');
+      return;
+    }
     setLoading(true); setError('');
     try {
       if (mode === 'login') {
         await login(email, password);
       } else {
-        await register(name, email, password);
+        await register({
+          name: name.trim(),
+          email: email.trim(),
+          password,
+          company_name: companyName.trim(),
+          telefoon: telefoon.trim(),
+        });
       }
       navigate('/admin');
     } catch (err) {
@@ -185,8 +197,8 @@ function PasswordView({ initialMode = 'login', onBack }) {
             <div className="w-16 h-16 rounded-2xl bg-[#FF5C00] flex items-center justify-center mx-auto mb-4 shadow-lg shadow-orange-500/20">
               {mode === 'login' ? <KeyRound className="w-9 h-9 text-white" /> : <UserPlus className="w-9 h-9 text-white" />}
             </div>
-            <h2 className="text-3xl font-bold text-slate-900 tracking-tight">{mode === 'login' ? 'Beheerder Login' : 'Account aanmaken'}</h2>
-            <p className="text-base text-slate-400 mt-1">{mode === 'login' ? 'Log in met uw e-mail en wachtwoord' : 'Registreer uw beheerder account'}</p>
+            <h2 className="text-3xl font-bold text-slate-900 tracking-tight">{mode === 'login' ? 'Beheerder Login' : 'Nieuw account'}</h2>
+            <p className="text-base text-slate-400 mt-1">{mode === 'login' ? 'Log in met uw e-mail en wachtwoord' : 'Maak uw eigen Vastgoed omgeving aan'}</p>
           </div>
 
           {error && (
@@ -197,12 +209,32 @@ function PasswordView({ initialMode = 'login', onBack }) {
 
           <form onSubmit={submit} className="space-y-4">
             {mode === 'register' && (
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">Naam</label>
-                <input type="text" value={name} onChange={(e) => setName(e.target.value)} data-testid="auth-name"
-                  required minLength={2}
-                  className="w-full h-14 text-lg px-5 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] focus:ring-4 focus:ring-[#FF5C00]/10 bg-[#F9FAFB] outline-none transition" />
-              </div>
+              <>
+                <div className="rounded-xl bg-orange-50 border border-orange-200 p-3 text-xs text-orange-800">
+                  <p className="font-bold mb-0.5">Eigen omgeving voor uw bedrijf</p>
+                  <p>Bij registratie maken we automatisch een nieuwe afgeschermde omgeving aan met u als beheerder.</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Bedrijfsnaam <span className="text-red-500">*</span></label>
+                  <input type="text" value={companyName} onChange={(e) => setCompanyName(e.target.value)} data-testid="auth-company-name"
+                    required minLength={2}
+                    placeholder="bv. Gopi Appartement's N.V."
+                    className="w-full h-14 text-lg px-5 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] focus:ring-4 focus:ring-[#FF5C00]/10 bg-[#F9FAFB] outline-none transition" />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Uw naam</label>
+                  <input type="text" value={name} onChange={(e) => setName(e.target.value)} data-testid="auth-name"
+                    required minLength={2}
+                    placeholder="bv. Shyam Kewalbansing"
+                    className="w-full h-14 text-lg px-5 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] focus:ring-4 focus:ring-[#FF5C00]/10 bg-[#F9FAFB] outline-none transition" />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Telefoon</label>
+                  <input type="tel" value={telefoon} onChange={(e) => setTelefoon(e.target.value)} data-testid="auth-telefoon"
+                    placeholder="+597 ..."
+                    className="w-full h-14 text-lg px-5 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] focus:ring-4 focus:ring-[#FF5C00]/10 bg-[#F9FAFB] outline-none transition" />
+                </div>
+              </>
             )}
             <div>
               <label className="block text-sm font-semibold text-slate-700 mb-2">E-mailadres</label>

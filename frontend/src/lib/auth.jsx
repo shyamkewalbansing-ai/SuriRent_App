@@ -55,8 +55,8 @@ export function AuthProvider({ children }) {
     return data;
   };
 
-  const register = async (name, email, password) => {
-    const { data } = await api.post('/auth/register', { name, email, password });
+  const register = async (payload) => {
+    const { data } = await api.post('/auth/register', payload);
     if (data?.token) localStorage.setItem('admin_token', data.token);
     setUser(data.user);
     setActiveCompanyMeta(data.company || null);

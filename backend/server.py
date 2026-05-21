@@ -199,6 +199,8 @@ class RegisterIn(BaseModel):
     name: str
     email: EmailStr
     password: str = Field(min_length=6)
+    company_name: Optional[str] = None  # If set, creates a new company with this user as admin
+    telefoon: Optional[str] = ""
 
 
 class LoginIn(BaseModel):
@@ -468,34 +470,68 @@ def _set_access_cookie(response: Response, token: str, name="access_token", minu
     )
 
 
+def _slugify(name: str) -> str:
+    import re
+    s = re.sub(r"[^a-z0-9]+", "-", (name or "").lower()).strip("-")
+    return s[:40] or "bedrijf"
+
+
 @api.post("/auth/register")
 async def register(body: RegisterIn, response: Response):
     email = body.email.lower().strip()
     existing = await db.users.find_one({"email": email})
     if existing:
         raise HTTPException(status_code=400, detail="E-mailadres is al in gebruik")
-    # New self-registrations join the default company
-    default = await db.companies.find_one({"slug": DEFAULT_COMPANY_SLUG}, {"_id": 0})
+
+    company_id = None
+    company_payload = None
+
+    # Self-serve onboarding: when company_name is provided, create a new tenant.
+    if (body.company_name or "").strip():
+        base_slug = _slugify(body.company_name)
+        slug = base_slug
+        i = 2
+        while await db.companies.find_one({"slug": slug}, {"_id": 1}):
+            slug = f"{base_slug}-{i}"
+            i += 1
+        c = {
+            "id": new_id(),
+            "name": body.company_name.strip(),
+            "slug": slug,
+            "plan": "trial",
+            "telefoon": (body.telefoon or "").strip(),
+            "owner_email": email,
+            "created_at": iso(now_utc()),
+        }
+        await db.companies.insert_one(c)
+        company_id = c["id"]
+        company_payload = {k: c[k] for k in ("id", "slug", "name", "plan")}
+    else:
+        # Backwards compat: join the default company when company_name is omitted.
+        default = await db.companies.find_one({"slug": DEFAULT_COMPANY_SLUG}, {"_id": 0})
+        if default:
+            company_id = default["id"]
+            company_payload = {k: default[k] for k in ("id", "slug", "name", "plan")}
+
     user_doc = {
         "id": new_id(),
         "email": email,
         "name": body.name.strip(),
         "role": "admin",
-        "company_id": default["id"] if default else None,
+        "company_id": company_id,
         "password_hash": hash_password(body.password),
         "created_at": iso(now_utc()),
     }
     await db.users.insert_one(user_doc)
     token = create_token({
         "sub": user_doc["id"], "email": email, "type": "access",
-        "company_id": user_doc["company_id"], "role": "admin",
+        "company_id": company_id, "role": "admin",
     }, ACCESS_MIN)
     _set_access_cookie(response, token)
-    company = default and {k: default[k] for k in ("id", "slug", "name", "plan")}
     return {
         "token": token,
         "user": {k: user_doc[k] for k in ("id", "email", "name", "role", "company_id", "created_at")},
-        "company": company,
+        "company": company_payload,
     }
 
 
