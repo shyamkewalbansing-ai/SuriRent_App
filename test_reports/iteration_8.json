@@ -1,0 +1,46 @@
+{
+  "summary": "Iteration 9 (filed as iteration_8.json per existing naming gap — previous reports 1..7 + this one). Shelly integration (Fase E) verified end-to-end. NEW test_shelly.py: 11/11 PASS. Regression test_multi_company.py + test_p1_hardening.py: 55/55 PASS. Grand total 66/66 green backend. Frontend: login → Apartments tab → Zap button present on every card (5/5), modal opens with correct title 'STROOM · APPT. A1' + 'Shelly apparaat' heading, Opslaan saves binding and closes modal, reopening shows orange-tinted Zap and Ontkoppelen button (bound state correctly detected). Cloud lijst and status fetch correctly return 400 from backend; modal does NOT crash (no white screen) — confirmed. One concern: the [data-testid='shelly-error'] element does NOT visibly surface the Dutch error text inline after Cloud lijst or status 400 — error is swallowed silently in UI. Backend behaviour matches spec (400 + Dutch).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/shelly/apartment/{apt_id}/status", "issue": "_shelly_or_400 gate runs BEFORE binding check, so when Shelly section is disabled the API returns 'Shelly is niet ingeschakeld' even for unbound apartments — never reaches the 'Geen Shelly apparaat gekoppeld' branch unless Shelly is configured + enabled. Review-request spec wanted the 'not bound' message; consider reordering the binding lookup before the cfg gate, or document expected order."},
+      {"endpoint": "POST /api/shelly/apartment/{apt_id}/control (cross-company)", "issue": "Same ordering — admin B hitting Company A's apt currently returns 400 ('Shelly niet ingeschakeld' for B) instead of 404 ('Appartement niet gevonden'). Functionally still secure (no leak, no 500), but spec wanted 404. Move apt lookup before _shelly_or_400 for crisper 404."},
+      {"endpoint": "Public PDF endpoints (/api/payments|contracts|invoices/{id}/pdf)", "issue": "Carry-over from iteration 7 — still no auth. UUID enumeration risk for cross-company PDF disclosure. Not addressed in Shelly batch."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "ShellyControlModal", "issue": "[data-testid='shelly-error'] element does NOT display the Dutch error text inline after Cloud lijst click (HTTP 400) or status refresh (HTTP 400). Browser console shows the 400 but no visible UI feedback for the user. Modal stays alive (no crash) — this is graceful but silent.", "selector": "[data-testid='shelly-error']", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_shelly.py",
+    "/app/test_reports/pytest/iteration9_shelly.xml",
+    "/app/test_reports/pytest/iteration9_regression.xml"
+  ],
+  "action_items": [
+    "Surface Cloud lijst / status fetch errors inside [data-testid='shelly-error'] (currently hidden / not populated when fetch fails with 400). Users get no feedback that Shelly is not configured.",
+    "(OPTIONAL) Reorder apt lookup before _shelly_or_400 in GET /shelly/apartment/{id}/status and POST /shelly/apartment/{id}/control so cross-company correctly yields 404 'Appartement niet gevonden' and unbound apartments correctly yield 'Geen Shelly apparaat gekoppeld' even when Shelly is disabled — matches spec wording more precisely.",
+    "(CARRY-OVER) Lock down public PDF endpoints."
+  ],
+  "critical_code_review_comments": [
+    "_shelly_or_400 cleanly raises 400 with Dutch messages — no path leaks 500 to client. Verified by control test on Admin A (Shelly disabled).",
+    "bind_apartment_shelly does not require Shelly to be enabled — it's pure DB state. Verified bind+unbind work without cfg. Correct design.",
+    "Apartment binding write uses {'id': apt_id, **scope(user)} — scope-filtered. Cross-company write correctly returns 404 (verified).",
+    "control_relay default channel parsing: int(binding.get('channel') or 0) — safe.",
+    "ShellyControlIn uses Literal['on','off','toggle'] — Pydantic 422 validation verified for invalid value 'banana'.",
+    "ShellyBindIn allows device_id=None / '' to act as unbind — clean overload, simpler API.",
+    "shelly_service.py uses httpx with 15s timeout, structured errors via ShellyError. Good. raises 502 in the route (not 500) when ShellyError bubbles up from upstream — sensible.",
+    "Server still 2980 lines — Shelly endpoints could live in a routers/shelly.py module; non-blocking."
+  ],
+  "updated_files": ["/app/backend/tests/test_shelly.py"],
+  "success_rate": {"backend": "66/66 = 100% (11 Shelly + 43 multi-company + 12 P1 hardening)", "frontend": "9/10 critical flows verified; inline error display missing"},
+  "test_credentials": "All credentials in /app/memory/test_credentials.md verified working.",
+  "seed_data_creation": "Test creates apartment 'TEST-SHELLY-01' only if Company A has zero apartments (it has 5 — so no new data created). Binding is set then unset within the test class.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Canonical suites for re-run: pytest backend/tests/test_shelly.py backend/tests/test_multi_company.py backend/tests/test_p1_hardening.py -v --junitxml=.../iterationN.xml. Shelly tests assume Shelly section is NOT configured in DB — if a real cloud_token is added later, TestShellyDisabled will start failing and must be flipped. Frontend test_ids confirmed working: apt-shelly-{id}, shelly-modal, shelly-device-id, shelly-load-devices, shelly-channel, shelly-label, shelly-save, shelly-unbind, shelly-on, shelly-off, shelly-refresh, shelly-error (exists but not rendered when fetch fails).",
+  "rca of the issue": "Inline error not showing on Cloud lijst / status 400: most likely the frontend ShellyControlModal's catch block sets a state var but the JSX guard renders the [data-testid='shelly-error'] block only when status fetch succeeds OR the err state is wired but cleared on next render. Recommend inspecting setErr / setError flow in ShellyControlModal — ensure catch(e) → setErr(parsed Dutch detail) BEFORE setLoading(false) and that the JSX renders error block independent of status result."
+}

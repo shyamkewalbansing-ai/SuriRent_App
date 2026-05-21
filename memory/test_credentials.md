@@ -32,13 +32,21 @@ Endpoints:
 - Test tenant (Company A): `Jan de Vries` (email `jan@example.sr`, phone `+597 8001234`, PIN `5678`)
 - Login accepteert email of telefoon (volledig string OF alleen cijfers) — case-insensitive voor email.
 
-## Frontend Routes
-- `/vastgoed` — Marketing landing
-- `/vastgoed/login` — PIN keypad + admin login (toggle)
-- `/vastgoed/admin` — Beheer dashboard (protected)
-- `/vastgoed/kiosk` — Kiosk flow (requires kiosk_token in localStorage)
-- `/huurder` — Tenant login
-- `/huurder/portaal` — Tenant dashboard
+## Frontend Routes (dual-domain architecture)
+Production:
+- `https://surirent.sr/` — Marketing landing (marketing host only)
+- `https://app.surirent.sr/` — Login (root of app host)
+- `https://app.surirent.sr/login` — PIN keypad + admin login (toggle)
+- `https://app.surirent.sr/admin` — Beheer dashboard (protected)
+- `https://app.surirent.sr/kiosk` — Kiosk flow (requires kiosk_token in localStorage)
+- `https://app.surirent.sr/onderteken/:token` — Contract sign page
+- `https://app.surirent.sr/huurder` — Tenant login
+- `https://app.surirent.sr/huurder/portaal` — Tenant dashboard
+
+Preview / local (hybrid single-domain — both REACT_APP_MARKETING_HOST and REACT_APP_APP_URL empty):
+- `/` — Marketing landing
+- `/login`, `/admin`, `/kiosk`, `/onderteken/:token`, `/huurder`, `/huurder/portaal`
+- Legacy `/vastgoed/*` paths redirect to the new root paths automatically.
 
 ## Multi-Company Architecture Notes
 - `get_current_user` sets `user["active_company_id"]`:

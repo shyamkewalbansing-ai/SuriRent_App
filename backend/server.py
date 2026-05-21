@@ -235,7 +235,18 @@ class ApartmentOut(ApartmentIn):
     status: Literal["vacant", "occupied"]
     tenant_id: Optional[str] = None
     tenant_name: Optional[str] = None
+    shelly: Optional[dict] = None  # {device_id, channel, label} when bound
     created_at: str
+
+
+class ShellyBindIn(BaseModel):
+    device_id: Optional[str] = None  # None / "" unbinds
+    channel: int = 0
+    label: Optional[str] = ""
+
+
+class ShellyControlIn(BaseModel):
+    turn: Literal["on", "off", "toggle"]
 
 
 class TenantIn(BaseModel):
@@ -2863,6 +2874,105 @@ async def mope_webhook(request: Request):
         return {"ok": True, "queued": True}
     await _apply_remote_status(pr, remote, user_email="webhook")
     return {"ok": True, "status": remote.get("status")}
+
+
+# =====================================================================
+# Shelly — elektriciteit per appartement (admin only)
+# =====================================================================
+async def _shelly_or_400(user) -> dict:
+    cid = company_id_of(user)
+    if not cid:
+        raise HTTPException(status_code=400, detail="Geen actief bedrijf geselecteerd")
+    cfg = await get_company_section(cid, "shelly")
+    if not cfg.get("enabled"):
+        raise HTTPException(status_code=400, detail="Shelly is niet ingeschakeld — configureer eerst onder Instellingen → Shelly.")
+    if not (cfg.get("cloud_token") or "").strip():
+        raise HTTPException(status_code=400, detail="Shelly Cloud token ontbreekt — vul in onder Instellingen → Shelly.")
+    return cfg
+
+
+@api.get("/shelly/devices")
+async def shelly_list_devices(user=Depends(get_current_user)):
+    """List all Shelly devices on the company's Shelly Cloud account."""
+    from shelly_service import list_devices, ShellyError
+    cfg = await _shelly_or_400(user)
+    try:
+        devs = await list_devices(cfg)
+    except ShellyError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    # Normalize to a small payload for the dropdown.
+    out = []
+    for d in devs:
+        out.append({
+            "device_id": str(d.get("id") or d.get("deviceId") or ""),
+            "name": d.get("name") or d.get("alias") or "",
+            "type": d.get("type") or d.get("gen") or "",
+            "online": bool(d.get("online")) if "online" in d else None,
+        })
+    return out
+
+
+@api.put("/apartments/{apt_id}/shelly")
+async def bind_apartment_shelly(apt_id: str, body: ShellyBindIn, user=Depends(get_current_user)):
+    """Bind or unbind a Shelly device to an apartment."""
+    apt = await db.apartments.find_one({"id": apt_id, **scope(user)}, {"_id": 0})
+    if not apt:
+        raise HTTPException(status_code=404, detail="Appartement niet gevonden")
+    if not (body.device_id or "").strip():
+        await db.apartments.update_one({"id": apt_id}, {"$unset": {"shelly": ""}})
+        return {"ok": True, "shelly": None}
+    binding = {
+        "device_id": body.device_id.strip(),
+        "channel": int(body.channel or 0),
+        "label": (body.label or "").strip(),
+    }
+    await db.apartments.update_one({"id": apt_id}, {"$set": {"shelly": binding}})
+    return {"ok": True, "shelly": binding}
+
+
+@api.get("/shelly/apartment/{apt_id}/status")
+async def shelly_apartment_status(apt_id: str, user=Depends(get_current_user)):
+    from shelly_service import device_status, ShellyError
+    cfg = await _shelly_or_400(user)
+    apt = await db.apartments.find_one({"id": apt_id, **scope(user)}, {"_id": 0})
+    if not apt:
+        raise HTTPException(status_code=404, detail="Appartement niet gevonden")
+    binding = apt.get("shelly") or {}
+    device_id = (binding.get("device_id") or "").strip()
+    if not device_id:
+        raise HTTPException(status_code=400, detail="Geen Shelly apparaat gekoppeld aan dit appartement")
+    try:
+        st = await device_status(cfg, device_id)
+    except ShellyError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    return {
+        "apartment_id": apt_id,
+        "device_id": device_id,
+        "channel": binding.get("channel", 0),
+        "label": binding.get("label", ""),
+        "online": st.get("online"),
+        "ison": st.get("ison"),
+        "power_w": st.get("power_w"),
+        "energy_wh": st.get("energy_wh"),
+    }
+
+
+@api.post("/shelly/apartment/{apt_id}/control")
+async def shelly_apartment_control(apt_id: str, body: ShellyControlIn, user=Depends(get_current_user)):
+    from shelly_service import control_relay, ShellyError
+    cfg = await _shelly_or_400(user)
+    apt = await db.apartments.find_one({"id": apt_id, **scope(user)}, {"_id": 0})
+    if not apt:
+        raise HTTPException(status_code=404, detail="Appartement niet gevonden")
+    binding = apt.get("shelly") or {}
+    device_id = (binding.get("device_id") or "").strip()
+    if not device_id:
+        raise HTTPException(status_code=400, detail="Geen Shelly apparaat gekoppeld aan dit appartement")
+    try:
+        await control_relay(cfg, device_id, body.turn, int(binding.get("channel") or 0))
+    except ShellyError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    return {"ok": True, "apartment_id": apt_id, "turn": body.turn}
 
 
 app.include_router(api)
