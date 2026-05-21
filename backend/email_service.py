@@ -79,6 +79,43 @@ async def send_email(cfg: dict, to: str, subject: str, body_html: str,
     await asyncio.to_thread(_send_sync, cfg, msg)
 
 
+def get_platform_smtp_config() -> dict | None:
+    """Read SuriRent's platform-wide SMTP from env vars (for transactional
+    mails like the post-signup welcome email). Returns None when not configured."""
+    import os
+    host = (os.environ.get("PLATFORM_SMTP_HOST") or "").strip()
+    if not host:
+        return None
+    return {
+        "enabled": True,
+        "host": host,
+        "port": int(os.environ.get("PLATFORM_SMTP_PORT") or 587),
+        "username": os.environ.get("PLATFORM_SMTP_USERNAME") or "",
+        "password": os.environ.get("PLATFORM_SMTP_PASSWORD") or "",
+        "use_tls": (os.environ.get("PLATFORM_SMTP_TLS") or "true").lower() != "false",
+        "from_name": os.environ.get("PLATFORM_FROM_NAME") or "SuriRent",
+        "from_email": os.environ.get("PLATFORM_FROM_EMAIL") or "no-reply@surirent.sr",
+    }
+
+
+async def send_platform_email(to: str, subject: str, body_html: str,
+                              body_text: str | None = None) -> None:
+    """Send a transactional email using SuriRent's platform SMTP.
+
+    Silently no-ops when not configured (so registration still succeeds
+    even if the operator hasn't filled in PLATFORM_SMTP_HOST yet).
+    """
+    cfg = get_platform_smtp_config()
+    if not cfg:
+        return
+    msg = _build_message(cfg, to, subject, body_html, body_text)
+    try:
+        await asyncio.to_thread(_send_sync, cfg, msg)
+    except EmailError:
+        # Welcome email is best-effort: registration must not fail.
+        return
+
+
 # ============== Branded HTML helpers ==============
 def wrap_template(content_html: str, footer: str = "") -> str:
     """Wrap a snippet in a SuriRent-styled HTML email shell."""

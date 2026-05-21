@@ -4,7 +4,7 @@ import {
   Building2, Users, Receipt, LayoutDashboard, LogOut, Plus, Trash2, Pencil,
   X, Check, Loader2, Search, Home, Banknote, KeySquare, ChevronRight, Wallet,
   FileText, ShieldCheck, Wrench, FileSignature, Sparkles, Bell, Briefcase, Mail,
-  CreditCard, Zap, Power, Menu, MoreHorizontal, MapPin,
+  CreditCard, Zap, Power, Menu, MoreHorizontal, MapPin, Crown,
 } from 'lucide-react';
 import { api, formatError, fmtMoney, MONTHS_NL } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
@@ -21,6 +21,7 @@ import Companies from './admin/Companies';
 import SettingsPage from './admin/Settings';
 import PaymentRequests from './admin/PaymentRequests';
 import Locations from './admin/Locations';
+import Subscriptions from './admin/Subscriptions';
 import TrialBanner from '../../components/TrialBanner';
 
 const BASE_TABS = [
@@ -40,10 +41,13 @@ const BASE_TABS = [
   { id: 'notifications', label: 'Notificaties', icon: Bell },
   { id: 'settings', label: 'Instellingen', icon: KeySquare },
 ];
-const SUPER_TAB = { id: 'companies', label: 'Bedrijven', icon: Briefcase };
+const SUPER_TABS = [
+  { id: 'subscriptions', label: 'SaaS Beheer', icon: Crown },
+  { id: 'companies', label: 'Bedrijven', icon: Briefcase },
+];
 
 function getTabsFor(user) {
-  return user?.role === 'superadmin' ? [SUPER_TAB, ...BASE_TABS] : BASE_TABS;
+  return user?.role === 'superadmin' ? [...SUPER_TABS, ...BASE_TABS] : BASE_TABS;
 }
 
 function Sidebar({ active, onChange, onLogout, user, activeCompany, tabs }) {
@@ -1258,7 +1262,7 @@ function Settings() {
 export default function AdminDashboard() {
   const { user, logout, activeCompany } = useAuth();
   const tabs = getTabsFor(user);
-  const [tab, setTab] = useState(() => (user?.role === 'superadmin' ? 'companies' : 'overview'));
+  const [tab, setTab] = useState(() => (user?.role === 'superadmin' ? 'subscriptions' : 'overview'));
   const [drawerOpen, setDrawerOpen] = useState(false);
   const navigate = useNavigate();
   useEffect(() => { document.title = 'SuriRent - Beheer'; }, []);
@@ -1276,6 +1280,7 @@ export default function AdminDashboard() {
         <TrialBanner />
         <main className="flex-1 p-5 md:p-8 pb-24 md:pb-8 max-w-7xl w-full">
           {tab === 'companies' && <Companies />}
+          {tab === 'subscriptions' && <Subscriptions />}
           {tab === 'overview' && <Overview />}
           {tab === 'ai' && <AIChat />}
           {tab === 'locations' && <Locations />}

@@ -202,6 +202,7 @@ class RegisterIn(BaseModel):
     company_name: Optional[str] = None  # If set, creates a new company with this user as admin
     telefoon: Optional[str] = ""
     plan: Optional[Literal["starter", "professional"]] = "starter"
+    kiosk_pin: Optional[str] = None  # 4 digits — set the kiosk PIN at registration
 
 
 class LoginIn(BaseModel):
@@ -512,6 +513,19 @@ async def register(body: RegisterIn, response: Response):
         await db.companies.insert_one(c)
         company_id = c["id"]
         company_payload = {k: c[k] for k in ("id", "slug", "name", "plan")}
+
+        # Persist kiosk PIN if provided (used for kiosk login)
+        if (body.kiosk_pin or "").strip():
+            pin = body.kiosk_pin.strip()
+            if pin.isdigit() and len(pin) == 4:
+                others = await db.kiosk_pins.find({}, {"_id": 0, "pin_hash": 1}).to_list(1000)
+                pin_in_use = any(verify_password(pin, o.get("pin_hash", "")) for o in others)
+                if not pin_in_use:
+                    await db.kiosk_pins.update_one(
+                        {"company_id": company_id},
+                        {"$set": {"company_id": company_id, "pin_hash": hash_password(pin), "updated_at": iso(now)}},
+                        upsert=True,
+                    )
     else:
         # Backwards compat: join the default company when company_name is omitted.
         default = await db.companies.find_one({"slug": DEFAULT_COMPANY_SLUG}, {"_id": 0})
@@ -534,6 +548,46 @@ async def register(body: RegisterIn, response: Response):
         "company_id": company_id, "role": "admin",
     }, ACCESS_MIN)
     _set_access_cookie(response, token)
+
+    # Welcome email — best-effort, never fails registration
+    if company_payload:
+        try:
+            from email_service import send_platform_email, wrap_template
+            app_url = (os.environ.get("APP_PUBLIC_URL") or "https://app.surirent.sr").rstrip("/")
+            plan_info = PLAN_PRICES.get(c.get("plan", "starter"), PLAN_PRICES["starter"])
+            pin_row = ""
+            if (body.kiosk_pin or "").isdigit() and len(body.kiosk_pin) == 4:
+                pin_row = f"<tr><td>Kiosk PIN</td><td>{body.kiosk_pin}</td></tr>"
+            content = f"""
+                <h1>Welkom bij SuriRent!</h1>
+                <p>Uw eigen Vastgoed omgeving is aangemaakt voor
+                  <strong>{company_payload['name']}</strong>. U kunt direct inloggen op:</p>
+                <p><a href="{app_url}/login" style="display:inline-block;background:#FF5C00;color:#fff;padding:10px 18px;border-radius:10px;text-decoration:none;font-weight:700;">{app_url}/login</a></p>
+
+                <h1 style="font-size:16px;margin-top:18px;">Uw inloggegevens</h1>
+                <table class="kv">
+                  <tr><td>E-mailadres</td><td>{email}</td></tr>
+                  <tr><td>Wachtwoord</td><td>(zoals u die heeft ingevoerd)</td></tr>
+                  {pin_row}
+                </table>
+
+                <h1 style="font-size:16px;margin-top:18px;">Uw pakket</h1>
+                <table class="kv">
+                  <tr><td>Pakket</td><td>{plan_info['name']}</td></tr>
+                  <tr><td>Prijs</td><td>{plan_info['currency']} {int(plan_info['amount']):,}/maand</td></tr>
+                  <tr><td>Proefperiode</td><td>14 dagen gratis</td></tr>
+                </table>
+
+                <p style="margin-top:14px;">Bewaar deze e-mail goed. Heeft u vragen? Antwoord gerust op deze mail.</p>
+            """.replace(",", ".")
+            await send_platform_email(
+                to=email,
+                subject=f"Welkom bij SuriRent — uw {plan_info['name']} omgeving is klaar",
+                body_html=wrap_template(content, footer=f"SuriRent · {app_url}"),
+            )
+        except Exception:
+            pass  # never block registration on email failure
+
     return {
         "token": token,
         "user": {k: user_doc[k] for k in ("id", "email", "name", "role", "company_id", "created_at")},
@@ -662,29 +716,174 @@ class CompanyIn(BaseModel):
     contact_email: Optional[str] = ""
     contact_phone: Optional[str] = ""
     address: Optional[str] = ""
-    plan: Literal["free", "starter", "pro"] = "starter"
+    plan: str = "starter"
     active: bool = True
 
 
 class CompanyOut(CompanyIn):
     id: str
     created_at: str
+    billing_status: Optional[str] = None
+    trial_started_at: Optional[str] = None
+    trial_ends_at: Optional[str] = None
+    days_left: Optional[int] = None
+    owner_email: Optional[str] = None
+    telefoon: Optional[str] = None
+    monthly_amount: Optional[float] = None
+    currency: Optional[str] = None
     stats: Optional[dict] = None
+
+
+def _billing_summary(c: dict) -> dict:
+    plan_id = c.get("plan", "starter")
+    plan = PLAN_PRICES.get(plan_id, PLAN_PRICES.get("starter", {"amount": 0, "currency": "SRD"}))
+    status = c.get("billing_status") or ("trial" if c.get("trial_ends_at") else "active")
+    days_left = None
+    trial_ends = c.get("trial_ends_at")
+    if trial_ends:
+        try:
+            end = datetime.fromisoformat(trial_ends.replace("Z", "+00:00"))
+            delta = end - now_utc()
+            days_left = max(0, int(delta.total_seconds() // 86400) + (1 if delta.total_seconds() % 86400 > 0 else 0))
+        except Exception:
+            days_left = None
+    if status == "trial" and days_left is not None and days_left <= 0:
+        status = "expired"
+    return {
+        "billing_status": status,
+        "days_left": days_left,
+        "monthly_amount": plan.get("amount"),
+        "currency": plan.get("currency", "SRD"),
+    }
 
 
 @api.get("/companies", response_model=List[CompanyOut])
 async def list_companies(user=Depends(require_role("superadmin"))):
     docs = await db.companies.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
-    # Add stats
     out = []
     for c in docs:
         apt_count = await db.apartments.count_documents({"company_id": c["id"]})
         tenant_count = await db.tenants.count_documents({"company_id": c["id"]})
         admin_count = await db.users.count_documents({"company_id": c["id"]})
-        out.append({**c, "stats": {
-            "apartments": apt_count, "tenants": tenant_count, "admins": admin_count,
-        }})
+        out.append({
+            **c,
+            **_billing_summary(c),
+            "stats": {"apartments": apt_count, "tenants": tenant_count, "admins": admin_count},
+        })
     return out
+
+
+class ExtendTrialIn(BaseModel):
+    days: int = Field(ge=1, le=365)
+
+
+@api.post("/companies/{cid}/extend-trial")
+async def extend_trial(cid: str, body: ExtendTrialIn, user=Depends(require_role("superadmin"))):
+    c = await db.companies.find_one({"id": cid}, {"_id": 0})
+    if not c:
+        raise HTTPException(status_code=404, detail="Bedrijf niet gevonden")
+    base = c.get("trial_ends_at")
+    try:
+        cur_end = datetime.fromisoformat(base.replace("Z", "+00:00")) if base else now_utc()
+    except Exception:
+        cur_end = now_utc()
+    if cur_end < now_utc():
+        cur_end = now_utc()
+    new_end = cur_end + timedelta(days=int(body.days))
+    await db.companies.update_one({"id": cid}, {"$set": {
+        "trial_ends_at": iso(new_end), "billing_status": "trial",
+    }})
+    return {"ok": True, "trial_ends_at": iso(new_end)}
+
+
+@api.post("/companies/{cid}/activate-subscription")
+async def activate_subscription(cid: str, user=Depends(require_role("superadmin"))):
+    """Mark a company's subscription as active (manual confirmation of bank
+    transfer or other offline payment). Creates a paid SaaS invoice record."""
+    c = await db.companies.find_one({"id": cid}, {"_id": 0})
+    if not c:
+        raise HTTPException(status_code=404, detail="Bedrijf niet gevonden")
+    plan_id = c.get("plan", "starter")
+    plan = PLAN_PRICES.get(plan_id, PLAN_PRICES["starter"])
+    now = now_utc()
+    period_end = now + timedelta(days=30)
+    inv = {
+        "id": new_id(),
+        "company_id": cid,
+        "company_name": c.get("name", ""),
+        "plan": plan_id,
+        "amount": plan["amount"],
+        "currency": plan["currency"],
+        "status": "paid",
+        "period_start": iso(now),
+        "period_end": iso(period_end),
+        "paid_at": iso(now),
+        "created_at": iso(now),
+        "created_by": user.get("email"),
+    }
+    await db.subscription_invoices.insert_one(inv)
+    await db.companies.update_one({"id": cid}, {"$set": {
+        "billing_status": "active", "subscription_started_at": iso(now),
+        "subscription_renews_at": iso(period_end),
+    }})
+    inv.pop("_id", None)
+    return {"ok": True, "invoice": inv}
+
+
+@api.post("/companies/{cid}/cancel-subscription")
+async def cancel_subscription(cid: str, user=Depends(require_role("superadmin"))):
+    c = await db.companies.find_one({"id": cid}, {"_id": 0})
+    if not c:
+        raise HTTPException(status_code=404, detail="Bedrijf niet gevonden")
+    await db.companies.update_one({"id": cid}, {"$set": {"billing_status": "cancelled"}})
+    return {"ok": True}
+
+
+@api.get("/superadmin/overview")
+async def superadmin_overview(user=Depends(require_role("superadmin"))):
+    """Aggregate metrics for the superadmin dashboard."""
+    companies = await db.companies.find({}, {"_id": 0}).to_list(1000)
+    total = len(companies)
+    trial = active = expired = cancelled = 0
+    mrr = 0.0
+    for c in companies:
+        s = _billing_summary(c)
+        st = s["billing_status"]
+        if st == "trial":
+            trial += 1
+        elif st == "active":
+            active += 1
+            mrr += (s.get("monthly_amount") or 0)
+        elif st == "expired":
+            expired += 1
+        elif st == "cancelled":
+            cancelled += 1
+    paid_invoices = await db.subscription_invoices.count_documents({"status": "paid"})
+    return {
+        "companies_total": total,
+        "trial": trial, "active": active, "expired": expired, "cancelled": cancelled,
+        "mrr": mrr, "currency": "SRD",
+        "paid_invoices": paid_invoices,
+    }
+
+
+@api.get("/superadmin/subscription-invoices")
+async def list_subscription_invoices(user=Depends(require_role("superadmin"))):
+    docs = await db.subscription_invoices.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    return docs
+
+
+@api.post("/superadmin/subscription-invoices/{inv_id}/mark-paid")
+async def mark_invoice_paid(inv_id: str, user=Depends(require_role("superadmin"))):
+    from pymongo import ReturnDocument
+    res = await db.subscription_invoices.find_one_and_update(
+        {"id": inv_id},
+        {"$set": {"status": "paid", "paid_at": iso(now_utc())}},
+        projection={"_id": 0}, return_document=ReturnDocument.AFTER,
+    )
+    if not res:
+        raise HTTPException(status_code=404, detail="Factuur niet gevonden")
+    return res
 
 
 @api.post("/companies", response_model=CompanyOut)

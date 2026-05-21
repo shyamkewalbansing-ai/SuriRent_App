@@ -156,6 +156,7 @@ function PasswordView({ initialMode = 'login', onBack, onRegistered }) {
   const [companyName, setCompanyName] = useState('');
   const [telefoon, setTelefoon] = useState('');
   const [plan, setPlan] = useState('starter');
+  const [kioskPin, setKioskPin] = useState('');
   const [plans, setPlans] = useState([]);
   const [bankDetails, setBankDetails] = useState(null);
   const [showSuccess, setShowSuccess] = useState(false);
