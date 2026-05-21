@@ -204,31 +204,28 @@ function ApartmentSelect({ location, onSelect, onBack }) {
           </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4">
-            {apts.map((a) => {
-              const isOccupied = a.status === 'occupied' && a.tenant_id;
-              return (
-                <button key={a.id} disabled={!isOccupied} onClick={() => onSelect(a)}
-                  data-testid={`kiosk-apt-${a.id}`}
-                  className={`relative aspect-[5/4] rounded-2xl p-4 text-center transition-all flex flex-col items-center justify-center gap-2 ${
-                    isOccupied
-                      ? 'bg-[#FFE6D3] hover:bg-white hover:scale-[1.03] active:scale-[0.98] shadow-[0_15px_35px_-10px_rgba(0,0,0,0.2)]'
-                      : 'bg-white/40 cursor-not-allowed opacity-60'
-                  }`}>
-                  <div className="w-14 h-14 rounded-full bg-white flex items-center justify-center shadow-inner">
-                    <Building2 className="w-7 h-7 text-[#FF5C00]" />
-                  </div>
-                  <p className="text-xl font-black text-slate-900 tracking-tight">{a.number}</p>
-                  {a.tenant_name && (
-                    <p className="text-xs text-slate-500 truncate w-full px-1">{a.tenant_name}</p>
-                  )}
-                  <span className={`text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full ${
-                    isOccupied ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-500'
-                  }`}>
-                    {isOccupied ? 'Bezet' : 'Vacant'}
-                  </span>
-                </button>
-              );
-            })}
+            {apts.filter((a) => a.status === 'occupied' && a.tenant_id).map((a) => (
+              <button key={a.id} onClick={() => onSelect(a)}
+                data-testid={`kiosk-apt-${a.id}`}
+                className="relative aspect-[5/4] rounded-2xl p-4 text-center flex flex-col items-center justify-center gap-2 bg-[#FFE6D3] hover:bg-white hover:scale-[1.03] active:scale-[0.98] transition-all shadow-[0_15px_35px_-10px_rgba(0,0,0,0.2)]">
+                <div className="w-14 h-14 rounded-full bg-white flex items-center justify-center shadow-inner">
+                  <Building2 className="w-7 h-7 text-[#FF5C00]" />
+                </div>
+                <p className="text-xl font-black text-slate-900 tracking-tight">{a.number}</p>
+                {a.tenant_name && (
+                  <p className="text-xs text-slate-500 truncate w-full px-1">{a.tenant_name}</p>
+                )}
+                <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
+                  Bezet
+                </span>
+              </button>
+            ))}
+            {apts.filter((a) => a.status === 'occupied' && a.tenant_id).length === 0 && (
+              <div className="col-span-full bg-white rounded-3xl p-10 text-center">
+                <Home className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                <p className="text-slate-500 font-semibold">Geen bezette appartementen op deze locatie.</p>
+              </div>
+            )}
           </div>
         )}
       </div>
