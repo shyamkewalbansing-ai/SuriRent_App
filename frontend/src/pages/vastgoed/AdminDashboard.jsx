@@ -21,6 +21,7 @@ import Companies from './admin/Companies';
 import SettingsPage from './admin/Settings';
 import PaymentRequests from './admin/PaymentRequests';
 import Locations from './admin/Locations';
+import TrialBanner from '../../components/TrialBanner';
 
 const BASE_TABS = [
   { id: 'overview', label: 'Overzicht', icon: LayoutDashboard },
@@ -1272,6 +1273,7 @@ export default function AdminDashboard() {
       <Sidebar active={tab} onChange={setTab} onLogout={doLogout} user={user} activeCompany={activeCompany} tabs={tabs} />
       <div className="flex-1 flex flex-col min-w-0">
         <MobileHeader activeCompany={activeCompany} user={user} onOpenMenu={() => setDrawerOpen(true)} />
+        <TrialBanner />
         <main className="flex-1 p-5 md:p-8 pb-24 md:pb-8 max-w-7xl w-full">
           {tab === 'companies' && <Companies />}
           {tab === 'overview' && <Overview />}

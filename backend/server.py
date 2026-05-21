@@ -201,6 +201,7 @@ class RegisterIn(BaseModel):
     password: str = Field(min_length=6)
     company_name: Optional[str] = None  # If set, creates a new company with this user as admin
     telefoon: Optional[str] = ""
+    plan: Optional[Literal["starter", "professional"]] = "starter"
 
 
 class LoginIn(BaseModel):
@@ -494,14 +495,19 @@ async def register(body: RegisterIn, response: Response):
         while await db.companies.find_one({"slug": slug}, {"_id": 1}):
             slug = f"{base_slug}-{i}"
             i += 1
+        now = now_utc()
+        trial_end = now + timedelta(days=14)
         c = {
             "id": new_id(),
             "name": body.company_name.strip(),
             "slug": slug,
-            "plan": "trial",
+            "plan": body.plan or "starter",  # selected package
+            "billing_status": "trial",       # trial | active | past_due | cancelled
+            "trial_started_at": iso(now),
+            "trial_ends_at": iso(trial_end),
             "telefoon": (body.telefoon or "").strip(),
             "owner_email": email,
-            "created_at": iso(now_utc()),
+            "created_at": iso(now),
         }
         await db.companies.insert_one(c)
         company_id = c["id"]
@@ -578,6 +584,73 @@ async def me(user=Depends(get_current_user)):
         if c:
             company = {k: c[k] for k in ("id", "slug", "name", "plan")}
     return {**user, "active_company": company}
+
+
+# =====================================================================
+# Billing — trial status + bank details for offline payments
+# =====================================================================
+PLAN_PRICES = {
+    "starter": {"name": "Starter", "amount": 3000, "currency": "SRD", "interval": "month",
+                "description": "Voor kleinere vastgoedbeheerders.",
+                "features": ["Onbeperkt appartementen", "Online betalen", "WhatsApp & E-mail"]},
+    "professional": {"name": "Professional", "amount": 5000, "currency": "SRD", "interval": "month",
+                     "description": "Met Kiosk terminal en alle functies.",
+                     "features": ["Alles uit Starter", "Kiosk terminal", "Shelly stroombeheer", "Prioriteit support"]},
+}
+
+
+@api.get("/billing/plans")
+async def list_plans():
+    """Public plan catalog — used by landing + registration flow."""
+    return [{"id": k, **v} for k, v in PLAN_PRICES.items()]
+
+
+@api.get("/billing/me")
+async def billing_me(user=Depends(get_current_user)):
+    """Trial / subscription status for the current admin's company."""
+    cid = company_id_of(user)
+    if not cid:
+        return {"status": "none"}
+    c = await db.companies.find_one({"id": cid}, {"_id": 0}) or {}
+    plan_id = c.get("plan", "starter")
+    plan = PLAN_PRICES.get(plan_id, PLAN_PRICES["starter"])
+    status = c.get("billing_status", "active")
+    days_left = None
+    trial_ends = c.get("trial_ends_at")
+    if trial_ends:
+        try:
+            end = datetime.fromisoformat(trial_ends.replace("Z", "+00:00"))
+            delta = end - now_utc()
+            days_left = max(0, int(delta.total_seconds() // 86400) + (1 if delta.total_seconds() % 86400 > 0 else 0))
+        except Exception:
+            days_left = None
+    if status == "trial" and days_left is not None and days_left <= 0:
+        status = "expired"
+    return {
+        "status": status,
+        "plan_id": plan_id,
+        "plan": plan,
+        "trial_started_at": c.get("trial_started_at"),
+        "trial_ends_at": trial_ends,
+        "days_left": days_left,
+        "monthly_amount": plan["amount"],
+        "currency": plan["currency"],
+    }
+
+
+@api.get("/billing/bank-details")
+async def billing_bank_details():
+    """Public bank details for offline / wire transfer subscription payments."""
+    return {
+        "bank_name": os.environ.get("BILLING_BANK_NAME", "DSB Bank N.V."),
+        "account_name": os.environ.get("BILLING_ACCOUNT_NAME", "SuriRent N.V."),
+        "account_number": os.environ.get("BILLING_ACCOUNT_NUMBER", "12.34.56.789"),
+        "swift": os.environ.get("BILLING_SWIFT", "DSBBSRPA"),
+        "reference_template": "ABONNEMENT — <BEDRIJF> — <PERIODE>",
+        "currency": "SRD",
+        "support_email": os.environ.get("BILLING_SUPPORT_EMAIL", "billing@surirent.sr"),
+        "whatsapp": os.environ.get("BILLING_WHATSAPP", "+597 8 555 0123"),
+    }
 
 
 # =====================================================================

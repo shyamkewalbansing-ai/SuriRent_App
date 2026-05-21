@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Building2, Loader2, Lock, Delete, KeyRound, ArrowLeft, Eye, EyeOff, UserPlus, LogIn } from 'lucide-react';
+import { Building2, Loader2, Lock, Delete, KeyRound, ArrowLeft, Eye, EyeOff, UserPlus, LogIn, Check } from 'lucide-react';
 import { api, formatError } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 
@@ -146,7 +146,7 @@ function PinLanding({ onSuccess, onPassword, onRegister }) {
   );
 }
 
-function PasswordView({ initialMode = 'login', onBack }) {
+function PasswordView({ initialMode = 'login', onBack, onRegistered }) {
   const navigate = useNavigate();
   const { login, register } = useAuth();
   const [mode, setMode] = useState(initialMode); // 'login' | 'register'
@@ -155,20 +155,31 @@ function PasswordView({ initialMode = 'login', onBack }) {
   const [name, setName] = useState('');
   const [companyName, setCompanyName] = useState('');
   const [telefoon, setTelefoon] = useState('');
+  const [plan, setPlan] = useState('starter');
+  const [plans, setPlans] = useState([]);
+  const [bankDetails, setBankDetails] = useState(null);
+  const [showSuccess, setShowSuccess] = useState(false);
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  useEffect(() => {
+    if (mode !== 'register') return;
+    api.get('/billing/plans').then((r) => setPlans(r.data)).catch(() => setPlans([]));
+    api.get('/billing/bank-details').then((r) => setBankDetails(r.data)).catch(() => setBankDetails(null));
+  }, [mode]);
+
   const submit = async (e) => {
     e?.preventDefault();
     if (mode === 'register' && !companyName.trim()) {
-      setError('Vul de bedrijfsnaam in — uw eigen omgeving wordt aangemaakt.');
+      setError('Vul de bedrijfsnaam in.');
       return;
     }
     setLoading(true); setError('');
     try {
       if (mode === 'login') {
         await login(email, password);
+        navigate('/admin');
       } else {
         await register({
           name: name.trim(),
@@ -176,13 +187,21 @@ function PasswordView({ initialMode = 'login', onBack }) {
           password,
           company_name: companyName.trim(),
           telefoon: telefoon.trim(),
+          plan,
         });
+        if (onRegistered) onRegistered();
+        setShowSuccess(true);
       }
-      navigate('/admin');
     } catch (err) {
       setError(formatError(err, mode === 'login' ? 'Inloggen mislukt' : 'Registratie mislukt'));
     } finally { setLoading(false); }
   };
+
+  if (showSuccess) {
+    const selectedPlan = plans.find((p) => p.id === plan) || { name: plan, amount: 0, currency: 'SRD' };
+    return <RegisterSuccess plan={selectedPlan} company={companyName} bankDetails={bankDetails}
+      onContinue={() => navigate('/admin')} />;
+  }
 
   return (
     <div className="min-h-screen bg-orange-500 flex flex-col">
@@ -210,22 +229,53 @@ function PasswordView({ initialMode = 'login', onBack }) {
           <form onSubmit={submit} className="space-y-4">
             {mode === 'register' && (
               <>
-                <div className="rounded-xl bg-orange-50 border border-orange-200 p-3 text-xs text-orange-800">
-                  <p className="font-bold mb-0.5">Eigen omgeving voor uw bedrijf</p>
-                  <p>Bij registratie maken we automatisch een nieuwe afgeschermde omgeving aan met u als beheerder.</p>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Kies uw pakket</label>
+                  <div className="grid sm:grid-cols-2 gap-3">
+                    {plans.map((p) => {
+                      const sel = plan === p.id;
+                      return (
+                        <button key={p.id} type="button" onClick={() => setPlan(p.id)}
+                          data-testid={`plan-${p.id}`}
+                          className={`text-left rounded-2xl border-2 p-4 transition-all ${
+                            sel ? 'border-[#FF5C00] bg-orange-50 shadow-lg shadow-orange-500/15' : 'border-slate-200 bg-white hover:border-orange-300'
+                          }`}>
+                          <div className="flex items-start justify-between mb-1">
+                            <p className={`font-extrabold ${sel ? 'text-[#C74600]' : 'text-slate-900'}`}>{p.name}</p>
+                            <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${sel ? 'border-[#FF5C00] bg-[#FF5C00]' : 'border-slate-300'}`}>
+                              {sel && <div className="w-2 h-2 rounded-full bg-white" />}
+                            </div>
+                          </div>
+                          <p className="text-xs text-slate-500 mb-2 leading-snug">{p.description}</p>
+                          <p className={`text-xl font-extrabold ${sel ? 'text-[#FF5C00]' : 'text-slate-900'}`}>
+                            {p.currency} {Number(p.amount).toLocaleString('nl-NL')}
+                            <span className="text-xs font-medium text-slate-400 ml-1">/maand</span>
+                          </p>
+                          <ul className="mt-2 space-y-0.5 text-[11px] text-slate-500">
+                            {(p.features || []).slice(0, 3).map((f) => (
+                              <li key={f} className="flex items-center gap-1.5">
+                                <span className={`w-1 h-1 rounded-full ${sel ? 'bg-[#FF5C00]' : 'bg-slate-400'}`} />{f}
+                              </li>
+                            ))}
+                          </ul>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p className="text-[11px] text-slate-400 mt-2">U start met een gratis proefperiode van 14 dagen. Daarna factureren we per bankoverschrijving.</p>
                 </div>
                 <div>
                   <label className="block text-sm font-semibold text-slate-700 mb-2">Bedrijfsnaam <span className="text-red-500">*</span></label>
                   <input type="text" value={companyName} onChange={(e) => setCompanyName(e.target.value)} data-testid="auth-company-name"
                     required minLength={2}
-                    placeholder="bv. Gopi Appartement's N.V."
+                    placeholder="Demo Vastgoed N.V."
                     className="w-full h-14 text-lg px-5 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] focus:ring-4 focus:ring-[#FF5C00]/10 bg-[#F9FAFB] outline-none transition" />
                 </div>
                 <div>
                   <label className="block text-sm font-semibold text-slate-700 mb-2">Uw naam</label>
                   <input type="text" value={name} onChange={(e) => setName(e.target.value)} data-testid="auth-name"
                     required minLength={2}
-                    placeholder="bv. Shyam Kewalbansing"
+                    placeholder="Demo Beheerder"
                     className="w-full h-14 text-lg px-5 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] focus:ring-4 focus:ring-[#FF5C00]/10 bg-[#F9FAFB] outline-none transition" />
                 </div>
                 <div>
@@ -241,7 +291,7 @@ function PasswordView({ initialMode = 'login', onBack }) {
               <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} data-testid="auth-email"
                 required
                 className="w-full h-14 text-lg px-5 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] focus:ring-4 focus:ring-[#FF5C00]/10 bg-[#F9FAFB] outline-none transition"
-                placeholder="admin@vastgoed.sr" />
+                placeholder={mode === 'register' ? 'naam@bedrijf.sr' : 'admin@vastgoed.sr'} />
             </div>
             <div>
               <label className="block text-sm font-semibold text-slate-700 mb-2">Wachtwoord</label>
@@ -273,10 +323,76 @@ function PasswordView({ initialMode = 'login', onBack }) {
           </p>
 
           <p className="text-center text-xs text-slate-300 mt-4">
-            Standaard: <span className="font-bold text-slate-400">admin@vastgoed.sr / admin123</span>
+            {mode === 'login' ? <>Standaard: <span className="font-bold text-slate-400">admin@vastgoed.sr / admin123</span></> :
+              <>14 dagen gratis · Annuleer wanneer u wilt</>}
           </p>
         </div>
       </div>
+    </div>
+  );
+}
+
+function RegisterSuccess({ plan, company, bankDetails, onContinue }) {
+  const ref = `ABONNEMENT — ${company || ''} — ${new Date().toLocaleDateString('nl-NL', { month: 'long', year: 'numeric' })}`;
+  return (
+    <div className="min-h-screen bg-orange-500 flex flex-col">
+      <Header />
+      <div className="flex-1 flex items-center justify-center p-4 sm:p-6">
+        <div className="bg-white rounded-3xl shadow-[0_20px_60px_rgba(0,0,0,0.15)] w-full max-w-2xl p-6 sm:p-10" data-testid="register-success">
+          <div className="text-center mb-6">
+            <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-3">
+              <Check className="w-10 h-10 text-emerald-600" strokeWidth={3} />
+            </div>
+            <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">Welkom bij SuriRent!</h2>
+            <p className="text-sm text-slate-500 mt-1">Uw eigen omgeving is aangemaakt voor <span className="font-bold text-slate-900">{company}</span>.</p>
+          </div>
+
+          <div className="rounded-2xl bg-gradient-to-br from-orange-50 to-orange-100 border-2 border-orange-200 p-4 mb-5">
+            <div className="flex items-start justify-between gap-3 mb-2">
+              <div>
+                <p className="text-[10px] font-extrabold uppercase tracking-widest text-orange-700">14 dagen proefperiode</p>
+                <p className="text-sm font-bold text-slate-900 mt-0.5">Volledige toegang tot {plan.name}</p>
+              </div>
+              <p className="text-xl font-extrabold text-[#FF5C00] whitespace-nowrap">
+                {plan.currency} {Number(plan.amount).toLocaleString('nl-NL')}
+                <span className="text-[10px] font-medium text-slate-500 ml-1">/maand</span>
+              </p>
+            </div>
+            <p className="text-xs text-slate-600">Na 14 dagen ontvangt u een factuur per e-mail. Annuleer vrijblijvend via uw beheerder-dashboard.</p>
+          </div>
+
+          {bankDetails && (
+            <div className="rounded-2xl bg-slate-50 border border-slate-200 p-4 mb-5" data-testid="success-bank-details">
+              <p className="text-[10px] font-extrabold uppercase tracking-widest text-slate-500 mb-2">Bankoverschrijving</p>
+              <div className="space-y-1.5 text-sm">
+                <Bank label="Bank" value={bankDetails.bank_name} />
+                <Bank label="Tenaamstelling" value={bankDetails.account_name} />
+                <Bank label="Rekeningnummer" value={bankDetails.account_number} mono />
+                {bankDetails.swift && <Bank label="SWIFT" value={bankDetails.swift} mono />}
+                <Bank label="Omschrijving" value={ref} mono />
+              </div>
+              <p className="text-[11px] text-slate-400 mt-2">
+                Vragen? {bankDetails.whatsapp && <>WhatsApp <a href={`https://wa.me/${bankDetails.whatsapp.replace(/\D/g, '')}`} className="text-orange-600 font-bold">{bankDetails.whatsapp}</a> · </>}
+                {bankDetails.support_email && <>E-mail <a href={`mailto:${bankDetails.support_email}`} className="text-orange-600 font-bold">{bankDetails.support_email}</a></>}
+              </p>
+            </div>
+          )}
+
+          <button onClick={onContinue} data-testid="success-continue"
+            className="w-full h-14 bg-[#FF5C00] hover:bg-[#E05200] text-white rounded-xl text-lg font-extrabold transition shadow-lg shadow-orange-500/20">
+            Naar mijn dashboard
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Bank({ label, value, mono }) {
+  return (
+    <div className="flex justify-between gap-3">
+      <span className="text-slate-500">{label}</span>
+      <span className={`font-bold text-slate-900 text-right ${mono ? 'font-mono' : ''}`}>{value}</span>
     </div>
   );
 }
@@ -285,20 +401,22 @@ export default function LoginPage() {
   const navigate = useNavigate();
   const { user, loading } = useAuth();
   const [view, setView] = useState('pin'); // pin | login | register
+  const [skipRedirect, setSkipRedirect] = useState(false);
 
   useEffect(() => {
     document.title = 'Vastgoed Kiosk - Login';
   }, []);
 
-  // Auto-redirect if already logged
+  // Auto-redirect if already logged (but not when we're showing the success screen)
   useEffect(() => {
-    if (!loading && user) {
+    if (!loading && user && !skipRedirect) {
       navigate('/admin', { replace: true });
     }
-  }, [user, loading, navigate]);
+  }, [user, loading, navigate, skipRedirect]);
 
   if (view === 'login' || view === 'register') {
-    return <PasswordView initialMode={view} onBack={() => setView('pin')} />;
+    return <PasswordView initialMode={view} onBack={() => setView('pin')}
+      onRegistered={() => setSkipRedirect(true)} />;
   }
   return (
     <PinLanding
