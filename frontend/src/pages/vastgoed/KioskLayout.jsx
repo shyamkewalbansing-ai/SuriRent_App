@@ -5,13 +5,14 @@ import {
   Building2, ArrowRight, ArrowLeft, Banknote, Receipt, LogOut, MapPin,
   Check, Loader2, Home, X, Wallet, FileText, Wifi, AlertCircle,
   Smartphone, QrCode, ShieldCheck, Clock as ClockIcon, Printer, Download,
+  Droplets, User, Settings as SettingsIcon, Hash, CheckCircle,
 } from 'lucide-react';
 import { api, formatError, fmtMoney, MONTHS_NL } from '../../lib/api';
 
 const variants = {
-  enter: { opacity: 0, x: 30 },
+  enter: { opacity: 0, x: 60 },
   center: { opacity: 1, x: 0 },
-  exit: { opacity: 0, x: -30 },
+  exit: { opacity: 0, x: -60 },
 };
 
 function getKioskCompany() {
@@ -21,70 +22,87 @@ function getKioskCompany() {
   } catch { return null; }
 }
 
+// Sort apartments by alphabetic prefix + numeric suffix ("A1" < "A2" < "HUIS 7A")
+function sortApartments(a, b) {
+  const numA = (a.number || '').replace(/[^0-9]/g, '');
+  const numB = (b.number || '').replace(/[^0-9]/g, '');
+  const prefA = (a.number || '').replace(/[0-9]/g, '');
+  const prefB = (b.number || '').replace(/[0-9]/g, '');
+  if (prefA !== prefB) return prefA.localeCompare(prefB);
+  return (parseInt(numA) || 0) - (parseInt(numB) || 0);
+}
+
 // =====================================================================
-// Footer — bedrijfsnaam links + appartement-info + Beheerder/Uit rechts
+// Mobile header buttons (Beheerder + Uit) — shown inline on mobile only
 // =====================================================================
-function KioskFooter({ company, apartment, onAdmin, onExit, showAdmin = true }) {
+function MobileHeaderButtons({ onAdmin, onExit }) {
   return (
-    <div className="bg-white border-t border-white/10 px-4 sm:px-6 py-2.5 flex items-center justify-between gap-3 shadow-[0_-10px_30px_-15px_rgba(0,0,0,0.2)]">
-      <div className="flex items-center gap-2 min-w-0">
-        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#FF8A3D] to-[#C74600] p-1 shrink-0">
-          <img src="/kiosk-icons/kiosk-512.png" alt="" className="w-full h-full object-contain" />
-        </div>
-        <p className="font-black text-slate-900 text-sm sm:text-base truncate" data-testid="kiosk-footer-company">
-          {company?.name || 'SuriRent'}
-        </p>
-      </div>
-      <div className="flex items-center gap-2">
-        {apartment && (
-          <div className="hidden sm:block text-right">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{apartment.number}</p>
-            <p className="text-xs font-bold text-slate-600">Appt. {apartment.number}</p>
-          </div>
-        )}
-        {showAdmin && (
-          <button onClick={onAdmin} data-testid="kiosk-footer-admin"
-            className="px-4 h-10 rounded-xl bg-[#FF5C00] hover:bg-[#E05200] text-white font-bold text-sm shadow-[0_8px_20px_-5px_rgba(255,92,0,0.5)]">
-            Beheerder
-          </button>
-        )}
-        <button onClick={onExit} data-testid="kiosk-footer-exit"
-          className="px-3 h-10 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm flex items-center gap-1.5">
-          <LogOut className="w-3.5 h-3.5" /> Uit
+    <div className="flex items-center gap-1.5 md:hidden">
+      {onExit && (
+        <button onClick={onExit} data-testid="kiosk-lock-btn"
+          className="flex items-center gap-1.5 text-white font-bold bg-white/20 backdrop-blur-sm rounded-lg px-3 py-1.5">
+          <LogOut className="w-3.5 h-3.5" /> <span className="text-xs">Uit</span>
         </button>
-      </div>
+      )}
+      {onAdmin && (
+        <button onClick={onAdmin} data-testid="kiosk-admin-btn"
+          className="flex items-center gap-1.5 text-orange-600 font-bold bg-white rounded-lg px-3 py-1.5">
+          <SettingsIcon className="w-3.5 h-3.5" /> <span className="text-xs">Beheerder</span>
+        </button>
+      )}
     </div>
   );
 }
 
 // =====================================================================
-// Welcome screen
+// Welcome
 // =====================================================================
-function Welcome({ onStart }) {
+function Welcome({ company, onStart, onAdmin, onExit }) {
   return (
-    <div className="h-full flex items-center justify-center p-4 sm:p-8">
-      <div className="bg-white rounded-3xl shadow-[0_30px_80px_-20px_rgba(0,0,0,0.25)] w-full max-w-2xl p-8 sm:p-12 text-center">
-        <div className="w-28 h-28 sm:w-32 sm:h-32 rounded-3xl bg-gradient-to-br from-[#FF8A3D] to-[#C74600] flex items-center justify-center mx-auto mb-6 shadow-xl shadow-orange-500/40 p-4">
-          <img src="/kiosk-icons/kiosk-512.png" alt="Kiosk" className="w-full h-full object-contain" />
+    <div className="h-full bg-orange-500 flex flex-col" style={{ padding: '1.5vh 1.5vw 0' }}>
+      <div className="flex items-center justify-between" style={{ height: '7vh' }}>
+        <div className="flex items-center gap-2 text-white">
+          <Building2 className="w-5 h-5" />
+          <span className="text-sm sm:text-base font-semibold">{company?.name || 'Kiosk'}</span>
         </div>
-        <h1 className="text-4xl sm:text-5xl font-black text-slate-900 tracking-tighter mb-3">Welkom</h1>
-        <p className="text-base sm:text-lg text-slate-500 mb-8">Betaal uw huur, servicekosten en meer</p>
-        <button onClick={onStart} data-testid="kiosk-start-btn"
-          className="inline-flex items-center gap-3 px-10 py-5 bg-[#FF5C00] hover:bg-[#E05200] text-white text-xl font-black rounded-2xl shadow-[0_20px_40px_-10px_rgba(255,92,0,0.6)] active:scale-[0.98] transition-all">
-          Start <ArrowRight className="w-6 h-6" />
-        </button>
-        <div className="mt-10 pt-8 border-t border-slate-100">
-          <p className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-4">Beschikbare diensten</p>
-          <div className="flex gap-3 sm:gap-6 justify-center flex-wrap">
+        <div className="flex items-center gap-2">
+          {onAdmin && (
+            <button onClick={onAdmin} data-testid="welcome-admin-btn"
+              className="flex items-center gap-1 text-white/90 bg-white/15 hover:bg-white/25 rounded-lg px-3 py-1.5">
+              <SettingsIcon className="w-4 h-4" />
+              <span className="text-xs hidden sm:inline font-bold">Beheerder</span>
+            </button>
+          )}
+          <button onClick={onExit} data-testid="welcome-exit-btn"
+            className="flex items-center gap-1 text-white/90 bg-white/15 hover:bg-white/25 rounded-lg px-3 py-1.5">
+            <LogOut className="w-4 h-4" />
+            <span className="text-xs hidden sm:inline font-bold">Uit</span>
+          </button>
+        </div>
+      </div>
+
+      <div className="flex-1 flex min-h-0" style={{ paddingBottom: '1.5vh' }}>
+        <div className="flex-1 bg-white rounded-2xl flex flex-col items-center justify-center text-center px-6 py-10">
+          <div className="w-24 h-24 rounded-3xl bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center shadow-xl shadow-orange-500/40 p-4 mb-5">
+            <img src="/kiosk-icons/kiosk-512.png" alt="Kiosk" className="w-full h-full object-contain" />
+          </div>
+          <h1 className="text-4xl sm:text-5xl font-extrabold text-slate-900 tracking-tight mb-2">Welkom</h1>
+          <p className="text-base text-slate-400 mb-8">Betaal uw huur, servicekosten en meer</p>
+          <button onClick={onStart} data-testid="kiosk-start-btn"
+            className="bg-orange-500 hover:bg-orange-600 text-white text-lg sm:text-xl font-bold rounded-xl flex items-center gap-3 active:scale-[0.98] transition px-12 py-4 mb-10">
+            Start <ArrowRight className="w-6 h-6" />
+          </button>
+          <p className="text-xs uppercase tracking-widest font-bold text-slate-400 mb-3">Beschikbare diensten</p>
+          <div className="flex gap-3 sm:gap-5 justify-center flex-wrap">
             {[
               { icon: Banknote, label: 'Maandhuur' },
-              { icon: Wallet, label: 'Servicekosten' },
+              { icon: Droplets, label: 'Servicekosten' },
               { icon: Wifi, label: 'Internet' },
-              { icon: Receipt, label: 'Borg & Boetes' },
+              { icon: Receipt, label: 'Boetes' },
             ].map((s) => (
-              <div key={s.label} className="bg-slate-50 rounded-2xl px-4 py-3 flex flex-col items-center">
-                <div className="w-10 h-10 rounded-xl bg-orange-100 flex items-center justify-center mb-2">
-                  <s.icon className="w-5 h-5 text-[#FF5C00]" />
+              <div key={s.label} className="bg-slate-50 rounded-xl px-4 py-3 flex flex-col items-center">
+                <div className="w-9 h-9 rounded-lg bg-orange-100 flex items-center justify-center mb-1.5">
+                  <s.icon className="w-4 h-4 text-orange-500" />
                 </div>
                 <p className="text-xs font-bold text-slate-700">{s.label}</p>
               </div>
@@ -97,150 +115,177 @@ function Welcome({ onStart }) {
 }
 
 // =====================================================================
-// Location select — kies de locatie
+// Apartment select (with optional inline location picker when ≥2 locations)
 // =====================================================================
-function LocationSelect({ onBack, onSelect, onSkip }) {
-  const [locs, setLocs] = useState([]);
+function ApartmentSelect({ onSelect, onAdmin, onExit }) {
+  const [apartments, setApartments] = useState([]);
+  const [locations, setLocations] = useState([]);
+  const [selectedLocationId, setSelectedLocationId] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState('');
+  const [error, setError] = useState('');
+
   useEffect(() => {
-    api.get('/kiosk/locations').then((r) => setLocs(r.data))
-      .catch((e) => setErr(formatError(e)))
+    Promise.all([
+      api.get('/kiosk/apartments'),
+      api.get('/kiosk/locations'),
+    ]).then(([aRes, lRes]) => {
+      setApartments(aRes.data);
+      setLocations((lRes.data || []).filter((l) => l.id !== '_none'));
+    }).catch((e) => setError(formatError(e)))
       .finally(() => setLoading(false));
   }, []);
-  // Auto-skip naar appartement-keuze als er maar 1 (of 0) locatie is.
-  useEffect(() => {
-    if (!loading && locs.length <= 1) onSkip();
-  }, [loading, locs, onSkip]);
 
-  return (
-    <div className="h-full overflow-y-auto p-4 sm:p-8">
-      <div className="max-w-5xl mx-auto">
-        <div className="flex items-center justify-between mb-5">
-          <button onClick={onBack} data-testid="loc-back"
-            className="flex items-center gap-2 text-white/90 hover:text-white font-bold">
-            <ArrowLeft className="w-5 h-5" /> Terug
-          </button>
-          <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight">Kies uw locatie</h2>
-          <div className="w-20" />
-        </div>
-
-        {loading ? (
-          <div className="py-16 flex items-center justify-center"><Loader2 className="w-10 h-10 text-white animate-spin" /></div>
-        ) : err ? (
-          <div className="bg-white rounded-2xl p-6 text-center text-red-500">{err}</div>
-        ) : (
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {locs.map((loc) => (
-              <button key={loc.id} onClick={() => onSelect(loc)}
-                data-testid={`kiosk-loc-${loc.id}`}
-                className="bg-white rounded-3xl shadow-[0_20px_50px_-15px_rgba(0,0,0,0.25)] overflow-hidden text-left hover:scale-[1.02] active:scale-[0.99] transition-transform">
-                {loc.photo_url ? (
-                  <div className="h-40 bg-slate-100 overflow-hidden">
-                    <img src={loc.photo_url} alt={loc.name} className="w-full h-full object-cover"
-                      onError={(e) => { e.currentTarget.style.display = 'none'; }} />
-                  </div>
-                ) : (
-                  <div className="h-40 bg-gradient-to-br from-[#FFF4EC] to-[#FFE6D3] flex items-center justify-center">
-                    <MapPin className="w-16 h-16 text-[#FF5C00]/40" />
-                  </div>
-                )}
-                <div className="p-5">
-                  <h3 className="text-xl font-black text-slate-900 truncate">{loc.name}</h3>
-                  <p className="text-sm text-slate-500 truncate mt-0.5">{loc.address || '—'}</p>
-                  <div className="flex items-center gap-2 mt-3">
-                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-orange-50 text-[#C74600] font-bold text-xs">
-                      <Building2 className="w-3 h-3" /> {loc.apartments_total} appt.
-                    </span>
-                  </div>
-                </div>
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
+  const unassignedCount = useMemo(
+    () => apartments.filter((a) => !a.location_id && a.status === 'occupied').length,
+    [apartments]
   );
-}
+  const totalGroups = locations.length + (unassignedCount > 0 ? 1 : 0);
+  const showLocationPicker = totalGroups > 1 && selectedLocationId === null;
 
-// =====================================================================
-// Apartment select — grid in oude-ERP-stijl, header met locatie
-// =====================================================================
-function ApartmentSelect({ location, onSelect, onBack }) {
-  const [apts, setApts] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState('');
+  // Auto-skip when there's only one (or zero) groups.
   useEffect(() => {
-    const params = location?.id ? { params: { location_id: location.id } } : {};
-    api.get('/kiosk/apartments', params).then((r) => setApts(r.data))
-      .catch((e) => setErr(formatError(e)))
-      .finally(() => setLoading(false));
-  }, [location]);
+    if (loading || selectedLocationId !== null) return;
+    if (totalGroups <= 1) {
+      setSelectedLocationId(locations[0]?.id || '__any__');
+    }
+  }, [loading, selectedLocationId, totalGroups, locations]);
 
-  return (
-    <div className="h-full overflow-y-auto p-4 sm:p-8">
-      <div className="max-w-7xl mx-auto">
-        <div className="flex items-center justify-between mb-5">
-          <button onClick={onBack} data-testid="apt-select-back"
-            className="flex items-center gap-2 text-white/90 hover:text-white font-bold">
-            <ArrowLeft className="w-5 h-5" /> Terug
-          </button>
-          <div className="text-center min-w-0">
-            <h2 className="text-base sm:text-xl font-black text-white tracking-tight truncate">
-              {location?.name ? `${location.name} · ` : ''}Kies uw appartement
-            </h2>
-          </div>
-          <div className="w-20" />
+  if (loading) {
+    return (
+      <div className="h-full bg-orange-500 flex items-center justify-center">
+        <Loader2 className="w-10 h-10 text-white animate-spin" />
+      </div>
+    );
+  }
+
+  const currentLocation = selectedLocationId === '__none__'
+    ? { name: 'Overige' }
+    : selectedLocationId === '__any__'
+      ? null
+      : locations.find((l) => l.id === selectedLocationId);
+
+  const visible = (showLocationPicker ? [] :
+    selectedLocationId === '__none__' ? apartments.filter((a) => !a.location_id) :
+    selectedLocationId === '__any__' ? apartments :
+    apartments.filter((a) => a.location_id === selectedLocationId)
+  ).filter((a) => a.status === 'occupied' && a.tenant_id).sort(sortApartments);
+
+  // ----- Location picker view -----
+  if (showLocationPicker) {
+    return (
+      <div className="h-full bg-orange-500 flex flex-col" style={{ padding: '1.5vh 1.5vw 0' }}>
+        <div className="flex items-center justify-between flex-wrap gap-2 px-1 sm:px-2 py-2" style={{ minHeight: '7vh' }}>
+          <MobileHeaderButtons onAdmin={onAdmin} onExit={onExit} />
+          <span className="text-sm sm:text-base font-semibold text-white">Kies een locatie</span>
+          <div className="w-16" />
         </div>
-
-        {loading ? (
-          <div className="py-16 flex items-center justify-center"><Loader2 className="w-10 h-10 text-white animate-spin" /></div>
-        ) : err ? (
-          <div className="bg-white rounded-2xl p-6 text-center text-red-500">{err}</div>
-        ) : apts.length === 0 ? (
-          <div className="bg-white rounded-3xl p-10 text-center">
-            <Home className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-            <p className="text-slate-500 font-semibold">Geen appartementen gevonden.</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4">
-            {apts.filter((a) => a.status === 'occupied' && a.tenant_id).map((a) => (
-              <button key={a.id} onClick={() => onSelect(a)}
-                data-testid={`kiosk-apt-${a.id}`}
-                className="relative aspect-[5/4] rounded-2xl p-4 text-center flex flex-col items-center justify-center gap-2 bg-[#FFE6D3] hover:bg-white hover:scale-[1.03] active:scale-[0.98] transition-all shadow-[0_15px_35px_-10px_rgba(0,0,0,0.2)]">
-                <div className="w-14 h-14 rounded-full bg-white flex items-center justify-center shadow-inner">
-                  <Building2 className="w-7 h-7 text-[#FF5C00]" />
+        <div className="flex-1 min-h-0 overflow-auto pb-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 px-1 sm:px-2 max-w-5xl mx-auto pt-2">
+            {locations.map((loc) => {
+              const count = apartments.filter((a) => a.location_id === loc.id && a.status === 'occupied').length;
+              return (
+                <button key={loc.id} onClick={() => setSelectedLocationId(loc.id)}
+                  data-testid={`location-${loc.id}`}
+                  className="bg-white/90 backdrop-blur-sm flex flex-col items-center text-center rounded-2xl p-6 sm:p-8 hover:-translate-y-1 hover:bg-white transition shadow-lg border-2 border-transparent hover:border-orange-500">
+                  {loc.photo_url ? (
+                    <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl overflow-hidden mb-3 bg-slate-100">
+                      <img src={loc.photo_url} alt={loc.name} className="w-full h-full object-cover"
+                        onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+                    </div>
+                  ) : (
+                    <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-orange-100 flex items-center justify-center mb-3">
+                      <MapPin className="w-7 h-7 sm:w-8 sm:h-8 text-orange-600" />
+                    </div>
+                  )}
+                  <span className="text-lg sm:text-xl font-extrabold text-slate-900 mb-1">{loc.name}</span>
+                  {loc.address && <span className="text-xs text-slate-500 mb-2">{loc.address}</span>}
+                  <span className="text-xs font-bold text-orange-600 bg-orange-50 rounded-full px-3 py-1">
+                    {count} {count === 1 ? 'appartement' : 'appartementen'}
+                  </span>
+                </button>
+              );
+            })}
+            {unassignedCount > 0 && (
+              <button onClick={() => setSelectedLocationId('__none__')}
+                data-testid="location-unassigned"
+                className="bg-white/80 backdrop-blur-sm flex flex-col items-center text-center rounded-2xl p-6 sm:p-8 hover:-translate-y-1 hover:bg-white transition shadow-lg border-2 border-dashed border-white/40">
+                <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-slate-100 flex items-center justify-center mb-3">
+                  <Building2 className="w-7 h-7 sm:w-8 sm:h-8 text-slate-500" />
                 </div>
-                <p className="text-xl font-black text-slate-900 tracking-tight">{a.number}</p>
-                {a.tenant_name && (
-                  <p className="text-xs text-slate-500 truncate w-full px-1">{a.tenant_name}</p>
-                )}
-                <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
-                  Bezet
+                <span className="text-lg sm:text-xl font-extrabold text-slate-700 mb-1">Overige</span>
+                <span className="text-xs text-slate-500 mb-2">Zonder locatie</span>
+                <span className="text-xs font-bold text-slate-600 bg-slate-50 rounded-full px-3 py-1">
+                  {unassignedCount} {unassignedCount === 1 ? 'appartement' : 'appartementen'}
                 </span>
               </button>
-            ))}
-            {apts.filter((a) => a.status === 'occupied' && a.tenant_id).length === 0 && (
-              <div className="col-span-full bg-white rounded-3xl p-10 text-center">
-                <Home className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-                <p className="text-slate-500 font-semibold">Geen bezette appartementen op deze locatie.</p>
-              </div>
             )}
           </div>
-        )}
+        </div>
+      </div>
+    );
+  }
+
+  // ----- Apartment grid view -----
+  return (
+    <div className="h-full bg-orange-500 flex flex-col" style={{ padding: '1.5vh 1.5vw 0' }}>
+      <div className="flex items-center justify-between flex-wrap gap-2 px-1 sm:px-2 py-2" style={{ minHeight: '7vh' }}>
+        <div className="flex items-center gap-2">
+          {totalGroups > 1 && (
+            <button onClick={() => setSelectedLocationId(null)} data-testid="back-to-locations"
+              className="flex items-center gap-1.5 text-white font-bold bg-white/20 backdrop-blur-sm rounded-lg px-3 py-1.5">
+              <ArrowLeft className="w-3.5 h-3.5" /> <span className="text-xs">Locaties</span>
+            </button>
+          )}
+          <MobileHeaderButtons onAdmin={onAdmin} onExit={onExit} />
+        </div>
+        <span className="text-sm sm:text-base font-semibold text-white">
+          {currentLocation ? `${currentLocation.name} · Kies uw appartement` : 'Kies uw appartement'}
+        </span>
+        <div className="w-16" />
+      </div>
+
+      {error && (
+        <div className="bg-white/95 text-red-600 rounded-lg text-center text-sm font-semibold mx-1 mb-2 py-2 px-3">{error}</div>
+      )}
+
+      <div className="flex-1 min-h-0 overflow-auto pb-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 sm:gap-3 px-1 sm:px-2">
+          {visible.map((a) => (
+            <button key={a.id} onClick={() => onSelect(a)} data-testid={`apt-${a.number}`}
+              className="group bg-white/85 backdrop-blur-sm flex flex-col items-center justify-center text-center rounded-xl sm:rounded-2xl p-3 sm:p-4 hover:-translate-y-1 hover:bg-white/95 transition border-2 border-transparent hover:border-orange-500 shadow"
+              style={{ boxShadow: '0 4px 20px rgba(0,0,0,0.06)' }}>
+              <div className="rounded-full flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 mb-2 bg-orange-50 group-hover:bg-orange-100">
+                <Building2 className="w-5 h-5 sm:w-6 sm:h-6 text-orange-500" />
+              </div>
+              <span className="text-base sm:text-lg font-extrabold text-slate-900 mb-0.5">{a.number}</span>
+              <div className="flex items-center gap-1 text-slate-400 mb-1">
+                <User className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                <span className="text-xs sm:text-sm truncate text-slate-700 font-medium max-w-[100px] sm:max-w-[120px]">{a.tenant_name}</span>
+              </div>
+              <span className="text-xs font-bold text-green-600 bg-green-50 rounded-full px-2.5 py-0.5">Bezet</span>
+            </button>
+          ))}
+          {visible.length === 0 && (
+            <div className="col-span-full bg-white/90 rounded-2xl p-10 text-center">
+              <Home className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+              <p className="text-slate-500 font-semibold">Geen bezette appartementen op deze locatie.</p>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
 }
 
 // =====================================================================
-// Tenant overview — split-screen: financieel overzicht (L) + te betalen (R)
+// Tenant overview — split-screen
 // =====================================================================
 function TenantOverview({ apartment, onBack, onPay }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
   const [showHistory, setShowHistory] = useState(false);
+
   useEffect(() => {
     if (!apartment?.tenant_id) return;
     api.get(`/kiosk/tenants/${apartment.tenant_id}/overview`)
@@ -249,106 +294,93 @@ function TenantOverview({ apartment, onBack, onPay }) {
       .finally(() => setLoading(false));
   }, [apartment]);
 
-  if (loading) {
-    return <div className="h-full flex items-center justify-center"><Loader2 className="w-10 h-10 text-white animate-spin" /></div>;
-  }
-  if (err || !data) {
-    return <div className="h-full flex items-center justify-center text-white p-8">{err || 'Geen data'}</div>;
-  }
+  if (loading) return <div className="h-full bg-orange-500 flex items-center justify-center"><Loader2 className="w-10 h-10 text-white animate-spin" /></div>;
+  if (err || !data) return <div className="h-full bg-orange-500 flex items-center justify-center text-white p-8">{err || 'Geen data'}</div>;
+
   const { tenant, apartment: apt, balance } = data;
   const internet = Number(tenant.internet_amount || 0);
   const openRent = balance.balance > 0 ? balance.balance : 0;
-  const totalDue = openRent + internet;  // servicekosten/boetes are extra on the pay step
+  const totalDue = openRent + internet;
+  const cur = balance.currency || apt.currency || 'SRD';
+
+  const items = [
+    { key: 'rent', label: 'Maandhuur', value: apt.rent_amount, icon: Home },
+    ...(openRent > 0 ? [{ key: 'open', label: 'Openstaande huur', value: openRent, icon: Wallet, highlight: true,
+        sub: balance.next_period ? `${MONTHS_NL[balance.next_period.month - 1]} ${balance.next_period.year}` : '' }] : []),
+    { key: 'svc', label: 'Servicekosten', value: 0, icon: FileText, muted: true },
+    { key: 'fines', label: 'Boetes', value: 0, icon: FileText, muted: true },
+    { key: 'internet', label: 'Internet', value: internet, icon: Wifi, muted: internet === 0 },
+  ];
 
   return (
-    <div className="h-full overflow-y-auto p-4 sm:p-6">
-      <div className="max-w-7xl mx-auto">
-        <div className="flex items-center justify-between mb-4">
-          <button onClick={onBack} data-testid="overview-back"
-            className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold backdrop-blur-sm">
-            <ArrowLeft className="w-5 h-5" /> Terug
+    <div className="h-full bg-orange-500 flex flex-col" style={{ padding: '1.5vh 1.5vw 0' }}>
+      <div className="flex items-center justify-between flex-wrap gap-2 px-1 sm:px-2 py-2">
+        <button onClick={onBack} data-testid="overview-back"
+          className="flex items-center gap-1.5 text-white font-bold bg-white/20 backdrop-blur-sm rounded-lg px-3 py-1.5 sm:px-4 sm:py-2">
+          <ArrowLeft className="w-4 h-4" /> <span className="text-xs sm:text-sm">Terug</span>
+        </button>
+        <div className="text-right text-white">
+          <p className="text-xs sm:text-sm font-semibold">{tenant.name}</p>
+          <p className="text-[10px] sm:text-xs opacity-70">Appt. {apt.number}</p>
+        </div>
+      </div>
+
+      <div className="flex-1 min-h-0 flex flex-col md:flex-row gap-2 sm:gap-3 pb-3">
+        <div className="bg-white rounded-2xl flex-1 md:flex-[3] flex flex-col p-4 sm:p-5 min-w-0">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-base sm:text-lg font-bold text-slate-900">Financieel overzicht</h3>
+            <button data-testid="overview-pdf" disabled
+              className="px-3 h-8 rounded-lg bg-orange-100 text-orange-700 font-bold text-xs flex items-center gap-1.5 disabled:opacity-60 cursor-not-allowed">
+              <Download className="w-3.5 h-3.5" /> PDF
+            </button>
+          </div>
+          <div className="flex-1 divide-y divide-slate-100">
+            {items.map((it) => {
+              const Icon = it.icon;
+              const klass = it.highlight ? 'text-orange-600' : it.muted ? 'text-slate-400' : 'text-slate-900';
+              return (
+                <div key={it.key} className={`flex items-center justify-between py-2.5 px-1 ${klass}`}>
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${
+                      it.highlight ? 'bg-orange-100 text-orange-500' : it.muted ? 'bg-slate-50 text-slate-300' : 'bg-slate-100 text-slate-500'
+                    }`}>
+                      <Icon className="w-3.5 h-3.5" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className={`text-sm ${it.highlight ? 'font-extrabold' : 'font-semibold'}`}>{it.label}</p>
+                      {it.sub && <p className="text-[10px] mt-0.5">{it.sub}</p>}
+                    </div>
+                  </div>
+                  <p className={`font-bold text-sm sm:text-base ${it.highlight ? 'font-extrabold' : ''}`}>{fmtMoney(it.value, cur)}</p>
+                </div>
+              );
+            })}
+          </div>
+          <div className="border-t-2 border-slate-200 mt-2 pt-2 flex items-center justify-between">
+            <p className="font-bold text-slate-900 text-sm sm:text-base">Totaal openstaand</p>
+            <p className="text-lg sm:text-xl font-extrabold text-slate-900" data-testid="overview-total">{fmtMoney(totalDue, cur)}</p>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl md:flex-[2] flex flex-col items-center justify-center text-center p-6 sm:p-8 min-h-[260px]">
+          <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-orange-100 flex items-center justify-center mb-3">
+            <Wallet className="w-7 h-7 sm:w-9 sm:h-9 text-orange-500" />
+          </div>
+          <p className="text-xs sm:text-sm font-bold uppercase tracking-widest text-slate-400">Te betalen</p>
+          <p className="text-4xl sm:text-5xl font-extrabold text-slate-900 tracking-tight mt-1 mb-6">{fmtMoney(totalDue, cur)}</p>
+          <button onClick={() => onPay({ ...data, internet, total_due: totalDue })}
+            data-testid="overview-pay-btn"
+            className="w-full max-w-xs bg-orange-500 hover:bg-orange-600 text-white text-base sm:text-lg font-bold rounded-xl flex items-center justify-center gap-2 transition py-3 sm:py-3.5 active:scale-[0.98]">
+            Volgende <ArrowRight className="w-5 h-5" />
           </button>
-          <div className="text-white text-center">
-            <p className="text-xs font-bold tracking-wider uppercase text-white/70">{tenant.name}</p>
-            <p className="text-sm font-black">Appt. {apt.number}</p>
-          </div>
-          <div className="w-20" />
-        </div>
-
-        <div className="grid lg:grid-cols-2 gap-4">
-          {/* LEFT: Financieel overzicht */}
-          <div className="bg-white rounded-3xl shadow-[0_30px_80px_-20px_rgba(0,0,0,0.25)] p-5 sm:p-6 flex flex-col">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-black text-slate-900">Financieel overzicht</h3>
-              <button data-testid="overview-pdf" disabled
-                title="PDF binnenkort beschikbaar"
-                className="px-3 h-9 rounded-lg bg-[#FF5C00]/10 text-[#C74600] font-bold text-xs flex items-center gap-1.5 disabled:opacity-50 cursor-not-allowed">
-                <Download className="w-3.5 h-3.5" /> PDF
-              </button>
-            </div>
-
-            <div className="flex-1 divide-y divide-slate-100">
-              <OverviewRow icon={Home} label="Maandhuur" amount={apt.rent_amount} currency={apt.currency} />
-              {openRent > 0 && (
-                <OverviewRow icon={Wallet} label="Openstaande huur" amount={openRent} currency={balance.currency}
-                  sub={balance.next_period ? `${MONTHS_NL[balance.next_period.month - 1]} ${balance.next_period.year}` : ''}
-                  highlight />
-              )}
-              <OverviewRow icon={FileText} label="Servicekosten" amount={0} currency={apt.currency} muted />
-              <OverviewRow icon={AlertCircle} label="Boetes" amount={0} currency={apt.currency} muted />
-              <OverviewRow icon={Wifi} label="Internet" amount={internet} currency="SRD" muted={internet === 0} />
-            </div>
-
-            <div className="border-t-2 border-slate-200 mt-3 pt-3 flex items-center justify-between">
-              <p className="font-bold text-slate-900">Totaal openstaand</p>
-              <p className="text-xl font-black text-slate-900">{fmtMoney(totalDue, balance.currency)}</p>
-            </div>
-          </div>
-
-          {/* RIGHT: Te betalen + Volgende + Geschiedenis */}
-          <div className="bg-white rounded-3xl shadow-[0_30px_80px_-20px_rgba(0,0,0,0.25)] p-6 sm:p-8 flex flex-col items-center justify-center text-center min-h-[380px]">
-            <div className="w-20 h-20 rounded-2xl bg-orange-100 flex items-center justify-center mb-4">
-              <Wallet className="w-10 h-10 text-[#FF5C00]" />
-            </div>
-            <p className="text-sm font-bold uppercase tracking-widest text-slate-500">Te betalen</p>
-            <p className="text-5xl sm:text-6xl font-black text-slate-900 tracking-tighter mt-2 mb-8" data-testid="overview-total">
-              {fmtMoney(totalDue, balance.currency)}
-            </p>
-            <button onClick={() => onPay({ ...data, internet, total_due: totalDue })}
-              data-testid="overview-pay-btn"
-              className="w-full max-w-md h-16 bg-[#FF5C00] hover:bg-[#E05200] text-white text-xl font-black rounded-2xl flex items-center justify-center gap-3 shadow-[0_20px_40px_-10px_rgba(255,92,0,0.6)] active:scale-[0.98]">
-              Volgende <ArrowRight className="w-6 h-6" />
-            </button>
-            <button onClick={() => setShowHistory(true)} data-testid="overview-history-btn"
-              className="mt-3 w-full max-w-md h-12 bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold rounded-2xl flex items-center justify-center gap-2">
-              <ClockIcon className="w-4 h-4" /> Betalingsgeschiedenis
-            </button>
-          </div>
+          <button onClick={() => setShowHistory(true)} data-testid="overview-history-btn"
+            className="mt-2 w-full max-w-xs bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold rounded-xl flex items-center justify-center gap-2 py-2.5 text-sm">
+            <ClockIcon className="w-4 h-4" /> Betalingsgeschiedenis
+          </button>
         </div>
       </div>
 
-      {showHistory && (
-        <PaymentHistoryModal tenant={tenant} apartment={apt} onClose={() => setShowHistory(false)} />
-      )}
-    </div>
-  );
-}
-
-function OverviewRow({ icon: Icon, label, amount, currency, sub, highlight, muted }) {
-  return (
-    <div className={`flex items-center justify-between py-3 px-1 ${highlight ? 'text-[#FF5C00]' : muted ? 'text-slate-400' : 'text-slate-900'}`}>
-      <div className="flex items-center gap-3 min-w-0">
-        <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-          highlight ? 'bg-orange-100 text-[#FF5C00]' : muted ? 'bg-slate-50 text-slate-400' : 'bg-slate-100 text-slate-600'
-        }`}>
-          <Icon className="w-4 h-4" />
-        </div>
-        <div className="min-w-0">
-          <p className={`text-sm ${highlight ? 'font-black' : 'font-semibold'}`}>{label}</p>
-          {sub && <p className="text-[11px] mt-0.5">{sub}</p>}
-        </div>
-      </div>
-      <p className={`font-${highlight ? 'black' : 'bold'} text-sm sm:text-base`}>{fmtMoney(amount, currency)}</p>
+      {showHistory && <PaymentHistoryModal tenant={tenant} apartment={apt} onClose={() => setShowHistory(false)} />}
     </div>
   );
 }
@@ -361,33 +393,30 @@ function PaymentHistoryModal({ tenant, apartment, onClose }) {
   const [err, setErr] = useState('');
   useEffect(() => {
     api.get(`/kiosk/tenants/${tenant.id}/payments`)
-      .then((r) => setItems(r.data))
-      .catch((e) => setErr(formatError(e)));
+      .then((r) => setItems(r.data)).catch((e) => setErr(formatError(e)));
   }, [tenant.id]);
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4" data-testid="kiosk-history-modal">
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col animate-slide-up">
-        <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" data-testid="kiosk-history-modal">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
+        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="w-10 h-10 rounded-xl bg-orange-100 flex items-center justify-center shrink-0">
-              <ClockIcon className="w-5 h-5 text-[#FF5C00]" />
+            <div className="w-9 h-9 rounded-lg bg-orange-100 flex items-center justify-center shrink-0">
+              <ClockIcon className="w-4 h-4 text-orange-500" />
             </div>
             <div className="min-w-0">
-              <h3 className="text-lg font-black text-slate-900">Betalingsgeschiedenis</h3>
+              <h3 className="text-base font-bold text-slate-900">Betalingsgeschiedenis</h3>
               <p className="text-xs text-slate-500 truncate">Appt. {apartment?.number}</p>
             </div>
           </div>
           <button onClick={onClose} data-testid="history-close"
-            className="w-10 h-10 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center">
-            <X className="w-5 h-5" />
+            className="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center">
+            <X className="w-4 h-4" />
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto px-6 py-4">
+        <div className="flex-1 overflow-y-auto px-6 py-3">
           {err && <p className="text-red-500 text-sm py-4">{err}</p>}
-          {!items && !err && (
-            <div className="py-10 flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-[#FF5C00]" /></div>
-          )}
+          {!items && !err && <div className="py-10 flex items-center justify-center"><Loader2 className="w-7 h-7 animate-spin text-orange-500" /></div>}
           {items && items.length === 0 && (
             <div className="py-10 text-center text-slate-400">
               <Receipt className="w-10 h-10 mx-auto mb-2 opacity-50" />
@@ -396,11 +425,11 @@ function PaymentHistoryModal({ tenant, apartment, onClose }) {
           )}
           {items && items.map((p) => (
             <div key={p.id} className="py-3 border-b border-slate-100 last:border-0 flex items-start gap-3">
-              <Check className="w-5 h-5 text-emerald-500 mt-1 shrink-0" />
+              <CheckCircle className="w-5 h-5 text-emerald-500 mt-0.5 shrink-0" />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <p className="font-black text-slate-900">{fmtMoney(p.amount, p.currency)}</p>
-                  <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-orange-100 text-[#C74600]">{p.category}</span>
+                  <p className="font-extrabold text-slate-900">{fmtMoney(p.amount, p.currency)}</p>
+                  <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-orange-100 text-orange-700">{p.category}</span>
                   <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-slate-100 text-slate-600">{p.method}</span>
                 </div>
                 <p className="text-xs text-slate-500 mt-1">
@@ -418,17 +447,15 @@ function PaymentHistoryModal({ tenant, apartment, onClose }) {
               </div>
               <button data-testid={`history-print-${p.id}`}
                 onClick={() => window.open(`/api/payments/${p.id}/pdf`, '_blank')}
-                className="px-3 h-9 rounded-lg bg-[#FF5C00] hover:bg-[#E05200] text-white font-bold text-xs flex items-center gap-1.5 shrink-0">
-                <Printer className="w-3.5 h-3.5" /> Afdruk
+                className="px-2.5 h-8 rounded-lg bg-orange-500 hover:bg-orange-600 text-white font-bold text-xs flex items-center gap-1 shrink-0">
+                <Printer className="w-3 h-3" /> Afdruk
               </button>
             </div>
           ))}
         </div>
-        <div className="px-6 py-4 border-t border-slate-100">
+        <div className="px-6 py-3 border-t border-slate-100">
           <button onClick={onClose}
-            className="w-full h-12 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold">
-            Sluiten
-          </button>
+            className="w-full h-11 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm">Sluiten</button>
         </div>
       </div>
     </div>
@@ -436,139 +463,216 @@ function PaymentHistoryModal({ tenant, apartment, onClose }) {
 }
 
 // =====================================================================
-// Pay step — checklist + numeric keypad (old ERP style)
+// Pay select — checklist + keypad (old-ERP style)
 // =====================================================================
+const PAY_ITEMS_TEMPLATE = [
+  { id: 'huur', label: 'Huur', icon: Banknote, desc: 'Openstaand huurbedrag' },
+  { id: 'servicekosten', label: 'Servicekosten', icon: Droplets, desc: 'Water, stroom en overige' },
+  { id: 'boete', label: 'Boetes', icon: AlertCircle, desc: 'Openstaande boetes' },
+  { id: 'internet', label: 'Internet', icon: Wifi, desc: 'Internetaansluiting' },
+];
+
 function PaySelect({ overview, onBack, onConfirm }) {
   const { tenant, apartment: apt, balance, internet, total_due } = overview;
+  const cur = (balance.currency || apt.currency || 'SRD').toUpperCase();
+  const fmt = (v) => fmtMoney(v, cur);
   const openRent = balance.balance > 0 ? balance.balance : 0;
 
-  const items = useMemo(() => [
-    { key: 'huur', label: 'Huur', icon: Home, amount: openRent > 0 ? openRent : apt.rent_amount },
-    { key: 'servicekosten', label: 'Servicekosten', icon: FileText, amount: 0 },
-    { key: 'boete', label: 'Boetes', icon: AlertCircle, amount: 0 },
-    { key: 'internet', label: 'Internet', icon: Wifi, amount: Number(internet || 0) },
-  ], [apt.rent_amount, openRent, internet]);
+  const amounts = {
+    huur: openRent > 0 ? openRent : apt.rent_amount,
+    servicekosten: 0,
+    boete: 0,
+    internet: Number(internet || 0),
+  };
 
-  const [selected, setSelected] = useState(() => new Set(['huur']));
-  const [amount, setAmount] = useState(items[0].amount.toFixed(2));
-  const [typing, setTyping] = useState(false);  // true zodra gebruiker zelf op keypad drukt
+  const [selected, setSelected] = useState(new Set());
+  const [custom, setCustom] = useState('');
+  const [showMobileKeypad, setShowMobileKeypad] = useState(false);
 
-  // Whenever selection changes, sync amount to selected total (user can override on keypad).
-  const selectedTotal = useMemo(
-    () => items.filter((i) => selected.has(i.key)).reduce((s, i) => s + (Number(i.amount) || 0), 0),
-    [items, selected]
-  );
-  useEffect(() => { setAmount(selectedTotal.toFixed(2)); setTyping(false); }, [selectedTotal]);
-
-  const toggle = (key) => {
+  const toggle = (id) => {
     setSelected((cur) => {
       const next = new Set(cur);
-      if (next.has(key)) next.delete(key); else next.add(key);
+      if (next.has(id)) next.delete(id); else next.add(id);
       return next;
     });
+    setCustom('');
+  };
+
+  const isDisabled = (id) => (amounts[id] || 0) <= 0;
+  const enabled = PAY_ITEMS_TEMPLATE.filter((t) => !isDisabled(t.id));
+  const allSelected = enabled.length > 0 && enabled.every((t) => selected.has(t.id));
+  const selectAll = () => {
+    if (allSelected) setSelected(new Set());
+    else setSelected(new Set(enabled.map((t) => t.id)));
+    setCustom('');
+  };
+
+  const selectedTotal = [...selected].reduce((s, id) => s + (amounts[id] || 0), 0);
+  const hasCustom = custom && parseFloat(custom) > 0;
+  const activeAmount = hasCustom ? parseFloat(custom) : selectedTotal;
+  const canProceed = activeAmount > 0;
+
+  const buildDescription = () => {
+    const labels = [];
+    if (selected.has('huur')) labels.push('Huur');
+    if (selected.has('servicekosten')) labels.push('Servicekosten');
+    if (selected.has('boete')) labels.push('Boetes');
+    if (selected.has('internet')) labels.push('Internet');
+    return labels.join(' + ');
   };
 
   const press = (k) => {
-    setAmount((cur) => {
-      // Eerste keypad-druk na auto-fill wist het bedrag.
-      const base = typing ? cur : '0';
-      if (k === 'DEL') return base.length <= 1 ? '0' : base.slice(0, -1);
-      if (k === '.') return base.includes('.') ? base : base + '.';
-      if (base === '0' || base === '0.00') return k;
-      return base + k;
-    });
-    setTyping(true);
+    if (k === 'DEL') setCustom((c) => c.slice(0, -1));
+    else if (k === '.') setCustom((c) => c.includes('.') ? c : c + '.');
+    else setCustom((c) => c + k);
+    setSelected(new Set());
   };
 
-  const amountNum = parseFloat(amount) || 0;
-  const primaryCategory = selected.has('huur') ? 'huur'
-    : selected.has('servicekosten') ? 'servicekosten'
-    : selected.has('boete') ? 'boete'
-    : selected.has('internet') ? 'internet' : 'overig';
-
-  const canContinue = amountNum > 0 && selected.size > 0;
+  const handleNext = () => {
+    if (!canProceed) return;
+    let amount, category, note;
+    if (hasCustom) {
+      amount = parseFloat(custom);
+      category = 'huur';  // partial -> general bucket
+      note = `Gedeeltelijke betaling — ${fmt(amount)}`;
+    } else {
+      amount = selectedTotal;
+      category = selected.size === 1 ? [...selected][0] : 'huur';
+      note = buildDescription();
+    }
+    onConfirm({
+      tenant_id: tenant.id, apartment_id: apt.id,
+      amount, currency: cur, category, method: 'contant',
+      period_month: category === 'huur' && balance.next_period ? balance.next_period.month : null,
+      period_year: category === 'huur' && balance.next_period ? balance.next_period.year : null,
+      note,
+    });
+  };
 
   return (
-    <div className="h-full overflow-y-auto p-4 sm:p-6">
-      <div className="max-w-7xl mx-auto">
-        <div className="flex items-center justify-between mb-4">
-          <button onClick={onBack} data-testid="pay-back"
-            className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold backdrop-blur-sm">
-            <ArrowLeft className="w-5 h-5" /> Terug
-          </button>
-          <h2 className="text-base sm:text-xl font-black text-white tracking-tight">Wat wilt u betalen?</h2>
-          <div className="w-20" />
+    <div className="h-full bg-orange-500 flex flex-col px-3 sm:px-6 pt-2">
+      <div className="flex items-center justify-between flex-wrap gap-2 py-2">
+        <button onClick={onBack} data-testid="payselect-back-btn"
+          className="flex items-center gap-1.5 text-white font-bold bg-white/20 backdrop-blur-sm rounded-lg px-3 py-1.5 sm:px-4 sm:py-2">
+          <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5" /> <span className="text-xs sm:text-sm">Terug</span>
+        </button>
+        <span className="text-sm sm:text-base font-semibold text-white">Wat wilt u betalen?</span>
+        <div className="text-right text-white hidden sm:block">
+          <p className="text-xs sm:text-sm font-semibold">{tenant.name}</p>
+          <p className="text-[10px] sm:text-xs opacity-70">Appt. {apt.number}</p>
         </div>
+      </div>
 
-        <div className="grid lg:grid-cols-2 gap-4">
-          {/* Checklist links */}
-          <div className="bg-white rounded-3xl shadow-[0_30px_80px_-20px_rgba(0,0,0,0.25)] p-4 sm:p-6 space-y-2">
-            {items.map((it) => {
-              const isOn = selected.has(it.key);
-              const Icon = it.icon;
+      <div className="flex-1 flex flex-col md:flex-row gap-2 sm:gap-3 min-h-0 pb-2">
+        {/* LEFT — Payment items */}
+        <div className="bg-white rounded-2xl flex-1 md:flex-[3] flex flex-col min-w-0 p-2 sm:p-3">
+          {enabled.length > 1 && (
+            <button onClick={selectAll} data-testid="pay-select-all"
+              className={`w-full flex items-center justify-between rounded-lg border-2 transition px-2.5 py-2 sm:px-3 sm:py-2.5 mb-1.5 ${
+                allSelected ? 'bg-orange-50 border-orange-400' : 'bg-white border-slate-200 hover:border-orange-300'
+              }`}>
+              <div className="flex items-center gap-2">
+                <div className={`flex items-center justify-center rounded border-2 w-5 h-5 ${allSelected ? 'bg-orange-500 border-orange-500' : 'border-slate-300'}`}>
+                  {allSelected && <Check className="text-white w-3.5 h-3.5" strokeWidth={3} />}
+                </div>
+                <span className="text-sm font-bold text-slate-900">Alles betalen</span>
+              </div>
+              <span className="text-sm sm:text-base font-semibold text-orange-600 whitespace-nowrap">
+                {fmt(enabled.reduce((s, t) => s + (amounts[t.id] || 0), 0))}
+              </span>
+            </button>
+          )}
+
+          <div className="flex flex-col gap-1 sm:gap-1.5 flex-1">
+            {PAY_ITEMS_TEMPLATE.map((t) => {
+              const disabled = isDisabled(t.id);
+              const sel = selected.has(t.id);
+              const Icon = t.icon;
               return (
-                <button key={it.key} onClick={() => toggle(it.key)}
-                  data-testid={`pay-item-${it.key}`}
-                  className={`w-full flex items-center justify-between gap-3 p-4 rounded-2xl border-2 transition-all text-left ${
-                    isOn
-                      ? 'border-[#FF5C00] bg-orange-50'
-                      : 'border-slate-100 hover:border-slate-300'
+                <button key={t.id} disabled={disabled} onClick={() => toggle(t.id)} data-testid={`pay-type-${t.id}`}
+                  className={`flex items-center justify-between w-full rounded-lg border-2 transition px-2.5 py-2 sm:px-3 sm:py-2.5 ${
+                    disabled ? 'bg-slate-50 border-slate-100 opacity-40 cursor-not-allowed' :
+                    sel ? 'bg-orange-50 border-orange-400' : 'bg-white border-slate-200 hover:border-orange-300'
                   }`}>
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className={`w-6 h-6 rounded-md border-2 flex items-center justify-center shrink-0 ${
-                      isOn ? 'border-[#FF5C00] bg-[#FF5C00] text-white' : 'border-slate-300'
-                    }`}>
-                      {isOn && <Check className="w-4 h-4" strokeWidth={3} />}
+                  <div className="flex items-center gap-2">
+                    <div className={`flex items-center justify-center rounded border-2 flex-shrink-0 w-5 h-5 ${sel ? 'bg-orange-500 border-orange-500' : 'border-slate-300'}`}>
+                      {sel && <Check className="text-white w-3.5 h-3.5" strokeWidth={3} />}
                     </div>
-                    <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${isOn ? 'bg-white text-[#FF5C00]' : 'bg-slate-50 text-slate-400'}`}>
-                      <Icon className="w-4 h-4" />
+                    <div className={`rounded-lg flex items-center justify-center flex-shrink-0 w-8 h-8 sm:w-9 sm:h-9 ${sel ? 'bg-orange-100' : 'bg-slate-50'}`}>
+                      <Icon className={`w-4 h-4 sm:w-5 sm:h-5 ${sel ? 'text-orange-500' : 'text-slate-400'}`} />
                     </div>
-                    <p className={`font-bold ${isOn ? 'text-slate-900' : 'text-slate-500'}`}>{it.label}</p>
+                    <span className="text-sm font-bold text-slate-900">{t.label}</span>
                   </div>
-                  <p className={`font-black ${isOn ? 'text-slate-900' : 'text-slate-400'}`}>{fmtMoney(it.amount, apt.currency)}</p>
+                  <p className={`text-sm sm:text-base flex-shrink-0 ml-2 whitespace-nowrap font-semibold ${disabled ? 'text-slate-300' : sel ? 'text-orange-600' : 'text-slate-900'}`}>
+                    {fmt(amounts[t.id] || 0)}
+                  </p>
                 </button>
               );
             })}
-
-            <button onClick={() => onConfirm({
-              tenant_id: tenant.id, apartment_id: apt.id,
-              amount: amountNum, currency: apt.currency,
-              category: primaryCategory, method: 'contant',
-              period_month: primaryCategory === 'huur' && balance.next_period ? balance.next_period.month : null,
-              period_year: primaryCategory === 'huur' && balance.next_period ? balance.next_period.year : null,
-            })}
-              disabled={!canContinue}
-              data-testid="pay-continue"
-              className="w-full mt-4 h-14 bg-[#FF5C00] hover:bg-[#E05200] text-white text-base sm:text-lg font-black rounded-2xl shadow-[0_15px_30px_-10px_rgba(255,92,0,0.5)] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
-              Volgende — {fmtMoney(amountNum, apt.currency)} <ArrowRight className="w-5 h-5" />
-            </button>
           </div>
 
-          {/* Keypad rechts */}
-          <div className="bg-white rounded-3xl shadow-[0_30px_80px_-20px_rgba(0,0,0,0.25)] p-4 sm:p-6 flex flex-col">
-            <div className="mb-3">
-              <p className="text-sm font-bold text-slate-900">Bedrag invoeren</p>
-              <p className="text-xs text-slate-500">Totaal openstaand: {fmtMoney(total_due, balance.currency)}</p>
+          {selected.size > 0 && (
+            <div className="bg-slate-900 rounded-lg flex items-center justify-between px-3 py-2 sm:py-2.5 mt-1.5">
+              <div className="min-w-0">
+                <p className="text-xs text-slate-400">{selected.size} item{selected.size > 1 ? 's' : ''}</p>
+                <p className="text-xs text-white truncate">{buildDescription()}</p>
+              </div>
+              <p className="text-base sm:text-lg font-bold text-white whitespace-nowrap ml-2">{fmt(selectedTotal)}</p>
             </div>
-            <div className="rounded-2xl bg-slate-50 p-5 mb-3 text-center">
-              <p className="text-xs font-bold uppercase tracking-widest text-slate-500">{apt.currency}</p>
-              <p className="text-4xl sm:text-5xl font-black text-slate-900 tabular-nums mt-1" data-testid="pay-amount-display">
-                {amount}
-              </p>
-            </div>
-            <div className="grid grid-cols-3 gap-2 flex-1">
-              {['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0', 'DEL'].map((k) => (
-                <button key={k} onClick={() => press(k)}
-                  data-testid={`keypad-${k}`}
-                  className={`aspect-square rounded-2xl text-2xl font-black flex items-center justify-center transition-all ${
-                    k === 'DEL'
-                      ? 'bg-red-50 hover:bg-red-100 text-red-600'
-                      : 'bg-slate-50 hover:bg-slate-100 text-slate-900'
-                  } active:scale-95`}>
-                  {k}
-                </button>
-              ))}
-            </div>
+          )}
+
+          <button onClick={handleNext} disabled={!canProceed} data-testid="payment-next-btn"
+            className="w-full bg-orange-500 hover:bg-orange-600 disabled:bg-slate-200 disabled:text-slate-400 text-white rounded-xl flex items-center justify-center gap-2 transition active:scale-[0.98] py-3 sm:py-3.5 mt-1.5 text-sm sm:text-base font-bold">
+            <span>Volgende — {fmt(activeAmount)}</span> <ArrowRight className="w-5 h-5" />
+          </button>
+
+          {/* Mobile keypad toggle */}
+          <div className="md:hidden mt-1.5">
+            {!showMobileKeypad ? (
+              <button onClick={() => setShowMobileKeypad(true)} data-testid="mobile-custom-toggle"
+                className="w-full flex items-center justify-center gap-2 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-500 hover:bg-slate-100 transition">
+                <Hash className="w-4 h-4" /> Ander bedrag invoeren
+              </button>
+            ) : (
+              <div className="bg-white border border-slate-200 rounded-xl p-2.5">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs text-slate-400 font-medium">Ander bedrag ({cur})</span>
+                  <button onClick={() => { setShowMobileKeypad(false); setCustom(''); }} className="text-xs text-slate-400">Sluiten</button>
+                </div>
+                <div className={`border-2 rounded-lg text-center py-2 mb-2 ${hasCustom ? 'bg-orange-50 border-orange-300' : 'bg-slate-50 border-slate-200'}`}>
+                  <span className={`font-mono font-extrabold text-xl ${hasCustom ? 'text-orange-600' : 'text-slate-300'}`}>{cur} {custom || '0.00'}</span>
+                </div>
+                <div className="grid grid-cols-4 gap-1">
+                  {['1','2','3','DEL','4','5','6','.','7','8','9','0'].map((k) => (
+                    <button key={k} onClick={() => press(k)} data-testid={`mobile-key-${k}`}
+                      className={`rounded-lg font-bold transition active:scale-95 h-10 text-base ${
+                        k === 'DEL' ? 'bg-red-50 text-red-500 text-xs' : 'bg-slate-50 text-slate-900 hover:bg-orange-50 hover:text-orange-600 border border-slate-100'
+                      }`}>{k}</button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* RIGHT — Desktop keypad */}
+        <div className="bg-white rounded-2xl hidden md:flex flex-none md:flex-[2] flex-col min-w-0 p-4 sm:p-5">
+          <h4 className="text-sm sm:text-base font-bold text-slate-900 mb-0.5">Bedrag invoeren</h4>
+          <p className="text-xs text-slate-400 mb-3">Totaal openstaand: {fmt(total_due)}</p>
+          <div className={`border-2 rounded-lg transition px-3 py-3 mb-3 ${hasCustom ? 'bg-orange-50 border-orange-300' : 'bg-slate-50 border-slate-200'}`}>
+            <p className="text-xs text-slate-400 mb-0.5">{cur}</p>
+            <p className={`font-extrabold font-mono text-2xl sm:text-3xl ${hasCustom ? 'text-orange-600' : 'text-slate-900'}`} data-testid="pay-amount-display">
+              {custom || '0.00'}
+            </p>
+          </div>
+          <div className="grid grid-cols-3 flex-1 gap-1.5">
+            {['1','2','3','4','5','6','7','8','9','.','0','DEL'].map((k) => (
+              <button key={k} onClick={() => press(k)} data-testid={`keypad-${k}`}
+                className={`rounded-lg font-bold transition active:scale-95 flex items-center justify-center text-base sm:text-lg ${
+                  k === 'DEL' ? 'bg-slate-100 text-red-500 hover:bg-red-50 border border-slate-100' :
+                  'bg-slate-50 text-slate-900 hover:bg-orange-50 hover:text-orange-600 border border-slate-100'
+                }`}>{k}</button>
+            ))}
           </div>
         </div>
       </div>
@@ -577,41 +681,44 @@ function PaySelect({ overview, onBack, onConfirm }) {
 }
 
 // =====================================================================
-// Payment method select — Contant / Mope / Uni5Pay
+// Method select — Contant / Mope / Uni5Pay
 // =====================================================================
-function MethodSelect({ payload, onBack, onConfirm }) {
+function MethodSelect({ payload, overview, onBack, onConfirm }) {
+  const { tenant, apartment: apt } = overview;
+  const cur = payload.currency || 'SRD';
   const methods = [
     { v: 'contant', l: 'Contant', sub: 'Betaal met contant geld', icon: Banknote, accent: 'emerald' },
     { v: 'mope', l: 'Mope', sub: 'Scan QR-code', icon: QrCode, accent: 'emerald' },
     { v: 'uni5pay', l: 'Uni5Pay', sub: 'Scan QR-code', icon: Smartphone, accent: 'red' },
   ];
   return (
-    <div className="h-full overflow-y-auto p-4 sm:p-6">
-      <div className="max-w-5xl mx-auto">
-        <div className="flex items-center justify-between mb-4">
-          <button onClick={onBack} data-testid="method-back"
-            className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold backdrop-blur-sm">
-            <ArrowLeft className="w-5 h-5" /> Terug
-          </button>
-          <h2 className="text-base sm:text-xl font-black text-white tracking-tight">
-            Hoe wilt u betalen? <span className="font-bold text-white/80 ml-2">{fmtMoney(payload.amount, payload.currency)}</span>
-          </h2>
-          <div className="w-20" />
+    <div className="h-full bg-orange-500 flex flex-col" style={{ padding: '1.5vh 1.5vw 0' }}>
+      <div className="flex items-center justify-between flex-wrap gap-2 px-1 sm:px-2 py-2">
+        <button onClick={onBack} data-testid="method-back"
+          className="flex items-center gap-1.5 text-white font-bold bg-white/20 backdrop-blur-sm rounded-lg px-3 py-1.5 sm:px-4 sm:py-2">
+          <ArrowLeft className="w-4 h-4" /> <span className="text-xs sm:text-sm">Terug</span>
+        </button>
+        <span className="text-sm sm:text-base font-semibold text-white">
+          Hoe wilt u betalen? <span className="ml-2 opacity-80">{fmtMoney(payload.amount, cur)}</span>
+        </span>
+        <div className="text-right text-white">
+          <p className="text-xs sm:text-sm font-semibold">{tenant.name}</p>
+          <p className="text-[10px] sm:text-xs opacity-70">Appt. {apt.number}</p>
         </div>
-
-        <div className="grid sm:grid-cols-3 gap-4 mt-10">
+      </div>
+      <div className="flex-1 min-h-0 flex items-center justify-center pb-6">
+        <div className="grid sm:grid-cols-3 gap-4 max-w-4xl w-full px-2">
           {methods.map((m) => {
             const Icon = m.icon;
             return (
-              <button key={m.v} onClick={() => onConfirm({ ...payload, method: m.v })}
-                data-testid={`method-${m.v}`}
-                className="bg-white rounded-3xl shadow-[0_30px_80px_-20px_rgba(0,0,0,0.25)] p-8 text-center hover:scale-[1.03] active:scale-[0.99] transition-transform aspect-[3/5] flex flex-col items-center justify-center">
-                <div className={`w-20 h-20 rounded-full flex items-center justify-center mb-5 ${
+              <button key={m.v} onClick={() => onConfirm({ ...payload, method: m.v })} data-testid={`method-${m.v}`}
+                className="bg-white rounded-3xl p-8 text-center hover:scale-[1.03] active:scale-[0.98] transition aspect-[3/4] flex flex-col items-center justify-center shadow-2xl">
+                <div className={`w-20 h-20 rounded-full flex items-center justify-center mb-4 ${
                   m.accent === 'red' ? 'bg-red-50 text-red-500' : 'bg-emerald-50 text-emerald-500'
                 }`}>
                   <Icon className="w-10 h-10" />
                 </div>
-                <p className="text-2xl font-black text-slate-900">{m.l}</p>
+                <p className="text-2xl font-extrabold text-slate-900">{m.l}</p>
                 <p className="text-sm text-slate-500 mt-1">{m.sub}</p>
               </button>
             );
@@ -638,33 +745,37 @@ function PaymentConfirm({ payload, overview, onBack, onSuccess }) {
     finally { setLoading(false); }
   };
   return (
-    <div className="h-full overflow-y-auto p-4 sm:p-8">
-      <div className="max-w-xl mx-auto">
+    <div className="h-full bg-orange-500 flex flex-col" style={{ padding: '1.5vh 1.5vw 0' }}>
+      <div className="flex items-center justify-between flex-wrap gap-2 px-1 sm:px-2 py-2">
         <button onClick={onBack} data-testid="confirm-back"
-          className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold backdrop-blur-sm mb-4">
-          <ArrowLeft className="w-5 h-5" /> Terug
+          className="flex items-center gap-1.5 text-white font-bold bg-white/20 backdrop-blur-sm rounded-lg px-3 py-1.5 sm:px-4 sm:py-2">
+          <ArrowLeft className="w-4 h-4" /> <span className="text-xs sm:text-sm">Terug</span>
         </button>
-        <div className="bg-white rounded-3xl shadow-[0_30px_80px_-20px_rgba(0,0,0,0.25)] p-6 sm:p-8">
-          <h2 className="text-2xl font-black text-slate-900 tracking-tight mb-1">Bevestig betaling</h2>
-          <p className="text-sm text-slate-500 mb-6">Controleer voordat u doorgaat</p>
-
-          <div className="bg-gradient-to-br from-[#FF8A3D] via-[#FF5C00] to-[#C74600] rounded-3xl p-6 mb-5 text-white text-center">
-            <p className="text-xs font-bold uppercase tracking-widest text-white/80">Te betalen</p>
-            <p className="text-5xl font-black tracking-tighter mt-2">{fmtMoney(payload.amount, payload.currency)}</p>
-            <p className="text-sm text-white/90 mt-2 capitalize">{payload.category}{payload.period_month ? ` · ${MONTHS_NL[payload.period_month - 1]} ${payload.period_year}` : ''}</p>
+        <span className="text-sm sm:text-base font-semibold text-white">Bevestig betaling</span>
+        <div className="text-right text-white">
+          <p className="text-xs sm:text-sm font-semibold">{tenant.name}</p>
+          <p className="text-[10px] sm:text-xs opacity-70">Appt. {apt.number}</p>
+        </div>
+      </div>
+      <div className="flex-1 min-h-0 overflow-auto flex items-center justify-center pb-6">
+        <div className="bg-white rounded-3xl w-full max-w-xl p-6 sm:p-8 shadow-2xl">
+          <div className="bg-slate-900 rounded-2xl p-6 mb-5 text-white text-center">
+            <p className="text-xs font-bold uppercase tracking-widest text-white/60">Te betalen</p>
+            <p className="text-5xl font-extrabold tracking-tight mt-2 text-orange-400">{fmtMoney(payload.amount, payload.currency)}</p>
+            <p className="text-sm text-white/80 mt-2 capitalize">
+              {payload.note || payload.category}
+              {payload.period_month ? ` · ${MONTHS_NL[payload.period_month - 1]} ${payload.period_year}` : ''}
+            </p>
           </div>
-
           <div className="space-y-2 mb-5">
             <Row label="Huurder" value={tenant.name} />
             <Row label="Appartement" value={`Appt. ${apt.number}`} />
             <Row label="Betaalwijze" value={String(payload.method || '').toUpperCase()} />
           </div>
-
           {err && <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-600 rounded-xl text-sm">{err}</div>}
-
           <button onClick={submit} disabled={loading} data-testid="confirm-submit"
-            className="w-full h-16 bg-emerald-500 hover:bg-emerald-600 text-white text-xl font-black rounded-2xl flex items-center justify-center gap-3 shadow-[0_20px_40px_-10px_rgba(16,185,129,0.5)] disabled:opacity-50">
-            {loading ? <Loader2 className="w-6 h-6 animate-spin" /> : <ShieldCheck className="w-6 h-6" />}
+            className="w-full h-14 bg-emerald-500 hover:bg-emerald-600 text-white text-lg font-extrabold rounded-xl flex items-center justify-center gap-2 transition disabled:opacity-50">
+            {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <ShieldCheck className="w-5 h-5" />}
             Bevestig betaling
           </button>
         </div>
@@ -674,7 +785,7 @@ function PaymentConfirm({ payload, overview, onBack, onSuccess }) {
 }
 function Row({ label, value }) {
   return (
-    <div className="flex justify-between items-center bg-slate-50 rounded-xl p-3">
+    <div className="flex justify-between items-center bg-slate-50 rounded-lg p-3">
       <span className="text-sm text-slate-500">{label}</span>
       <span className="text-sm font-bold text-slate-900">{value}</span>
     </div>
@@ -683,50 +794,47 @@ function Row({ label, value }) {
 
 function ReceiptScreen({ payment, onDone }) {
   return (
-    <div className="h-full overflow-y-auto p-4 sm:p-8">
-      <div className="max-w-md mx-auto">
-        <div className="bg-white rounded-3xl shadow-[0_30px_80px_-20px_rgba(0,0,0,0.25)] p-6 sm:p-8 text-center">
-          <div className="w-20 h-20 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-4">
-            <Check className="w-12 h-12 text-emerald-600" strokeWidth={3} />
-          </div>
-          <h2 className="text-3xl font-black text-slate-900 tracking-tight">Bedankt!</h2>
-          <p className="text-base text-slate-500 mb-6">Uw betaling is succesvol verwerkt</p>
-
-          <div className="bg-slate-50 rounded-2xl p-5 mb-5 text-left border-2 border-dashed border-slate-200">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-200 mb-3">
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Kwitantie</p>
-                <p className="font-mono text-base font-black text-slate-900">{payment.receipt_number}</p>
-              </div>
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#FF8A3D] to-[#C74600] p-1.5">
-                <img src="/kiosk-icons/kiosk-512.png" alt="logo" className="w-full h-full object-contain" />
-              </div>
-            </div>
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between"><span className="text-slate-500">Huurder</span><span className="font-bold text-slate-900">{payment.tenant_name}</span></div>
-              <div className="flex justify-between"><span className="text-slate-500">Appartement</span><span className="font-bold text-slate-900">{payment.apartment_number || '—'}</span></div>
-              <div className="flex justify-between"><span className="text-slate-500">Categorie</span><span className="font-bold text-slate-900 capitalize">{payment.category}</span></div>
-              {payment.period_month && (
-                <div className="flex justify-between"><span className="text-slate-500">Periode</span><span className="font-bold text-slate-900 capitalize">{MONTHS_NL[payment.period_month - 1]} {payment.period_year}</span></div>
-              )}
-              <div className="flex justify-between"><span className="text-slate-500">Methode</span><span className="font-bold text-slate-900 capitalize">{payment.method}</span></div>
-              <div className="flex justify-between"><span className="text-slate-500">Datum</span><span className="font-bold text-slate-900">{new Date(payment.paid_at).toLocaleString('nl-NL')}</span></div>
-              {payment.approved_by && <div className="flex justify-between"><span className="text-slate-500">Goedgekeurd door</span><span className="font-bold text-slate-900">{payment.approved_by}</span></div>}
-              <div className="flex justify-between pt-2 border-t border-dashed border-slate-200 mt-2">
-                <span className="text-slate-500 font-bold">Totaal</span>
-                <span className="font-black text-slate-900 text-lg">{fmtMoney(payment.amount, payment.currency)}</span>
-              </div>
-            </div>
-          </div>
-
-          <button onClick={onDone} data-testid="receipt-done"
-            className="w-full h-14 bg-[#FF5C00] hover:bg-[#E05200] text-white text-lg font-black rounded-2xl shadow-[0_15px_30px_-10px_rgba(255,92,0,0.5)]">
-            Klaar
-          </button>
+    <div className="h-full bg-orange-500 flex flex-col items-center justify-center p-4 sm:p-8">
+      <div className="bg-white rounded-3xl w-full max-w-md p-6 sm:p-8 text-center shadow-2xl">
+        <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-3">
+          <Check className="w-10 h-10 text-emerald-600" strokeWidth={3} />
         </div>
+        <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900">Bedankt!</h2>
+        <p className="text-sm text-slate-500 mb-5">Uw betaling is succesvol verwerkt</p>
+        <div className="bg-slate-50 rounded-2xl p-5 mb-5 text-left border-2 border-dashed border-slate-200">
+          <div className="flex items-center justify-between pb-3 border-b border-slate-200 mb-3">
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Kwitantie</p>
+              <p className="font-mono text-base font-extrabold text-slate-900">{payment.receipt_number}</p>
+            </div>
+            <div className="w-9 h-9 rounded-lg bg-orange-500 flex items-center justify-center">
+              <Building2 className="w-5 h-5 text-white" />
+            </div>
+          </div>
+          <div className="space-y-1.5 text-sm">
+            <RowSlim label="Huurder" value={payment.tenant_name} />
+            <RowSlim label="Appartement" value={payment.apartment_number || '—'} />
+            <RowSlim label="Categorie" value={payment.category} />
+            {payment.period_month && <RowSlim label="Periode" value={`${MONTHS_NL[payment.period_month - 1]} ${payment.period_year}`} />}
+            <RowSlim label="Methode" value={payment.method} />
+            <RowSlim label="Datum" value={new Date(payment.paid_at).toLocaleString('nl-NL')} />
+            {payment.approved_by && <RowSlim label="Goedgekeurd door" value={payment.approved_by} />}
+            <div className="flex justify-between pt-2 border-t border-dashed border-slate-200 mt-2">
+              <span className="text-slate-500 font-bold">Totaal</span>
+              <span className="font-extrabold text-slate-900 text-lg">{fmtMoney(payment.amount, payment.currency)}</span>
+            </div>
+          </div>
+        </div>
+        <button onClick={onDone} data-testid="receipt-done"
+          className="w-full h-12 bg-orange-500 hover:bg-orange-600 text-white text-base font-extrabold rounded-xl">
+          Klaar
+        </button>
       </div>
     </div>
   );
+}
+function RowSlim({ label, value }) {
+  return <div className="flex justify-between"><span className="text-slate-500">{label}</span><span className="font-bold text-slate-900 capitalize">{value}</span></div>;
 }
 
 // =====================================================================
@@ -735,7 +843,6 @@ function ReceiptScreen({ payment, onDone }) {
 export default function KioskLayout() {
   const navigate = useNavigate();
   const [step, setStep] = useState('check');
-  const [location, setLocation] = useState(null);
   const [apartment, setApartment] = useState(null);
   const [overview, setOverview] = useState(null);
   const [paymentPayload, setPaymentPayload] = useState(null);
@@ -745,10 +852,7 @@ export default function KioskLayout() {
   useEffect(() => {
     document.title = 'Vastgoed Kiosk';
     const tok = localStorage.getItem('kiosk_token');
-    if (!tok) {
-      navigate('/login', { replace: true });
-      return;
-    }
+    if (!tok) { navigate('/login', { replace: true }); return; }
     setCompany(getKioskCompany());
     setStep('welcome');
   }, [navigate]);
@@ -759,69 +863,84 @@ export default function KioskLayout() {
     navigate('/login', { replace: true });
   }, [navigate]);
 
-  const adminMode = useCallback(() => {
-    // Switch to admin login (keep kiosk token though, in case user comes back).
-    navigate('/login', { replace: true });
-  }, [navigate]);
+  const adminMode = useCallback(() => navigate('/login', { replace: true }), [navigate]);
 
   const reset = () => {
-    setLocation(null); setApartment(null); setOverview(null);
-    setPaymentPayload(null); setPaymentResult(null);
+    setApartment(null); setOverview(null); setPaymentPayload(null); setPaymentResult(null);
     setStep('welcome');
   };
 
-  const skipLocation = useCallback(() => {
-    setLocation(null);
-    setStep('select');
-  }, []);
+  const showDesktopBar = step !== 'check' && step !== 'welcome';
 
   return (
-    <div className="kiosk-fullscreen flex flex-col bg-gradient-to-b from-[#FF5C00] to-[#C74600]" data-testid="kiosk-root">
-      <div className="flex-1 min-h-0 relative">
-        <AnimatePresence mode="wait">
-          <motion.div key={step} variants={variants}
-            initial="enter" animate="center" exit="exit"
-            transition={{ duration: 0.25, ease: 'easeInOut' }}
-            className="absolute inset-0 overflow-hidden">
-            {step === 'check' && (
-              <div className="h-full flex items-center justify-center">
-                <Loader2 className="w-10 h-10 text-white animate-spin" />
+    <div className="kiosk-fullscreen bg-orange-500" data-testid="kiosk-root">
+      <AnimatePresence mode="wait">
+        <motion.div key={step} variants={variants}
+          initial="enter" animate="center" exit="exit"
+          transition={{ duration: 0.25, ease: 'easeInOut' }}
+          className="absolute inset-0 overflow-y-auto overflow-x-hidden md:pb-16"
+          style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}>
+          {step === 'check' && (
+            <div className="h-full bg-orange-500 flex items-center justify-center">
+              <Loader2 className="w-10 h-10 text-white animate-spin" />
+            </div>
+          )}
+          {step === 'welcome' && (
+            <Welcome company={company} onStart={() => setStep('select')} onAdmin={adminMode} onExit={exit} />
+          )}
+          {step === 'select' && (
+            <ApartmentSelect onSelect={(a) => { setApartment(a); setStep('overview'); }}
+              onAdmin={adminMode} onExit={exit} />
+          )}
+          {step === 'overview' && apartment && (
+            <TenantOverview apartment={apartment} onBack={() => setStep('select')}
+              onPay={(d) => { setOverview(d); setStep('pay'); }} />
+          )}
+          {step === 'pay' && overview && (
+            <PaySelect overview={overview} onBack={() => setStep('overview')}
+              onConfirm={(p) => { setPaymentPayload(p); setStep('method'); }} />
+          )}
+          {step === 'method' && paymentPayload && overview && (
+            <MethodSelect payload={paymentPayload} overview={overview} onBack={() => setStep('pay')}
+              onConfirm={(p) => { setPaymentPayload(p); setStep('confirm'); }} />
+          )}
+          {step === 'confirm' && paymentPayload && overview && (
+            <PaymentConfirm payload={paymentPayload} overview={overview} onBack={() => setStep('method')}
+              onSuccess={(r) => { setPaymentResult(r); setStep('receipt'); }} />
+          )}
+          {step === 'receipt' && paymentResult && (
+            <ReceiptScreen payment={paymentResult} onDone={reset} />
+          )}
+        </motion.div>
+      </AnimatePresence>
+
+      {/* Desktop floating bottom bar */}
+      {showDesktopBar && (
+        <div className="hidden md:flex fixed bottom-0 left-0 right-0 z-40 bg-white items-center justify-between px-4 sm:px-6"
+          style={{ height: 'clamp(48px, 7vh, 64px)' }}
+          data-testid="kiosk-bottom-bar">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <div className="rounded-lg bg-orange-500 flex items-center justify-center w-9 h-9 shrink-0">
+              <Building2 className="w-5 h-5 text-white" />
+            </div>
+            <span className="text-sm sm:text-base font-bold text-slate-800 truncate" data-testid="kiosk-footer-company">
+              {company?.name || 'Kiosk'}
+            </span>
+          </div>
+          <div className="flex items-center gap-2 sm:gap-4">
+            {apartment && step !== 'select' && (
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-slate-400 font-medium hidden sm:inline">{apartment.tenant_name}</span>
+                <span className="text-sm font-bold text-slate-800">Appt. {apartment.number}</span>
               </div>
             )}
-            {step === 'welcome' && <Welcome onStart={() => setStep('locations')} />}
-            {step === 'locations' && (
-              <LocationSelect onBack={() => setStep('welcome')}
-                onSelect={(loc) => { setLocation(loc.id === '_none' ? { id: '_none', name: 'Overige' } : loc); setStep('select'); }}
-                onSkip={skipLocation} />
-            )}
-            {step === 'select' && (
-              <ApartmentSelect location={location}
-                onBack={() => setStep(location ? 'locations' : 'welcome')}
-                onSelect={(a) => { setApartment(a); setStep('overview'); }} />
-            )}
-            {step === 'overview' && apartment && (
-              <TenantOverview apartment={apartment} onBack={() => setStep('select')}
-                onPay={(d) => { setOverview(d); setStep('pay'); }} />
-            )}
-            {step === 'pay' && overview && (
-              <PaySelect overview={overview} onBack={() => setStep('overview')}
-                onConfirm={(p) => { setPaymentPayload(p); setStep('method'); }} />
-            )}
-            {step === 'method' && paymentPayload && (
-              <MethodSelect payload={paymentPayload} onBack={() => setStep('pay')}
-                onConfirm={(p) => { setPaymentPayload(p); setStep('confirm'); }} />
-            )}
-            {step === 'confirm' && paymentPayload && overview && (
-              <PaymentConfirm payload={paymentPayload} overview={overview} onBack={() => setStep('method')}
-                onSuccess={(r) => { setPaymentResult(r); setStep('receipt'); }} />
-            )}
-            {step === 'receipt' && paymentResult && (
-              <ReceiptScreen payment={paymentResult} onDone={reset} />
-            )}
-          </motion.div>
-        </AnimatePresence>
-      </div>
-      <KioskFooter company={company} apartment={apartment} onAdmin={adminMode} onExit={exit} />
+            <button onClick={adminMode} data-testid="kiosk-admin-btn-desktop"
+              className="bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-lg px-5 py-2 text-sm">Beheerder</button>
+            <button onClick={exit} data-testid="kiosk-lock-btn-desktop"
+              className="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-lg px-5 py-2 text-sm">Uit</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
