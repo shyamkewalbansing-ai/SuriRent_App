@@ -4,7 +4,7 @@ import {
   Building2, Users, Receipt, LayoutDashboard, LogOut, Plus, Trash2, Pencil,
   X, Check, Loader2, Search, Home, Banknote, KeySquare, ChevronRight, Wallet,
   FileText, ShieldCheck, Wrench, FileSignature, Sparkles, Bell, Briefcase, Mail,
-  CreditCard, Zap, Power,
+  CreditCard, Zap, Power, Menu, MoreHorizontal,
 } from 'lucide-react';
 import { api, formatError, fmtMoney, MONTHS_NL } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
@@ -97,23 +97,128 @@ function Sidebar({ active, onChange, onLogout, user, activeCompany, tabs }) {
   );
 }
 
-function MobileTabBar({ active, onChange, tabs }) {
+// Top 4 tabs always visible on the mobile bottom bar. The "Meer" button opens
+// a full drawer that exposes every other tab. Superadmins keep "Bedrijven"
+// on the bottom bar so they always have access to the company switcher.
+const MOBILE_PRIMARY_IDS = ['overview', 'apartments', 'tenants', 'payments'];
+const MOBILE_SUPER_PRIMARY_IDS = ['companies', 'overview', 'apartments', 'tenants'];
+
+function MobileHeader({ activeCompany, user, onOpenMenu }) {
   return (
-    <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white border-t border-orange-100 overflow-x-auto no-scrollbar"
+    <header className="md:hidden sticky top-0 z-30 bg-white border-b border-orange-100"
+      style={{ paddingTop: 'env(safe-area-inset-top)' }}>
+      <div className="flex items-center gap-3 px-4 h-14">
+        <button onClick={onOpenMenu} data-testid="mobile-menu-btn"
+          className="w-10 h-10 -ml-2 rounded-xl flex items-center justify-center hover:bg-orange-50">
+          <Menu className="w-6 h-6 text-slate-700" />
+        </button>
+        <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#FF8A3D] to-[#C74600] p-1">
+          <img src="/kiosk-icons/kiosk-512.png" alt="SuriRent" className="w-full h-full object-contain" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-black text-slate-900 leading-tight truncate">
+            {activeCompany?.name || (user?.role === 'superadmin' ? 'Alle bedrijven' : 'SuriRent')}
+          </p>
+          <p className="text-[10px] text-[#FF5C00] font-bold tracking-wider uppercase truncate">
+            {user?.role === 'superadmin' ? 'Superadmin' : 'Beheer'}{activeCompany?.plan ? ` · ${activeCompany.plan}` : ''}
+          </p>
+        </div>
+      </div>
+    </header>
+  );
+}
+
+function MobileDrawer({ open, onClose, active, onChange, onLogout, user, activeCompany, tabs }) {
+  if (!open) return null;
+  return (
+    <div className="md:hidden fixed inset-0 z-50" data-testid="mobile-drawer">
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <aside className="absolute left-0 top-0 bottom-0 w-72 max-w-[85%] bg-white shadow-2xl flex flex-col animate-slide-in"
+        style={{ paddingTop: 'env(safe-area-inset-top)' }}>
+        <div className="flex items-center justify-between px-5 pt-4 pb-2">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#FF8A3D] to-[#C74600] p-1.5">
+              <img src="/kiosk-icons/kiosk-512.png" alt="SuriRent" className="w-full h-full object-contain" />
+            </div>
+            <div>
+              <p className="text-base font-black text-slate-900 leading-tight">SuriRent</p>
+              <p className="text-[10px] text-[#FF5C00] font-bold tracking-[0.2em] uppercase">Beheer</p>
+            </div>
+          </div>
+          <button onClick={onClose} data-testid="mobile-drawer-close"
+            className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className={`mx-5 my-3 rounded-xl px-3 py-2.5 border ${user?.role === 'superadmin' ? 'bg-amber-50 border-amber-200' : 'bg-orange-50 border-orange-100'}`}>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
+            {user?.role === 'superadmin' ? 'Actief bedrijf' : 'Bedrijf'}
+          </p>
+          <p className="text-sm font-black text-slate-900 truncate">
+            {activeCompany?.name || (user?.role === 'superadmin' ? 'Alle bedrijven' : '—')}
+          </p>
+          {activeCompany?.plan && (
+            <p className="text-[10px] text-slate-500 mt-0.5">/{activeCompany.slug} • {activeCompany.plan}</p>
+          )}
+        </div>
+
+        <nav className="flex-1 overflow-y-auto px-3 pb-4 space-y-1">
+          {tabs.map((t) => {
+            const Icon = t.icon;
+            const isActive = active === t.id;
+            return (
+              <button key={t.id}
+                onClick={() => { onChange(t.id); onClose(); }}
+                data-testid={`tab-drawer-${t.id}`}
+                className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-semibold transition-all ${
+                  isActive ? 'bg-[#FF5C00] text-white shadow-[0_8px_20px_-5px_rgba(255,92,0,0.55)]'
+                    : 'text-slate-700 hover:bg-orange-50 hover:text-[#FF5C00]'
+                }`}>
+                <Icon className="w-5 h-5" /> {t.label}
+              </button>
+            );
+          })}
+        </nav>
+
+        <div className="border-t border-orange-100 px-5 py-4 space-y-2"
+          style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 1rem)' }}>
+          <p className="text-xs text-slate-500 truncate">{user?.email}</p>
+          <button onClick={() => { onClose(); onLogout(); }} data-testid="mobile-drawer-logout"
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold text-red-600 hover:bg-red-50 transition-all">
+            <LogOut className="w-4 h-4" /> Uitloggen
+          </button>
+        </div>
+      </aside>
+    </div>
+  );
+}
+
+function MobileTabBar({ active, onChange, tabs, onOpenMenu, user }) {
+  const primaryIds = user?.role === 'superadmin' ? MOBILE_SUPER_PRIMARY_IDS : MOBILE_PRIMARY_IDS;
+  const primary = primaryIds
+    .map((id) => tabs.find((t) => t.id === id))
+    .filter(Boolean);
+  return (
+    <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white border-t border-orange-100"
       style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
-      <div className="flex min-w-max">
-        {tabs.map((t) => {
+      <div className="grid grid-cols-5">
+        {primary.map((t) => {
           const Icon = t.icon;
           const isActive = active === t.id;
           return (
             <button key={t.id} onClick={() => onChange(t.id)} data-testid={`tab-mobile-${t.id}`}
-              className={`flex flex-col items-center gap-1 py-2.5 px-3 text-[9px] font-bold uppercase tracking-wider whitespace-nowrap ${
+              className={`flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-bold uppercase tracking-wider ${
                 isActive ? 'text-[#FF5C00]' : 'text-slate-400'
               }`}>
-              <Icon className="w-5 h-5" /> {t.label}
+              <Icon className="w-5 h-5" /> <span className="truncate max-w-[64px]">{t.label}</span>
             </button>
           );
         })}
+        <button onClick={onOpenMenu} data-testid="tab-mobile-more"
+          className="flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-400 hover:text-[#FF5C00]">
+          <MoreHorizontal className="w-5 h-5" /> Meer
+        </button>
       </div>
     </nav>
   );
@@ -1116,6 +1221,7 @@ export default function AdminDashboard() {
   const { user, logout, activeCompany } = useAuth();
   const tabs = getTabsFor(user);
   const [tab, setTab] = useState(() => (user?.role === 'superadmin' ? 'companies' : 'overview'));
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const navigate = useNavigate();
   useEffect(() => { document.title = 'SuriRent - Beheer'; }, []);
   useEffect(() => {
@@ -1127,24 +1233,31 @@ export default function AdminDashboard() {
   return (
     <div className="min-h-screen bg-[#FFF7F0] flex">
       <Sidebar active={tab} onChange={setTab} onLogout={doLogout} user={user} activeCompany={activeCompany} tabs={tabs} />
-      <main className="flex-1 p-5 md:p-8 pb-20 md:pb-8 max-w-7xl">
-        {tab === 'companies' && <Companies />}
-        {tab === 'overview' && <Overview />}
-        {tab === 'ai' && <AIChat />}
-        {tab === 'apartments' && <Apartments />}
-        {tab === 'tenants' && <Tenants />}
-        {tab === 'contracts' && <Contracts />}
-        {tab === 'payments' && <Payments />}
-        {tab === 'invoices' && <Invoices />}
-        {tab === 'paylinks' && <PaymentRequests />}
-        {tab === 'deposits' && <Deposits />}
-        {tab === 'maintenance' && <Maintenance />}
-        {tab === 'kasgeld' && <Kasgeld />}
-        {tab === 'employees' && <Employees />}
-        {tab === 'notifications' && <Notifications />}
-        {tab === 'settings' && <SettingsPage />}
-      </main>
-      <MobileTabBar active={tab} onChange={setTab} tabs={tabs} />
+      <div className="flex-1 flex flex-col min-w-0">
+        <MobileHeader activeCompany={activeCompany} user={user} onOpenMenu={() => setDrawerOpen(true)} />
+        <main className="flex-1 p-5 md:p-8 pb-24 md:pb-8 max-w-7xl w-full">
+          {tab === 'companies' && <Companies />}
+          {tab === 'overview' && <Overview />}
+          {tab === 'ai' && <AIChat />}
+          {tab === 'apartments' && <Apartments />}
+          {tab === 'tenants' && <Tenants />}
+          {tab === 'contracts' && <Contracts />}
+          {tab === 'payments' && <Payments />}
+          {tab === 'invoices' && <Invoices />}
+          {tab === 'paylinks' && <PaymentRequests />}
+          {tab === 'deposits' && <Deposits />}
+          {tab === 'maintenance' && <Maintenance />}
+          {tab === 'kasgeld' && <Kasgeld />}
+          {tab === 'employees' && <Employees />}
+          {tab === 'notifications' && <Notifications />}
+          {tab === 'settings' && <SettingsPage />}
+        </main>
+      </div>
+      <MobileTabBar active={tab} onChange={setTab} tabs={tabs} user={user}
+        onOpenMenu={() => setDrawerOpen(true)} />
+      <MobileDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)}
+        active={tab} onChange={setTab} onLogout={doLogout}
+        user={user} activeCompany={activeCompany} tabs={tabs} />
     </div>
   );
 }
