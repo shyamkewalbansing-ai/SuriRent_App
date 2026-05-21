@@ -2326,6 +2326,30 @@ async def test_settings_section(section: str, user=Depends(get_current_user)):
         except TwilioError as e:
             return {"section": section, "ok": False, "detail": str(e)}
 
+    if section in ("mope", "uni5pay"):
+        from payments_service import (
+            mope_create_payment_request, uni5pay_create_payment_request, GatewayError, is_mope_test_mode,
+        )
+        # Test by creating a TINY (1 cent) payment request — Mope test tokens return mock data.
+        # Production tokens will actually create a real request, so warn the user.
+        try:
+            if section == "mope":
+                if not is_mope_test_mode(cfg):
+                    return {"section": section, "ok": False,
+                            "detail": "Productie token gedetecteerd — test verbinding is alleen veilig met een test_ token. "
+                                      "Gebruik een sandbox-key om te testen."}
+                result = await mope_create_payment_request(
+                    cfg, description="SuriRent test", amount=1.00, currency="SRD",
+                    order_id=f"test-{new_id()[:8]}",
+                    redirect_url=cfg.get("callback_url") or "https://example.com/return",
+                )
+                return {"section": section, "ok": True,
+                        "detail": f"Mope test betaalverzoek aangemaakt: {result.get('url')}"}
+            await uni5pay_create_payment_request(cfg)
+            return {"section": section, "ok": True, "detail": "Uni5Pay test geslaagd"}
+        except GatewayError as e:
+            return {"section": section, "ok": False, "detail": str(e)}
+
     # Other sections come in later Fases.
     return {
         "section": section,
@@ -2609,6 +2633,188 @@ async def message_overdue_reminder(tenant_id: str, body: MessageSendIn, user=Dep
     )
     await _twilio_send(cfg, body.channel, to, msg)
     return {"ok": True, "sent_to": to, "channel": body.channel}
+
+
+# ============== Online betalingen / Payment Requests (Fase D) ==============
+class PaymentRequestCreateIn(BaseModel):
+    provider: Literal["mope", "uni5pay"] = "mope"
+    redirect_url: Optional[str] = None
+
+
+async def _gateway_or_400(user, provider: str) -> dict:
+    cid = company_id_of(user)
+    if not cid:
+        raise HTTPException(status_code=400, detail="Geen actief bedrijf geselecteerd")
+    cfg = await get_company_section(cid, provider)
+    if not cfg.get("enabled"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"{provider.title()} is niet ingeschakeld — configureer eerst onder Instellingen."
+        )
+    return cfg
+
+
+@api.post("/payment-requests/invoice/{invoice_id}")
+async def create_payment_request_for_invoice(invoice_id: str, body: PaymentRequestCreateIn,
+                                             user=Depends(get_current_user)):
+    from payments_service import mope_create_payment_request, uni5pay_create_payment_request, GatewayError
+    cfg = await _gateway_or_400(user, body.provider)
+    inv = await db.invoices.find_one({"id": invoice_id, **scope(user)}, {"_id": 0})
+    if not inv:
+        raise HTTPException(status_code=404, detail="Factuur niet gevonden")
+    if inv.get("status") == "paid":
+        raise HTTPException(status_code=400, detail="Factuur is al betaald")
+    cid = company_id_of(user)
+    company = await db.companies.find_one({"id": cid}, {"_id": 0}) or {}
+    redirect_url = body.redirect_url or cfg.get("callback_url") or os.environ.get("REACT_APP_BACKEND_URL", "") + f"/vastgoed/factuur/{invoice_id}"
+    order_id = f"INV-{inv['invoice_number']}"
+    description = f"{company.get('name', 'SuriRent')} - Huur {inv.get('period_month')}-{inv.get('period_year')}"
+    try:
+        if body.provider == "mope":
+            res = await mope_create_payment_request(
+                cfg, description=description, amount=inv["amount"],
+                currency=inv.get("currency", "SRD"),
+                order_id=order_id, redirect_url=redirect_url,
+            )
+        else:
+            res = await uni5pay_create_payment_request(cfg, description=description, amount=inv["amount"])
+    except GatewayError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+    doc = {
+        "id": new_id(),
+        "company_id": cid,
+        "provider": body.provider,
+        "provider_id": res["id"],
+        "invoice_id": invoice_id,
+        "tenant_id": inv["tenant_id"],
+        "amount": inv["amount"],
+        "currency": inv.get("currency", "SRD"),
+        "description": description,
+        "order_id": order_id,
+        "status": "open",
+        "payment_url": res["url"],
+        "redirect_url": redirect_url,
+        "created_at": iso(now_utc()),
+        "updated_at": iso(now_utc()),
+        "paid_at": None,
+    }
+    await db.payment_requests.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@api.get("/payment-requests")
+async def list_payment_requests(user=Depends(get_current_user)):
+    docs = await db.payment_requests.find(scope(user), {"_id": 0}).sort("created_at", -1).to_list(500)
+    # Enrich with tenant_name + invoice_number
+    for d in docs:
+        if d.get("tenant_id"):
+            t = await db.tenants.find_one({"id": d["tenant_id"]}, {"_id": 0, "name": 1})
+            d["tenant_name"] = t.get("name") if t else None
+        if d.get("invoice_id"):
+            inv = await db.invoices.find_one({"id": d["invoice_id"]}, {"_id": 0, "invoice_number": 1})
+            d["invoice_number"] = inv.get("invoice_number") if inv else None
+    return docs
+
+
+@api.post("/payment-requests/{pr_id}/refresh")
+async def refresh_payment_request(pr_id: str, user=Depends(get_current_user)):
+    """Pull the latest status from the gateway."""
+    from payments_service import mope_get_payment_request, GatewayError
+    pr = await db.payment_requests.find_one({"id": pr_id, **scope(user)}, {"_id": 0})
+    if not pr:
+        raise HTTPException(status_code=404, detail="Betaalverzoek niet gevonden")
+    cfg = await get_company_section(company_id_of(user), pr["provider"])
+    try:
+        remote = await (mope_get_payment_request(cfg, pr["provider_id"]) if pr["provider"] == "mope" else _raise_uni5pay())
+    except GatewayError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    return await _apply_remote_status(pr, remote, user_email=user.get("email"))
+
+
+async def _raise_uni5pay():
+    from payments_service import GatewayError
+    raise GatewayError("Uni5Pay nog niet geconfigureerd")
+
+
+async def _apply_remote_status(pr: dict, remote: dict, user_email: str | None = None) -> dict:
+    """Update local payment_request doc + auto-create payment + mark invoice paid."""
+    new_status = remote.get("status") or pr.get("status")
+    updates = {"status": new_status, "updated_at": iso(now_utc())}
+    pr_updated = {**pr, **updates}
+
+    # When transitioning to paid, create a Payment + mark invoice paid (idempotent).
+    if new_status == "paid" and pr.get("status") != "paid":
+        already = await db.payments.find_one({
+            "company_id": pr["company_id"],
+            "category": "huur",
+            "tenant_id": pr["tenant_id"],
+            "notes": f"Online betaling — {pr['provider']} {pr['provider_id']}",
+        })
+        if not already:
+            year = now_utc().year
+            seq = await _next_seq(f"receipt_{year}")
+            inv = await db.invoices.find_one({"id": pr["invoice_id"]}, {"_id": 0}) or {}
+            payment_doc = {
+                "id": new_id(),
+                "company_id": pr["company_id"],
+                "receipt_number": f"KW{year}-{seq:05d}",
+                "tenant_id": pr["tenant_id"],
+                "apartment_id": inv.get("apartment_id"),
+                "amount": pr["amount"],
+                "currency": pr.get("currency", "SRD"),
+                "method": pr["provider"],  # mope / uni5pay
+                "category": "huur",
+                "period_month": inv.get("period_month"),
+                "period_year": inv.get("period_year"),
+                "paid_at": iso(now_utc()),
+                "notes": f"Online betaling — {pr['provider']} {pr['provider_id']}",
+                "created_at": iso(now_utc()),
+                "created_by": user_email or "webhook",
+            }
+            await db.payments.insert_one(payment_doc)
+        await db.invoices.update_one({"id": pr["invoice_id"], "company_id": pr["company_id"]},
+                                     {"$set": {"status": "paid", "paid_at": iso(now_utc())}})
+        updates["paid_at"] = iso(now_utc())
+        pr_updated["paid_at"] = updates["paid_at"]
+
+    await db.payment_requests.update_one({"id": pr["id"]}, {"$set": updates})
+    return pr_updated
+
+
+# ============== Public webhook (no auth dep — Mope sends Bearer) ==============
+@api.post("/webhooks/mope")
+async def mope_webhook(request: Request):
+    """Mope sends {id} with Authorization: Bearer <our token>.
+    We look up the payment_request, verify token matches that company's mope.api_key,
+    then refresh status from Mope.
+    """
+    from payments_service import mope_get_payment_request, GatewayError
+    try:
+        body = await request.json()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+    pr_provider_id = (body or {}).get("id")
+    if not pr_provider_id:
+        raise HTTPException(status_code=400, detail="Missing id in webhook body")
+    pr = await db.payment_requests.find_one({"provider_id": pr_provider_id, "provider": "mope"}, {"_id": 0})
+    if not pr:
+        # Unknown id — return 204 so Mope doesn't retry forever, but log.
+        return {"ok": True, "ignored": True}
+    cfg = await get_company_section(pr["company_id"], "mope")
+    expected_token = (cfg.get("api_key") or "").strip()
+    auth_header = request.headers.get("authorization", "")
+    sent_token = auth_header[7:].strip() if auth_header.lower().startswith("bearer ") else ""
+    if expected_token and sent_token and sent_token != expected_token:
+        raise HTTPException(status_code=401, detail="Invalid webhook token")
+    try:
+        remote = await mope_get_payment_request(cfg, pr_provider_id)
+    except GatewayError:
+        # Don't fail webhook — return 204 to avoid Mope retries; status update will happen on next manual refresh.
+        return {"ok": True, "queued": True}
+    await _apply_remote_status(pr, remote, user_email="webhook")
+    return {"ok": True, "status": remote.get("status")}
 
 
 app.include_router(api)

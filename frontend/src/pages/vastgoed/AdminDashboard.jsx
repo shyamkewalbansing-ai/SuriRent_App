@@ -4,6 +4,7 @@ import {
   Building2, Users, Receipt, LayoutDashboard, LogOut, Plus, Trash2, Pencil,
   X, Check, Loader2, Search, Home, Banknote, KeySquare, ChevronRight, Wallet,
   FileText, ShieldCheck, Wrench, FileSignature, Sparkles, Bell, Briefcase, Mail,
+  CreditCard,
 } from 'lucide-react';
 import { api, formatError, fmtMoney, MONTHS_NL } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
@@ -18,6 +19,7 @@ import AIChat from './admin/AIChat';
 import Notifications from './admin/Notifications';
 import Companies from './admin/Companies';
 import SettingsPage from './admin/Settings';
+import PaymentRequests from './admin/PaymentRequests';
 
 const BASE_TABS = [
   { id: 'overview', label: 'Overzicht', icon: LayoutDashboard },
@@ -27,6 +29,7 @@ const BASE_TABS = [
   { id: 'contracts', label: 'Contracten', icon: FileSignature },
   { id: 'payments', label: 'Betalingen', icon: Receipt },
   { id: 'invoices', label: 'Facturen', icon: FileText },
+  { id: 'paylinks', label: 'Online betalen', icon: CreditCard },
   { id: 'deposits', label: 'Borg', icon: ShieldCheck },
   { id: 'maintenance', label: 'Onderhoud', icon: Wrench },
   { id: 'kasgeld', label: 'Kasgeld', icon: Wallet },
@@ -911,6 +914,7 @@ export default function AdminDashboard() {
         {tab === 'contracts' && <Contracts />}
         {tab === 'payments' && <Payments />}
         {tab === 'invoices' && <Invoices />}
+        {tab === 'paylinks' && <PaymentRequests />}
         {tab === 'deposits' && <Deposits />}
         {tab === 'maintenance' && <Maintenance />}
         {tab === 'kasgeld' && <Kasgeld />}

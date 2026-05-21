@@ -138,7 +138,21 @@ User koos voor **Optie C — minimale herbouw** (kern eerst), dan vroeg om **Fas
 - ✅ **SendDialog component** (vervangt EmailDialog): 3-channel switcher (E-mail / WhatsApp / SMS), automatisch wisselen prefilled veld tussen email/telefoon
 - ✅ Alle 3 send-knoppen (Payments/Invoices/Contracts) gebruiken nu één dialoog met alle kanalen
 
-## Prioritized Backlog (Fases D-F)
+### Fase 3 deel 8 (Fase D — Mope + Uni5Pay online betalingen — 2026-05-21) ✅
+- ✅ **`payments_service.py`** — Mope REST API (create + get payment_request) via httpx; bedragen in cents; test mode op `test_` token prefix
+- ✅ **Mope `Test verbinding`** roept echt API aan en valideert response (bewijst werkende auth-flow)
+- ✅ **Nieuwe collectie `payment_requests`** met provider/provider_id/invoice/status/payment_url/paid_at
+- ✅ **Endpoints**:
+  - `POST /api/payment-requests/invoice/{id}` body `{provider: "mope"|"uni5pay"}` → maakt verzoek aan
+  - `GET /api/payment-requests` lijst
+  - `POST /api/payment-requests/{id}/refresh` ververst status
+  - `POST /api/webhooks/mope` publiek endpoint met Bearer-token auth tegen company.mope.api_key
+- ✅ **Auto-payment**: als status=paid → maakt automatisch Payment record + zet invoice op `paid` (idempotent)
+- ✅ **Nieuwe admin-tab "Online betalen"** (`/app/frontend/src/pages/vastgoed/admin/PaymentRequests.jsx`) met 4 status-counters, filter, refresh + copy + open-link knoppen
+- ✅ **PaymentLinkDialog**: knop op factuurrij opent dialoog (Mope/Uni5Pay), genereert link, toont met copy + open-buttons
+- ✅ **Uni5Pay stub**: nette foutmelding "nog niet geconfigureerd — deel API documentatie"
+
+## Prioritized Backlog (Fases E-F)
 - 📧 **Email notificaties** — wacht op SendGrid / Resend credentials van user
 - 📱 **WhatsApp/SMS herinneringen** — wacht op Twilio credentials
 - 💳 **Payment gateways** (SumUp/Mope/Uni5Pay) — wacht op credentials

@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Plus, X, Check, Loader2, FileText, Wand2, Trash2, Mail } from 'lucide-react';
+import { Plus, X, Check, Loader2, FileText, Wand2, Trash2, Mail, CreditCard } from 'lucide-react';
 import { api, formatError, fmtMoney, MONTHS_NL } from '../../../lib/api';
 import { EmailDialog, SendDialog } from '../../../components/EmailDialog';
+import { PaymentLinkDialog } from './PaymentRequests';
 
 function PageHeader({ title, subtitle, action }) {
   return (
@@ -93,6 +94,7 @@ export default function Invoices() {
   const [creating, setCreating] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [emailing, setEmailing] = useState(null);
+  const [payLink, setPayLink] = useState(null);
   const today = new Date();
 
   const load = useCallback(async () => {
@@ -178,6 +180,12 @@ export default function Invoices() {
                       className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700" title="Verstuur via e-mail">
                       <Mail className="w-3.5 h-3.5" />
                     </button>
+                    {i.status !== 'paid' && (
+                      <button onClick={() => setPayLink(i)} data-testid={`invoice-paylink-${i.id}`}
+                        className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700" title="Genereer betaallink (Mope/Uni5Pay)">
+                        <CreditCard className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                     <button onClick={() => del(i.id)} data-testid={`invoice-delete-${i.id}`}
                       className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-red-50 hover:bg-red-100 text-red-500">
                       <Trash2 className="w-3.5 h-3.5" />
@@ -201,6 +209,12 @@ export default function Invoices() {
           tenantPhone={tenants.find((t) => t.id === emailing.tenant_id)?.phone || ''}
           tenantName={emailing.tenant_name}
           onClose={() => setEmailing(null)} />
+      )}
+      {payLink && (
+        <PaymentLinkDialog
+          invoice={payLink}
+          onClose={() => setPayLink(null)}
+          onCreated={() => load()} />
       )}
     </div>
   );
