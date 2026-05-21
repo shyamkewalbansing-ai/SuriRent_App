@@ -2,7 +2,7 @@
   "name": "SuriRent Vastgoed Kiosk",
   "short_name": "SuriRent",
   "description": "Complete huurbeheer & kiosk oplossing voor vastgoed — beheer, kiosk en huurportaal in één app.",
-  "start_url": "/vastgoed",
+  "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "any",
@@ -11,7 +11,7 @@
   "lang": "nl",
   "dir": "ltr",
   "categories": ["business", "finance", "productivity"],
-  "id": "/vastgoed",
+  "id": "/",
   "prefer_related_applications": false,
   "icons": [
     {
@@ -44,14 +44,14 @@
       "name": "Open Kiosk",
       "short_name": "Kiosk",
       "description": "Open de selfservice terminal voor huurders",
-      "url": "/vastgoed/kiosk",
+      "url": "/kiosk",
       "icons": [{ "src": "/kiosk-icons/kiosk-192.png", "sizes": "192x192", "type": "image/png" }]
     },
     {
       "name": "Beheer",
       "short_name": "Beheer",
       "description": "Open het beheer dashboard",
-      "url": "/vastgoed/admin",
+      "url": "/admin",
       "icons": [{ "src": "/kiosk-icons/kiosk-192.png", "sizes": "192x192", "type": "image/png" }]
     },
     {

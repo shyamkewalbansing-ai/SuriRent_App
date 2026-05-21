@@ -165,7 +165,7 @@ function PasswordView({ initialMode = 'login', onBack }) {
       } else {
         await register(name, email, password);
       }
-      navigate('/vastgoed/admin');
+      navigate('/admin');
     } catch (err) {
       setError(formatError(err, mode === 'login' ? 'Inloggen mislukt' : 'Registratie mislukt'));
     } finally { setLoading(false); }
@@ -260,7 +260,7 @@ export default function LoginPage() {
   // Auto-redirect if already logged
   useEffect(() => {
     if (!loading && user) {
-      navigate('/vastgoed/admin', { replace: true });
+      navigate('/admin', { replace: true });
     }
   }, [user, loading, navigate]);
 
@@ -269,7 +269,7 @@ export default function LoginPage() {
   }
   return (
     <PinLanding
-      onSuccess={() => navigate('/vastgoed/kiosk')}
+      onSuccess={() => navigate('/kiosk')}
       onPassword={() => setView('login')}
       onRegister={() => setView('register')}
     />

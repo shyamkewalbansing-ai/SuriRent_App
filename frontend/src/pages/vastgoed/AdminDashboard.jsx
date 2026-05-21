@@ -193,7 +193,7 @@ function Overview() {
       </div>
 
       <div className="mt-8 grid sm:grid-cols-2 gap-4">
-        <button onClick={() => navigate('/vastgoed/kiosk')} data-testid="quick-kiosk"
+        <button onClick={() => navigate('/kiosk')} data-testid="quick-kiosk"
           className="bg-gradient-to-br from-[#FF8A3D] via-[#FF5C00] to-[#C74600] rounded-2xl p-6 text-white text-left hover:shadow-[0_20px_40px_-10px_rgba(255,92,0,0.5)] transition-shadow">
           <div className="flex items-center justify-between mb-3">
             <Building2 className="w-7 h-7" />
@@ -901,7 +901,7 @@ export default function AdminDashboard() {
     window.addEventListener('go-tab', handler);
     return () => window.removeEventListener('go-tab', handler);
   }, []);
-  const doLogout = async () => { await logout(); navigate('/vastgoed/login'); };
+  const doLogout = async () => { await logout(); navigate('/login'); };
   return (
     <div className="min-h-screen bg-[#FFF7F0] flex">
       <Sidebar active={tab} onChange={setTab} onLogout={doLogout} user={user} activeCompany={activeCompany} tabs={tabs} />

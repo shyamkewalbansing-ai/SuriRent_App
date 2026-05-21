@@ -2350,6 +2350,50 @@ async def test_settings_section(section: str, user=Depends(get_current_user)):
         except GatewayError as e:
             return {"section": section, "ok": False, "detail": str(e)}
 
+    if section == "shelly":
+        from shelly_service import list_devices, ShellyError
+        try:
+            devs = await list_devices(cfg)
+            return {"section": section, "ok": True,
+                    "detail": f"Verbonden met Shelly Cloud — {len(devs)} apparaat(en) gevonden."}
+        except ShellyError as e:
+            return {"section": section, "ok": False, "detail": str(e)}
+
+    if section == "domain":
+        import socket
+        custom = (cfg.get("custom_domain") or "").strip().lower()
+        if not custom:
+            return {"section": section, "ok": False, "detail": "Vul eerst een custom domein in."}
+        # Target = the server hostname users normally use to reach this app.
+        app_target = (os.environ.get("APP_PUBLIC_HOST")
+                      or os.environ.get("APP_PUBLIC_URL", "")
+                      .replace("https://", "").replace("http://", "").rstrip("/"))
+        if not app_target:
+            return {"section": section, "ok": False,
+                    "detail": "Server is niet geconfigureerd voor custom domeinen: zet APP_PUBLIC_HOST in backend/.env (bv. app.surirent.sr)."}
+        try:
+            host_ip = socket.gethostbyname(custom)
+        except socket.gaierror as e:
+            return {"section": section, "ok": False,
+                    "detail": f"DNS lookup mislukt voor {custom}: {e}. "
+                              f"Stel CNAME of A record naar {app_target} in en wacht op DNS propagatie."}
+        try:
+            target_ip = socket.gethostbyname(app_target)
+        except socket.gaierror:
+            return {"section": section, "ok": False,
+                    "detail": f"Kan target {app_target} niet resolven — controleer APP_PUBLIC_HOST."}
+        if host_ip == target_ip:
+            await db.company_settings.update_one(
+                {"company_id": company_id_of(user)},
+                {"$set": {"domain.dns_verified": True, "updated_at": iso(now_utc())}},
+            )
+            return {"section": section, "ok": True,
+                    "detail": f"{custom} wijst correct naar {app_target} (IP {target_ip}). "
+                              "Voeg dit domein nu toe als alias-vhost in CloudPanel met Let's Encrypt SSL."}
+        return {"section": section, "ok": False,
+                "detail": f"{custom} resolveert naar {host_ip}, maar verwacht het IP van {app_target} ({target_ip}). "
+                          f"Controleer je DNS record."}
+
     # Other sections come in later Fases.
     return {
         "section": section,
@@ -2467,7 +2511,8 @@ async def email_contract(contract_id: str, body: EmailSendIn, user=Depends(get_c
     # If contract is unsigned, include a signing link.
     sign_block = ""
     if c.get("sign_token") and not c.get("signed_at"):
-        backend_url = os.environ.get("PUBLIC_APP_URL", "").rstrip("/")
+        backend_url = (os.environ.get("APP_PUBLIC_URL")
+                       or os.environ.get("PUBLIC_APP_URL", "")).rstrip("/")
         if backend_url:
             sign_block = (f"<p style=\"margin-top:14px\"><a href=\"{backend_url}/onderteken/{c['sign_token']}\""
                           f" style=\"background:#FF5C00;color:#fff;text-decoration:none;padding:10px 18px;border-radius:10px;font-weight:700;display:inline-block\">"
@@ -2510,7 +2555,10 @@ async def _twilio_or_400(user) -> dict:
 
 
 def _public_url(path: str) -> str:
-    base = os.environ.get("PUBLIC_APP_URL") or os.environ.get("REACT_APP_BACKEND_URL", "")
+    """Return absolute URL using APP_PUBLIC_URL (frontend hostname), fallback to backend URL."""
+    base = (os.environ.get("APP_PUBLIC_URL")
+            or os.environ.get("PUBLIC_APP_URL")
+            or os.environ.get("REACT_APP_BACKEND_URL", ""))
     return f"{base.rstrip('/')}{path}"
 
 
@@ -2666,7 +2714,7 @@ async def create_payment_request_for_invoice(invoice_id: str, body: PaymentReque
         raise HTTPException(status_code=400, detail="Factuur is al betaald")
     cid = company_id_of(user)
     company = await db.companies.find_one({"id": cid}, {"_id": 0}) or {}
-    redirect_url = body.redirect_url or cfg.get("callback_url") or os.environ.get("REACT_APP_BACKEND_URL", "") + f"/vastgoed/factuur/{invoice_id}"
+    redirect_url = body.redirect_url or cfg.get("callback_url") or _public_url(f"/factuur/{invoice_id}")
     order_id = f"INV-{inv['invoice_number']}"
     description = f"{company.get('name', 'SuriRent')} - Huur {inv.get('period_month')}-{inv.get('period_year')}"
     try:

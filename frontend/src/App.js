@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './lib/auth';
 import { useRegisterServiceWorker, InstallPrompt } from './lib/pwa';
+import { isMarketingHost, appUrl } from './lib/env';
 import MarketingLanding from './pages/vastgoed/MarketingLanding';
 import LoginPage from './pages/vastgoed/LoginPage';
 import AdminDashboard from './pages/vastgoed/AdminDashboard';
@@ -18,25 +19,77 @@ function Protected({ children }) {
       </div>
     );
   }
-  if (!user) return <Navigate to="/vastgoed/login" replace />;
+  if (!user) return <Navigate to="/login" replace />;
   return children;
+}
+
+function MarketingRoutes() {
+  // surirent.sr only serves the marketing landing.
+  return (
+    <Routes>
+      <Route path="/" element={<MarketingLanding />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  );
+}
+
+function AppRoutes() {
+  // app.surirent.sr serves the kiosk + admin + tenant portal + contract sign.
+  // On preview / local dev, all routes are reachable under the same domain.
+  return (
+    <Routes>
+      <Route path="/" element={<LoginPage />} />
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="/admin/*" element={<Protected><AdminDashboard /></Protected>} />
+      <Route path="/kiosk" element={<KioskLayout />} />
+      <Route path="/onderteken/:token" element={<ContractSignPage />} />
+      <Route path="/huurder" element={<TenantLoginPage />} />
+      <Route path="/huurder/portaal" element={<TenantDashboard />} />
+
+      {/* Legacy /vastgoed/* redirects, so old bookmarks keep working during transition. */}
+      <Route path="/vastgoed" element={<Navigate to="/" replace />} />
+      <Route path="/vastgoed/login" element={<Navigate to="/login" replace />} />
+      <Route path="/vastgoed/admin/*" element={<Navigate to="/admin" replace />} />
+      <Route path="/vastgoed/kiosk" element={<Navigate to="/kiosk" replace />} />
+
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  );
+}
+
+function HybridRoutes() {
+  // On a single-domain deployment (preview / local), we expose both worlds:
+  // - `/` shows marketing landing
+  // - All app paths reachable directly (/login, /admin, /kiosk, /huurder, ...)
+  return (
+    <Routes>
+      <Route path="/" element={<MarketingLanding />} />
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="/admin/*" element={<Protected><AdminDashboard /></Protected>} />
+      <Route path="/kiosk" element={<KioskLayout />} />
+      <Route path="/onderteken/:token" element={<ContractSignPage />} />
+      <Route path="/huurder" element={<TenantLoginPage />} />
+      <Route path="/huurder/portaal" element={<TenantDashboard />} />
+
+      {/* Legacy /vastgoed/* redirects */}
+      <Route path="/vastgoed" element={<Navigate to="/" replace />} />
+      <Route path="/vastgoed/login" element={<Navigate to="/login" replace />} />
+      <Route path="/vastgoed/admin/*" element={<Navigate to="/admin" replace />} />
+      <Route path="/vastgoed/kiosk" element={<Navigate to="/kiosk" replace />} />
+
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  );
 }
 
 export default function App() {
   useRegisterServiceWorker();
+  const mode = isMarketingHost() ? 'marketing' : (appUrl() ? 'app' : 'hybrid');
   return (
     <AuthProvider>
-      <Routes>
-        <Route path="/" element={<Navigate to="/vastgoed" replace />} />
-        <Route path="/vastgoed" element={<MarketingLanding />} />
-        <Route path="/vastgoed/login" element={<LoginPage />} />
-        <Route path="/vastgoed/admin/*" element={<Protected><AdminDashboard /></Protected>} />
-        <Route path="/vastgoed/kiosk" element={<KioskLayout />} />
-        <Route path="/onderteken/:token" element={<ContractSignPage />} />
-        <Route path="/huurder" element={<TenantLoginPage />} />
-        <Route path="/huurder/portaal" element={<TenantDashboard />} />
-        <Route path="*" element={<Navigate to="/vastgoed" replace />} />
-      </Routes>
+      {mode === 'marketing' && <MarketingRoutes />}
+      {mode === 'app' && <AppRoutes />}
+      {mode === 'hybrid' && <HybridRoutes />}
       <InstallPrompt />
     </AuthProvider>
   );

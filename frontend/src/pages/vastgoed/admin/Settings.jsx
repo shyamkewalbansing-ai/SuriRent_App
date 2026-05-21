@@ -190,6 +190,9 @@ function ShellyForm({ initial }) {
 function DomainForm({ initial }) {
   const s = useSection('domain', initial);
   const d = s.data;
+  // We expose the production target via Settings backend response in a future
+  // iteration; for now we hint a placeholder so the admin knows what to point to.
+  const exampleTarget = 'app.surirent.sr';
   return (
     <SectionShell msg={s.msg} err={s.err}>
       <SwitchField label="Ingeschakeld" testid="domain-enabled"
@@ -198,16 +201,26 @@ function DomainForm({ initial }) {
       <TextField label="Custom domein" testid="domain-custom" value={d.custom_domain} onChange={(v) => s.onField('custom_domain', v.trim().toLowerCase())} placeholder="vastgoed.mijnbedrijf.com" helper="Zonder https:// en zonder pad." />
       <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 text-xs text-slate-700 space-y-2">
         <p className="font-bold flex items-center gap-2 text-slate-900"><Shield className="w-4 h-4 text-[#FF5C00]" /> DNS configuratie</p>
-        <p>Maak bij je domeinregistrar een CNAME record aan:</p>
+        <p>Maak bij je domeinregistrar één van deze records aan:</p>
         <pre className="bg-white border border-slate-200 rounded-lg p-2 font-mono text-[11px] overflow-x-auto">
 {`Type:   CNAME
 Naam:   ${d.custom_domain || 'vastgoed'}
-Waarde: vastgoed-app.emergent.host
+Waarde: ${exampleTarget}
+TTL:    3600
+
+OF (als CNAME niet kan op root):
+
+Type:   A
+Naam:   ${d.custom_domain || '@'}
+Waarde: <IP van je productie server>
 TTL:    3600`}
         </pre>
-        <p className="text-slate-500">Na DNS-propagatie (max 24u) kun je SSL/HTTPS activeren in Emergent Deployments.</p>
+        <p className="text-slate-500">Na DNS-propagatie (max 24u): klik <b>Test verbinding</b> om te verifiëren, en voeg het domein als alias toe in CloudPanel met Let's Encrypt SSL.</p>
+        {d.dns_verified && (
+          <p className="text-emerald-700 font-bold flex items-center gap-1.5"><Check className="w-3.5 h-3.5" /> DNS geverifieerd</p>
+        )}
       </div>
-      <ActionRow onSave={s.save} saving={s.saving} />
+      <ActionRow onSave={s.save} onTest={s.test} saving={s.saving} testing={s.testing} canTest={d.enabled && !!d.custom_domain} />
     </SectionShell>
   );
 }

@@ -481,7 +481,7 @@ export default function KioskLayout() {
     document.title = 'Vastgoed Kiosk';
     const tok = localStorage.getItem('kiosk_token');
     if (!tok) {
-      navigate('/vastgoed/login', { replace: true });
+      navigate('/login', { replace: true });
       return;
     }
     setStep('welcome');
@@ -489,7 +489,7 @@ export default function KioskLayout() {
 
   const exit = useCallback(() => {
     localStorage.removeItem('kiosk_token');
-    navigate('/vastgoed/login', { replace: true });
+    navigate('/login', { replace: true });
   }, [navigate]);
 
   const reset = () => {

@@ -6,13 +6,12 @@
  * - Bypass /api/* (always go to network)
  * - Push notifications + click handler
  */
-const CACHE_VERSION = 'surirent-v4';
+const CACHE_VERSION = 'surirent-v5';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 
 const PRECACHE = [
   '/',
-  '/vastgoed',
   '/manifest.json',
   '/kiosk-icons/kiosk-72.png',
   '/kiosk-icons/kiosk-144.png',
@@ -74,7 +73,7 @@ self.addEventListener('fetch', (event) => {
           return res;
         })
         .catch(() =>
-          caches.match(req).then((cached) => cached || caches.match('/vastgoed') || caches.match('/'))
+          caches.match(req).then((cached) => cached || caches.match('/'))
         )
     );
     return;
@@ -131,7 +130,7 @@ self.addEventListener('push', (event) => {
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const target = (event.notification.data && event.notification.data.url) || '/vastgoed/admin';
+  const target = (event.notification.data && event.notification.data.url) || '/admin';
   event.waitUntil(
     self.clients.matchAll({ type: 'window' }).then((clients) => {
       const existing = clients.find((c) => c.url.includes(target));

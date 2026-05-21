@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { appLink, publicMarketingUrl } from '../../lib/env';
 import {
   Menu, X, ArrowRight, Check, Building2, Receipt, Users, Wallet,
   Shield, Zap, CreditCard, Sparkles, Globe, ScanFace, Phone,
@@ -282,7 +283,7 @@ function InstallSection() {
                   Op je laptop? Richt je camera op de QR-code om SuriRent direct te openen op iPhone of Android. Daarna volg je de iOS / Android stappen hieronder.
                 </p>
                 <p className="mt-3 text-xs font-mono text-slate-400 truncate">
-                  vastgoed-app.emergent.host/vastgoed
+                  {publicMarketingUrl().replace(/^https?:\/\//, '')}
                 </p>
               </div>
             </div>
@@ -639,7 +640,7 @@ function Footer({ onLogin }) {
             <h4 className="text-xs font-black uppercase tracking-[0.2em] text-[#FF5C00] mb-5">Toegang</h4>
             <ul className="space-y-3.5 text-sm">
               <li><button onClick={onLogin} data-testid="footer-login-btn" className="text-slate-700 hover:text-[#FF5C00] transition-colors font-semibold">Inloggen / PIN</button></li>
-              <li><a href="/huurder" data-testid="footer-tenant-portal" className="text-slate-700 hover:text-[#FF5C00] transition-colors font-semibold">Mijn huurportaal</a></li>
+              <li><a href={appLink('/huurder')} data-testid="footer-tenant-portal" className="text-slate-700 hover:text-[#FF5C00] transition-colors font-semibold">Mijn huurportaal</a></li>
               <li><a href="#pricing" className="text-slate-700 hover:text-[#FF5C00] transition-colors font-semibold">Prijzen</a></li>
               <li><a href="#features" className="text-slate-700 hover:text-[#FF5C00] transition-colors font-semibold">Functies</a></li>
             </ul>
@@ -662,7 +663,16 @@ export default function MarketingLanding() {
     document.body.style.backgroundColor = '#FFF7F0';
     return () => { document.body.style.backgroundColor = ''; };
   }, []);
-  const goLogin = () => navigate('/vastgoed/login');
+  // If REACT_APP_APP_URL is set, the marketing site lives on a separate
+  // domain and "inloggen" buttons must cross-redirect to the app domain.
+  const goLogin = () => {
+    const target = appLink('/login');
+    if (target.startsWith('http')) {
+      window.location.href = target;
+    } else {
+      navigate(target);
+    }
+  };
   return (
     <div className="min-h-screen bg-[#FFF7F0] text-slate-900 antialiased selection:bg-[#FF5C00] selection:text-white">
       <TopNav onLogin={goLogin} />
