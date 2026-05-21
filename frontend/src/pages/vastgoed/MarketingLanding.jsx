@@ -262,6 +262,33 @@ function InstallSection() {
           </p>
         </div>
 
+        {/* QR code panel — only useful on desktop/tablet (md+), where the user is unlikely
+            to be on their phone already. Hidden on mobile. */}
+        <div className="hidden md:block max-w-3xl mx-auto mb-14" data-testid="install-qr-panel">
+          <div className="relative rounded-3xl bg-white border-2 border-orange-100 p-6 md:p-7 shadow-[0_20px_50px_-20px_rgba(255,92,0,0.25)] overflow-hidden">
+            <div className="absolute -top-16 -right-16 w-48 h-48 rounded-full bg-orange-100/60 blur-3xl pointer-events-none" />
+            <div className="relative flex items-center gap-6 md:gap-8">
+              <div className="shrink-0 rounded-2xl bg-white border-2 border-orange-100 p-2 shadow-[0_8px_25px_-10px_rgba(255,92,0,0.4)]">
+                <img src="/kiosk-icons/install-qr.svg" alt="QR code installatie" className="w-32 h-32 md:w-40 md:h-40 block" data-testid="install-qr-img" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-orange-50 border border-orange-200 text-[#FF5C00] text-[10px] font-black uppercase tracking-[0.2em]">
+                  <ScanLine className="w-3 h-3" /> Snel scannen
+                </span>
+                <h3 className="mt-3 text-xl md:text-2xl font-black tracking-tight text-slate-900 leading-tight">
+                  Scan met je telefoon
+                </h3>
+                <p className="mt-2 text-sm text-slate-600 leading-relaxed">
+                  Op je laptop? Richt je camera op de QR-code om SuriRent direct te openen op iPhone of Android. Daarna volg je de iOS / Android stappen hieronder.
+                </p>
+                <p className="mt-3 text-xs font-mono text-slate-400 truncate">
+                  vastgoed-app.emergent.host/vastgoed
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12">
           {/* iOS card */}
           <div data-testid="install-card-ios"
