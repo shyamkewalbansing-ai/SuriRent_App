@@ -130,7 +130,15 @@ User koos voor **Optie C — minimale herbouw** (kern eerst), dan vroeg om **Fas
 - ✅ **Mail buttons** toegevoegd aan Payments, Invoices, Contracts rij-acties (33+ items getest)
 - ✅ Heldere foutmelding bij verkeerde SMTP (toonbaar voorbeeld: `[Errno -2] Name or service not known`)
 
-## Prioritized Backlog (Fases C-F)
+### Fase 3 deel 7 (Fase C — Twilio WhatsApp & SMS — 2026-05-21) ✅
+- ✅ **`twilio_service.py`** — directe Twilio REST API via httpx (geen SDK), basic auth met SID + Auth Token
+- ✅ **Test verbinding** stuurt echte test-bericht naar geconfigureerde from-nummer (bewezen: 401 vs verkeerde creds bereikt Twilio API)
+- ✅ **4 nieuwe endpoints**: `POST /api/message/payment|invoice|contract|overdue-reminder/{id}` met body `{to?, message?, channel: "whatsapp"|"sms"}`
+- ✅ **PDF-links in bericht body** (i.p.v. bijlage) — Twilio MMS is duur, link is gratis
+- ✅ **SendDialog component** (vervangt EmailDialog): 3-channel switcher (E-mail / WhatsApp / SMS), automatisch wisselen prefilled veld tussen email/telefoon
+- ✅ Alle 3 send-knoppen (Payments/Invoices/Contracts) gebruiken nu één dialoog met alle kanalen
+
+## Prioritized Backlog (Fases D-F)
 - 📧 **Email notificaties** — wacht op SendGrid / Resend credentials van user
 - 📱 **WhatsApp/SMS herinneringen** — wacht op Twilio credentials
 - 💳 **Payment gateways** (SumUp/Mope/Uni5Pay) — wacht op credentials

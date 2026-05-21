@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Plus, X, Check, Loader2, FileText, Wand2, Trash2, Mail } from 'lucide-react';
 import { api, formatError, fmtMoney, MONTHS_NL } from '../../../lib/api';
-import { EmailDialog } from '../../../components/EmailDialog';
+import { EmailDialog, SendDialog } from '../../../components/EmailDialog';
 
 function PageHeader({ title, subtitle, action }) {
   return (
@@ -192,12 +192,14 @@ export default function Invoices() {
       {creating && <InvoiceForm tenants={tenants}
         onCancel={() => setCreating(false)} onSaved={() => { setCreating(false); load(); }} />}
       {emailing && (
-        <EmailDialog
-          endpoint={`/email/invoice/${emailing.id}`}
-          subject={`Factuur ${emailing.invoice_number} verzenden`}
-          defaultTo={tenants.find((t) => t.id === emailing.tenant_id)?.email || ''}
-          tenantName={emailing.tenant_name}
+        <SendDialog
+          documentType="invoice"
+          documentId={emailing.id}
           documentLabel="factuur"
+          title={`Factuur ${emailing.invoice_number} verzenden`}
+          tenantEmail={tenants.find((t) => t.id === emailing.tenant_id)?.email || ''}
+          tenantPhone={tenants.find((t) => t.id === emailing.tenant_id)?.phone || ''}
+          tenantName={emailing.tenant_name}
           onClose={() => setEmailing(null)} />
       )}
     </div>

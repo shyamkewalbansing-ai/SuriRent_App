@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Plus, Trash2, X, Check, Loader2, FileText, ExternalLink, Copy, Pencil, Mail } from 'lucide-react';
 import { api, formatError, fmtMoney } from '../../../lib/api';
-import { EmailDialog } from '../../../components/EmailDialog';
+import { EmailDialog, SendDialog } from '../../../components/EmailDialog';
 
 function PageHeader({ title, subtitle, action }) {
   return (
@@ -223,12 +223,14 @@ export default function Contracts() {
       {creating && <ContractForm tenants={tenants} apartments={apartments}
         onCancel={() => setCreating(false)} onSaved={() => { setCreating(false); load(); }} />}
       {emailing && (
-        <EmailDialog
-          endpoint={`/email/contract/${emailing.id}`}
-          subject={`Contract ${emailing.contract_number} verzenden`}
-          defaultTo={tenants.find((t) => t.id === emailing.tenant_id)?.email || ''}
-          tenantName={emailing.tenant_name}
+        <SendDialog
+          documentType="contract"
+          documentId={emailing.id}
           documentLabel="contract"
+          title={`Contract ${emailing.contract_number} verzenden`}
+          tenantEmail={tenants.find((t) => t.id === emailing.tenant_id)?.email || ''}
+          tenantPhone={tenants.find((t) => t.id === emailing.tenant_id)?.phone || ''}
+          tenantName={emailing.tenant_name}
           onClose={() => setEmailing(null)} />
       )}
     </div>

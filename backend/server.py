@@ -2307,6 +2307,25 @@ async def test_settings_section(section: str, user=Depends(get_current_user)):
             return {"section": section, "ok": False, "detail": str(e)}
         return {"section": section, "ok": True, "detail": f"Test e-mail verzonden naar {to}"}
 
+    if section == "twilio":
+        from twilio_service import send_whatsapp, send_sms, TwilioError
+        # Try WhatsApp first if from is set, else SMS.
+        test_msg = "SuriRent test bericht — als je dit ontvangt is je Twilio configuratie correct."
+        # Find a destination: prefer admin's own phone from user record (not stored normally),
+        # so we test by sending to the configured `from` itself (will fail with sandbox not paired,
+        # but at minimum validates credentials).
+        target = cfg.get("whatsapp_from") or cfg.get("sms_from")
+        if not target:
+            raise HTTPException(status_code=400, detail="Vul minimaal WhatsApp- of SMS-afzender in")
+        try:
+            if cfg.get("whatsapp_from"):
+                await send_whatsapp(cfg, target, test_msg)
+                return {"section": section, "ok": True, "detail": f"WhatsApp testbericht verzonden naar {target}"}
+            await send_sms(cfg, target, test_msg)
+            return {"section": section, "ok": True, "detail": f"SMS testbericht verzonden naar {target}"}
+        except TwilioError as e:
+            return {"section": section, "ok": False, "detail": str(e)}
+
     # Other sections come in later Fases.
     return {
         "section": section,
@@ -2447,6 +2466,149 @@ async def email_contract(contract_id: str, body: EmailSendIn, user=Depends(get_c
     except EmailError as e:
         raise HTTPException(status_code=502, detail=str(e))
     return {"ok": True, "sent_to": to}
+
+
+# ============== WhatsApp / SMS send endpoints (Fase C) ==============
+class MessageSendIn(BaseModel):
+    to: Optional[str] = None
+    channel: Literal["whatsapp", "sms"] = "whatsapp"
+    message: Optional[str] = ""  # extra text prepended to template
+
+
+async def _twilio_or_400(user) -> dict:
+    cid = company_id_of(user)
+    if not cid:
+        raise HTTPException(status_code=400, detail="Geen actief bedrijf geselecteerd")
+    cfg = await get_company_section(cid, "twilio")
+    if not cfg.get("enabled"):
+        raise HTTPException(status_code=400, detail="Twilio is niet ingeschakeld — configureer eerst onder Instellingen → WhatsApp & SMS.")
+    return cfg
+
+
+def _public_url(path: str) -> str:
+    base = os.environ.get("PUBLIC_APP_URL") or os.environ.get("REACT_APP_BACKEND_URL", "")
+    return f"{base.rstrip('/')}{path}"
+
+
+async def _twilio_send(cfg: dict, channel: str, to: str, body: str):
+    from twilio_service import send_whatsapp, send_sms, TwilioError
+    try:
+        if channel == "whatsapp":
+            await send_whatsapp(cfg, to, body)
+        else:
+            await send_sms(cfg, to, body)
+    except TwilioError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@api.post("/message/payment/{payment_id}")
+async def message_payment_receipt(payment_id: str, body: MessageSendIn, user=Depends(get_current_user)):
+    cfg = await _twilio_or_400(user)
+    p = await db.payments.find_one({"id": payment_id, **scope(user)}, {"_id": 0})
+    if not p:
+        raise HTTPException(status_code=404, detail="Kwitantie niet gevonden")
+    p = await _enrich_payment(p)
+    tenant = await db.tenants.find_one({"id": p.get("tenant_id"), **scope(user)}, {"_id": 0}) or {}
+    to = (body.to or tenant.get("phone") or "").strip()
+    if not to:
+        raise HTTPException(status_code=400, detail="Geen telefoonnummer — vul een nummer in of voeg toe aan de huurder")
+    extra = f"{body.message.strip()}\n\n" if body.message else ""
+    msg = (
+        f"{extra}"
+        f"Hallo {tenant.get('name', 'huurder')},\n\n"
+        f"Bij dezen je kwitantie {p['receipt_number']}:\n"
+        f"• Bedrag: {p['currency']} {p['amount']:.2f}\n"
+        f"• Datum: {p.get('paid_at', '')[:10]}\n"
+        f"• Methode: {p.get('method', '')}\n\n"
+        f"PDF kwitantie: {_public_url(f'/api/payments/{payment_id}/pdf')}\n\n"
+        f"— SuriRent"
+    )
+    await _twilio_send(cfg, body.channel, to, msg)
+    return {"ok": True, "sent_to": to, "channel": body.channel}
+
+
+@api.post("/message/invoice/{invoice_id}")
+async def message_invoice(invoice_id: str, body: MessageSendIn, user=Depends(get_current_user)):
+    cfg = await _twilio_or_400(user)
+    inv = await db.invoices.find_one({"id": invoice_id, **scope(user)}, {"_id": 0})
+    if not inv:
+        raise HTTPException(status_code=404, detail="Factuur niet gevonden")
+    inv = await _enrich_invoice(inv)
+    tenant = await db.tenants.find_one({"id": inv["tenant_id"], **scope(user)}, {"_id": 0}) or {}
+    to = (body.to or tenant.get("phone") or "").strip()
+    if not to:
+        raise HTTPException(status_code=400, detail="Geen telefoonnummer — vul een nummer in of voeg toe aan de huurder")
+    months_nl = ["januari", "februari", "maart", "april", "mei", "juni",
+                 "juli", "augustus", "september", "oktober", "november", "december"]
+    period = f"{months_nl[inv['period_month'] - 1]} {inv['period_year']}"
+    extra = f"{body.message.strip()}\n\n" if body.message else ""
+    msg = (
+        f"{extra}"
+        f"Hallo {tenant.get('name', 'huurder')},\n\n"
+        f"Je factuur {inv['invoice_number']} voor {period}:\n"
+        f"• Bedrag: {inv['currency']} {inv['amount']:.2f}\n"
+        f"• Status: {inv['status']}\n\n"
+        f"PDF: {_public_url(f'/api/invoices/{invoice_id}/pdf')}\n\n"
+        f"— SuriRent"
+    )
+    await _twilio_send(cfg, body.channel, to, msg)
+    return {"ok": True, "sent_to": to, "channel": body.channel}
+
+
+@api.post("/message/contract/{contract_id}")
+async def message_contract(contract_id: str, body: MessageSendIn, user=Depends(get_current_user)):
+    cfg = await _twilio_or_400(user)
+    c = await db.contracts.find_one({"id": contract_id, **scope(user)}, {"_id": 0})
+    if not c:
+        raise HTTPException(status_code=404, detail="Contract niet gevonden")
+    c = await _enrich_contract(c)
+    tenant = await db.tenants.find_one({"id": c["tenant_id"], **scope(user)}, {"_id": 0}) or {}
+    to = (body.to or tenant.get("phone") or "").strip()
+    if not to:
+        raise HTTPException(status_code=400, detail="Geen telefoonnummer — vul een nummer in of voeg toe aan de huurder")
+    extra = f"{body.message.strip()}\n\n" if body.message else ""
+    pdf_link = _public_url(f"/api/contracts/{contract_id}/pdf")
+    sign_line = ""
+    if c.get("sign_token") and not c.get("signed_at"):
+        sign_url = _public_url(f"/onderteken/{c['sign_token']}")
+        sign_line = f"\nOnderteken hier: {sign_url}"
+    msg = (
+        f"{extra}"
+        f"Hallo {tenant.get('name', 'huurder')},\n\n"
+        f"Je huurcontract {c['contract_number']}:\n"
+        f"• Startdatum: {c.get('start_date', '')}\n"
+        f"• Einddatum: {c.get('end_date') or '—'}\n\n"
+        f"PDF: {pdf_link}"
+        f"{sign_line}\n\n"
+        f"— SuriRent"
+    )
+    await _twilio_send(cfg, body.channel, to, msg)
+    return {"ok": True, "sent_to": to, "channel": body.channel}
+
+
+@api.post("/message/overdue-reminder/{tenant_id}")
+async def message_overdue_reminder(tenant_id: str, body: MessageSendIn, user=Depends(get_current_user)):
+    """Send a friendly overdue-payment reminder to a tenant."""
+    cfg = await _twilio_or_400(user)
+    t = await db.tenants.find_one({"id": tenant_id, **scope(user)}, {"_id": 0})
+    if not t:
+        raise HTTPException(status_code=404, detail="Huurder niet gevonden")
+    to = (body.to or t.get("phone") or "").strip()
+    if not to:
+        raise HTTPException(status_code=400, detail="Geen telefoonnummer — vul in of voeg toe aan de huurder")
+    bal = await _calc_balance(t)
+    if bal.get("balance", 0) <= 0:
+        raise HTTPException(status_code=400, detail="Deze huurder heeft geen achterstand")
+    extra = f"{body.message.strip()}\n\n" if body.message else ""
+    msg = (
+        f"{extra}"
+        f"Hallo {t.get('name', 'huurder')},\n\n"
+        f"Vriendelijke herinnering: er staat nog {bal['currency']} {bal['balance']:.2f} open.\n\n"
+        f"Je kunt langskomen bij ons kantoor of via de Kiosk betalen.\n\n"
+        f"— SuriRent"
+    )
+    await _twilio_send(cfg, body.channel, to, msg)
+    return {"ok": True, "sent_to": to, "channel": body.channel}
 
 
 app.include_router(api)

@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { api, formatError, fmtMoney, MONTHS_NL } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
-import { EmailDialog } from '../../components/EmailDialog';
+import { EmailDialog, SendDialog } from '../../components/EmailDialog';
 import Contracts from './admin/Contracts';
 import Invoices from './admin/Invoices';
 import Employees from './admin/Employees';
@@ -867,12 +867,14 @@ function Payments() {
       </div>
       {creating && <PaymentForm tenants={tenants} onCancel={() => setCreating(false)} onSaved={() => { setCreating(false); load(); }} />}
       {emailingPayment && (
-        <EmailDialog
-          endpoint={`/email/payment/${emailingPayment.id}`}
-          subject={`Kwitantie ${emailingPayment.receipt_number} verzenden`}
-          defaultTo={tenantByPayment(emailingPayment)?.email || ''}
-          tenantName={emailingPayment.tenant_name || tenantByPayment(emailingPayment)?.name}
+        <SendDialog
+          documentType="payment"
+          documentId={emailingPayment.id}
           documentLabel="kwitantie"
+          title={`Kwitantie ${emailingPayment.receipt_number} verzenden`}
+          tenantEmail={tenantByPayment(emailingPayment)?.email || ''}
+          tenantPhone={tenantByPayment(emailingPayment)?.phone || ''}
+          tenantName={emailingPayment.tenant_name || tenantByPayment(emailingPayment)?.name}
           onClose={() => setEmailingPayment(null)} />
       )}
     </div>
