@@ -594,7 +594,7 @@ function ShellyControlModal({ apt, onClose, onChanged }) {
                 Cloud lijst
               </button>
             </div>
-            {devicesError && <p className="text-xs text-red-500 mt-1">{devicesError}</p>}
+            {devicesError && <p className="text-xs text-red-500 mt-1" data-testid="shelly-devices-error">{devicesError}</p>}
             {devices && devices.length > 0 && (
               <div className="mt-2 max-h-32 overflow-auto rounded-xl border-2 border-slate-100">
                 {devices.map((d) => (

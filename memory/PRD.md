@@ -152,6 +152,29 @@ User koos voor **Optie C — minimale herbouw** (kern eerst), dan vroeg om **Fas
 - ✅ **PaymentLinkDialog**: knop op factuurrij opent dialoog (Mope/Uni5Pay), genereert link, toont met copy + open-buttons
 - ✅ **Uni5Pay stub**: nette foutmelding "nog niet geconfigureerd — deel API documentatie"
 
+### Dual-domain refactor (2026-05-21) ✅
+- ✅ Volledig verwijderen van `/vastgoed/*` subfolder routing — alle app-pagina's nu op root (`/login`, `/admin`, `/kiosk`, `/huurder`, `/onderteken/:token`)
+- ✅ Hostname-based routing in `App.js`: `MarketingRoutes` (surirent.sr), `AppRoutes` (app.surirent.sr), `HybridRoutes` (preview/local)
+- ✅ Nieuwe helper `frontend/src/lib/env.js` met `isMarketingHost()`, `appLink()`, `appUrl()`, `publicMarketingUrl()` — leest uit `REACT_APP_MARKETING_HOST` en `REACT_APP_APP_URL`
+- ✅ Backend `_public_url()` gebruikt `APP_PUBLIC_URL` env var — alle mail/SMS/contract/betaal-links worden gegenereerd richting het app-domein
+- ✅ `DEPLOYMENT.md` (root) compleet met CloudPanel-stappen voor 2 vhosts, Nginx config, PM2, DNS, MongoDB backup
+- ✅ `.env.example` (backend + frontend) met productie-defaults en uitleg
+- ✅ SW cache bumped naar `surirent-v6`
+- ✅ Legacy `/vastgoed/*` paths blijven als redirect (veiligheidsnet voor oude bookmarks)
+- ✅ Tested: backend 55/55 regression + alle frontend flows (admin login, kiosk PIN, tenant portal, legacy redirects)
+
+### Fase E — Shelly smart breakers (2026-05-21) ✅
+- ✅ `backend/shelly_service.py` — Shelly Cloud API (control_relay, device_status, list_devices) via httpx
+- ✅ Apartment model heeft optioneel `shelly: {device_id, channel, label}` veld voor binding
+- ✅ Endpoints (alle scope-filtered op company):
+  - `GET /api/shelly/devices` → lijst van apparaten op het Shelly Cloud-account van het bedrijf
+  - `PUT /api/apartments/{id}/shelly` body `{device_id, channel, label}` → koppel/ontkoppel (lege device_id ontkoppelt)
+  - `GET /api/shelly/apartment/{id}/status` → relay state + power_w + energy_wh
+  - `POST /api/shelly/apartment/{id}/control` body `{turn: on|off|toggle}` → flip relay
+- ✅ Cross-company isolation: 404 zonder Shelly te lekken
+- ✅ Frontend: nieuw `Zap` icoon-knop op elke appartement-kaart → `ShellyControlModal` met device binding, Cloud lijst-picker, AAN/UIT knoppen, status (vermogen + kWh)
+- ✅ Tested: 11 nieuwe Shelly-tests (test_shelly.py) + 55 regressie-tests = **66/66 backend pass**
+
 ## Prioritized Backlog (Fases E-F)
 - 📧 **Email notificaties** — wacht op SendGrid / Resend credentials van user
 - 📱 **WhatsApp/SMS herinneringen** — wacht op Twilio credentials

@@ -2933,7 +2933,6 @@ async def bind_apartment_shelly(apt_id: str, body: ShellyBindIn, user=Depends(ge
 @api.get("/shelly/apartment/{apt_id}/status")
 async def shelly_apartment_status(apt_id: str, user=Depends(get_current_user)):
     from shelly_service import device_status, ShellyError
-    cfg = await _shelly_or_400(user)
     apt = await db.apartments.find_one({"id": apt_id, **scope(user)}, {"_id": 0})
     if not apt:
         raise HTTPException(status_code=404, detail="Appartement niet gevonden")
@@ -2941,6 +2940,7 @@ async def shelly_apartment_status(apt_id: str, user=Depends(get_current_user)):
     device_id = (binding.get("device_id") or "").strip()
     if not device_id:
         raise HTTPException(status_code=400, detail="Geen Shelly apparaat gekoppeld aan dit appartement")
+    cfg = await _shelly_or_400(user)
     try:
         st = await device_status(cfg, device_id)
     except ShellyError as e:
@@ -2960,7 +2960,6 @@ async def shelly_apartment_status(apt_id: str, user=Depends(get_current_user)):
 @api.post("/shelly/apartment/{apt_id}/control")
 async def shelly_apartment_control(apt_id: str, body: ShellyControlIn, user=Depends(get_current_user)):
     from shelly_service import control_relay, ShellyError
-    cfg = await _shelly_or_400(user)
     apt = await db.apartments.find_one({"id": apt_id, **scope(user)}, {"_id": 0})
     if not apt:
         raise HTTPException(status_code=404, detail="Appartement niet gevonden")
@@ -2968,6 +2967,7 @@ async def shelly_apartment_control(apt_id: str, body: ShellyControlIn, user=Depe
     device_id = (binding.get("device_id") or "").strip()
     if not device_id:
         raise HTTPException(status_code=400, detail="Geen Shelly apparaat gekoppeld aan dit appartement")
+    cfg = await _shelly_or_400(user)
     try:
         await control_relay(cfg, device_id, body.turn, int(binding.get("channel") or 0))
     except ShellyError as e:
