@@ -2290,12 +2290,163 @@ async def test_settings_section(section: str, user=Depends(get_current_user)):
     cfg = await get_company_section(cid, section)
     if not cfg.get("enabled"):
         raise HTTPException(status_code=400, detail="Sectie is uitgeschakeld — vink 'Ingeschakeld' aan en bewaar eerst.")
-    # Each section's actual test logic will be added in its own Fase.
+
+    if section == "smtp":
+        from email_service import send_email, wrap_template, EmailError
+        to = user.get("email") or cfg.get("from_email")
+        if not to:
+            raise HTTPException(status_code=400, detail="Geen ontvanger gevonden (vul afzender e-mail in)")
+        html = wrap_template(
+            "<h1>SMTP test geslaagd</h1>"
+            "<p>Als je deze e-mail ontvangt, is de SMTP configuratie voor je bedrijf correct.</p>"
+            "<p>Je kunt nu kwitanties, facturen en herinneringen verzenden naar je huurders.</p>"
+        )
+        try:
+            await send_email(cfg, to, "SuriRent SMTP test", html)
+        except EmailError as e:
+            return {"section": section, "ok": False, "detail": str(e)}
+        return {"section": section, "ok": True, "detail": f"Test e-mail verzonden naar {to}"}
+
+    # Other sections come in later Fases.
     return {
         "section": section,
         "ok": False,
         "detail": "Test endpoint nog niet geïmplementeerd voor deze sectie. Wordt in een volgende fase toegevoegd.",
     }
+
+
+# ============== Email send endpoints (Fase B) ==============
+class EmailSendIn(BaseModel):
+    to: Optional[str] = None  # override; otherwise we use tenant.email
+    message: Optional[str] = ""  # optional extra note shown above the receipt block
+
+
+async def _smtp_or_400(user) -> dict:
+    cid = company_id_of(user)
+    if not cid:
+        raise HTTPException(status_code=400, detail="Geen actief bedrijf geselecteerd")
+    cfg = await get_company_section(cid, "smtp")
+    if not cfg.get("enabled"):
+        raise HTTPException(status_code=400, detail="SMTP is niet ingeschakeld — configureer eerst onder Instellingen → E-mail.")
+    return cfg
+
+
+@api.post("/email/payment/{payment_id}")
+async def email_payment_receipt(payment_id: str, body: EmailSendIn, user=Depends(get_current_user)):
+    from email_service import send_email, wrap_template, EmailError
+    cfg = await _smtp_or_400(user)
+    p = await db.payments.find_one({"id": payment_id, **scope(user)}, {"_id": 0})
+    if not p:
+        raise HTTPException(status_code=404, detail="Kwitantie niet gevonden")
+    p = await _enrich_payment(p)
+    tenant = await db.tenants.find_one({"id": p.get("tenant_id"), **scope(user)}, {"_id": 0}) or {}
+    to = (body.to or tenant.get("email") or "").strip()
+    if not to:
+        raise HTTPException(status_code=400, detail="Geen ontvanger — vul een e-mailadres in of zet er een bij de huurder")
+    pdf_bytes = receipt_pdf(p)
+    extra_note = f"<p>{body.message}</p>" if body.message else ""
+    content = f"""
+        {extra_note}
+        <h1>Kwitantie {p['receipt_number']}</h1>
+        <p>Beste {tenant.get('name', 'huurder')},<br />Hierbij ontvang je de kwitantie van je betaling.</p>
+        <table class="kv">
+          <tr><td>Datum</td><td>{p.get('paid_at', '')[:10]}</td></tr>
+          <tr><td>Bedrag</td><td>{p['currency']} {p['amount']:.2f}</td></tr>
+          <tr><td>Betaalmethode</td><td>{p.get('method', '')}</td></tr>
+          <tr><td>Appartement</td><td>{p.get('apartment_number', '-')}</td></tr>
+        </table>
+    """
+    try:
+        await send_email(cfg, to, f"Kwitantie {p['receipt_number']} - SuriRent", wrap_template(content),
+                         attachments=[(f"kwitantie-{p['receipt_number']}.pdf", pdf_bytes, "application/pdf")])
+    except EmailError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    return {"ok": True, "sent_to": to}
+
+
+@api.post("/email/invoice/{invoice_id}")
+async def email_invoice(invoice_id: str, body: EmailSendIn, user=Depends(get_current_user)):
+    from email_service import send_email, wrap_template, EmailError
+    cfg = await _smtp_or_400(user)
+    inv = await db.invoices.find_one({"id": invoice_id, **scope(user)}, {"_id": 0})
+    if not inv:
+        raise HTTPException(status_code=404, detail="Factuur niet gevonden")
+    inv = await _enrich_invoice(inv)
+    tenant = await db.tenants.find_one({"id": inv["tenant_id"], **scope(user)}, {"_id": 0}) or {}
+    apt = await db.apartments.find_one({"id": inv.get("apartment_id"), **scope(user)}, {"_id": 0}) or {}
+    to = (body.to or tenant.get("email") or "").strip()
+    if not to:
+        raise HTTPException(status_code=400, detail="Geen ontvanger — vul een e-mailadres in of zet er een bij de huurder")
+    payments = await db.payments.find({
+        **scope(user),
+        "tenant_id": inv["tenant_id"], "category": "huur",
+        "period_month": inv["period_month"], "period_year": inv["period_year"],
+    }, {"_id": 0}).to_list(50)
+    pdf_bytes = invoice_pdf(inv, tenant, apt, payments)
+    extra_note = f"<p>{body.message}</p>" if body.message else ""
+    months_nl = ["januari", "februari", "maart", "april", "mei", "juni",
+                 "juli", "augustus", "september", "oktober", "november", "december"]
+    period_label = f"{months_nl[inv['period_month'] - 1]} {inv['period_year']}"
+    content = f"""
+        {extra_note}
+        <h1>Factuur {inv['invoice_number']}</h1>
+        <p>Beste {tenant.get('name', 'huurder')},<br />Hierbij ontvang je je factuur voor {period_label}.</p>
+        <table class="kv">
+          <tr><td>Periode</td><td>{period_label}</td></tr>
+          <tr><td>Bedrag</td><td>{inv['currency']} {inv['amount']:.2f}</td></tr>
+          <tr><td>Status</td><td>{inv['status']}</td></tr>
+          <tr><td>Appartement</td><td>{apt.get('number', '-')}</td></tr>
+        </table>
+    """
+    try:
+        await send_email(cfg, to, f"Factuur {inv['invoice_number']} - SuriRent", wrap_template(content),
+                         attachments=[(f"factuur-{inv['invoice_number']}.pdf", pdf_bytes, "application/pdf")])
+    except EmailError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    return {"ok": True, "sent_to": to}
+
+
+@api.post("/email/contract/{contract_id}")
+async def email_contract(contract_id: str, body: EmailSendIn, user=Depends(get_current_user)):
+    from email_service import send_email, wrap_template, EmailError
+    cfg = await _smtp_or_400(user)
+    c = await db.contracts.find_one({"id": contract_id, **scope(user)}, {"_id": 0})
+    if not c:
+        raise HTTPException(status_code=404, detail="Contract niet gevonden")
+    c = await _enrich_contract(c)
+    tenant = await db.tenants.find_one({"id": c["tenant_id"], **scope(user)}, {"_id": 0}) or {}
+    apt = await db.apartments.find_one({"id": c["apartment_id"], **scope(user)}, {"_id": 0}) or {}
+    to = (body.to or tenant.get("email") or "").strip()
+    if not to:
+        raise HTTPException(status_code=400, detail="Geen ontvanger — vul een e-mailadres in of zet er een bij de huurder")
+    pdf_bytes = contract_pdf(c, tenant, apt)
+    extra_note = f"<p>{body.message}</p>" if body.message else ""
+    # If contract is unsigned, include a signing link.
+    sign_block = ""
+    if c.get("sign_token") and not c.get("signed_at"):
+        backend_url = os.environ.get("PUBLIC_APP_URL", "").rstrip("/")
+        if backend_url:
+            sign_block = (f"<p style=\"margin-top:14px\"><a href=\"{backend_url}/onderteken/{c['sign_token']}\""
+                          f" style=\"background:#FF5C00;color:#fff;text-decoration:none;padding:10px 18px;border-radius:10px;font-weight:700;display:inline-block\">"
+                          f"Onderteken contract</a></p>")
+    content = f"""
+        {extra_note}
+        <h1>Contract {c['contract_number']}</h1>
+        <p>Beste {tenant.get('name', 'huurder')},<br />Hierbij ontvang je je huurcontract.</p>
+        <table class="kv">
+          <tr><td>Contract</td><td>{c['contract_number']}</td></tr>
+          <tr><td>Appartement</td><td>{apt.get('number', '-')}</td></tr>
+          <tr><td>Startdatum</td><td>{c.get('start_date', '')}</td></tr>
+          <tr><td>Einddatum</td><td>{c.get('end_date') or '—'}</td></tr>
+        </table>
+        {sign_block}
+    """
+    try:
+        await send_email(cfg, to, f"Huurcontract {c['contract_number']} - SuriRent", wrap_template(content),
+                         attachments=[(f"contract-{c['contract_number']}.pdf", pdf_bytes, "application/pdf")])
+    except EmailError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    return {"ok": True, "sent_to": to}
 
 
 app.include_router(api)

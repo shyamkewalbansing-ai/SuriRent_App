@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, Trash2, X, Check, Loader2, FileText, ExternalLink, Copy, Pencil } from 'lucide-react';
+import { Plus, Trash2, X, Check, Loader2, FileText, ExternalLink, Copy, Pencil, Mail } from 'lucide-react';
 import { api, formatError, fmtMoney } from '../../../lib/api';
+import { EmailDialog } from '../../../components/EmailDialog';
 
 function PageHeader({ title, subtitle, action }) {
   return (
@@ -121,6 +122,7 @@ export default function Contracts() {
   const [tenants, setTenants] = useState([]);
   const [apartments, setApartments] = useState([]);
   const [creating, setCreating] = useState(false);
+  const [emailing, setEmailing] = useState(null);
 
   const load = useCallback(async () => {
     const [c, t, a] = await Promise.all([api.get('/contracts'), api.get('/tenants'), api.get('/apartments')]);
@@ -197,6 +199,10 @@ export default function Contracts() {
                       className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600" title="PDF">
                       <FileText className="w-3.5 h-3.5" />
                     </a>
+                    <button onClick={() => setEmailing(c)} data-testid={`contract-email-${c.id}`}
+                      className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700" title="Verstuur via e-mail">
+                      <Mail className="w-3.5 h-3.5" />
+                    </button>
                     {!c.signed_at && (
                       <button onClick={() => copyLink(c.sign_token)} data-testid={`contract-link-${c.id}`}
                         className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-orange-50 hover:bg-orange-100 text-[#FF5C00]" title="Ondertekenlink kopiëren">
@@ -216,6 +222,15 @@ export default function Contracts() {
       </div>
       {creating && <ContractForm tenants={tenants} apartments={apartments}
         onCancel={() => setCreating(false)} onSaved={() => { setCreating(false); load(); }} />}
+      {emailing && (
+        <EmailDialog
+          endpoint={`/email/contract/${emailing.id}`}
+          subject={`Contract ${emailing.contract_number} verzenden`}
+          defaultTo={tenants.find((t) => t.id === emailing.tenant_id)?.email || ''}
+          tenantName={emailing.tenant_name}
+          documentLabel="contract"
+          onClose={() => setEmailing(null)} />
+      )}
     </div>
   );
 }

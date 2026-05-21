@@ -3,10 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import {
   Building2, Users, Receipt, LayoutDashboard, LogOut, Plus, Trash2, Pencil,
   X, Check, Loader2, Search, Home, Banknote, KeySquare, ChevronRight, Wallet,
-  FileText, ShieldCheck, Wrench, FileSignature, Sparkles, Bell, Briefcase,
+  FileText, ShieldCheck, Wrench, FileSignature, Sparkles, Bell, Briefcase, Mail,
 } from 'lucide-react';
 import { api, formatError, fmtMoney, MONTHS_NL } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
+import { EmailDialog } from '../../components/EmailDialog';
 import Contracts from './admin/Contracts';
 import Invoices from './admin/Invoices';
 import Employees from './admin/Employees';
@@ -790,12 +791,14 @@ function Payments() {
   const [items, setItems] = useState([]);
   const [tenants, setTenants] = useState([]);
   const [creating, setCreating] = useState(false);
+  const [emailingPayment, setEmailingPayment] = useState(null);
   const load = useCallback(async () => {
     const [p, t] = await Promise.all([api.get('/payments'), api.get('/tenants')]);
     setItems(p.data); setTenants(t.data);
   }, []);
   useEffect(() => { load(); }, [load]);
   const apiBase = `${process.env.REACT_APP_BACKEND_URL}/api`;
+  const tenantByPayment = (p) => tenants.find((t) => t.id === p.tenant_id);
   return (
     <div>
       <PageHeader title="Betalingen" subtitle={`${items.length} kwitanties geregistreerd`}
@@ -845,6 +848,11 @@ function Payments() {
                       className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 mr-1" title="Kwitantie PDF">
                       <FileText className="w-3.5 h-3.5" />
                     </a>
+                    <button onClick={() => setEmailingPayment(p)}
+                      data-testid={`payment-email-${p.id}`}
+                      className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 mr-1" title="Verstuur via e-mail">
+                      <Mail className="w-3.5 h-3.5" />
+                    </button>
                     <a href={`${apiBase}/payments/${p.id}/secure-pdf`} target="_blank" rel="noreferrer"
                       data-testid={`payment-secure-pdf-${p.id}`}
                       className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-orange-50 hover:bg-orange-100 text-[#FF5C00]" title="Beveiligde PDF met QR verificatie">
@@ -858,6 +866,15 @@ function Payments() {
         )}
       </div>
       {creating && <PaymentForm tenants={tenants} onCancel={() => setCreating(false)} onSaved={() => { setCreating(false); load(); }} />}
+      {emailingPayment && (
+        <EmailDialog
+          endpoint={`/email/payment/${emailingPayment.id}`}
+          subject={`Kwitantie ${emailingPayment.receipt_number} verzenden`}
+          defaultTo={tenantByPayment(emailingPayment)?.email || ''}
+          tenantName={emailingPayment.tenant_name || tenantByPayment(emailingPayment)?.name}
+          documentLabel="kwitantie"
+          onClose={() => setEmailingPayment(null)} />
+      )}
     </div>
   );
 }

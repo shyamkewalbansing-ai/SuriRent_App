@@ -121,7 +121,16 @@ User koos voor **Optie C — minimale herbouw** (kern eerst), dan vroeg om **Fas
 - ✅ **Frontend Settings page** (`/app/frontend/src/pages/vastgoed/admin/Settings.jsx`) met sub-nav: 6 integraties + Kiosk PIN. Per sectie: ingeschakeld-toggle, alle velden, "Bewaar" + "Test verbinding" knoppen, DNS-instructies voor custom domain
 - ✅ 55/55 backend regressie pass
 
-## Prioritized Backlog (Fases B-F)
+### Fase 3 deel 6 (Fase B — SMTP E-mail send — 2026-05-21) ✅
+- ✅ **`email_service.py`** — async smtplib wrapper (STARTTLS poort 587 + SSL poort 465), branded HTML template met SuriRent kleuren
+- ✅ **Test verbinding** stuurt echte test-e-mail naar admin
+- ✅ **Verstuur kwitantie/factuur/contract via e-mail** met PDF als bijlage en branded HTML body
+- ✅ **3 nieuwe endpoints**: `POST /api/email/payment/{id}`, `POST /api/email/invoice/{id}`, `POST /api/email/contract/{id}` (body: `{to?, message?}`)
+- ✅ **EmailDialog component** (`/app/frontend/src/components/EmailDialog.jsx`) — prefilled met tenant.email, override + extra bericht, foutafhandeling
+- ✅ **Mail buttons** toegevoegd aan Payments, Invoices, Contracts rij-acties (33+ items getest)
+- ✅ Heldere foutmelding bij verkeerde SMTP (toonbaar voorbeeld: `[Errno -2] Name or service not known`)
+
+## Prioritized Backlog (Fases C-F)
 - 📧 **Email notificaties** — wacht op SendGrid / Resend credentials van user
 - 📱 **WhatsApp/SMS herinneringen** — wacht op Twilio credentials
 - 💳 **Payment gateways** (SumUp/Mope/Uni5Pay) — wacht op credentials

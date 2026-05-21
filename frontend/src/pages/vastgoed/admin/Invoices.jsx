@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Plus, X, Check, Loader2, FileText, Wand2, Trash2 } from 'lucide-react';
+import { Plus, X, Check, Loader2, FileText, Wand2, Trash2, Mail } from 'lucide-react';
 import { api, formatError, fmtMoney, MONTHS_NL } from '../../../lib/api';
+import { EmailDialog } from '../../../components/EmailDialog';
 
 function PageHeader({ title, subtitle, action }) {
   return (
@@ -91,6 +92,7 @@ export default function Invoices() {
   const [tenants, setTenants] = useState([]);
   const [creating, setCreating] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [emailing, setEmailing] = useState(null);
   const today = new Date();
 
   const load = useCallback(async () => {
@@ -172,6 +174,10 @@ export default function Invoices() {
                       className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600" title="PDF">
                       <FileText className="w-3.5 h-3.5" />
                     </a>
+                    <button onClick={() => setEmailing(i)} data-testid={`invoice-email-${i.id}`}
+                      className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700" title="Verstuur via e-mail">
+                      <Mail className="w-3.5 h-3.5" />
+                    </button>
                     <button onClick={() => del(i.id)} data-testid={`invoice-delete-${i.id}`}
                       className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-red-50 hover:bg-red-100 text-red-500">
                       <Trash2 className="w-3.5 h-3.5" />
@@ -185,6 +191,15 @@ export default function Invoices() {
       </div>
       {creating && <InvoiceForm tenants={tenants}
         onCancel={() => setCreating(false)} onSaved={() => { setCreating(false); load(); }} />}
+      {emailing && (
+        <EmailDialog
+          endpoint={`/email/invoice/${emailing.id}`}
+          subject={`Factuur ${emailing.invoice_number} verzenden`}
+          defaultTo={tenants.find((t) => t.id === emailing.tenant_id)?.email || ''}
+          tenantName={emailing.tenant_name}
+          documentLabel="factuur"
+          onClose={() => setEmailing(null)} />
+      )}
     </div>
   );
 }
