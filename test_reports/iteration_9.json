@@ -1,0 +1,47 @@
+{
+  "summary": "Iteration 9 — Locatie entity + Kiosk total rewrite + internet_amount + uni5pay + approved/received_by. Backend 88/88 PASS: 22 NEW tests in test_locations.py (Locations CRUD, cross-company isolation, apartment.location_id, tenant.internet_amount, PaymentIn.internet/uni5pay, approved_by/received_by storage, kiosk endpoints incl. _none bucket + tenant payments scope) + 66 regression PASS (multi_company 43 + p1_hardening 12 + shelly 11). Frontend kiosk full 8-step flow verified on desktop 1366x900: PIN 1234 → Welcome → Start → LocationSelect (2 cards: 'Kewalbansingweg 7' + 'Overige appartementen') → ApartmentSelect (HUIS 7A/7B Vacant, HUIS 7K Bezet/Jan de Vries, HUIS 7A Bezet/Rayshree) → TenantOverview split-screen (Maandhuur SRD 5.000,00, Servicekosten, Boetes, Internet, Totaal openstaand, Te betalen panel, Volgende + Betalingsgeschiedenis buttons) → History modal opens → PaySelect (checklist + 1-9/0/./DEL keypad, toggling Huur recomputes SRD 5.000,00) → MethodSelect → PaymentConfirm → Receipt. Footer with 'SuriRent N.V.' + 'Beheerder' + 'Uit' rendered on every step incl. Welcome. Admin Locaties tab visible in sidebar with full CRUD card (photo placeholder, name, address, '1 appt.' badge, Bewerk + Delete buttons, '+ Nieuwe locatie'). ApartmentForm has 'Locatie' dropdown with 'Geen locatie' option. tenant-internet testid confirmed in code at AdminDashboard.jsx:858.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "KioskLayout/PaySelect", "issue": "Keypad concatenates raw digits to existing auto-filled amount without decimal handling. Toggling 'Huur' auto-fills SRD 5000.00 — typing '1','0','0' on keypad produces literal string '5000.00100' instead of treating new digits as fresh entry or properly appending pre-decimal. Display value resets when checklist item is toggled off, so it's recoverable, but UX is confusing.", "selector": "[data-testid='pay-amount-display']", "priority": "MEDIUM"},
+      {"component": "KioskLayout/Welcome", "issue": "Spec internally contradictory but agent_to_agent_context_note says 'Welcome screen has NO footer (intentional)'. Footer IS currently visible on Welcome (verified in screenshot — 'SuriRent N.V.' + Beheerder + Uit shown). Either the note is stale or the footer needs to be conditionally hidden on the Welcome step. Confirm with main agent which is intended.", "selector": "[data-testid='kiosk-footer-company']", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "ApartmentSelect", "issues": ["Card title displays 'HUIS HUIS 7A' (duplicate 'HUIS' prefix). Likely the loop prepends 'HUIS' and the apartment number stored in DB is already 'HUIS 7A'. Visible in screenshot for all 4 cards. Consider stripping leading 'HUIS' from number before render or storing only the suffix."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_locations.py",
+    "/app/test_reports/pytest/iteration9_locations.xml",
+    "/app/test_reports/pytest/iteration9_regression.xml"
+  ],
+  "action_items": [
+    "Fix keypad concat-on-autofill bug: when checklist toggle pre-fills amount, the first keypad digit should reset the display (or use a typing-mode flag). Currently produces '5000.00100' style strings.",
+    "Decide and fix Welcome footer visibility: spec says 'no footer on Welcome' but it currently renders. If footer should hide on welcome, conditionally render KioskFooter based on step.",
+    "Strip duplicate 'HUIS' prefix in ApartmentSelect cards — title currently reads 'HUIS HUIS 7A' for apartments whose stored number is already 'HUIS 7A'."
+  ],
+  "critical_code_review_comments": [
+    "Locations CRUD endpoints (server.py 1204-1248) correctly use scope(user) on all reads/updates/deletes — verified cross-company returns 404 for B hitting A's location id.",
+    "DELETE /locations correctly detaches apartments via $unset of location_id within the same scope. Verified apt.location_id falsy after delete.",
+    "kiosk_list_locations injects synthetic '_none' bucket only when unassigned > 0 — defensive against $or with 3 forms (None / missing / empty string).",
+    "_create_payment_doc defaults approved_by to user.name/email for admin route and to company name for kiosk route (no user context). Both verified.",
+    "PaymentIn now allows 'uni5pay' method and 'internet' category — both confirmed via 200 vs 422 reject for 'crypto'.",
+    "Server.py now at 3104 lines (was 2980 in iter 8). Approaching the 'split into modules' threshold from code-review guidelines — consider routers/locations.py + routers/kiosk.py extraction.",
+    "KioskLayout.jsx is 827 lines — high cohesion but ripe for splitting Welcome/LocationSelect/ApartmentSelect/TenantOverview/PaySelect/MethodSelect/PaymentConfirm/Receipt into separate files under /pages/vastgoed/kiosk/.",
+    "Public PDF endpoints still unauthenticated (carry-over from iter 7/8). Not in scope here but should be locked down."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_locations.py (NEW — 22 tests)"
+  ],
+  "success_rate": {"backend": "88/88 = 100% (22 new + 66 regression)", "frontend": "8/8 kiosk steps render, 3/3 admin testids verified, 2 minor UI bugs found (keypad concat, duplicate HUIS prefix)"},
+  "test_credentials": "All credentials in /app/memory/test_credentials.md verified working — admin@vastgoed.sr/admin123, adminb@test.sr/adminb123, kiosk PIN 1234.",
+  "seed_data_creation": "Test creates and cleans up: 1 TEST_LOC_xxx location, 1 TEST_APT_xxx apartment, 1 TEST_TENANT_xxx tenant, 1 TEST internet/uni5pay payment. All deleted in TestLocationDelete teardown.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Canonical re-run: pytest backend/tests/test_locations.py backend/tests/test_multi_company.py backend/tests/test_p1_hardening.py backend/tests/test_shelly.py -v. New testids in kiosk: kiosk-start-btn, loc-back, kiosk-loc-{id} (incl. kiosk-loc-_none), apt-select-back, kiosk-apt-{id}, overview-back, overview-pdf, overview-total, overview-pay-btn, overview-history-btn, kiosk-history-modal, history-close, history-print-{id}, pay-back, pay-item-{key} (huur/servicekosten/boetes/internet), pay-continue, pay-amount-display, keypad-{0-9|./DEL}, method-back, method-{contant|mope|uni5pay}, confirm-back, confirm-submit, receipt-done, kiosk-footer-company, kiosk-footer-admin, kiosk-footer-exit, kiosk-root. Admin: apt-location, tenant-internet. DB state after this run: Company A has 5 apartments (HUIS 7A x2, HUIS 7B, HUIS 7K, A1), 2 tenants Jan de Vries + Rayshree, 1 location Kewalbansingweg 7. Each kiosk submission adds a payment — currently 40 payments / SRD 219.500 visible in admin overview.",
+  "rca of the issue": "Keypad concat bug RCA: PaySelect likely uses single state amount as string and onKeypadDigit does setAmount(prev => prev + digit). When checklist toggle pre-fills 5000.00 the next digit press concatenates instead of resetting. Fix: maintain a typingStarted boolean that resets amount to '' on first keypad press after a checklist toggle, or restrict keypad to integer cents and disable while checklist is active. Duplicate HUIS prefix RCA: ApartmentSelect renders `HUIS {a.number}` but DB stored numbers already include 'HUIS' prefix (HUIS 7A, HUIS 7B, etc.). Either change render template to `{a.number}` or normalize stored numbers via migration."
+}

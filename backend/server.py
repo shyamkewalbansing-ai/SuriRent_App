@@ -228,6 +228,7 @@ class ApartmentIn(BaseModel):
     rent_amount: float
     currency: Literal["SRD", "USD", "EUR"] = "SRD"
     description: Optional[str] = ""
+    location_id: Optional[str] = None
 
 
 class ApartmentOut(ApartmentIn):
@@ -254,6 +255,7 @@ class TenantIn(BaseModel):
     phone: Optional[str] = ""
     email: Optional[str] = ""
     apartment_id: Optional[str] = None
+    internet_amount: float = 0.0  # Vast bedrag per maand voor internet (SRD)
 
 
 class TenantOut(TenantIn):
@@ -264,16 +266,30 @@ class TenantOut(TenantIn):
     created_at: str
 
 
+class LocationIn(BaseModel):
+    name: str
+    address: Optional[str] = ""
+    photo_url: Optional[str] = ""
+
+
+class LocationOut(LocationIn):
+    id: str
+    apartments_total: int = 0
+    apartments_occupied: int = 0
+    created_at: str
+
+
 class PaymentIn(BaseModel):
     tenant_id: str
     apartment_id: Optional[str] = None
     amount: float
     currency: Literal["SRD", "USD", "EUR"] = "SRD"
-    method: Literal["contant", "bank", "mope", "sumup"] = "contant"
-    category: Literal["huur", "servicekosten", "borg", "boete", "overig"] = "huur"
+    method: Literal["contant", "bank", "mope", "sumup", "uni5pay"] = "contant"
+    category: Literal["huur", "servicekosten", "borg", "boete", "internet", "overig"] = "huur"
     period_month: Optional[int] = None
     period_year: Optional[int] = None
     note: Optional[str] = ""
+    received_by: Optional[str] = ""  # naam medewerker die betaling ontving
 
 
 class PaymentOut(BaseModel):
@@ -291,6 +307,8 @@ class PaymentOut(BaseModel):
     receipt_number: str
     paid_at: str
     note: Optional[str] = ""
+    received_by: Optional[str] = ""
+    approved_by: Optional[str] = ""
 
 
 # =====================================================================
@@ -303,7 +321,7 @@ DEFAULT_COMPANY_NAME = "SuriRent N.V."
 TENANT_SCOPED_COLLECTIONS = [
     "apartments", "tenants", "payments", "contracts", "invoices",
     "employees", "salaries", "deposits", "maintenance", "kasgeld",
-    "ai_sessions", "push_subs",
+    "ai_sessions", "push_subs", "locations",
 ]
 
 
@@ -1037,7 +1055,7 @@ async def _enrich_payment(p: dict) -> dict:
     return {**p, "tenant_name": tenant_name, "apartment_number": apt_number}
 
 
-async def _create_payment_doc(body: PaymentIn, company_id: Optional[str] = None) -> dict:
+async def _create_payment_doc(body: PaymentIn, company_id: Optional[str] = None, approved_by: Optional[str] = None) -> dict:
     q = {"id": body.tenant_id}
     if company_id:
         q["company_id"] = company_id
@@ -1046,6 +1064,10 @@ async def _create_payment_doc(body: PaymentIn, company_id: Optional[str] = None)
         raise HTTPException(status_code=404, detail="Huurder niet gevonden")
     apt_id = body.apartment_id or tenant.get("apartment_id")
     receipt_no = await _next_receipt_number()
+    company_name = ""
+    if company_id:
+        c = await db.companies.find_one({"id": company_id}, {"_id": 0, "name": 1})
+        company_name = (c or {}).get("name", "")
     doc = {
         "id": new_id(),
         "company_id": company_id or tenant.get("company_id"),
@@ -1060,6 +1082,8 @@ async def _create_payment_doc(body: PaymentIn, company_id: Optional[str] = None)
         "receipt_number": receipt_no,
         "paid_at": iso(now_utc()),
         "note": body.note or "",
+        "received_by": (body.received_by or "").strip(),
+        "approved_by": approved_by or company_name,
     }
     await db.payments.insert_one(doc)
     doc.pop("_id", None)
@@ -1081,7 +1105,7 @@ async def list_payments(
 
 @api.post("/payments", response_model=PaymentOut)
 async def create_payment(body: PaymentIn, user=Depends(get_current_user)):
-    doc = await _create_payment_doc(body, company_id_of(user))
+    doc = await _create_payment_doc(body, company_id_of(user), approved_by=user.get("name") or user.get("email"))
     return await _enrich_payment(doc)
 
 
@@ -1169,12 +1193,99 @@ async def _calc_balance(tenant: dict) -> dict:
 
 
 # =====================================================================
+# Locations (admin only) — appartementen worden gegroepeerd per locatie
+# =====================================================================
+async def _enrich_location(loc: dict) -> dict:
+    total = await db.apartments.count_documents({"location_id": loc["id"], "company_id": loc["company_id"]})
+    occupied = await db.apartments.count_documents({"location_id": loc["id"], "company_id": loc["company_id"], "status": "occupied"})
+    return {**loc, "apartments_total": total, "apartments_occupied": occupied}
+
+
+@api.get("/locations", response_model=List[LocationOut])
+async def list_locations(user=Depends(get_current_user)):
+    docs = await db.locations.find(scope(user), {"_id": 0}).sort("name", 1).to_list(1000)
+    return [await _enrich_location(d) for d in docs]
+
+
+@api.post("/locations", response_model=LocationOut)
+async def create_location(body: LocationIn, user=Depends(get_current_user)):
+    cid = company_id_of(user)
+    if not cid:
+        raise HTTPException(status_code=400, detail="Geen actief bedrijf geselecteerd")
+    doc = {
+        "id": new_id(),
+        "company_id": cid,
+        "name": body.name,
+        "address": body.address or "",
+        "photo_url": body.photo_url or "",
+        "created_at": iso(now_utc()),
+    }
+    await db.locations.insert_one(doc)
+    doc.pop("_id", None)
+    return await _enrich_location(doc)
+
+
+@api.put("/locations/{loc_id}", response_model=LocationOut)
+async def update_location(loc_id: str, body: LocationIn, user=Depends(get_current_user)):
+    from pymongo import ReturnDocument
+    res = await db.locations.find_one_and_update(
+        {"id": loc_id, **scope(user)}, {"$set": body.model_dump()},
+        projection={"_id": 0}, return_document=ReturnDocument.AFTER,
+    )
+    if not res:
+        raise HTTPException(status_code=404, detail="Locatie niet gevonden")
+    return await _enrich_location(res)
+
+
+@api.delete("/locations/{loc_id}")
+async def delete_location(loc_id: str, user=Depends(get_current_user)):
+    loc = await db.locations.find_one({"id": loc_id, **scope(user)}, {"_id": 0})
+    if not loc:
+        raise HTTPException(status_code=404, detail="Locatie niet gevonden")
+    # Detach apartments instead of refusing — keeps admin flow simple.
+    await db.apartments.update_many({"location_id": loc_id, **scope(user)}, {"$unset": {"location_id": ""}})
+    await db.locations.delete_one({"id": loc_id})
+    return {"ok": True}
+
+
+# =====================================================================
 # Kiosk public endpoints (no auth, but expects kiosk session for payments)
 # =====================================================================
+@api.get("/kiosk/locations")
+async def kiosk_list_locations(_session=Depends(get_kiosk_session)):
+    """List locations for the kiosk's company, with apartment counts."""
+    sc = kiosk_scope(_session)
+    docs = await db.locations.find(sc, {"_id": 0}).sort("name", 1).to_list(500)
+    out = []
+    for loc in docs:
+        total = await db.apartments.count_documents({**sc, "location_id": loc["id"]})
+        occupied = await db.apartments.count_documents({**sc, "location_id": loc["id"], "status": "occupied"})
+        out.append({**loc, "apartments_total": total, "apartments_occupied": occupied})
+    # Also surface "no location" group when there are unassigned apartments.
+    unassigned = await db.apartments.count_documents({
+        **sc, "$or": [{"location_id": None}, {"location_id": {"$exists": False}}, {"location_id": ""}]
+    })
+    if unassigned > 0:
+        out.append({
+            "id": "_none", "name": "Overige appartementen",
+            "address": "", "photo_url": "",
+            "apartments_total": unassigned, "apartments_occupied": 0,
+            "created_at": "",
+        })
+    return out
+
+
 @api.get("/kiosk/apartments")
-async def kiosk_list_apartments(_session=Depends(get_kiosk_session)):
-    """List apartments for the kiosk's company."""
-    docs = await db.apartments.find(kiosk_scope(_session), {"_id": 0}).sort("number", 1).to_list(1000)
+async def kiosk_list_apartments(location_id: Optional[str] = None, _session=Depends(get_kiosk_session)):
+    """List apartments for the kiosk's company, optionally filtered by location."""
+    sc = kiosk_scope(_session)
+    q = {**sc}
+    if location_id is not None:
+        if location_id in ("_none", ""):
+            q["$or"] = [{"location_id": None}, {"location_id": {"$exists": False}}, {"location_id": ""}]
+        else:
+            q["location_id"] = location_id
+    docs = await db.apartments.find(q, {"_id": 0}).sort("number", 1).to_list(1000)
     out = []
     for a in docs:
         tenant_name = None
@@ -1190,6 +1301,7 @@ async def kiosk_list_apartments(_session=Depends(get_kiosk_session)):
             "status": a["status"],
             "tenant_id": a.get("tenant_id"),
             "tenant_name": tenant_name,
+            "location_id": a.get("location_id"),
         })
     return out
 
@@ -1209,6 +1321,7 @@ async def kiosk_tenant_overview(tenant_id: str, _session=Depends(get_kiosk_sessi
             "name": t["name"],
             "phone": t.get("phone", ""),
             "email": t.get("email", ""),
+            "internet_amount": float(t.get("internet_amount") or 0),
         },
         "apartment": apt and {
             "id": apt["id"],
@@ -1225,6 +1338,18 @@ async def kiosk_tenant_overview(tenant_id: str, _session=Depends(get_kiosk_sessi
 async def kiosk_create_payment(body: PaymentIn, _session=Depends(get_kiosk_session)):
     doc = await _create_payment_doc(body, _session.get("company_id"))
     return await _enrich_payment(doc)
+
+
+@api.get("/kiosk/tenants/{tenant_id}/payments")
+async def kiosk_tenant_payments(tenant_id: str, _session=Depends(get_kiosk_session)):
+    """List recent payments for a tenant (used in kiosk 'Betalingsgeschiedenis' modal)."""
+    t = await db.tenants.find_one({"id": tenant_id, **kiosk_scope(_session)}, {"_id": 0, "id": 1})
+    if not t:
+        raise HTTPException(status_code=404, detail="Huurder niet gevonden")
+    docs = await db.payments.find(
+        {"tenant_id": tenant_id, **kiosk_scope(_session)}, {"_id": 0}
+    ).sort("paid_at", -1).to_list(50)
+    return [await _enrich_payment(d) for d in docs]
 
 
 @api.get("/kiosk/receipts/{payment_id}")

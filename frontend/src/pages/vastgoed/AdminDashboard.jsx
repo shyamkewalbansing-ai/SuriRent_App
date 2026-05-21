@@ -4,7 +4,7 @@ import {
   Building2, Users, Receipt, LayoutDashboard, LogOut, Plus, Trash2, Pencil,
   X, Check, Loader2, Search, Home, Banknote, KeySquare, ChevronRight, Wallet,
   FileText, ShieldCheck, Wrench, FileSignature, Sparkles, Bell, Briefcase, Mail,
-  CreditCard, Zap, Power, Menu, MoreHorizontal,
+  CreditCard, Zap, Power, Menu, MoreHorizontal, MapPin,
 } from 'lucide-react';
 import { api, formatError, fmtMoney, MONTHS_NL } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
@@ -20,10 +20,12 @@ import Notifications from './admin/Notifications';
 import Companies from './admin/Companies';
 import SettingsPage from './admin/Settings';
 import PaymentRequests from './admin/PaymentRequests';
+import Locations from './admin/Locations';
 
 const BASE_TABS = [
   { id: 'overview', label: 'Overzicht', icon: LayoutDashboard },
   { id: 'ai', label: 'AI Assistent', icon: Sparkles },
+  { id: 'locations', label: 'Locaties', icon: MapPin },
   { id: 'apartments', label: 'Appartementen', icon: Building2 },
   { id: 'tenants', label: 'Huurders', icon: Users },
   { id: 'contracts', label: 'Contracten', icon: FileSignature },
@@ -326,14 +328,22 @@ function Overview() {
 
 // ============== Apartments ==============
 function ApartmentForm({ initial, onCancel, onSaved }) {
-  const [data, setData] = useState(initial || { number: '', address: '', rent_amount: 0, currency: 'SRD', description: '' });
+  const [data, setData] = useState(initial || { number: '', address: '', rent_amount: 0, currency: 'SRD', description: '', location_id: '' });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [locations, setLocations] = useState([]);
+  useEffect(() => {
+    api.get('/locations').then((r) => setLocations(r.data)).catch(() => setLocations([]));
+  }, []);
 
   const save = async () => {
     setLoading(true); setError('');
     try {
-      const payload = { ...data, rent_amount: parseFloat(data.rent_amount) || 0 };
+      const payload = {
+        ...data,
+        rent_amount: parseFloat(data.rent_amount) || 0,
+        location_id: data.location_id || null,
+      };
       if (initial?.id) {
         const { data: r } = await api.put(`/apartments/${initial.id}`, payload);
         onSaved(r);
@@ -383,6 +393,20 @@ function ApartmentForm({ initial, onCancel, onSaved }) {
                 <option value="EUR">EUR</option>
               </select>
             </div>
+          </div>
+          <div>
+            <label className="text-xs font-bold uppercase tracking-widest text-slate-500">Locatie</label>
+            <select value={data.location_id || ''} onChange={(e) => setData({ ...data, location_id: e.target.value })}
+              data-testid="apt-location"
+              className="w-full mt-1 h-12 px-3 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] outline-none bg-white">
+              <option value="">— Geen locatie —</option>
+              {locations.map((loc) => (
+                <option key={loc.id} value={loc.id}>{loc.name}{loc.address ? ` · ${loc.address}` : ''}</option>
+              ))}
+            </select>
+            {locations.length === 0 && (
+              <p className="text-[11px] text-slate-400 mt-1">Maak eerst locaties aan in de tab "Locaties" om appartementen te groeperen.</p>
+            )}
           </div>
           <div>
             <label className="text-xs font-bold uppercase tracking-widest text-slate-500">Beschrijving</label>
@@ -766,13 +790,17 @@ function ShellyControlModal({ apt, onClose, onChanged }) {
   );
 }
 function TenantForm({ initial, apartments, onCancel, onSaved }) {
-  const [data, setData] = useState(initial || { name: '', phone: '', email: '', apartment_id: '' });
+  const [data, setData] = useState(initial || { name: '', phone: '', email: '', apartment_id: '', internet_amount: 0 });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const save = async () => {
     setLoading(true); setError('');
     try {
-      const payload = { ...data, apartment_id: data.apartment_id || null };
+      const payload = {
+        ...data,
+        apartment_id: data.apartment_id || null,
+        internet_amount: parseFloat(data.internet_amount) || 0,
+      };
       if (initial?.id) {
         const { data: r } = await api.put(`/tenants/${initial.id}`, payload);
         onSaved(r);
@@ -821,6 +849,15 @@ function TenantForm({ initial, apartments, onCancel, onSaved }) {
                 </option>
               ))}
             </select>
+          </div>
+          <div>
+            <label className="text-xs font-bold uppercase tracking-widest text-slate-500">Internet per maand (SRD)</label>
+            <input type="number" step="0.01" min="0"
+              value={data.internet_amount ?? 0}
+              onChange={(e) => setData({ ...data, internet_amount: e.target.value })}
+              data-testid="tenant-internet"
+              className="w-full mt-1 h-12 px-4 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] outline-none" />
+            <p className="text-[11px] text-slate-400 mt-1">Vast maandelijks bedrag dat in de kiosk als regelpost "Internet" verschijnt. 0 = niet tonen.</p>
           </div>
         </div>
         <div className="flex gap-3 mt-6">
@@ -1239,6 +1276,7 @@ export default function AdminDashboard() {
           {tab === 'companies' && <Companies />}
           {tab === 'overview' && <Overview />}
           {tab === 'ai' && <AIChat />}
+          {tab === 'locations' && <Locations />}
           {tab === 'apartments' && <Apartments />}
           {tab === 'tenants' && <Tenants />}
           {tab === 'contracts' && <Contracts />}

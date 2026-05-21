@@ -49,6 +49,7 @@ function PinLanding({ onSuccess, onPassword, onRegister }) {
     try {
       const { data } = await api.post('/auth/kiosk-pin', { pin: code });
       if (data?.token) localStorage.setItem('kiosk_token', data.token);
+      if (data?.company) localStorage.setItem('kiosk_company', JSON.stringify(data.company));
       onSuccess();
     } catch (e) {
       setError(formatError(e, 'Ongeldige PIN code'));
