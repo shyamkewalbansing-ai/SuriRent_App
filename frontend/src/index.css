@@ -46,13 +46,14 @@ body {
     width: 100%;
     height: 100%;
     overflow: hidden;
-    /* Match the body to the cream app background so any 1px overshoot at
-       the notch/home-indicator doesn't show a different color. */
-    background-color: #FFF7F0;
+    /* Brand orange so any 1px overshoot at the notch / home-indicator
+       reveals the brand colour, never a stray white/cream strip. */
+    background-color: #FF5C00;
   }
   #root {
     height: 100%;
     overflow: hidden;
+    background-color: #FF5C00;
   }
 }
 
