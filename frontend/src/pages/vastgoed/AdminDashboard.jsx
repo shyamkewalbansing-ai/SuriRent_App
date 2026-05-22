@@ -352,8 +352,27 @@ function Overview() {
     <div>
       <PageHeader title="Overzicht" subtitle="Snelle blik op uw vastgoedportefeuille" />
 
-      {/* 4 stat-kaarten — gecentreerde value, icoon linksboven */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      {/* Mobile/tablet: combined "Portfolio in één oogopslag" card with 4 mini-stats */}
+      <div className="lg:hidden bg-white rounded-2xl border border-orange-100 p-5 mb-5" data-testid="portfolio-card-mobile">
+        <p className="text-[11px] font-bold uppercase tracking-widest text-slate-500 mb-4">Portfolio in één oogopslag</p>
+        <div className="grid grid-cols-4 divide-x divide-slate-100">
+          {cards.map((c) => {
+            const Icon = c.icon;
+            return (
+              <div key={c.label} className="px-2 first:pl-0 last:pr-0 text-center">
+                <div className={`w-12 h-12 rounded-full ${c.accent} flex items-center justify-center mx-auto mb-3`}>
+                  <Icon className="w-5 h-5" />
+                </div>
+                <p className="text-2xl font-black text-slate-900 tracking-tight" data-testid={`stat-m-${c.label.toLowerCase()}`}>{c.value}</p>
+                <p className="text-[11px] text-slate-500 font-semibold mt-1">{c.label}</p>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Desktop: 4 separate stat-kaarten */}
+      <div className="hidden lg:grid grid-cols-4 gap-4 mb-6">
         {cards.map((c) => {
           const Icon = c.icon;
           return (
@@ -368,48 +387,51 @@ function Overview() {
         })}
       </div>
 
-      {/* Inkomsten + Openstaand saldo — 2 koloms hero kaart */}
-      <div className="bg-white rounded-2xl border border-orange-100 p-6 mb-6 grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="flex items-center gap-4">
-          <div className="w-14 h-14 rounded-2xl bg-orange-50 flex items-center justify-center shrink-0">
-            <Wallet className="w-7 h-7 text-[#FF5C00]" />
+      {/* Inkomsten + Openstaand — oranje getinte hero op mobile, wit op desktop */}
+      <div className="rounded-2xl border border-orange-200 lg:border-orange-100 p-5 lg:p-6 mb-5 lg:mb-6 grid grid-cols-2 gap-3 lg:gap-6 bg-gradient-to-br from-orange-50 to-orange-100/40 lg:from-white lg:to-white lg:bg-white">
+        <div className="flex flex-col lg:flex-row lg:items-center gap-2 lg:gap-4 min-w-0">
+          <div className="w-10 h-10 lg:w-14 lg:h-14 rounded-xl lg:rounded-2xl bg-white lg:bg-orange-50 flex items-center justify-center shrink-0">
+            <Wallet className="w-5 h-5 lg:w-7 lg:h-7 text-[#FF5C00]" />
           </div>
           <div className="min-w-0">
-            <p className="text-[11px] font-bold uppercase tracking-widest text-slate-500">Inkomsten deze maand</p>
-            <p className="text-3xl font-black text-slate-900 tracking-tight mt-1" data-testid="income-total">
+            <p className="text-[10px] lg:text-[11px] font-bold uppercase tracking-widest text-slate-500">Inkomsten deze maand</p>
+            <p className="text-xl lg:text-3xl font-black text-slate-900 tracking-tight mt-1 truncate" data-testid="income-total">
               {fmtMoney(incomeTotal, primaryCur)}
             </p>
-            <p className="text-xs text-slate-400 mt-1">{incomeCount} betalingen</p>
+            <p className="text-[11px] lg:text-xs text-slate-500 lg:text-slate-400 mt-1">{incomeCount} betalingen</p>
           </div>
         </div>
         <button onClick={() => window.dispatchEvent(new CustomEvent('go-tab', { detail: 'invoices' }))}
           data-testid="outstanding-cta"
-          className="flex items-center gap-4 text-left hover:bg-orange-50/40 rounded-xl -mx-2 px-2 py-2 transition-colors group">
-          <div className="w-14 h-14 rounded-2xl bg-orange-50 flex items-center justify-center shrink-0">
-            <Gauge className="w-7 h-7 text-[#FF5C00]" />
+          className="flex flex-col lg:flex-row lg:items-center gap-2 lg:gap-4 text-left hover:opacity-90 transition-opacity group min-w-0">
+          <div className="w-10 h-10 lg:w-14 lg:h-14 rounded-xl lg:rounded-2xl bg-white lg:bg-orange-50 flex items-center justify-center shrink-0">
+            <Gauge className="w-5 h-5 lg:w-7 lg:h-7 text-[#FF5C00]" />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-[11px] font-bold uppercase tracking-widest text-slate-500">Openstaand saldo</p>
-            <p className="text-3xl font-black text-[#FF5C00] tracking-tight mt-1" data-testid="outstanding-total">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-[10px] lg:text-[11px] font-bold uppercase tracking-widest text-slate-500">Openstaand saldo</p>
+              <ChevronRight className="lg:hidden w-4 h-4 text-[#FF5C00] shrink-0" />
+            </div>
+            <p className="text-xl lg:text-3xl font-black text-[#FF5C00] tracking-tight mt-1 truncate" data-testid="outstanding-total">
               {fmtMoney(outstandingTotal, primaryCur)}
             </p>
-            <p className="text-xs text-slate-400 mt-1">{outstandingCount} openstaand</p>
+            <p className="text-[11px] lg:text-xs text-slate-500 lg:text-slate-400 mt-1">{outstandingCount} openstaand</p>
           </div>
-          <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-[#FF5C00] transition-colors shrink-0" />
+          <ChevronRight className="hidden lg:block w-5 h-5 text-slate-300 group-hover:text-[#FF5C00] transition-colors shrink-0" />
         </button>
       </div>
 
       {/* Status overzicht + Laatste activiteiten — 2 koloms op desktop */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-        <div className="bg-white rounded-2xl border border-orange-100 p-6 lg:col-span-2" data-testid="status-overview-card">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 lg:gap-6 mb-5 lg:mb-6">
+        <div className="bg-white rounded-2xl border border-orange-100 p-5 lg:p-6 lg:col-span-2" data-testid="status-overview-card">
           <div className="flex items-center justify-between mb-4">
             <p className="text-[11px] font-bold uppercase tracking-widest text-slate-500">Status Overzicht</p>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 lg:gap-6">
             {/* Donut: Betalingsstatus */}
             <div>
               <p className="text-sm font-bold text-slate-900 mb-3">Betalingsstatus</p>
-              <div className="flex items-center gap-5">
+              <div className="flex items-center gap-4 lg:gap-5">
                 <StatusDonut paid={invStatus.paid} open={invStatus.open} overdue={invStatus.overdue} />
                 <div className="space-y-3">
                   <StatusLegendItem color="#10B981" label="Betaald" count={invStatus.paid} percent={pct(invStatus.paid)} />
@@ -447,7 +469,7 @@ function Overview() {
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl border border-orange-100 p-6" data-testid="recent-activity-card">
+        <div className="bg-white rounded-2xl border border-orange-100 p-5 lg:p-6" data-testid="recent-activity-card">
           <div className="flex items-center justify-between mb-2">
             <p className="text-[11px] font-bold uppercase tracking-widest text-slate-500">Laatste Activiteiten</p>
             <button onClick={() => window.dispatchEvent(new CustomEvent('go-tab', { detail: 'payments' }))}
