@@ -782,6 +782,26 @@ export default function MarketingLanding({ previewContent = null } = {}) {
     return () => { document.body.style.backgroundColor = ''; };
   }, []);
 
+  // Auto-redirect to /login when launched as installed PWA.
+  // Detects both display-mode: standalone and the iOS-specific navigator.standalone flag.
+  // Skipped when ?landing=1 is in the URL (so user can still see the marketing page from inside the PWA on purpose).
+  useEffect(() => {
+    if (previewContent) return; // editor preview shouldn't redirect
+    try {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('landing') === '1') return;
+      const isStandalone =
+        window.matchMedia?.('(display-mode: standalone)').matches ||
+        window.navigator.standalone === true ||
+        params.get('source') === 'pwa';
+      if (isStandalone) {
+        const target = appLink('/login');
+        if (target.startsWith('http')) window.location.replace(target);
+        else navigate(target, { replace: true });
+      }
+    } catch { /* ignore */ }
+  }, [navigate, previewContent]);
+
   // Fetch published content. `previewContent` is used by the editor's iframe preview.
   useEffect(() => {
     if (previewContent) { setContent(previewContent); return; }

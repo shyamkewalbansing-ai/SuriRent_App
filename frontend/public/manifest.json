@@ -2,7 +2,7 @@
   "name": "SuriRent Vastgoed Kiosk",
   "short_name": "SuriRent",
   "description": "Complete huurbeheer & kiosk oplossing voor vastgoed — beheer, kiosk en huurportaal in één app.",
-  "start_url": "/",
+  "start_url": "/login?source=pwa",
   "scope": "/",
   "display": "standalone",
   "orientation": "any",
@@ -11,7 +11,7 @@
   "lang": "nl",
   "dir": "ltr",
   "categories": ["business", "finance", "productivity"],
-  "id": "/",
+  "id": "/?source=pwa",
   "prefer_related_applications": false,
   "icons": [
     {

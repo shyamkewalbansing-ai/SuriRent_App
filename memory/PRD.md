@@ -245,6 +245,12 @@ User koos voor **Optie C — minimale herbouw** (kern eerst), dan vroeg om **Fas
 - ✅ **LandingEditor**: nieuwe sectie-tab "Installeer" met formulier voor alle install-velden. Three nested groep-cards (QR-paneel / iOS-kaart / Android-kaart) elk met eigen Image upload + Repeatable steps lijst + icon picker. Benefits-lijst met add/remove/sort.
 - ✅ E2E getest: install eyebrow wijzigen → live preview updated direct via postMessage.
 
+### PWA opent direct in login (geen landing page) (2026-05-22) ✅
+- ✅ **Manifest aangepast**: `start_url` van `/` → `/login?source=pwa` en `id` naar `/?source=pwa`. Nieuwe PWA-installaties starten direct op login.
+- ✅ **Runtime detectie in MarketingLanding**: detecteert `display-mode: standalone`, `navigator.standalone` (iOS), of `?source=pwa` query → redirect naar `/login`. Bestaande installaties met gecachte oude manifest worden ook automatisch gepatcht.
+- ✅ **Escape hatch**: `?landing=1` query bypasst de redirect zodat marketing landing nog steeds bereikbaar is vanuit de PWA indien gewenst.
+- ✅ Tested via Playwright: `/?source=pwa` → final URL `/login` met Kiosk PIN. `/?landing=1` → landing page met h1 zichtbaar.
+
 ## Prioritized Backlog (Fases E-F)
 - 📧 **Email notificaties** — wacht op SendGrid / Resend credentials van user
 - 📱 **WhatsApp/SMS herinneringen** — wacht op Twilio credentials
