@@ -3149,7 +3149,7 @@ async def admin_stats(user=Depends(get_current_user)):
     total_apts = await db.apartments.count_documents({**sc})
     occupied = await db.apartments.count_documents({**sc, "status": "occupied"})
     total_tenants = await db.tenants.count_documents({**sc})
-    # Sum payments this month
+    # Sum payments this month (per currency)
     today = now_utc()
     start = datetime(today.year, today.month, 1, tzinfo=timezone.utc).isoformat()
     pipeline = [
@@ -3159,12 +3159,59 @@ async def admin_stats(user=Depends(get_current_user)):
     by_currency = {}
     async for r in db.payments.aggregate(pipeline):
         by_currency[r["_id"]] = {"total": r["total"], "count": r["count"]}
+
+    # Invoice status distribution (all open + overdue + paid totals for the dashboard).
+    inv_paid = await db.invoices.count_documents({**sc, "status": "paid"})
+    inv_open = await db.invoices.count_documents({**sc, "status": {"$in": ["open", "sent", "pending"]}})
+    inv_overdue = await db.invoices.count_documents({**sc, "status": "overdue"})
+
+    # Outstanding balance — sum of unpaid invoices per currency.
+    outstanding_pipeline = [
+        {"$match": {**sc, "status": {"$nin": ["paid", "cancelled"]}}},
+        {"$group": {"_id": "$currency", "total": {"$sum": "$amount"}, "count": {"$sum": 1}}},
+    ]
+    outstanding = {}
+    async for r in db.invoices.aggregate(outstanding_pipeline):
+        outstanding[r["_id"]] = {"total": r["total"], "count": r["count"]}
+
+    # Recent activity feed — last 8 events (payments received + invoices opened/overdue)
+    recent: list = []
+    async for p in db.payments.find({**sc}, {"_id": 0}).sort("paid_at", -1).limit(5):
+        tenant = await db.tenants.find_one({"id": p.get("tenant_id"), **sc}, {"_id": 0, "name": 1})
+        apt = await db.apartments.find_one({"id": p.get("apartment_id"), **sc}, {"_id": 0, "number": 1})
+        recent.append({
+            "type": "payment_received",
+            "title": "Betaling ontvangen",
+            "subtitle": f"{tenant.get('name') if tenant else '—'} · Appt. {apt.get('number') if apt else '—'}",
+            "amount": p.get("amount"),
+            "currency": p.get("currency", "SRD"),
+            "at": p.get("paid_at"),
+        })
+    async for inv in db.invoices.find({**sc, "status": {"$nin": ["paid", "cancelled"]}}, {"_id": 0}).sort("created_at", -1).limit(5):
+        tenant = await db.tenants.find_one({"id": inv.get("tenant_id"), **sc}, {"_id": 0, "name": 1})
+        apt = await db.apartments.find_one({"id": inv.get("apartment_id"), **sc}, {"_id": 0, "number": 1})
+        recent.append({
+            "type": "invoice_open",
+            "title": "Betaling openstaand",
+            "subtitle": f"{tenant.get('name') if tenant else '—'} · Appt. {apt.get('number') if apt else '—'}",
+            "amount": inv.get("amount"),
+            "currency": inv.get("currency", "SRD"),
+            "at": inv.get("created_at"),
+            "period_month": inv.get("period_month"),
+            "period_year": inv.get("period_year"),
+        })
+    recent.sort(key=lambda x: x.get("at") or "", reverse=True)
+    recent = recent[:8]
+
     return {
         "apartments_total": total_apts,
         "apartments_occupied": occupied,
         "apartments_vacant": total_apts - occupied,
         "tenants_total": total_tenants,
         "month_payments_by_currency": by_currency,
+        "outstanding_by_currency": outstanding,
+        "invoice_status": {"paid": inv_paid, "open": inv_open, "overdue": inv_overdue},
+        "recent_activity": recent,
     }
 
 

@@ -5,6 +5,7 @@ import {
   X, Check, Loader2, Search, Home, Banknote, KeySquare, ChevronRight, Wallet,
   FileText, ShieldCheck, Wrench, FileSignature, Bell, Briefcase, Mail,
   Zap, Power, Menu, MoreHorizontal, MapPin, Crown, Paintbrush, Palette,
+  Gauge, Activity, Clock as ClockIcon,
 } from 'lucide-react';
 import { api, formatError, fmtMoney, MONTHS_NL } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
@@ -225,6 +226,93 @@ function PageHeader({ title, subtitle, action }) {
 }
 
 // ============== Overview ==============
+function StatusDonut({ paid = 0, open = 0, overdue = 0 }) {
+  // Renders a 3-segment donut chart (paid=green, open=orange, overdue=slate)
+  // using a single SVG with stroke-dasharray. Radius 60, circumference 2πr ≈ 377.
+  const total = paid + open + overdue;
+  if (total === 0) {
+    return (
+      <div className="flex items-center justify-center w-40 h-40 rounded-full border-8 border-slate-100">
+        <div className="text-center">
+          <p className="text-2xl font-black text-slate-300">0</p>
+          <p className="text-xs text-slate-400">Totaal</p>
+        </div>
+      </div>
+    );
+  }
+  const C = 377;
+  const paidLen = (paid / total) * C;
+  const openLen = (open / total) * C;
+  const overdueLen = (overdue / total) * C;
+  return (
+    <div className="relative w-40 h-40">
+      <svg viewBox="0 0 140 140" className="w-full h-full -rotate-90">
+        <circle cx="70" cy="70" r="60" fill="none" stroke="#F3F4F6" strokeWidth="14" />
+        {paid > 0 && (
+          <circle cx="70" cy="70" r="60" fill="none" stroke="#10B981" strokeWidth="14"
+            strokeDasharray={`${paidLen} ${C}`} strokeDashoffset="0" strokeLinecap="butt" />
+        )}
+        {open > 0 && (
+          <circle cx="70" cy="70" r="60" fill="none" stroke="#FF5C00" strokeWidth="14"
+            strokeDasharray={`${openLen} ${C}`} strokeDashoffset={`-${paidLen}`} strokeLinecap="butt" />
+        )}
+        {overdue > 0 && (
+          <circle cx="70" cy="70" r="60" fill="none" stroke="#94A3B8" strokeWidth="14"
+            strokeDasharray={`${overdueLen} ${C}`} strokeDashoffset={`-${paidLen + openLen}`} strokeLinecap="butt" />
+        )}
+      </svg>
+      <div className="absolute inset-0 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-3xl font-black text-slate-900" data-testid="status-donut-total">{total}</p>
+          <p className="text-[11px] text-slate-500 font-semibold">Totaal</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StatusLegendItem({ color, label, count, percent }) {
+  return (
+    <div className="flex items-start gap-2.5">
+      <span className="mt-1.5 inline-block w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: color }} />
+      <div className="min-w-0">
+        <p className="text-xs font-semibold text-slate-600">{label}</p>
+        <p className="text-sm font-black text-slate-900 tracking-tight">
+          {count} <span className="text-xs text-slate-400 font-semibold">({percent}%)</span>
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function ActivityRow({ item }) {
+  const isPayment = item.type === 'payment_received';
+  const Icon = isPayment ? FileText : ClockIcon;
+  const amountColor = isPayment ? 'text-emerald-600' : 'text-[#FF5C00]';
+  let when = '—';
+  try {
+    const d = new Date(item.at);
+    if (!isNaN(d.getTime())) {
+      when = d.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' });
+    }
+  } catch { /* ignore */ }
+  return (
+    <div className="flex items-center gap-3 py-3 border-b border-slate-100 last:border-0">
+      <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${isPayment ? 'bg-emerald-50 text-emerald-600' : 'bg-orange-50 text-[#FF5C00]'}`}>
+        <Icon className="w-4 h-4" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-bold text-slate-900 truncate">{item.title}</p>
+        <p className="text-xs text-slate-500 truncate">{item.subtitle}</p>
+      </div>
+      <div className="text-right shrink-0">
+        <p className={`text-sm font-black tracking-tight ${amountColor}`}>{fmtMoney(item.amount || 0, item.currency || 'SRD')}</p>
+        <p className="text-[11px] text-slate-400">{when}</p>
+      </div>
+    </div>
+  );
+}
+
 function Overview() {
   const [stats, setStats] = useState(null);
   const navigate = useNavigate();
@@ -241,74 +329,168 @@ function Overview() {
   ];
 
   const byCur = stats.month_payments_by_currency || {};
+  const outstandingByCur = stats.outstanding_by_currency || {};
+  // Pick the dominant currency to show as the primary "Inkomsten / Openstaand" hero number.
+  // Falls back to SRD if there is no data yet.
+  const primaryCur = Object.keys(byCur)[0] || Object.keys(outstandingByCur)[0] || 'SRD';
+  const incomeTotal = byCur[primaryCur]?.total || 0;
+  const incomeCount = byCur[primaryCur]?.count || 0;
+  const outstandingTotal = outstandingByCur[primaryCur]?.total || 0;
+  const outstandingCount = outstandingByCur[primaryCur]?.count || 0;
+
+  const invStatus = stats.invoice_status || { paid: 0, open: 0, overdue: 0 };
+  const invTotal = invStatus.paid + invStatus.open + invStatus.overdue;
+  const pct = (n) => (invTotal === 0 ? 0 : Math.round((n / invTotal) * 100));
+
+  const occupiedPct = stats.apartments_total === 0 ? 0
+    : Math.round((stats.apartments_occupied / stats.apartments_total) * 100);
+  const vacantCount = stats.apartments_vacant;
+
+  const recent = stats.recent_activity || [];
 
   return (
     <div>
       <PageHeader title="Overzicht" subtitle="Snelle blik op uw vastgoedportefeuille" />
-      <div className="mb-6">
-        <MyUrlCard compact />
-      </div>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+
+      {/* 4 stat-kaarten — gecentreerde value, icoon linksboven */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         {cards.map((c) => {
           const Icon = c.icon;
           return (
-            <div key={c.label} className="bg-white rounded-2xl border border-orange-100 p-5 hover:border-[#FF5C00]/30 transition-colors">
-              <div className={`w-10 h-10 rounded-xl ${c.accent} flex items-center justify-center mb-3`}>
+            <div key={c.label} className="bg-white rounded-2xl border border-orange-100 p-6 hover:border-[#FF5C00]/30 transition-colors">
+              <div className={`w-11 h-11 rounded-xl ${c.accent} flex items-center justify-center mb-4`}>
                 <Icon className="w-5 h-5" />
               </div>
-              <p className="text-3xl font-black text-slate-900 tracking-tight">{c.value}</p>
-              <p className="text-xs text-slate-500 font-semibold mt-1">{c.label}</p>
+              <p className="text-4xl font-black text-slate-900 tracking-tight" data-testid={`stat-${c.label.toLowerCase()}`}>{c.value}</p>
+              <p className="text-sm text-slate-500 font-semibold mt-1">{c.label}</p>
             </div>
           );
         })}
       </div>
 
-      <div className="bg-white rounded-2xl border border-orange-100 p-6">
-        <div className="flex items-center gap-2 mb-4">
-          <Wallet className="w-5 h-5 text-[#FF5C00]" />
-          <h3 className="text-lg font-black text-slate-900">Inkomsten deze maand</h3>
-        </div>
-        {Object.keys(byCur).length === 0 ? (
-          <p className="text-sm text-slate-400">Nog geen betalingen deze maand.</p>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            {['SRD', 'USD', 'EUR'].map((cur) => {
-              const data = byCur[cur];
-              return (
-                <div key={cur} className="bg-gradient-to-br from-[#FFF7F0] to-[#FFEAD3] border border-orange-200 rounded-xl p-4">
-                  <p className="text-xs font-bold text-[#FF5C00] uppercase tracking-widest">{cur}</p>
-                  <p className="text-2xl font-black text-slate-900 tracking-tight mt-1">
-                    {fmtMoney(data?.total || 0, cur)}
-                  </p>
-                  <p className="text-xs text-slate-500 mt-1">{data?.count || 0} betalingen</p>
-                </div>
-              );
-            })}
+      {/* Inkomsten + Openstaand saldo — 2 koloms hero kaart */}
+      <div className="bg-white rounded-2xl border border-orange-100 p-6 mb-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="flex items-center gap-4">
+          <div className="w-14 h-14 rounded-2xl bg-orange-50 flex items-center justify-center shrink-0">
+            <Wallet className="w-7 h-7 text-[#FF5C00]" />
           </div>
-        )}
+          <div className="min-w-0">
+            <p className="text-[11px] font-bold uppercase tracking-widest text-slate-500">Inkomsten deze maand</p>
+            <p className="text-3xl font-black text-slate-900 tracking-tight mt-1" data-testid="income-total">
+              {fmtMoney(incomeTotal, primaryCur)}
+            </p>
+            <p className="text-xs text-slate-400 mt-1">{incomeCount} betalingen</p>
+          </div>
+        </div>
+        <button onClick={() => window.dispatchEvent(new CustomEvent('go-tab', { detail: 'invoices' }))}
+          data-testid="outstanding-cta"
+          className="flex items-center gap-4 text-left hover:bg-orange-50/40 rounded-xl -mx-2 px-2 py-2 transition-colors group">
+          <div className="w-14 h-14 rounded-2xl bg-orange-50 flex items-center justify-center shrink-0">
+            <Gauge className="w-7 h-7 text-[#FF5C00]" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] font-bold uppercase tracking-widest text-slate-500">Openstaand saldo</p>
+            <p className="text-3xl font-black text-[#FF5C00] tracking-tight mt-1" data-testid="outstanding-total">
+              {fmtMoney(outstandingTotal, primaryCur)}
+            </p>
+            <p className="text-xs text-slate-400 mt-1">{outstandingCount} openstaand</p>
+          </div>
+          <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-[#FF5C00] transition-colors shrink-0" />
+        </button>
       </div>
 
-      <div className="mt-8 grid sm:grid-cols-2 gap-4">
-        <button onClick={() => navigate('/kiosk')} data-testid="quick-kiosk"
-          className="bg-gradient-to-br from-[#FF8A3D] via-[#FF5C00] to-[#C74600] rounded-2xl p-6 text-white text-left hover:shadow-[0_20px_40px_-10px_rgba(255,92,0,0.5)] transition-shadow">
-          <div className="flex items-center justify-between mb-3">
-            <Building2 className="w-7 h-7" />
-            <ChevronRight className="w-5 h-5" />
+      {/* Status overzicht + Laatste activiteiten — 2 koloms op desktop */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+        <div className="bg-white rounded-2xl border border-orange-100 p-6 lg:col-span-2" data-testid="status-overview-card">
+          <div className="flex items-center justify-between mb-4">
+            <p className="text-[11px] font-bold uppercase tracking-widest text-slate-500">Status Overzicht</p>
           </div>
-          <p className="text-lg font-black">Open Kiosk</p>
-          <p className="text-sm text-white/80 mt-1">Selfservice terminal voor huurders</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Donut: Betalingsstatus */}
+            <div>
+              <p className="text-sm font-bold text-slate-900 mb-3">Betalingsstatus</p>
+              <div className="flex items-center gap-5">
+                <StatusDonut paid={invStatus.paid} open={invStatus.open} overdue={invStatus.overdue} />
+                <div className="space-y-3">
+                  <StatusLegendItem color="#10B981" label="Betaald" count={invStatus.paid} percent={pct(invStatus.paid)} />
+                  <StatusLegendItem color="#FF5C00" label="Openstaand" count={invStatus.open} percent={pct(invStatus.open)} />
+                  <StatusLegendItem color="#94A3B8" label="Achterstand" count={invStatus.overdue} percent={pct(invStatus.overdue)} />
+                </div>
+              </div>
+            </div>
+            {/* Huurstatus: bezet/totaal + vacancy card */}
+            <div>
+              <p className="text-sm font-bold text-slate-900 mb-3">Huurstatus</p>
+              <div className="h-3 w-full rounded-full bg-slate-100 overflow-hidden mb-2">
+                <div className="h-full bg-emerald-500 transition-all" style={{ width: `${occupiedPct}%` }} />
+              </div>
+              <div className="flex items-center justify-between text-xs mb-5">
+                <span className="text-slate-600 font-semibold">{stats.apartments_occupied} van {stats.apartments_total} bezet</span>
+                <span className="text-emerald-600 font-black">{occupiedPct}%</span>
+              </div>
+              <div className={`rounded-xl border p-4 ${vacantCount === 0 ? 'bg-emerald-50/60 border-emerald-200' : 'bg-amber-50/60 border-amber-200'}`}>
+                <div className="flex items-start gap-3">
+                  <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${vacantCount === 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                    <Home className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className={`text-sm font-black ${vacantCount === 0 ? 'text-emerald-800' : 'text-amber-800'}`}>
+                      {vacantCount === 0 ? 'Geen vacancies' : `${vacantCount} vacant${vacantCount === 1 ? '' : 'e'}`}
+                    </p>
+                    <p className={`text-xs ${vacantCount === 0 ? 'text-emerald-700' : 'text-amber-700'}`}>
+                      {vacantCount === 0 ? 'Alle eenheden zijn bezet.' : 'Eenheden beschikbaar voor verhuur.'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl border border-orange-100 p-6" data-testid="recent-activity-card">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-[11px] font-bold uppercase tracking-widest text-slate-500">Laatste Activiteiten</p>
+            <button onClick={() => window.dispatchEvent(new CustomEvent('go-tab', { detail: 'payments' }))}
+              data-testid="recent-view-all"
+              className="text-xs font-bold text-[#FF5C00] hover:underline">Bekijk alles</button>
+          </div>
+          {recent.length === 0 ? (
+            <div className="py-10 text-center text-sm text-slate-400">
+              <Activity className="w-6 h-6 mx-auto mb-2 text-slate-300" />
+              Nog geen activiteit
+            </div>
+          ) : (
+            <div>
+              {recent.map((item, idx) => <ActivityRow key={idx} item={item} />)}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* CTA's onderaan */}
+      <div className="grid sm:grid-cols-2 gap-4">
+        <button onClick={() => navigate('/kiosk')} data-testid="quick-kiosk"
+          className="bg-gradient-to-br from-[#FF8A3D] via-[#FF5C00] to-[#C74600] rounded-2xl p-6 text-white text-left hover:shadow-[0_20px_40px_-10px_rgba(255,92,0,0.5)] transition-shadow flex items-center gap-4">
+          <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
+            <Building2 className="w-6 h-6" />
+          </div>
+          <div className="flex-1">
+            <p className="text-lg font-black">Open Kiosk</p>
+            <p className="text-sm text-white/80">Selfservice terminal voor huurders</p>
+          </div>
+          <ChevronRight className="w-5 h-5 shrink-0" />
         </button>
         <button onClick={() => window.dispatchEvent(new CustomEvent('go-tab', { detail: 'payments' }))}
           data-testid="quick-payments"
-          className="bg-white border border-orange-100 rounded-2xl p-6 text-left hover:border-[#FF5C00]/30 transition-colors">
-          <div className="flex items-center justify-between mb-3">
-            <div className="w-12 h-12 rounded-xl bg-orange-50 flex items-center justify-center">
-              <Receipt className="w-5 h-5 text-[#FF5C00]" />
-            </div>
-            <ChevronRight className="w-5 h-5 text-slate-300" />
+          className="bg-white border border-orange-100 rounded-2xl p-6 text-left hover:border-[#FF5C00]/30 transition-colors flex items-center gap-4">
+          <div className="w-12 h-12 rounded-xl bg-orange-50 flex items-center justify-center shrink-0">
+            <Receipt className="w-5 h-5 text-[#FF5C00]" />
           </div>
-          <p className="text-lg font-black text-slate-900">Betalingen bekijken</p>
-          <p className="text-sm text-slate-500 mt-1">Alle kwitanties en transacties</p>
+          <div className="flex-1">
+            <p className="text-lg font-black text-slate-900">Betalingen bekijken</p>
+            <p className="text-sm text-slate-500">Alle kwitanties en transacties</p>
+          </div>
+          <ChevronRight className="w-5 h-5 text-slate-300" />
         </button>
       </div>
     </div>
