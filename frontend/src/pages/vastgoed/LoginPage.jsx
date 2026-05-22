@@ -176,6 +176,10 @@ function PasswordView({ initialMode = 'login', onBack, onRegistered }) {
       setError('Vul de bedrijfsnaam in.');
       return;
     }
+    if (mode === 'register' && kioskPin && !/^\d{4}$/.test(kioskPin)) {
+      setError('Kiosk PIN moet uit precies 4 cijfers bestaan.');
+      return;
+    }
     setLoading(true); setError('');
     try {
       if (mode === 'login') {
@@ -189,6 +193,7 @@ function PasswordView({ initialMode = 'login', onBack, onRegistered }) {
           company_name: companyName.trim(),
           telefoon: telefoon.trim(),
           plan,
+          kiosk_pin: kioskPin.trim() || null,
         });
         if (onRegistered) onRegistered();
         setShowSuccess(true);
@@ -284,6 +289,16 @@ function PasswordView({ initialMode = 'login', onBack, onRegistered }) {
                   <input type="tel" value={telefoon} onChange={(e) => setTelefoon(e.target.value)} data-testid="auth-telefoon"
                     placeholder="+597 ..."
                     className="w-full h-14 text-lg px-5 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] focus:ring-4 focus:ring-[#FF5C00]/10 bg-[#F9FAFB] outline-none transition" />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Kiosk PIN (4 cijfers)</label>
+                  <input type="text" inputMode="numeric" pattern="\d{4}" maxLength={4} autoComplete="off"
+                    value={kioskPin}
+                    onChange={(e) => setKioskPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                    data-testid="auth-kiosk-pin"
+                    placeholder="bv. 1234"
+                    className="w-full h-14 text-lg px-5 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] focus:ring-4 focus:ring-[#FF5C00]/10 bg-[#F9FAFB] outline-none transition font-mono tracking-[0.5em] text-center" />
+                  <p className="text-[11px] text-slate-400 mt-1">Optioneel — wordt gebruikt om de Kiosk te ontgrendelen. U kunt dit later wijzigen onder Instellingen.</p>
                 </div>
               </>
             )}
