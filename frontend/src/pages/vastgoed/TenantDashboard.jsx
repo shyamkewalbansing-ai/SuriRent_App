@@ -73,7 +73,7 @@ function MaintenanceForm({ onCancel, onSaved }) {
     finally { setLoading(false); }
   };
   return (
-    <div className="fixed inset-0 z-50 bg-white/70 backdrop-blur-xl flex items-end sm:items-center justify-center sm:p-4" data-testid="tenant-maint-modal">
+    <div className="fixed inset-0 z-50 bg-white/30 backdrop-blur-md flex items-end sm:items-center justify-center sm:p-4" data-testid="tenant-maint-modal">
       <div className="bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full max-w-md p-6 sm:p-7 animate-slide-up">
         <div className="flex items-center justify-between mb-5">
           <h3 className="text-xl font-black text-slate-900">Onderhoudsmelding</h3>

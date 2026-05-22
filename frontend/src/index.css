@@ -68,6 +68,8 @@ body {
    Targets the white-glass modal pattern AND the older dark variants for
    any modals that haven't been migrated yet. Uses CSS :has() — supported
    on iOS 15.4+, Chrome 105+, Safari 15.4+. */
+body:has(.fixed.inset-0.z-50.bg-white\/30) header.md\:hidden,
+body:has(.fixed.inset-0.z-50.bg-white\/30) nav.md\:hidden,
 body:has(.fixed.inset-0.z-50.bg-white\/70) header.md\:hidden,
 body:has(.fixed.inset-0.z-50.bg-white\/70) nav.md\:hidden,
 body:has(.fixed.inset-0.z-50.bg-black\/80) header.md\:hidden,

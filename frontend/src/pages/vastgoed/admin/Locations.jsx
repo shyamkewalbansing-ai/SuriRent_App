@@ -29,7 +29,7 @@ function LocationForm({ initial, onCancel, onSaved }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-white/70 backdrop-blur-xl flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 bg-white/30 backdrop-blur-md flex items-center justify-center p-4">
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-6 sm:p-8 animate-slide-up">
         <div className="flex items-center justify-between mb-5">
           <h3 className="text-xl font-black text-slate-900">{initial?.id ? 'Locatie bewerken' : 'Nieuwe locatie'}</h3>
