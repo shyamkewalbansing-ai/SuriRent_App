@@ -32,14 +32,12 @@ import ImpersonationBanner from '../../components/ImpersonationBanner';
 
 const BASE_TABS = [
   { id: 'overview', label: 'Overzicht', icon: LayoutDashboard },
-  { id: 'ai', label: 'AI Assistent', icon: Sparkles },
   { id: 'locations', label: 'Locaties', icon: MapPin },
   { id: 'apartments', label: 'Appartementen', icon: Building2 },
   { id: 'tenants', label: 'Huurders', icon: Users },
   { id: 'contracts', label: 'Contracten', icon: FileSignature },
   { id: 'payments', label: 'Betalingen', icon: Receipt },
   { id: 'invoices', label: 'Facturen', icon: FileText },
-  { id: 'paylinks', label: 'Online betalen', icon: CreditCard },
   { id: 'deposits', label: 'Borg', icon: ShieldCheck },
   { id: 'maintenance', label: 'Onderhoud', icon: Wrench },
   { id: 'kasgeld', label: 'Kasgeld', icon: Wallet },
