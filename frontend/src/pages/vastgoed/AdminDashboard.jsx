@@ -106,13 +106,8 @@ const MOBILE_SUPER_PRIMARY_IDS = ['companies', 'overview', 'apartments', 'tenant
 
 function MobileHeader({ activeCompany, user, onOpenMenu }) {
   return (
-    <header className="md:hidden sticky top-0 z-30 bg-white border-b border-orange-100">
-      {/* iPhone PWA only: een dunne donkere strip ACHTER de status-bar zodat
-          iOS' witte klok/batterij leesbaar blijft. Hoogte = env(safe-area-
-          inset-top), dus 0 op Android/desktop (onzichtbaar daar). De
-          zichtbare bedrijfsbalk hieronder blijft volledig wit. */}
-      <div className="bg-slate-900" aria-hidden="true"
-        style={{ height: 'env(safe-area-inset-top, 0px)' }} />
+    <header className="md:hidden sticky top-0 z-30 bg-white border-b border-orange-100"
+      style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}>
       <div className="flex items-center gap-3 px-4 h-14">
         <button onClick={onOpenMenu} data-testid="mobile-menu-btn"
           className="w-10 h-10 -ml-2 rounded-xl flex items-center justify-center hover:bg-orange-50">
@@ -194,8 +189,7 @@ function MobileTabBar({ active, onChange, tabs, onOpenMenu, user }) {
     .map((id) => tabs.find((t) => t.id === id))
     .filter(Boolean);
   return (
-    <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white border-t border-orange-100"
-      style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+    <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white border-t border-orange-100">
       <div className="grid grid-cols-5">
         {primary.map((t) => {
           const Icon = t.icon;
@@ -554,7 +548,7 @@ function ApartmentForm({ initial, onCancel, onSaved }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4" data-testid="apartment-modal">
+    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4" data-testid="apartment-modal">
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg p-6 sm:p-8 animate-slide-up">
         <div className="flex items-center justify-between mb-5">
           <h3 className="text-xl font-black text-slate-900">{initial ? 'Appartement bewerken' : 'Nieuw appartement'}</h3>
@@ -748,7 +742,7 @@ function Apartments() {
       )}
 
       {assignFor && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-6 sm:p-8 animate-slide-up">
             <div className="flex items-center justify-between mb-5">
               <h3 className="text-xl font-black text-slate-900">Huurder toewijzen aan {assignFor.number}</h3>
@@ -849,7 +843,7 @@ function ShellyControlModal({ apt, onClose, onChanged }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-6 sm:p-8 animate-slide-up" data-testid="shelly-modal">
         <div className="flex items-center justify-between mb-5">
           <div>
@@ -1010,7 +1004,7 @@ function TenantForm({ initial, apartments, onCancel, onSaved }) {
     finally { setLoading(false); }
   };
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4" data-testid="tenant-modal">
+    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4" data-testid="tenant-modal">
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg p-6 sm:p-8 animate-slide-up">
         <div className="flex items-center justify-between mb-5">
           <h3 className="text-xl font-black text-slate-900">{initial ? 'Huurder bewerken' : 'Nieuwe huurder'}</h3>
@@ -1088,7 +1082,7 @@ function TenantPinModal({ tenant, onCancel, onSaved }) {
     finally { setLoading(false); }
   };
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4" data-testid="tenant-pin-modal">
+    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4" data-testid="tenant-pin-modal">
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-6 sm:p-8 animate-slide-up">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-xl font-black text-slate-900">Portal PIN voor {tenant.name}</h3>
@@ -1256,7 +1250,7 @@ function PaymentForm({ tenants, onCancel, onSaved }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4" data-testid="payment-modal">
+    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4" data-testid="payment-modal">
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg p-6 sm:p-8 animate-slide-up max-h-[90vh] overflow-auto">
         <div className="flex items-center justify-between mb-5">
           <h3 className="text-xl font-black text-slate-900">Nieuwe betaling</h3>
