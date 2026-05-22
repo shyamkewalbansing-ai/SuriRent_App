@@ -37,17 +37,17 @@ function sortApartments(a, b) {
 // =====================================================================
 function MobileHeaderButtons({ onAdmin, onExit }) {
   return (
-    <div className="flex items-center gap-1.5 md:hidden">
+    <div className="flex items-center gap-2 md:hidden">
       {onExit && (
         <button onClick={onExit} data-testid="kiosk-lock-btn"
-          className="flex items-center gap-1.5 text-white font-bold bg-white/20 backdrop-blur-sm rounded-lg px-3 py-1.5">
-          <LogOut className="w-3.5 h-3.5" /> <span className="text-xs">Uit</span>
+          className="flex items-center gap-2 text-white font-bold bg-white/20 active:bg-white/30 backdrop-blur-sm rounded-xl px-4 py-2.5 min-h-[44px]">
+          <LogOut className="w-4 h-4" /> <span className="text-sm">Uit</span>
         </button>
       )}
       {onAdmin && (
         <button onClick={onAdmin} data-testid="kiosk-admin-btn"
-          className="flex items-center gap-1.5 text-orange-600 font-bold bg-white rounded-lg px-3 py-1.5">
-          <SettingsIcon className="w-3.5 h-3.5" /> <span className="text-xs">Beheerder</span>
+          className="flex items-center gap-2 text-orange-600 font-bold bg-white active:bg-orange-50 rounded-xl px-4 py-2.5 min-h-[44px] shadow-sm">
+          <SettingsIcon className="w-4 h-4" /> <span className="text-sm">Beheerder</span>
         </button>
       )}
     </div>
@@ -60,23 +60,23 @@ function MobileHeaderButtons({ onAdmin, onExit }) {
 function Welcome({ company, onStart, onAdmin, onExit }) {
   return (
     <div className="h-full bg-orange-500 flex flex-col" style={{ padding: '1.5vh 1.5vw 0' }}>
-      <div className="flex items-center justify-between" style={{ height: '7vh' }}>
-        <div className="flex items-center gap-2 text-white">
-          <Building2 className="w-5 h-5" />
-          <span className="text-sm sm:text-base font-semibold">{company?.name || 'Kiosk'}</span>
+      <div className="flex items-center justify-between gap-2" style={{ minHeight: '7vh' }}>
+        <div className="flex items-center gap-2 text-white min-w-0">
+          <Building2 className="w-5 h-5 shrink-0" />
+          <span className="text-sm sm:text-base font-semibold truncate">{company?.name || 'Kiosk'}</span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           {onAdmin && (
             <button onClick={onAdmin} data-testid="welcome-admin-btn"
-              className="flex items-center gap-1 text-white/90 bg-white/15 hover:bg-white/25 rounded-lg px-3 py-1.5">
-              <SettingsIcon className="w-4 h-4" />
-              <span className="text-xs hidden sm:inline font-bold">Beheerder</span>
+              className="flex items-center gap-1.5 text-white font-bold bg-white/20 active:bg-white/30 hover:bg-white/25 rounded-xl px-3.5 py-2.5 sm:px-4 sm:py-2 min-h-[44px]">
+              <SettingsIcon className="w-4 h-4 sm:w-4 sm:h-4" />
+              <span className="text-sm font-bold">Beheerder</span>
             </button>
           )}
           <button onClick={onExit} data-testid="welcome-exit-btn"
-            className="flex items-center gap-1 text-white/90 bg-white/15 hover:bg-white/25 rounded-lg px-3 py-1.5">
+            className="flex items-center gap-1.5 text-white font-bold bg-white/20 active:bg-white/30 hover:bg-white/25 rounded-xl px-3.5 py-2.5 sm:px-4 sm:py-2 min-h-[44px]">
             <LogOut className="w-4 h-4" />
-            <span className="text-xs hidden sm:inline font-bold">Uit</span>
+            <span className="text-sm font-bold">Uit</span>
           </button>
         </div>
       </div>
@@ -397,10 +397,14 @@ function PaymentHistoryModal({ tenant, apartment, onClose }) {
   }, [tenant.id]);
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 md:p-6"
+    <div className="fixed inset-0 z-50 backdrop-blur-sm flex items-center justify-center p-4 md:p-6"
       style={{
         paddingTop: 'max(env(safe-area-inset-top, 0px), 1rem)',
         paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 1rem)',
+        /* Brand-georiënteerde overlay zodat in PWA-kiosk de home-indicator
+           gebied dezelfde oranje kleur houdt als de rest van de kiosk,
+           in plaats van een zwarte band. */
+        backgroundColor: 'rgba(199, 70, 0, 0.55)',
       }}
       data-testid="kiosk-history-modal">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl h-full md:h-auto md:max-h-[85vh] overflow-hidden flex flex-col">
