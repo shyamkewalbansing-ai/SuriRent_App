@@ -43,15 +43,15 @@
     {
       "name": "Open Kiosk",
       "short_name": "Kiosk",
-      "description": "Open de selfservice terminal voor huurders",
-      "url": "/kiosk",
+      "description": "Open de selfservice terminal voor huurders (PIN vereist)",
+      "url": "/login?source=pwa&target=kiosk",
       "icons": [{ "src": "/kiosk-icons/kiosk-192.png", "sizes": "192x192", "type": "image/png" }]
     },
     {
       "name": "Beheer",
       "short_name": "Beheer",
-      "description": "Open het beheer dashboard",
-      "url": "/admin",
+      "description": "Open het beheer dashboard (PIN vereist)",
+      "url": "/login?source=pwa&target=admin",
       "icons": [{ "src": "/kiosk-icons/kiosk-192.png", "sizes": "192x192", "type": "image/png" }]
     },
     {

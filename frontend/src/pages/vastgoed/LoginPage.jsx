@@ -49,7 +49,7 @@ function Header({ branding }) {
   );
 }
 
-function PinLanding({ onSuccess, onPassword, onRegister, branding }) {
+function PinLanding({ onSuccess, onPassword, onRegister, branding, pwaTarget }) {
   const [pin, setPin] = useState(['', '', '', '']);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -57,6 +57,7 @@ function PinLanding({ onSuccess, onPassword, onRegister, branding }) {
   const appName = branding?.app_name || 'Kiosk';
   const tagline = branding?.tagline || '';
   const logoUrl = branding?.logo_url ? branding._logoResolved : '/kiosk-icons/kiosk-512.png';
+  const isAdminTarget = pwaTarget === 'admin';
 
   const verify = async (code) => {
     setLoading(true); setError('');
@@ -68,7 +69,9 @@ function PinLanding({ onSuccess, onPassword, onRegister, branding }) {
       // for the company's primary admin so the Kiosk "Beheerder" button can drop
       // directly into /admin without a second login.
       if (data?.admin_token) localStorage.setItem('admin_token', data.admin_token);
-      setPreferredRole('kiosk');
+      // Preferred role for PWA auto-redirect on next launch follows the chosen
+      // shortcut: Beheer-icoon → admin, Kiosk-icoon → kiosk.
+      setPreferredRole(isAdminTarget ? 'admin' : 'kiosk');
       onSuccess();
     } catch (e) {
       setError(formatError(e, 'Ongeldige PIN code'));
@@ -114,8 +117,13 @@ function PinLanding({ onSuccess, onPassword, onRegister, branding }) {
             </div>
             <h2 className="font-bold text-slate-900 tracking-tight leading-tight"
               style={{ fontSize: 'clamp(15px, 2.4vh, 22px)' }}
-              data-testid="pin-app-name">Welkom bij {appName}</h2>
-            {tagline && <p className="text-slate-400 leading-tight" style={{ fontSize: 'clamp(11px, 1.5vh, 13px)', marginTop: '2px' }}>{tagline}</p>}
+              data-testid="pin-app-name">{isAdminTarget ? `Beheer · ${appName}` : `Welkom bij ${appName}`}</h2>
+            {tagline && !isAdminTarget && <p className="text-slate-400 leading-tight" style={{ fontSize: 'clamp(11px, 1.5vh, 13px)', marginTop: '2px' }}>{tagline}</p>}
+            {isAdminTarget && (
+              <p className="font-bold leading-tight" style={{ fontSize: 'clamp(11px, 1.5vh, 13px)', marginTop: '2px', color: primary }}>
+                Voer uw PIN in om naar het Beheer-dashboard te gaan
+              </p>
+            )}
           </div>
 
           {error && (
@@ -557,23 +565,37 @@ export default function LoginPage() {
     return () => { cancelled = true; };
   }, []);
 
+  // PWA shortcut target. Two PWA app icons:
+  //   /login?source=pwa&target=kiosk → after PIN, go to /kiosk
+  //   /login?source=pwa&target=admin → after PIN, go to /admin (PIN gives both tokens)
+  // Defaults to 'kiosk' (the original Kiosk-first PWA experience).
+  const pwaTarget = (() => {
+    const t = (searchParams.get('target') || '').toLowerCase();
+    return t === 'admin' ? 'admin' : 'kiosk';
+  })();
+
   // PWA: if user has a stored preferred role AND a still-valid token for that role,
   // jump directly to that surface (kiosk / admin / tenant). The token-check prevents
   // redirect loops when a token has expired or been revoked.
+  // If the URL contains an explicit `target`, prefer that over the stored role so
+  // the Beheer-shortcut always lands on /admin (or its PIN-gate) and not on /kiosk.
   useEffect(() => {
     if (!isStandalonePWA()) return;
     const params = new URLSearchParams(window.location.search);
     if (params.get('pick') === '1') return; // explicit override: show login picker
     if (params.get('view')) return; // explicit view override → respect it
-    const stored = getPreferredRole();
-    if (!stored) return;
-    const tokenKey = stored === 'admin' ? 'admin_token'
-      : stored === 'tenant' ? 'tenant_token'
+    const targetParam = (params.get('target') || '').toLowerCase();
+    const role = targetParam === 'admin' ? 'admin'
+      : targetParam === 'kiosk' ? 'kiosk'
+      : getPreferredRole();
+    if (!role) return;
+    const tokenKey = role === 'admin' ? 'admin_token'
+      : role === 'tenant' ? 'tenant_token'
       : 'kiosk_token';
     let hasToken = false;
     try { hasToken = !!localStorage.getItem(tokenKey); } catch { /* ignore */ }
     if (!hasToken) return;
-    navigate(routeForRole(stored), { replace: true });
+    navigate(routeForRole(role), { replace: true });
   }, [navigate]);
 
   // Auto-redirect if already logged (but not when we're showing the success screen)
@@ -589,10 +611,25 @@ export default function LoginPage() {
         onRegistered={() => setSkipRedirect(true)} branding={branding} />
     );
   }
+
+  // After PIN-success, navigate to the target surface. Both shortcuts require
+  // PIN entry; the difference is only where the user lands afterwards.
+  const onPinSuccess = () => {
+    if (pwaTarget === 'admin') {
+      setPreferredRole('admin');
+      // Hard-navigate so AuthProvider re-runs /auth/me with the new admin_token
+      // that the kiosk-pin endpoint just returned.
+      window.location.assign('/admin');
+    } else {
+      navigate('/kiosk');
+    }
+  };
+
   return (
     <PinLanding
       branding={branding}
-      onSuccess={() => navigate('/kiosk')}
+      pwaTarget={pwaTarget}
+      onSuccess={onPinSuccess}
       onPassword={() => setView('login')}
       onRegister={() => setView('register')}
     />

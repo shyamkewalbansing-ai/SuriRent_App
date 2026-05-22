@@ -290,7 +290,15 @@ User koos voor **Optie C — minimale herbouw** (kern eerst), dan vroeg om **Fas
 - ✅ **Locked-banner** verschijnt op `/login?locked=1` met merkkleur: "Sessie vergrendeld door inactiviteit — voer uw PIN in om verder te gaan". Verdwijnt zodra de gebruiker een toets indrukt. Kiosk_token blijft behouden → PIN-invoer herstelt direct de admin-toegang (één tik PIN i.p.v. wachtwoord).
 - ✅ E2E getest via Playwright: PIN-pagina past op alle telefoonschermen, locked-banner toont correct.
 
-### Sidebar opgeschoond — Vergrendel/Open Kiosk/Bedrijfsbadge verwijderd (2026-05-22) ✅
+### PWA shortcuts: aparte "Beheer" + "Kiosk" icoon — beide met PIN (2026-05-22) ✅
+- ✅ **Manifest.json**: `shortcuts.kiosk.url` → `/login?source=pwa&target=kiosk`, `shortcuts.beheer.url` → `/login?source=pwa&target=admin`. Beide gaan eerst door PIN-scherm, niet meer direct naar `/kiosk` of `/admin` zonder authenticatie.
+- ✅ **LoginPage** detecteert `?target=admin` query → na PIN-success: `setPreferredRole('admin')` + hard navigate naar `/admin` (admin_token is al door backend meegegeven sinds eerdere fix). `target=kiosk` (default) → naar `/kiosk` met `preferredRole='kiosk'`.
+- ✅ **Visuele hint** in PIN-kaart bij Beheer-target: titel toont "Beheer · {appName}" + oranje sub-tekst "Voer uw PIN in om naar het Beheer-dashboard te gaan", zodat de gebruiker weet wat hij geopend heeft.
+- ✅ **PWA auto-redirect** respecteert nu de `target` query — als de Beheer-shortcut wordt geopend met geldig admin_token, springt het direct naar `/admin` (geen kiosk-redirect meer).
+- ✅ Service worker cache bumped naar `surirent-v15` zodat het nieuwe manifest direct doorkomt op bestaande installaties.
+- ✅ E2E getest via Playwright: beide shortcuts werken; PIN 1234 → juiste surface met juiste tokens + preferred_role gezet.
+
+
 - ✅ **Verwijderd uit Sidebar én MobileDrawer**: bedrijfsbadge ("Bedrijf SuriRent N.V. /surirent • pro"), Snel-acties blok (Open Kiosk + Vergrendel nu).
 - ✅ **`useIdleLock` hook + bestand verwijderd** + auto-lock call uit AdminDashboard weggehaald. Geen onbedoelde sessie-vergrendeling meer.
 - ✅ **`locked` banner en `?locked=1` afhandeling uit LoginPage gehaald** — niet meer relevant zonder auto-lock.
