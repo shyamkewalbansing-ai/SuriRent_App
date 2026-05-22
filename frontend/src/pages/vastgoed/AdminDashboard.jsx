@@ -3,8 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import {
   Building2, Users, Receipt, LayoutDashboard, LogOut, Plus, Trash2, Pencil,
   X, Check, Loader2, Search, Home, Banknote, KeySquare, ChevronRight, Wallet,
-  FileText, ShieldCheck, Wrench, FileSignature, Sparkles, Bell, Briefcase, Mail,
-  CreditCard, Zap, Power, Menu, MoreHorizontal, MapPin, Crown, Paintbrush, Palette,
+  FileText, ShieldCheck, Wrench, FileSignature, Bell, Briefcase, Mail,
+  Zap, Power, Menu, MoreHorizontal, MapPin, Crown, Paintbrush, Palette,
 } from 'lucide-react';
 import { api, formatError, fmtMoney, MONTHS_NL } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
@@ -15,11 +15,9 @@ import Employees from './admin/Employees';
 import Deposits from './admin/Deposits';
 import Maintenance from './admin/Maintenance';
 import Kasgeld from './admin/Kasgeld';
-import AIChat from './admin/AIChat';
 import Notifications from './admin/Notifications';
 import Companies from './admin/Companies';
 import SettingsPage from './admin/Settings';
-import PaymentRequests from './admin/PaymentRequests';
 import Locations from './admin/Locations';
 import Subscriptions from './admin/Subscriptions';
 import SaasSettings from './admin/SaasSettings';
@@ -1274,14 +1272,12 @@ export default function AdminDashboard() {
           {tab === 'landing_editor' && <LandingEditor />}
           {tab === 'branding' && <Branding />}
           {tab === 'overview' && <Overview />}
-          {tab === 'ai' && <AIChat />}
           {tab === 'locations' && <Locations />}
           {tab === 'apartments' && <Apartments />}
           {tab === 'tenants' && <Tenants />}
           {tab === 'contracts' && <Contracts />}
           {tab === 'payments' && <Payments />}
           {tab === 'invoices' && <Invoices />}
-          {tab === 'paylinks' && <PaymentRequests />}
           {tab === 'deposits' && <Deposits />}
           {tab === 'maintenance' && <Maintenance />}
           {tab === 'kasgeld' && <Kasgeld />}

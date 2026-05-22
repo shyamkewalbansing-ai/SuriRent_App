@@ -290,6 +290,15 @@ User koos voor **Optie C — minimale herbouw** (kern eerst), dan vroeg om **Fas
 - ✅ **Locked-banner** verschijnt op `/login?locked=1` met merkkleur: "Sessie vergrendeld door inactiviteit — voer uw PIN in om verder te gaan". Verdwijnt zodra de gebruiker een toets indrukt. Kiosk_token blijft behouden → PIN-invoer herstelt direct de admin-toegang (één tik PIN i.p.v. wachtwoord).
 - ✅ E2E getest via Playwright: PIN-pagina past op alle telefoonschermen, locked-banner toont correct.
 
+### AI Assistent + Online betalen code/endpoints volledig verwijderd (2026-05-22) ✅
+- ✅ **Frontend bestanden verwijderd**: `admin/AIChat.jsx`, `admin/PaymentRequests.jsx`
+- ✅ **AdminDashboard**: imports + tab-render cases voor `ai` en `paylinks` weggehaald
+- ✅ **Invoices.jsx**: per-factuur "betaallink"-knop + `PaymentLinkDialog` verwijderd
+- ✅ **Backend**: `/api/ai/chat`, `/api/ai/sessions/{id}`, `AIChatIn`, `_collect_context()`, `ai_service.py` (bestand weg), `ai_sessions` uit `TENANT_SCOPED_COLLECTIONS`
+- ✅ **Backend**: `/api/payment-requests/*` + `/api/webhooks/mope` + helpers weggehaald (per-invoice online betalen flow)
+- ✅ **SaaS-billing intact**: `saas_payment_requests`, `/api/billing/...`, `/api/webhooks/mope-saas` ongewijzigd — platform-abonnement betalingen werken
+- ✅ Smoke-test: `/api/ai/chat` → 404, `/api/payment-requests` → 404, `/api/invoices` → 200, facturen-tabel toont geen betaallink-knop meer
+
 ### PWA shortcuts: aparte "Beheer" + "Kiosk" icoon — beide met PIN (2026-05-22) ✅
 - ✅ **Manifest.json**: `shortcuts.kiosk.url` → `/login?source=pwa&target=kiosk`, `shortcuts.beheer.url` → `/login?source=pwa&target=admin`. Beide gaan eerst door PIN-scherm, niet meer direct naar `/kiosk` of `/admin` zonder authenticatie.
 - ✅ **LoginPage** detecteert `?target=admin` query → na PIN-success: `setPreferredRole('admin')` + hard navigate naar `/admin` (admin_token is al door backend meegegeven sinds eerdere fix). `target=kiosk` (default) → naar `/kiosk` met `preferredRole='kiosk'`.
