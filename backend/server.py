@@ -545,19 +545,6 @@ async def _reminder_loop():
         await _aio.sleep(6 * 3600)
 
 
-@app.on_event("shutdown")
-async def _stop_reminders_noop():
-    # Cleanup is handled by the lifespan context manager.
-    pass
-
-
-@api.post("/superadmin/run-trial-reminders")
-async def manual_run_trial_reminders(user=Depends(require_role("superadmin"))):
-    """Manually trigger the reminder sweep (useful for testing)."""
-    await _send_trial_reminders()
-    return {"ok": True}
-
-
 app = FastAPI(title="Vastgoed Kiosk API", lifespan=lifespan)
 
 cors_origins = os.environ.get("CORS_ORIGINS", "*")
@@ -3889,6 +3876,13 @@ async def shelly_apartment_control(apt_id: str, body: ShellyControlIn, user=Depe
     except ShellyError as e:
         raise HTTPException(status_code=502, detail=str(e))
     return {"ok": True, "apartment_id": apt_id, "turn": body.turn}
+
+
+@api.post("/superadmin/run-trial-reminders")
+async def manual_run_trial_reminders(user=Depends(require_role("superadmin"))):
+    """Manually trigger the reminder sweep (useful for testing)."""
+    await _send_trial_reminders()
+    return {"ok": True}
 
 
 app.include_router(api)

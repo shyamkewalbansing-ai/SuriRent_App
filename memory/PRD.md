@@ -206,6 +206,10 @@ User koos voor **Optie C — minimale herbouw** (kern eerst), dan vroeg om **Fas
 - ✅ SW cache → `surirent-v8`
 - ✅ Tested: **88/88 backend pass** (22 nieuwe location-tests + 66 regressie) + alle 8 kiosk-stappen + admin Locaties CRUD geverifieerd
 
+### Impersonation UI fix + verification (2026-05-22) ✅
+- ✅ **Bug fix**: backend crashte met `NameError: name 'app' is not defined` — `@app.on_event("shutdown")` en `@api.post("/superadmin/run-trial-reminders")` decorators stonden op regel 548/554, vóór `app = FastAPI(...)` op regel 561. Verplaatst: `app.on_event` (no-op) verwijderd, `run-trial-reminders` route nu vlak boven `app.include_router(api)` geplaatst zodat `api` al bestaat.
+- ✅ **Impersonation flow geverifieerd via Playwright**: superadmin login → `/api/superadmin/companies/{id}/impersonate` → hard reload naar `/admin` → `ImpersonationBanner` ("Support modus actief · Terug naar SaaS dashboard") zichtbaar, geen lingering dark overlay, "Mijn Abonnement" tab beschikbaar in sidebar. Exit-knop reset cleanly terug naar SaaS dashboard.
+
 ## Prioritized Backlog (Fases E-F)
 - 📧 **Email notificaties** — wacht op SendGrid / Resend credentials van user
 - 📱 **WhatsApp/SMS herinneringen** — wacht op Twilio credentials
