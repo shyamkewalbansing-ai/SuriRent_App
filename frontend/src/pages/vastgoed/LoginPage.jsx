@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Building2, Loader2, Lock, Delete, KeyRound, ArrowLeft, Eye, EyeOff, UserPlus, LogIn, Check } from 'lucide-react';
+import { Building2, Loader2, Lock, Delete, KeyRound, ArrowLeft, Eye, EyeOff, UserPlus, LogIn, Check, Smartphone, RotateCcw } from 'lucide-react';
 import { api, formatError } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
+import { getPreferredRole, setPreferredRole, clearPreferredRole, isStandalonePWA, routeForRole } from '../../lib/pwaRole';
 
 function Clock() {
   const [t, setT] = useState(new Date());
@@ -50,6 +51,7 @@ function PinLanding({ onSuccess, onPassword, onRegister }) {
       const { data } = await api.post('/auth/kiosk-pin', { pin: code });
       if (data?.token) localStorage.setItem('kiosk_token', data.token);
       if (data?.company) localStorage.setItem('kiosk_company', JSON.stringify(data.company));
+      setPreferredRole('kiosk');
       onSuccess();
     } catch (e) {
       setError(formatError(e, 'Ongeldige PIN code'));
@@ -202,6 +204,7 @@ function PasswordView({ initialMode = 'login', onBack, onRegistered }) {
     try {
       if (mode === 'login') {
         await login(email, password);
+        setPreferredRole('admin');
         navigate('/admin');
       } else {
         await register({
@@ -214,6 +217,7 @@ function PasswordView({ initialMode = 'login', onBack, onRegistered }) {
           kiosk_pin: kioskPin.trim() || null,
           ...(country ? { country } : {}),
         });
+        setPreferredRole('admin');
         if (onRegistered) onRegistered();
         setShowSuccess(true);
       }
@@ -461,15 +465,51 @@ function Bank({ label, value, mono }) {
   );
 }
 
+function PwaRoleBadge({ role, onReset }) {
+  if (!role) return null;
+  const labels = { kiosk: 'Kiosk', admin: 'Beheerder', tenant: 'Huurder' };
+  return (
+    <div className="fixed bottom-3 left-1/2 -translate-x-1/2 z-50 bg-white/95 backdrop-blur border border-orange-200 rounded-full pl-3 pr-1.5 py-1.5 shadow-lg flex items-center gap-2 text-xs"
+      data-testid="pwa-role-badge">
+      <Smartphone className="w-3.5 h-3.5 text-[#FF5C00]" />
+      <span className="font-bold text-slate-700">Standaard modus: <span className="text-[#C74600]">{labels[role]}</span></span>
+      <button type="button" onClick={onReset}
+        data-testid="pwa-role-reset"
+        className="ml-1 inline-flex items-center gap-1 px-2 py-1 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold transition">
+        <RotateCcw className="w-3 h-3" /> Wijzig
+      </button>
+    </div>
+  );
+}
+
 export default function LoginPage() {
   const navigate = useNavigate();
   const { user, loading } = useAuth();
   const [view, setView] = useState('pin'); // pin | login | register
   const [skipRedirect, setSkipRedirect] = useState(false);
+  const [pwaRole, setPwaRole] = useState(() => getPreferredRole());
 
   useEffect(() => {
     document.title = 'Vastgoed Kiosk - Login';
   }, []);
+
+  // PWA: if user has a stored preferred role AND a still-valid token for that role,
+  // jump directly to that surface (kiosk / admin / tenant). The badge below allows reset.
+  // The token-check prevents redirect loops when a token has expired or been revoked.
+  useEffect(() => {
+    if (!isStandalonePWA()) return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('pick') === '1') return; // explicit override: show login picker
+    const stored = getPreferredRole();
+    if (!stored) return;
+    const tokenKey = stored === 'admin' ? 'admin_token'
+      : stored === 'tenant' ? 'tenant_token'
+      : 'kiosk_token';
+    let hasToken = false;
+    try { hasToken = !!localStorage.getItem(tokenKey); } catch { /* ignore */ }
+    if (!hasToken) return; // token gone → let the user re-authenticate
+    navigate(routeForRole(stored), { replace: true });
+  }, [navigate]);
 
   // Auto-redirect if already logged (but not when we're showing the success screen)
   useEffect(() => {
@@ -478,15 +518,28 @@ export default function LoginPage() {
     }
   }, [user, loading, navigate, skipRedirect]);
 
+  const resetPwaRole = () => {
+    clearPreferredRole();
+    setPwaRole(null);
+  };
+
   if (view === 'login' || view === 'register') {
-    return <PasswordView initialMode={view} onBack={() => setView('pin')}
-      onRegistered={() => setSkipRedirect(true)} />;
+    return (
+      <>
+        <PasswordView initialMode={view} onBack={() => setView('pin')}
+          onRegistered={() => setSkipRedirect(true)} />
+        <PwaRoleBadge role={pwaRole} onReset={resetPwaRole} />
+      </>
+    );
   }
   return (
-    <PinLanding
-      onSuccess={() => navigate('/kiosk')}
-      onPassword={() => setView('login')}
-      onRegister={() => setView('register')}
-    />
+    <>
+      <PinLanding
+        onSuccess={() => navigate('/kiosk')}
+        onPassword={() => setView('login')}
+        onRegister={() => setView('register')}
+      />
+      <PwaRoleBadge role={pwaRole} onReset={resetPwaRole} />
+    </>
   );
 }

@@ -251,6 +251,14 @@ User koos voor **Optie C — minimale herbouw** (kern eerst), dan vroeg om **Fas
 - ✅ **Escape hatch**: `?landing=1` query bypasst de redirect zodat marketing landing nog steeds bereikbaar is vanuit de PWA indien gewenst.
 - ✅ Tested via Playwright: `/?source=pwa` → final URL `/login` met Kiosk PIN. `/?landing=1` → landing page met h1 zichtbaar.
 
+### PWA onthoudt voorkeur-rol (kiosk/admin/huurder) (2026-05-22) ✅
+- ✅ **Nieuwe `lib/pwaRole.js` helper**: `getPreferredRole`, `setPreferredRole`, `clearPreferredRole`, `isStandalonePWA`, `routeForRole`. localStorage key `pwa_preferred_role` met `kiosk | admin | tenant`.
+- ✅ **Auto-save bij login**: kiosk PIN succes → `setPreferredRole('kiosk')`; admin login/register → `setPreferredRole('admin')`; tenant portal login → `setPreferredRole('tenant')`.
+- ✅ **Auto-redirect in `/login`**: bij PWA standalone-modus + opgeslagen rol + bijbehorend token aanwezig → `replace` navigate naar `/kiosk` / `/admin` / `/huurder`. Token-check voorkomt redirect-loops bij verlopen tokens.
+- ✅ **`PwaRoleBadge`** UI onderaan: toont actieve standaard-modus + "Wijzig" knop (RotateCcw icoon) die de localStorage clear-t. Verschijnt alleen als er een rol opgeslagen is.
+- ✅ **Escape route**: `?pick=1` query parameter bypasst de auto-redirect zodat een gebruiker explicit kan kiezen.
+- ✅ End-to-end getest: admin token → /login?source=pwa → /admin redirect; tenant role → /huurder; ?pick=1 toont badge met "Beheerder · Wijzig"; reset clear-t de localStorage.
+
 ## Prioritized Backlog (Fases E-F)
 - 📧 **Email notificaties** — wacht op SendGrid / Resend credentials van user
 - 📱 **WhatsApp/SMS herinneringen** — wacht op Twilio credentials

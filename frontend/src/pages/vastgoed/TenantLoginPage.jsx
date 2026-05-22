@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Loader2, Delete, ArrowLeft, Mail, Phone, Home } from 'lucide-react';
 import { api, formatError } from '../../lib/api';
+import { setPreferredRole } from '../../lib/pwaRole';
 
 export default function TenantLoginPage() {
   const navigate = useNavigate();
@@ -23,6 +24,7 @@ export default function TenantLoginPage() {
     try {
       const { data } = await api.post('/tenant-portal/login', { identifier, pin: code });
       if (data?.token) localStorage.setItem('tenant_token', data.token);
+      setPreferredRole('tenant');
       navigate('/huurder/portaal', { replace: true });
     } catch (e) {
       setError(formatError(e, 'Onjuiste PIN'));
