@@ -397,12 +397,13 @@ function PaymentHistoryModal({ tenant, apartment, onClose }) {
   }, [tenant.id]);
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center"
+    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 md:p-6"
       style={{
-        padding: 'max(env(safe-area-inset-top, 0px), 12px) max(env(safe-area-inset-right, 0px), 12px) max(env(safe-area-inset-bottom, 0px), 12px) max(env(safe-area-inset-left, 0px), 12px)',
+        paddingTop: 'max(env(safe-area-inset-top, 0px), 1rem)',
+        paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 1rem)',
       }}
       data-testid="kiosk-history-modal">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl h-full max-h-full overflow-hidden flex flex-col">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl h-full md:h-auto md:max-h-[85vh] overflow-hidden flex flex-col">
         <div className="px-5 sm:px-6 py-3.5 border-b border-slate-100 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3 min-w-0">
             <div className="w-9 h-9 rounded-lg bg-orange-100 flex items-center justify-center shrink-0">
@@ -897,7 +898,7 @@ export default function KioskLayout() {
         <motion.div key={step} variants={variants}
           initial="enter" animate="center" exit="exit"
           transition={{ duration: 0.25, ease: 'easeInOut' }}
-          className="absolute inset-0 overflow-y-auto overflow-x-hidden"
+          className="absolute inset-0 overflow-y-auto overflow-x-hidden md:pb-16"
           style={{
             paddingTop: 'env(safe-area-inset-top, 0px)',
             paddingBottom: 'env(safe-area-inset-bottom, 0px)',
