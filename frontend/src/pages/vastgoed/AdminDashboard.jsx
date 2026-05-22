@@ -4,7 +4,7 @@ import {
   Building2, Users, Receipt, LayoutDashboard, LogOut, Plus, Trash2, Pencil,
   X, Check, Loader2, Search, Home, Banknote, KeySquare, ChevronRight, Wallet,
   FileText, ShieldCheck, Wrench, FileSignature, Sparkles, Bell, Briefcase, Mail,
-  CreditCard, Zap, Power, Menu, MoreHorizontal, MapPin, Crown, Paintbrush, Palette,
+  CreditCard, Zap, Power, Menu, MoreHorizontal, MapPin, Crown, Paintbrush, Palette, Lock,
 } from 'lucide-react';
 import { api, formatError, fmtMoney, MONTHS_NL } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
@@ -61,7 +61,7 @@ function getTabsFor(user) {
   return user?.role === 'superadmin' ? SUPER_TABS : BASE_TABS;
 }
 
-function Sidebar({ active, onChange, onLogout, user, activeCompany, tabs }) {
+function Sidebar({ active, onChange, onLogout, onLock, user, activeCompany, tabs }) {
   return (
     <aside className="hidden md:flex flex-col w-64 bg-white border-r border-orange-100 p-5">
       <div className="flex items-center gap-3 mb-4">
@@ -106,6 +106,12 @@ function Sidebar({ active, onChange, onLogout, user, activeCompany, tabs }) {
 
       <div className="border-t border-orange-100 pt-4 mt-4 space-y-2">
         <p className="text-xs text-slate-500 px-3 truncate">{user?.email}</p>
+        {onLock && (
+          <button onClick={onLock} data-testid="lock-now-btn"
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold text-slate-600 hover:bg-orange-50 hover:text-[#FF5C00] transition-all">
+            <Lock className="w-4 h-4" /> Vergrendel nu
+          </button>
+        )}
         <button onClick={onLogout} data-testid="logout-btn"
           className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold text-slate-600 hover:bg-red-50 hover:text-red-600 transition-all">
           <LogOut className="w-4 h-4" /> Uitloggen
@@ -146,7 +152,7 @@ function MobileHeader({ activeCompany, user, onOpenMenu }) {
   );
 }
 
-function MobileDrawer({ open, onClose, active, onChange, onLogout, user, activeCompany, tabs }) {
+function MobileDrawer({ open, onClose, active, onChange, onLogout, onLock, user, activeCompany, tabs }) {
   if (!open) return null;
   return (
     <div className="md:hidden fixed inset-0 z-50" data-testid="mobile-drawer">
@@ -202,6 +208,12 @@ function MobileDrawer({ open, onClose, active, onChange, onLogout, user, activeC
         <div className="border-t border-orange-100 px-5 py-4 space-y-2"
           style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 1rem)' }}>
           <p className="text-xs text-slate-500 truncate">{user?.email}</p>
+          {onLock && (
+            <button onClick={() => { onClose(); onLock(); }} data-testid="mobile-drawer-lock"
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold text-slate-700 hover:bg-orange-50 hover:text-[#FF5C00] transition-all">
+              <Lock className="w-4 h-4" /> Vergrendel nu
+            </button>
+          )}
           <button onClick={() => { onClose(); onLogout(); }} data-testid="mobile-drawer-logout"
             className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold text-red-600 hover:bg-red-50 transition-all">
             <LogOut className="w-4 h-4" /> Uitloggen
@@ -1287,18 +1299,32 @@ export default function AdminDashboard() {
   }, []);
   const doLogout = async () => { await logout(); navigate('/login'); };
 
+  // "Vergrendel nu" — gebruiker verlaat de PC bewust. We verwijderen het
+  // admin-token (zoals auto-lock doet) maar laten de kiosk_token + PIN-kennis
+  // intact, zodat heractivatie één PIN-tik kost. Hard navigation forceert
+  // AuthProvider remount.
+  const doLock = () => {
+    try { localStorage.removeItem('admin_token'); } catch { /* ignore */ }
+    window.location.assign('/login?locked=1');
+  };
+  // Lock-knop is alleen zinvol voor "gewone" admins. Superadmin heeft geen
+  // PIN-flow en zou daarmee niet meer terug kunnen komen.
+  const lockEnabled = !!user && user.role !== 'superadmin';
+
   // Auto-lock: na 15 minuten inactiviteit → admin-token wegnemen en terug
   // naar /login. De kiosk_token (en PIN) blijft behouden, dus opnieuw
   // inloggen kost slechts één PIN-invoer i.p.v. een volledige wachtwoord-flow.
   // Niet actief voor superadmin (die kan langer doorwerken op SaaS-zaken).
   useIdleLock({
     timeoutMs: 15 * 60 * 1000,
-    enabled: !!user && user.role !== 'superadmin',
-    onLock: () => { window.location.assign('/login?locked=1'); },
+    enabled: lockEnabled,
+    onLock: doLock,
   });
   return (
     <div className="min-h-screen bg-[#FFF7F0] flex">
-      <Sidebar active={tab} onChange={setTab} onLogout={doLogout} user={user} activeCompany={activeCompany} tabs={tabs} />
+      <Sidebar active={tab} onChange={setTab} onLogout={doLogout}
+        onLock={lockEnabled ? doLock : undefined}
+        user={user} activeCompany={activeCompany} tabs={tabs} />
       <div className="flex-1 flex flex-col min-w-0">
         <MobileHeader activeCompany={activeCompany} user={user} onOpenMenu={() => setDrawerOpen(true)} />
         <ImpersonationBanner />
@@ -1331,6 +1357,7 @@ export default function AdminDashboard() {
         onOpenMenu={() => setDrawerOpen(true)} />
       <MobileDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)}
         active={tab} onChange={setTab} onLogout={doLogout}
+        onLock={lockEnabled ? doLock : undefined}
         user={user} activeCompany={activeCompany} tabs={tabs} />
     </div>
   );

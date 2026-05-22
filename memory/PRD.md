@@ -290,6 +290,11 @@ User koos voor **Optie C — minimale herbouw** (kern eerst), dan vroeg om **Fas
 - ✅ **Locked-banner** verschijnt op `/login?locked=1` met merkkleur: "Sessie vergrendeld door inactiviteit — voer uw PIN in om verder te gaan". Verdwijnt zodra de gebruiker een toets indrukt. Kiosk_token blijft behouden → PIN-invoer herstelt direct de admin-toegang (één tik PIN i.p.v. wachtwoord).
 - ✅ E2E getest via Playwright: PIN-pagina past op alle telefoonschermen, locked-banner toont correct.
 
+### "Vergrendel nu" knop in admin sidebar (2026-05-22) ✅
+- ✅ **Nieuwe `Vergrendel nu` knop** in zowel desktop sidebar (boven "Uitloggen") als mobiele drawer — met `Lock` icoon, slate→oranje hover. Roept dezelfde `doLock` aan als de auto-lock (verwijdert admin_token + hard navigate naar `/login?locked=1`).
+- ✅ **Niet zichtbaar voor superadmin** (die heeft geen PIN-flow → zou niet meer terug kunnen).
+- ✅ E2E getest: klik in sidebar → admin_token=false, kiosk_token=true → `/login?locked=1` met lock-banner zichtbaar. Eén PIN-tik herstelt admin-toegang via de bestaande backend flow.
+
 ## Prioritized Backlog (Fases E-F)
 - 📧 **Email notificaties** — wacht op SendGrid / Resend credentials van user
 - 📱 **WhatsApp/SMS herinneringen** — wacht op Twilio credentials
