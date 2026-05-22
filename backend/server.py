@@ -142,6 +142,13 @@ async def get_current_user(request: Request) -> dict:
     user = await db.users.find_one({"id": payload["sub"]}, {"_id": 0, "password_hash": 0})
     if not user:
         raise HTTPException(status_code=401, detail="Gebruiker niet gevonden")
+    # Impersonation context carried via JWT payload
+    if payload.get("original_user_id"):
+        user["original_user_id"] = payload["original_user_id"]
+        user["impersonated_by"] = payload.get("impersonated_by")
+        # While impersonating, scope to the company embedded in the token
+        user["company_id"] = payload.get("company_id") or user.get("company_id")
+        user["role"] = "admin"  # acts as admin of the customer
     # Superadmin can simulate company via header x-active-company
     if user.get("role") == "superadmin":
         active = request.headers.get("x-active-company") or request.query_params.get("company_id")
@@ -699,6 +706,58 @@ async def billing_me(user=Depends(get_current_user)):
     }
 
 
+class ChangePlanIn(BaseModel):
+    plan: Literal["starter", "professional"]
+
+
+@api.put("/billing/me/plan")
+async def change_plan(body: ChangePlanIn, user=Depends(get_current_user)):
+    """Customer-driven plan upgrade/downgrade. Effective on next renewal."""
+    cid = company_id_of(user)
+    if not cid:
+        raise HTTPException(status_code=400, detail="Geen actief bedrijf")
+    c = await db.companies.find_one({"id": cid}, {"_id": 0})
+    if not c:
+        raise HTTPException(status_code=404, detail="Bedrijf niet gevonden")
+    old = c.get("plan", "starter")
+    new_plan = body.plan
+    update = {"plan": new_plan, "plan_changed_at": iso(now_utc())}
+    # During trial → just swap; the price banner already updates.
+    if c.get("billing_status") in ("trial", "expired"):
+        await db.companies.update_one({"id": cid}, {"$set": update})
+        return {"ok": True, "plan": new_plan, "effective": "immediately"}
+    # Active subscription → schedule on next renewal
+    update["pending_plan"] = new_plan
+    await db.companies.update_one({"id": cid}, {"$set": update})
+    await db.audit_log.insert_one({
+        "id": new_id(), "type": "plan_change",
+        "actor": user.get("email"), "company_id": cid,
+        "from_plan": old, "to_plan": new_plan, "at": iso(now_utc()),
+    })
+    return {
+        "ok": True, "plan": new_plan, "effective": "next_renewal",
+        "renews_at": c.get("subscription_renews_at"),
+    }
+
+
+@api.get("/billing/me/invoices")
+async def my_invoices(user=Depends(get_current_user)):
+    cid = company_id_of(user)
+    if not cid:
+        return []
+    docs = await db.subscription_invoices.find({"company_id": cid}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    return docs
+
+
+@api.get("/billing/me/payments")
+async def my_payments(user=Depends(get_current_user)):
+    cid = company_id_of(user)
+    if not cid:
+        return []
+    docs = await db.subscription_payments.find({"company_id": cid}, {"_id": 0}).sort("paid_at", -1).to_list(200)
+    return docs
+
+
 @api.get("/billing/bank-details")
 async def billing_bank_details():
     """Public bank details for offline / wire transfer subscription payments.
@@ -984,6 +1043,7 @@ async def impersonate_company(cid: str, response: Response, user=Depends(require
         "sub": target_user_id, "email": target_email, "type": "access",
         "company_id": cid, "role": "admin",
         "impersonated_by": user.get("email"),
+        "original_user_id": user.get("id"),
     }
     token = create_token(payload, IMPERSONATE_TOKEN_MIN)
     _set_access_cookie(response, token, minutes=IMPERSONATE_TOKEN_MIN)
@@ -997,6 +1057,23 @@ async def impersonate_company(cid: str, response: Response, user=Depends(require
         "company": {k: c.get(k) for k in ("id", "slug", "name", "plan")},
         "expires_in_minutes": IMPERSONATE_TOKEN_MIN,
     }
+
+
+@api.post("/auth/stop-impersonating")
+async def stop_impersonating(response: Response, user=Depends(get_current_user)):
+    """Return to the original superadmin session after an impersonation."""
+    original_id = user.get("original_user_id")
+    if not original_id:
+        raise HTTPException(status_code=400, detail="Geen impersonatie-sessie actief")
+    super_user = await db.users.find_one({"id": original_id}, {"_id": 0, "password_hash": 0})
+    if not super_user or super_user.get("role") != "superadmin":
+        raise HTTPException(status_code=403, detail="Origineel account niet gevonden of niet superadmin")
+    token = create_token({
+        "sub": super_user["id"], "email": super_user["email"], "type": "access",
+        "company_id": super_user.get("company_id"), "role": "superadmin",
+    }, ACCESS_MIN)
+    _set_access_cookie(response, token)
+    return {"token": token, "user": super_user}
 
 
 # SaaS-level settings (banking, Mope creds, branding) stored centrally

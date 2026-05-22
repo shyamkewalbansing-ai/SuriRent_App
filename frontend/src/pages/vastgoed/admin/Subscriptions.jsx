@@ -243,8 +243,8 @@ function CompanyDetailDrawer({ company, onClose, onChanged }) {
       const { data } = await api.post(`/superadmin/companies/${company.id}/impersonate`);
       if (data?.token) localStorage.setItem('admin_token', data.token);
       if (data?.company) localStorage.setItem('active_company', JSON.stringify(data.company));
-      await refresh();
-      navigate('/admin');
+      // Hard reload to guarantee a clean component tree for the impersonated context
+      window.location.href = '/admin';
     } catch (e) { setErr(formatError(e)); setBusy(false); }
   };
 

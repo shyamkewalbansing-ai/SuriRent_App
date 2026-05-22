@@ -23,7 +23,9 @@ import PaymentRequests from './admin/PaymentRequests';
 import Locations from './admin/Locations';
 import Subscriptions from './admin/Subscriptions';
 import SaasSettings from './admin/SaasSettings';
+import MijnAbonnement from './admin/MijnAbonnement';
 import TrialBanner from '../../components/TrialBanner';
+import ImpersonationBanner from '../../components/ImpersonationBanner';
 
 const BASE_TABS = [
   { id: 'overview', label: 'Overzicht', icon: LayoutDashboard },
@@ -40,6 +42,7 @@ const BASE_TABS = [
   { id: 'kasgeld', label: 'Kasgeld', icon: Wallet },
   { id: 'employees', label: 'Werknemers', icon: Users },
   { id: 'notifications', label: 'Notificaties', icon: Bell },
+  { id: 'mijn_abonnement', label: 'Mijn Abonnement', icon: Crown },
   { id: 'settings', label: 'Instellingen', icon: KeySquare },
 ];
 const SUPER_TABS = [
@@ -1279,6 +1282,7 @@ export default function AdminDashboard() {
       <Sidebar active={tab} onChange={setTab} onLogout={doLogout} user={user} activeCompany={activeCompany} tabs={tabs} />
       <div className="flex-1 flex flex-col min-w-0">
         <MobileHeader activeCompany={activeCompany} user={user} onOpenMenu={() => setDrawerOpen(true)} />
+        <ImpersonationBanner />
         <TrialBanner />
         <main className="flex-1 p-5 md:p-8 pb-24 md:pb-8 max-w-7xl w-full">
           {tab === 'companies' && <Companies />}
@@ -1298,6 +1302,7 @@ export default function AdminDashboard() {
           {tab === 'kasgeld' && <Kasgeld />}
           {tab === 'employees' && <Employees />}
           {tab === 'notifications' && <Notifications />}
+          {tab === 'mijn_abonnement' && <MijnAbonnement />}
           {tab === 'settings' && <SettingsPage />}
         </main>
       </div>
