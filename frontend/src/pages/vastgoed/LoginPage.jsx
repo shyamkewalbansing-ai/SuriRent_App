@@ -5,7 +5,7 @@ import { api, formatError } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { getPreferredRole, setPreferredRole, clearPreferredRole, isStandalonePWA, routeForRole } from '../../lib/pwaRole';
 import {
-  detectCompanySlug, setStoredSlug, fetchBranding, applyBranding,
+  detectCompanySlug, setStoredSlug, fetchBranding, fetchBrandingByHost, applyBranding,
   resolveLogoUrl, readCachedBranding, clearBrandingCache,
 } from '../../lib/branding';
 
@@ -568,11 +568,14 @@ export default function LoginPage() {
     let cancelled = false;
     (async () => {
       const slug = detectCompanySlug();
-      if (!slug) { setBranding(null); return; }
-      const data = await fetchBranding(slug);
+      let data = slug ? await fetchBranding(slug) : null;
+      // Last resort: ask the backend based on the Host header (works for wildcard DNS
+      // setups where the slug detector couldn't read window.location.hostname reliably).
+      if (!data) {
+        data = await fetchBrandingByHost();
+      }
       if (cancelled) return;
       if (!data) {
-        // Stored slug is no longer valid (company deleted etc.) → fall back to default
         clearBrandingCache();
         setBranding(null);
         return;

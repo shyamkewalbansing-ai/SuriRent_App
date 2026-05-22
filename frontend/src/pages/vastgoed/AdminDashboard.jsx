@@ -25,6 +25,7 @@ import Subscriptions from './admin/Subscriptions';
 import SaasSettings from './admin/SaasSettings';
 import LandingEditor from './admin/LandingEditor';
 import Branding from './admin/Branding';
+import MyUrlCard from '../../components/MyUrlCard';
 import MijnAbonnement from './admin/MijnAbonnement';
 import TrialBanner from '../../components/TrialBanner';
 import ImpersonationBanner from '../../components/ImpersonationBanner';
@@ -273,6 +274,9 @@ function Overview() {
   return (
     <div>
       <PageHeader title="Overzicht" subtitle="Snelle blik op uw vastgoedportefeuille" />
+      <div className="mb-6">
+        <MyUrlCard compact />
+      </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
         {cards.map((c) => {
           const Icon = c.icon;

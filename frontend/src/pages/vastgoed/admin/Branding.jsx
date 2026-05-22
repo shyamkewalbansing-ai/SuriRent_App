@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Palette, Save, Loader2, Upload, Check, AlertCircle, Eye, RotateCcw } from 'lucide-react';
 import { api, formatError } from '../../../lib/api';
 import { resolveLogoUrl, applyBranding } from '../../../lib/branding';
+import MyUrlCard from '../../../components/MyUrlCard';
 
 const PRESET_COLORS = [
   '#FF5C00', '#1e88e5', '#7c3aed', '#059669',
@@ -145,6 +146,8 @@ export default function Branding() {
       {err && <div className="bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold rounded-lg p-3 flex items-center gap-2"><AlertCircle className="w-4 h-4" />{err}</div>}
       {msg && <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold rounded-lg p-3 flex items-center gap-2"><Check className="w-4 h-4" />{msg}</div>}
 
+      <MyUrlCard />
+
       <div className="grid md:grid-cols-2 gap-4">
         {/* LEFT: form */}
         <div className="space-y-3">
@@ -177,14 +180,6 @@ export default function Branding() {
                 data-testid="branding-tagline"
                 className="w-full h-10 px-3 border-2 border-slate-200 rounded-lg text-sm focus:border-slate-900 focus:outline-none" />
             </label>
-          </div>
-
-          <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4">
-            <h3 className="text-sm font-extrabold text-slate-900 mb-2">Uw bedrijfslink</h3>
-            <p className="text-xs text-slate-600 mb-2">Deel deze link met klanten. Zij krijgen dan automatisch uw eigen branding te zien op de login-pagina.</p>
-            <code className="block bg-white border border-slate-200 rounded-lg p-2 text-xs font-mono break-all text-slate-900" data-testid="branding-share-link">
-              {(typeof window !== 'undefined' ? window.location.origin : '')}/login?c={b.slug || ''}
-            </code>
           </div>
         </div>
 

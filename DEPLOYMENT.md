@@ -185,3 +185,113 @@ curl -i https://app.surirent.sr/api/health
 curl -I https://surirent.sr/
 # 200 OK + Content-Type: text/html
 ```
+
+
+---
+
+## 10. White-label subdomains (wildcard DNS — optioneel)
+
+SuriRent ondersteunt **per-bedrijf branding**: elke klant kan in zijn dashboard
+onder **Branding** een eigen logo, kleur en app-naam instellen. Klanten kunnen
+hun login-pagina vervolgens delen via:
+
+- `https://app.surirent.sr/login?c=<bedrijfsslug>` *(werkt direct, geen DNS nodig)*
+- `https://<bedrijfsslug>.app.surirent.sr/` *(vereist wildcard DNS — zie hieronder)*
+
+De backend leest de slug uit de URL OF uit de `Host` header, en kiest de juiste
+branding bij het laden van de pagina.
+
+### 10.1 DNS instellen bij je registrar
+
+Voeg bij je DNS-provider (bij de registrar of een aparte DNS-host zoals Cloudflare)
+**twee** A-records toe:
+
+| Type | Name           | Value            | TTL   |
+|------|----------------|------------------|-------|
+| A    | `app`          | `<server-IP>`    | 3600  |
+| A    | `*.app`        | `<server-IP>`    | 3600  |
+
+> De `*.app` wildcard zorgt dat álle subdomeinen onder `app.surirent.sr`
+> (bv. `klantnaam.app.surirent.sr`) bij dezelfde server uitkomen.
+
+Verifieer met:
+
+```bash
+dig +short klantnaam.app.surirent.sr   # moet je server-IP teruggeven
+```
+
+### 10.2 CloudPanel — wildcard vhost
+
+CloudPanel staat geen `*` in de vhost-naam toe via de UI, maar wel via een
+**"Server Name Indication"** alias in de Nginx config. Het simpelste recept:
+
+1. Open in CloudPanel je bestaande `app.surirent.sr` site.
+2. Ga naar **Vhost** → klik **Edit**.
+3. Pas de `server_name` regel aan:
+
+   ```nginx
+   server_name app.surirent.sr *.app.surirent.sr;
+   ```
+
+4. Sla op en herlaad Nginx:
+
+   ```bash
+   sudo nginx -t && sudo systemctl reload nginx
+   ```
+
+### 10.3 TLS / wildcard SSL-certificaat
+
+Voor `*.app.surirent.sr` heb je een **wildcard certificaat** nodig. Let's Encrypt
+ondersteunt dit alleen via **DNS-01 challenge**:
+
+```bash
+sudo apt install -y certbot
+sudo certbot certonly --manual --preferred-challenges=dns \
+  -d app.surirent.sr -d "*.app.surirent.sr" \
+  --agree-tos -m info@surirent.sr
+```
+
+Certbot vraagt je een `_acme-challenge` TXT-record toe te voegen bij je DNS-provider.
+Plaats het, wacht ~60 seconden, druk Enter. Daarna heb je het certificaat in
+`/etc/letsencrypt/live/app.surirent.sr/`.
+
+Wijs CloudPanel naar dit certificaat (Site → SSL → "Existing Certificate") en
+vul `fullchain.pem` + `privkey.pem` in.
+
+**Auto-renewal** vereist een DNS-API hook (omdat manual DNS niet automatisch
+verlengt). Voor Cloudflare bv.:
+
+```bash
+sudo apt install -y python3-certbot-dns-cloudflare
+echo "dns_cloudflare_api_token = <token>" | sudo tee /root/.secrets/cf.ini
+sudo chmod 600 /root/.secrets/cf.ini
+sudo certbot certonly --dns-cloudflare \
+  --dns-cloudflare-credentials /root/.secrets/cf.ini \
+  -d app.surirent.sr -d "*.app.surirent.sr"
+```
+
+Certbot installeert automatisch een cron-job die elke 60 dagen verlengt.
+
+### 10.4 Test wildcard
+
+```bash
+# Spoof Host-header om te checken of backend de slug correct herkent
+curl -s -H "Host: surirent.app.surirent.sr" https://app.surirent.sr/api/public/branding-by-host
+
+# Verwacht:
+# {"slug":"surirent","host":"surirent.app.surirent.sr","found":true,...}
+```
+
+Bezoek vervolgens `https://surirent.app.surirent.sr/` in je browser — de
+LoginPage moet de bedrijfsbranding (logo + kleur + naam) van SuriRent tonen
+zónder dat de gebruiker een code hoeft in te vullen.
+
+### 10.5 Fallback gedrag
+
+- **Onbekend subdomein** (`flutter.app.surirent.sr` waar geen "flutter" bedrijf
+  bestaat) → toont standaard SuriRent branding + de "Bedrijfscode" picker
+  onderaan, zodat de gebruiker handmatig zijn slug kan invullen.
+- **Hoofddomein** (`app.surirent.sr`) zonder query — toont default branding +
+  picker.
+- **Met `?c=` query** — die wint altijd, ook over het subdomein. Handig voor
+  direct-link campagnes.

@@ -267,6 +267,13 @@ User koos voor **Optie C — minimale herbouw** (kern eerst), dan vroeg om **Fas
 - ✅ **Fallback**: onbekende slug → standaard SuriRent oranje branding + automatisch picker tonen zodat gebruiker kan corrigeren.
 - ✅ End-to-end getest via Playwright: `/login?c=surirent` met blauwe primary color (#1e88e5) renderde **complete blauwe achtergrond** + header "SuriRent Premium" + PIN-card "Welkom bij SuriRent Premium · Test branding live" + bedrijfs-badge onderaan. Unknown slug en picker-flow werken correct.
 
+### "Mijn URL" kaart + welkomstemail met login-link (2026-05-22) ✅
+- ✅ **Backend**: nieuw `GET /api/companies/me/url-info` endpoint dat slug, subdomein URL, universele query URL, en live DNS-status (`active | dns_missing | error | unknown`) teruggeeft via best-effort `/api/health` ping (3s timeout, faalt nooit). Respecteert `SAAS_APP_DOMAIN` env override.
+- ✅ **Herbruikbaar `MyUrlCard` component**: donkere gradient-kaart met "Wildcard DNS actief" badge (groen/amber/rose tones), eigen subdomein + universele link, Kopieer-knoppen (clipboard API + "Gekopieerd" feedback), Open knop, Refresh knop voor handmatige re-check. Heeft `compact` mode (alleen subdomein) voor het dashboard overzicht.
+- ✅ **Geplaatst op 2 locaties**: bovenaan op het Overzicht-dashboard (compact mode — meteen zichtbaar bij login) én bovenaan in de Branding tab (volledige versie met beide URLs).
+- ✅ **Welkomstemail uitgebreid**: nieuwe registratie krijgt nu in de mail (1) een grote oranje "Open mijn omgeving" CTA-knop naar de universele query-URL, (2) de plain-text URL eronder voor kopiëren, (3) een aparte sectie met de subdomein-URL "Of gebruik later uw eigen subdomein (zodra DNS actief is)". Tip-regel onderaan over bookmark/install.
+- ✅ E2E getest: card visible op zowel Overview als Branding tab, copy button werkt, DNS status badge toont "Wildcard DNS actief" correct (preview env accepteert wildcard hostnames).
+
 ## Prioritized Backlog (Fases E-F)
 - 📧 **Email notificaties** — wacht op SendGrid / Resend credentials van user
 - 📱 **WhatsApp/SMS herinneringen** — wacht op Twilio credentials

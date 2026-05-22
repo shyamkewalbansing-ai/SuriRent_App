@@ -56,6 +56,19 @@ export function detectCompanySlug() {
   return readFromUrl() || readFromSubdomain() || getStoredSlug();
 }
 
+/** Ask the backend who we are based on the Host header (useful when
+ *  CORS proxy strips the hostname or when running on wildcard DNS).
+ *  Returns branding object or null. */
+export async function fetchBrandingByHost() {
+  try {
+    const { data } = await api.get('/public/branding-by-host');
+    if (data && data.found) return data;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 /** Fetch branding for a slug. Returns null on 404 (unknown company) → falls back to SuriRent defaults. */
 export async function fetchBranding(slug) {
   if (!slug) return null;

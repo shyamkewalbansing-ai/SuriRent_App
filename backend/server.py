@@ -693,17 +693,32 @@ async def register(body: RegisterIn, response: Response):
         try:
             from email_service import send_email as _send_smtp, send_platform_email, wrap_template
             app_url = (os.environ.get("APP_PUBLIC_URL") or "https://app.surirent.sr").rstrip("/")
+            saas_app_domain = (os.environ.get("SAAS_APP_DOMAIN") or app_url.replace("https://", "").replace("http://", "")).strip("/").lower()
+            slug = c.get("slug")
+            # Two URLs: the always-works query link + the personalised subdomain link
+            login_query_url = f"{app_url}/login?c={slug}"
+            login_subdomain_url = f"https://{slug}.{saas_app_domain}" if slug and saas_app_domain else None
             plan_info = PLAN_PRICES.get(c.get("plan", "starter"), PLAN_PRICES["starter"])
             pin_row = ""
             if (body.kiosk_pin or "").isdigit() and len(body.kiosk_pin) == 4:
                 pin_row = f"<tr><td>Kiosk PIN</td><td>{body.kiosk_pin}</td></tr>"
+            sub_block = ""
+            if login_subdomain_url:
+                sub_block = f"""
+                <p style="margin-top:18px;font-size:13px;color:#475569;">
+                  Of gebruik later uw eigen subdomein (zodra DNS actief is):
+                  <br /><a href="{login_subdomain_url}" style="color:#FF5C00;font-weight:700;text-decoration:none;">{login_subdomain_url}</a>
+                </p>
+                """
             content = f"""
                 <h1>Welkom bij SuriRent!</h1>
                 <p>Uw eigen Vastgoed omgeving is aangemaakt voor
-                  <strong>{company_payload['name']}</strong>. U kunt direct inloggen op:</p>
-                <p><a href="{app_url}/login" style="display:inline-block;background:#FF5C00;color:#fff;padding:10px 18px;border-radius:10px;text-decoration:none;font-weight:700;">{app_url}/login</a></p>
+                  <strong>{company_payload['name']}</strong>. U kunt direct inloggen op uw persoonlijke link:</p>
+                <p><a href="{login_query_url}" style="display:inline-block;background:#FF5C00;color:#fff;padding:12px 22px;border-radius:10px;text-decoration:none;font-weight:700;font-size:14px;">Open mijn omgeving</a></p>
+                <p style="font-size:12px;color:#64748b;word-break:break-all;">{login_query_url}</p>
+                {sub_block}
 
-                <h1 style="font-size:16px;margin-top:18px;">Uw inloggegevens</h1>
+                <h1 style="font-size:16px;margin-top:24px;">Uw inloggegevens</h1>
                 <table class="kv">
                   <tr><td>E-mailadres</td><td>{email}</td></tr>
                   <tr><td>Wachtwoord</td><td>(zoals u die heeft ingevoerd)</td></tr>
@@ -717,7 +732,7 @@ async def register(body: RegisterIn, response: Response):
                   <tr><td>Proefperiode</td><td>14 dagen gratis</td></tr>
                 </table>
 
-                <p style="margin-top:14px;">Bewaar deze e-mail goed. Heeft u vragen? Antwoord gerust op deze mail.</p>
+                <p style="margin-top:18px;">Tip: <strong>bookmark</strong> de bovenstaande link of installeer hem als app op uw telefoon. Heeft u vragen? Antwoord gerust op deze mail.</p>
             """.replace(",", ".")
             subject = f"Welkom bij SuriRent — uw {plan_info['name']} omgeving is klaar"
             body_html = wrap_template(content, footer=f"SuriRent · {app_url}")
@@ -1646,6 +1661,32 @@ async def public_company_branding(slug: str):
     return _company_branding_response(c)
 
 
+@api.get("/public/branding-by-host")
+async def public_branding_by_host(request: Request):
+    """Resolve company branding using the HTTP Host header.
+    Used when the app is deployed with wildcard DNS *.app.<root>
+    (e.g. klantnaam.app.surirent.sr → slug=klantnaam).
+    Returns {slug, ...branding} or {slug: null} if the host has no usable subdomain.
+    """
+    host = (request.headers.get("x-forwarded-host") or request.headers.get("host") or "").lower()
+    # Strip optional port
+    host = host.split(":")[0].split(",")[0].strip()
+    parts = [p for p in host.split(".") if p]
+    # Need at least 3 segments (slug.app.<root>) and first part may not be 'app'/'www'.
+    if len(parts) < 3:
+        return {"slug": None, "host": host}
+    first = parts[0]
+    if first in ("app", "www") or not first.replace("-", "").isalnum():
+        return {"slug": None, "host": host}
+    c = await db.companies.find_one({"slug": first}, {"_id": 0})
+    if not c:
+        return {"slug": first, "host": host, "found": False}
+    out = _company_branding_response(c)
+    out["host"] = host
+    out["found"] = True
+    return out
+
+
 @api.get("/companies/me/branding")
 async def get_my_branding(user=Depends(get_current_user)):
     cid = company_id_of(user)
@@ -1707,6 +1748,59 @@ async def upload_branding_asset(file: UploadFile = File(...),
         "uploaded_at": iso(now_utc()),
     })
     return {"id": asset_id, "url": f"/api/landing/asset/{asset_id}"}
+
+
+@api.get("/companies/me/url-info")
+async def get_my_url_info(request: Request, user=Depends(get_current_user)):
+    """Return all login-URL variants for the current company + live DNS-status
+    for the wildcard subdomain. SAAS_APP_DOMAIN env overrides runtime host."""
+    import httpx as _httpx
+    cid = company_id_of(user)
+    if not cid:
+        raise HTTPException(status_code=400, detail="Geen actief bedrijf")
+    c = await db.companies.find_one({"id": cid}, {"_id": 0})
+    if not c:
+        raise HTTPException(status_code=404, detail="Bedrijf niet gevonden")
+    slug = c.get("slug") or ""
+
+    host = (request.headers.get("x-forwarded-host") or request.headers.get("host") or "").lower().split(":")[0].strip()
+    forwarded_proto = (request.headers.get("x-forwarded-proto") or "").split(",")[0].strip().lower()
+    scheme = forwarded_proto or "https"
+    app_domain = (os.environ.get("SAAS_APP_DOMAIN") or "").strip().lower() or host
+    # If runtime host is already a subdomain (slug.app.surirent.sr) → use apex
+    parts = app_domain.split(".") if app_domain else []
+    if len(parts) >= 4:
+        app_domain = ".".join(parts[1:])
+    base_url = f"{scheme}://{app_domain}" if app_domain else ""
+    query_url = f"{base_url}/login?c={slug}" if base_url else ""
+    subdomain_url = f"{scheme}://{slug}.{app_domain}" if slug and app_domain else None
+
+    dns_status = "unknown"
+    dns_error = None
+    if subdomain_url:
+        try:
+            async with _httpx.AsyncClient(timeout=3, follow_redirects=False, verify=True) as cli:
+                r = await cli.get(f"{subdomain_url}/api/health")
+                dns_status = "active" if r.status_code < 500 else "error"
+        except _httpx.ConnectError:
+            dns_status = "dns_missing"
+            dns_error = "Subdomein niet bereikbaar — DNS wildcard nog niet ingesteld."
+        except _httpx.HTTPError as e:
+            dns_status = "error"
+            dns_error = str(e)[:120]
+
+    return {
+        "slug": slug,
+        "company_name": c.get("name"),
+        "primary_url": subdomain_url if dns_status == "active" else query_url,
+        "query_url": query_url,
+        "subdomain_url": subdomain_url,
+        "app_domain": app_domain,
+        "dns_status": dns_status,
+        "dns_error": dns_error,
+    }
+
+
 
 
 # =====================================================================
