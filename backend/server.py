@@ -442,8 +442,120 @@ async def lifespan(app: FastAPI):
                 {"$set": {"pin_hash": hash_password(demo_pin)}},
             )
 
+    # --- Start trial-reminder background task ---
+    global _reminder_task_handle
+    if os.environ.get("DISABLE_TRIAL_REMINDERS") != "1":
+        import asyncio as _aio
+        _reminder_task_handle = _aio.create_task(_reminder_loop())
+
     yield
+    if _reminder_task_handle:
+        _reminder_task_handle.cancel()
     client.close()
+
+
+_reminder_task_handle = None
+
+
+async def _send_trial_reminders():
+    """Send a single reminder per threshold (7d / 3d / 1d) and one when expired.
+
+    Threshold tracking via company.reminders_sent so we never spam."""
+    try:
+        companies = await db.companies.find({"billing_status": "trial"}, {"_id": 0}).to_list(2000)
+    except Exception:
+        return
+    from email_service import send_email as _smtp_send, send_platform_email, wrap_template, EmailError
+    saas = await db.saas_settings.find_one({"id": SAAS_SETTINGS_ID}, {"_id": 0}) or {}
+    smtp = saas.get("smtp") or {}
+    app_url = (os.environ.get("APP_PUBLIC_URL") or "https://app.surirent.sr").rstrip("/")
+    for c in companies:
+        if not c.get("owner_email") or not c.get("trial_ends_at"):
+            continue
+        try:
+            end = datetime.fromisoformat(c["trial_ends_at"].replace("Z", "+00:00"))
+        except Exception:
+            continue
+        delta = end - now_utc()
+        days_left = int(delta.total_seconds() // 86400)
+        # Choose the threshold reached
+        threshold = None
+        if delta.total_seconds() <= 0:
+            threshold = "expired"
+        elif days_left <= 0:
+            threshold = "1d"
+        elif days_left <= 2:
+            threshold = "3d"
+        elif days_left <= 6:
+            threshold = "7d"
+        if threshold is None:
+            continue
+        sent = c.get("reminders_sent", []) or []
+        if threshold in sent:
+            continue
+        plan = PLAN_PRICES.get(c.get("plan", "starter"), PLAN_PRICES["starter"])
+        if threshold == "expired":
+            subject = "Uw proefperiode is verlopen — activeer nu"
+            headline = "Uw proefperiode is verlopen"
+            body_msg = "Activeer direct uw abonnement om ononderbroken toegang te behouden."
+            cta_color = "#EF4444"
+        else:
+            human = {"7d": "7 dagen", "3d": "3 dagen", "1d": "morgen"}[threshold]
+            subject = f"Nog {human} proefperiode — voltooi uw abonnement"
+            headline = f"Uw proefperiode loopt over {human} af"
+            body_msg = "Om ononderbroken toegang te behouden, voltooi a.u.b. de eerste betaling."
+            cta_color = "#FF5C00"
+        content = f"""
+            <h1>{headline}</h1>
+            <p>Hallo {c.get('name', '')},</p>
+            <p>{body_msg}</p>
+            <table class="kv">
+              <tr><td>Pakket</td><td>{plan['name']}</td></tr>
+              <tr><td>Bedrag</td><td>{plan['currency']} {int(plan['amount']):,}/maand</td></tr>
+              <tr><td>Verloopdatum</td><td>{end.strftime("%d %b %Y")}</td></tr>
+            </table>
+            <p style="margin-top:14px;"><a href="{app_url}/admin" style="display:inline-block;background:{cta_color};color:#fff;padding:10px 18px;border-radius:10px;text-decoration:none;font-weight:700;">Open dashboard om te betalen</a></p>
+            <p style="font-size:12px;color:#888;margin-top:10px;">In het dashboard ziet u onder "Mijn Abonnement" de bankgegevens en betaalinstructies.</p>
+        """.replace(",", ".")
+        body_html = wrap_template(content, footer=f"SuriRent · {app_url}")
+        try:
+            if smtp.get("enabled") and smtp.get("host"):
+                try:
+                    await _smtp_send(smtp, to=c["owner_email"], subject=subject, body_html=body_html)
+                except EmailError:
+                    await send_platform_email(to=c["owner_email"], subject=subject, body_html=body_html)
+            else:
+                await send_platform_email(to=c["owner_email"], subject=subject, body_html=body_html)
+            await db.companies.update_one(
+                {"id": c["id"]},
+                {"$addToSet": {"reminders_sent": threshold}, "$set": {"last_reminder_at": iso(now_utc())}},
+            )
+        except Exception:
+            continue
+
+
+async def _reminder_loop():
+    """Run the reminder check every 6 hours."""
+    import asyncio as _aio
+    while True:
+        try:
+            await _send_trial_reminders()
+        except Exception:
+            pass
+        await _aio.sleep(6 * 3600)
+
+
+@app.on_event("shutdown")
+async def _stop_reminders_noop():
+    # Cleanup is handled by the lifespan context manager.
+    pass
+
+
+@api.post("/superadmin/run-trial-reminders")
+async def manual_run_trial_reminders(user=Depends(require_role("superadmin"))):
+    """Manually trigger the reminder sweep (useful for testing)."""
+    await _send_trial_reminders()
+    return {"ok": True}
 
 
 app = FastAPI(title="Vastgoed Kiosk API", lifespan=lifespan)
@@ -694,6 +806,14 @@ async def billing_me(user=Depends(get_current_user)):
             days_left = None
     if status == "trial" and days_left is not None and days_left <= 0:
         status = "expired"
+
+    pending_plan_id = c.get("pending_plan")
+    pending_plan = PLAN_PRICES.get(pending_plan_id) if pending_plan_id else None
+    pending_invoice = None
+    if c.get("pending_invoice_id"):
+        pending_invoice = await db.subscription_invoices.find_one(
+            {"id": c["pending_invoice_id"]}, {"_id": 0}
+        )
     return {
         "status": status,
         "plan_id": plan_id,
@@ -703,6 +823,10 @@ async def billing_me(user=Depends(get_current_user)):
         "days_left": days_left,
         "monthly_amount": plan["amount"],
         "currency": plan["currency"],
+        "pending_plan_id": pending_plan_id,
+        "pending_plan": pending_plan,
+        "pending_invoice": pending_invoice,
+        "renews_at": c.get("subscription_renews_at"),
     }
 
 
@@ -712,7 +836,11 @@ class ChangePlanIn(BaseModel):
 
 @api.put("/billing/me/plan")
 async def change_plan(body: ChangePlanIn, user=Depends(get_current_user)):
-    """Customer-driven plan upgrade/downgrade. Effective on next renewal."""
+    """Customer-driven plan upgrade/downgrade.
+
+    Creates an invoice for the new plan and sets pending_plan on the company.
+    The actual plan switch happens only after a superadmin registers payment
+    for that invoice. During trial the new plan becomes the trial-pricing plan."""
     cid = company_id_of(user)
     if not cid:
         raise HTTPException(status_code=400, detail="Geen actief bedrijf")
@@ -721,22 +849,45 @@ async def change_plan(body: ChangePlanIn, user=Depends(get_current_user)):
         raise HTTPException(status_code=404, detail="Bedrijf niet gevonden")
     old = c.get("plan", "starter")
     new_plan = body.plan
-    update = {"plan": new_plan, "plan_changed_at": iso(now_utc())}
-    # During trial → just swap; the price banner already updates.
-    if c.get("billing_status") in ("trial", "expired"):
-        await db.companies.update_one({"id": cid}, {"$set": update})
-        return {"ok": True, "plan": new_plan, "effective": "immediately"}
-    # Active subscription → schedule on next renewal
-    update["pending_plan"] = new_plan
-    await db.companies.update_one({"id": cid}, {"$set": update})
+    if new_plan == old and not c.get("pending_plan"):
+        return {"ok": True, "plan": new_plan, "effective": "already_active"}
+
+    new_price = PLAN_PRICES.get(new_plan, PLAN_PRICES["starter"])
+    now = now_utc()
+
+    # Create an open invoice for the new plan (customer must pay this to activate)
+    inv = {
+        "id": new_id(),
+        "company_id": cid,
+        "company_name": c.get("name", ""),
+        "plan": new_plan,
+        "amount": new_price["amount"],
+        "currency": new_price["currency"],
+        "status": "open",
+        "kind": "plan_change",
+        "from_plan": old,
+        "period_start": iso(now),
+        "period_end": iso(now + timedelta(days=30)),
+        "created_at": iso(now),
+        "created_by": user.get("email"),
+    }
+    await db.subscription_invoices.insert_one(inv)
+    inv.pop("_id", None)
+
+    await db.companies.update_one({"id": cid}, {"$set": {
+        "pending_plan": new_plan,
+        "pending_invoice_id": inv["id"],
+        "plan_change_requested_at": iso(now),
+    }})
     await db.audit_log.insert_one({
-        "id": new_id(), "type": "plan_change",
+        "id": new_id(), "type": "plan_change_requested",
         "actor": user.get("email"), "company_id": cid,
-        "from_plan": old, "to_plan": new_plan, "at": iso(now_utc()),
+        "from_plan": old, "to_plan": new_plan, "invoice_id": inv["id"], "at": iso(now),
     })
     return {
-        "ok": True, "plan": new_plan, "effective": "next_renewal",
-        "renews_at": c.get("subscription_renews_at"),
+        "ok": True, "plan": old, "pending_plan": new_plan, "invoice": inv,
+        "effective": "after_payment",
+        "message": f"Maak {new_price['currency']} {int(new_price['amount']):,} over om over te stappen naar {new_price['name']}.".replace(",", "."),
     }
 
 
@@ -1016,14 +1167,55 @@ async def register_subscription_payment(body: SubscriptionPaymentIn, user=Depend
     }
     await db.subscription_payments.insert_one(pay)
 
-    await db.companies.update_one({"id": body.company_id}, {"$set": {
+    # If company had a pending_plan, apply it now
+    update_fields = {
         "billing_status": "active",
         "subscription_started_at": iso(now),
         "subscription_renews_at": iso(period_end),
-    }})
+    }
+    pending_plan = c.get("pending_plan")
+    if pending_plan and pending_plan != c.get("plan"):
+        update_fields["plan"] = pending_plan
+        update_fields["pending_plan"] = None
+        update_fields["pending_invoice_id"] = None
+        update_fields["plan_changed_at"] = iso(now)
+    await db.companies.update_one({"id": body.company_id}, {"$set": update_fields})
+
+    # Best-effort confirmation email to the company owner
+    if c.get("owner_email"):
+        try:
+            from email_service import send_email as _send_smtp, send_platform_email, wrap_template
+            saas = await db.saas_settings.find_one({"id": SAAS_SETTINGS_ID}, {"_id": 0}) or {}
+            smtp = saas.get("smtp") or {}
+            app_url = (os.environ.get("APP_PUBLIC_URL") or "https://app.surirent.sr").rstrip("/")
+            plan_label = PLAN_PRICES.get(update_fields.get("plan", c.get("plan", "starter")), {}).get("name", "Starter")
+            content = f"""
+                <h1>Betaling ontvangen — bedankt!</h1>
+                <p>Wij hebben uw betaling van <strong>{body.currency} {int(body.amount):,}</strong> ontvangen via {body.method}.</p>
+                <table class="kv">
+                  <tr><td>Pakket</td><td>{plan_label}</td></tr>
+                  <tr><td>Periode</td><td>tot {(now + timedelta(days=30)).strftime("%d %b %Y")}</td></tr>
+                  <tr><td>Referentie</td><td>{body.reference or '—'}</td></tr>
+                  <tr><td>Factuur</td><td>{inv['id'][:8].upper()}</td></tr>
+                </table>
+                <p style="margin-top:14px;">U kunt direct verder werken in uw dashboard:</p>
+                <p><a href="{app_url}/admin" style="display:inline-block;background:#10B981;color:#fff;padding:10px 18px;border-radius:10px;text-decoration:none;font-weight:700;">Open dashboard</a></p>
+            """.replace(",", ".")
+            subject = f"Betaling ontvangen — {plan_label} actief"
+            body_html = wrap_template(content, footer=f"SuriRent · {app_url}")
+            if smtp.get("enabled") and smtp.get("host"):
+                try:
+                    await _send_smtp(smtp, to=c["owner_email"], subject=subject, body_html=body_html)
+                except Exception:
+                    await send_platform_email(to=c["owner_email"], subject=subject, body_html=body_html)
+            else:
+                await send_platform_email(to=c["owner_email"], subject=subject, body_html=body_html)
+        except Exception:
+            pass
+
     inv.pop("_id", None)
     pay.pop("_id", None)
-    return {"ok": True, "invoice": inv, "payment": pay}
+    return {"ok": True, "invoice": inv, "payment": pay, "applied_plan": update_fields.get("plan")}
 
 
 # Impersonation — superadmin can act as a company's admin to assist support
