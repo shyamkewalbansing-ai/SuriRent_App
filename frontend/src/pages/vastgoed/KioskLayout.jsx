@@ -871,9 +871,18 @@ export default function KioskLayout() {
   // het iPhone-home-indicator gebied en eventuele 1px doorlek aan de notch
   // de huisstijl-kleur tonen, niet wit). De Admin gebruikt wit. We schakelen
   // door middel van een body-class die alleen in standalone PWA effect heeft.
+  // Tegelijk updaten we <meta theme-color> zodat de Android-statusbalk ook
+  // brand-oranje wordt en het overal hetzelfde voelt.
   useEffect(() => {
     document.body.classList.add('kiosk-mode');
-    return () => { document.body.classList.remove('kiosk-mode'); };
+    const meta = document.querySelector('meta[name="theme-color"]:not([media])')
+      || document.querySelector('meta[name="theme-color"]');
+    const prevColor = meta?.getAttribute('content');
+    if (meta) meta.setAttribute('content', '#FF5C00');
+    return () => {
+      document.body.classList.remove('kiosk-mode');
+      if (meta && prevColor) meta.setAttribute('content', prevColor);
+    };
   }, []);
 
   const exit = useCallback(() => {

@@ -548,7 +548,7 @@ function ApartmentForm({ initial, onCancel, onSaved }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4" data-testid="apartment-modal">
+    <div className="fixed inset-0 z-50 bg-white/70 backdrop-blur-xl flex items-center justify-center p-4" data-testid="apartment-modal">
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg p-6 sm:p-8 animate-slide-up">
         <div className="flex items-center justify-between mb-5">
           <h3 className="text-xl font-black text-slate-900">{initial ? 'Appartement bewerken' : 'Nieuw appartement'}</h3>
@@ -742,7 +742,7 @@ function Apartments() {
       )}
 
       {assignFor && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-white/70 backdrop-blur-xl flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-6 sm:p-8 animate-slide-up">
             <div className="flex items-center justify-between mb-5">
               <h3 className="text-xl font-black text-slate-900">Huurder toewijzen aan {assignFor.number}</h3>
@@ -843,7 +843,7 @@ function ShellyControlModal({ apt, onClose, onChanged }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 bg-white/70 backdrop-blur-xl flex items-center justify-center p-4">
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-6 sm:p-8 animate-slide-up" data-testid="shelly-modal">
         <div className="flex items-center justify-between mb-5">
           <div>
@@ -1004,7 +1004,7 @@ function TenantForm({ initial, apartments, onCancel, onSaved }) {
     finally { setLoading(false); }
   };
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4" data-testid="tenant-modal">
+    <div className="fixed inset-0 z-50 bg-white/70 backdrop-blur-xl flex items-center justify-center p-4" data-testid="tenant-modal">
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg p-6 sm:p-8 animate-slide-up">
         <div className="flex items-center justify-between mb-5">
           <h3 className="text-xl font-black text-slate-900">{initial ? 'Huurder bewerken' : 'Nieuwe huurder'}</h3>
@@ -1082,7 +1082,7 @@ function TenantPinModal({ tenant, onCancel, onSaved }) {
     finally { setLoading(false); }
   };
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4" data-testid="tenant-pin-modal">
+    <div className="fixed inset-0 z-50 bg-white/70 backdrop-blur-xl flex items-center justify-center p-4" data-testid="tenant-pin-modal">
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-6 sm:p-8 animate-slide-up">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-xl font-black text-slate-900">Portal PIN voor {tenant.name}</h3>
@@ -1250,7 +1250,7 @@ function PaymentForm({ tenants, onCancel, onSaved }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4" data-testid="payment-modal">
+    <div className="fixed inset-0 z-50 bg-white/70 backdrop-blur-xl flex items-center justify-center p-4" data-testid="payment-modal">
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg p-6 sm:p-8 animate-slide-up max-h-[90vh] overflow-auto">
         <div className="flex items-center justify-between mb-5">
           <h3 className="text-xl font-black text-slate-900">Nieuwe betaling</h3>
@@ -1457,6 +1457,15 @@ export default function AdminDashboard() {
     const handler = (e) => setTab(e.detail);
     window.addEventListener('go-tab', handler);
     return () => window.removeEventListener('go-tab', handler);
+  }, []);
+  // Android PWA: zorg dat de status-bar wit is (matcht de witte admin
+  // mobile-header). Op iOS doet status-bar-style `black-translucent` zijn
+  // werk en lift hier mee. Bij unmount zet niets terug — KioskLayout
+  // overschrijft 'm zelf.
+  useEffect(() => {
+    const meta = document.querySelector('meta[name="theme-color"]:not([media])')
+      || document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', '#ffffff');
   }, []);
   const doLogout = async () => { await logout(); navigate('/login'); };
 

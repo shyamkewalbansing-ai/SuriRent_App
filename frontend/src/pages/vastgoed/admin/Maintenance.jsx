@@ -29,7 +29,7 @@ function MaintenanceForm({ apartments, onCancel, onSaved }) {
     finally { setLoading(false); }
   };
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4" data-testid="maint-modal">
+    <div className="fixed inset-0 z-50 bg-white/70 backdrop-blur-xl flex items-center justify-center p-4" data-testid="maint-modal">
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg p-6 sm:p-8 animate-slide-up max-h-[90vh] overflow-auto">
         <div className="flex items-center justify-between mb-5">
           <h3 className="text-xl font-black text-slate-900">Nieuw onderhoudsticket</h3>
