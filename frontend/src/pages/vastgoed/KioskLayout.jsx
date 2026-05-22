@@ -899,14 +899,7 @@ export default function KioskLayout() {
           initial="enter" animate="center" exit="exit"
           transition={{ duration: 0.25, ease: 'easeInOut' }}
           className="absolute inset-0 overflow-y-auto overflow-x-hidden md:pb-16"
-          style={{
-            paddingTop: 'env(safe-area-inset-top, 0px)',
-            paddingBottom: 'env(safe-area-inset-bottom, 0px)',
-            paddingLeft: 'env(safe-area-inset-left, 0px)',
-            paddingRight: 'env(safe-area-inset-right, 0px)',
-            overscrollBehavior: 'contain',
-            WebkitOverflowScrolling: 'touch',
-          }}>
+          style={{ paddingTop: 'env(safe-area-inset-top, 0px)', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' }}>
           {step === 'check' && (
             <div className="h-full bg-orange-500 flex items-center justify-center">
               <Loader2 className="w-10 h-10 text-white animate-spin" />
