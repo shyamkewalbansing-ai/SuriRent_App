@@ -232,6 +232,13 @@ User koos voor **Optie C — minimale herbouw** (kern eerst), dan vroeg om **Fas
 - ✅ **Backend**: `RegisterIn.country` (`SR`/`NL`/`OTHER`) overschrijft de phone-based detectie. `/billing/plans` accepteert nu zowel `?currency=` (expliciet) als `?phone=` (auto). Tested: SR-telefoon (+597) met `country=NL` → bedrijf krijgt `currency=EUR`. NL-telefoon zonder country override blijft EUR.
 - ✅ Klanten met een SR-nummer in NL of vice versa kunnen nu expliciet hun valuta kiezen — flexibiliteit toegevoegd zonder de automatische detectie te breken.
 
+### Landing Page Live Editor (CMS in SaaS Beheer) (2026-05-22) ✅
+- ✅ **Backend**: nieuwe `landing_content.py` module met `LANDING_DEFAULTS` (volledige schema: brand, nav, hero, stats, features_header, features, pricing_header, pricing_starter, pricing_pro, cta_section, footer + links) en `deep_merge` helper. Twee MongoDB collecties: `landing_content` (`_draft` + `_published`) en `landing_assets` (base64 stored).
+- ✅ **6 nieuwe endpoints**: `GET /api/landing/content` (publiek), `GET /api/superadmin/landing/content?mode=draft|published`, `PUT /api/superadmin/landing/content`, `POST /api/superadmin/landing/publish`, `POST /api/superadmin/landing/discard`, `POST /api/superadmin/landing/upload` (max 5 MB, alleen image/*), `GET /api/landing/asset/{id}` (publiek serve).
+- ✅ **MarketingLanding gerefactored**: alle TopNav, Hero, StatsStrip, FeaturesSection, PricingSection (header+features), CTASection en Footer halen content van `/api/landing/content` met defaults fallback. Dynamische icon-resolver via `lucide-react` whitelist. Image URLs resolven `/api/landing/asset/*` automatisch via REACT_APP_BACKEND_URL.
+- ✅ **LandingEditor.jsx** (730 regels): nieuwe superadmin tab "Landing Editor" met 8 sectie-tabs, form-based editor links + live iframe preview rechts. Wijzigingen worden direct in de iframe getoond via `postMessage` (zonder reload). Sticky action bar met `Concept`/`Gepubliceerd` status badge, "Opslaan concept", "Publiceer", "Reset" knoppen. Image upload met file + URL plak fallback. Repeatable lists voor menu-items, badges, stats, features, footer-links met add/remove/up-down sortering. Icon picker uit 27 allowed lucide icons.
+- ✅ **Draft → Publish workflow**: concept wijzigingen zichtbaar in iframe preview maar pas live na expliciete "Publiceer" klik. "Reset" knop restored draft naar gepubliceerde versie. End-to-end getest via Playwright: superadmin → edit "De complete" → "De ultieme" → publish → public landing h1 toont "De ultieme huurbeheer..." direct.
+
 ## Prioritized Backlog (Fases E-F)
 - 📧 **Email notificaties** — wacht op SendGrid / Resend credentials van user
 - 📱 **WhatsApp/SMS herinneringen** — wacht op Twilio credentials

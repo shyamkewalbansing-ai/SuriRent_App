@@ -13,17 +13,22 @@ import jwt
 from datetime import datetime, timezone, timedelta
 from typing import List, Optional, Literal
 
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, Response, Query
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, Response, Query, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, EmailStr, Field
 from motor.motor_asyncio import AsyncIOMotorClient
 from contextlib import asynccontextmanager
 import io
+import base64
 import secrets
 
 from pdf_gen import (
     receipt_pdf, contract_pdf, invoice_pdf, deposit_refund_pdf, payslip_pdf,
+)
+from landing_content import (
+    LANDING_DEFAULTS, DRAFT_ID, PUBLISHED_ID, merge_with_defaults,
+    ALLOWED_FEATURE_ICONS,
 )
 
 # =====================================================================
@@ -1449,6 +1454,151 @@ async def sumup_saas_webhook(request: Request):
     except Exception:
         return {"ok": True, "error": True}
     return {"ok": True, "status": status_val}
+
+
+# =====================================================================
+# Landing-page CMS (superadmin live editor)
+# =====================================================================
+MAX_LANDING_ASSET_BYTES = 5 * 1024 * 1024  # 5 MB upload cap
+
+
+@api.get("/landing/content")
+async def get_landing_content():
+    """Public — returns the *published* landing content merged with defaults."""
+    doc = await db.landing_content.find_one({"id": PUBLISHED_ID}, {"_id": 0})
+    content = merge_with_defaults(doc)
+    return {"content": content, "allowed_icons": ALLOWED_FEATURE_ICONS}
+
+
+@api.get("/superadmin/landing/content")
+async def get_landing_content_admin(mode: Literal["draft", "published"] = "draft",
+                                    user=Depends(require_role("superadmin"))):
+    """Superadmin reads draft or published content (both merged with defaults)."""
+    doc_id = DRAFT_ID if mode == "draft" else PUBLISHED_ID
+    doc = await db.landing_content.find_one({"id": doc_id}, {"_id": 0})
+    # If no draft yet, seed from published; if no published either, defaults.
+    if mode == "draft" and not doc:
+        pub = await db.landing_content.find_one({"id": PUBLISHED_ID}, {"_id": 0})
+        if pub:
+            doc = pub
+    content = merge_with_defaults(doc)
+    return {
+        "content": content,
+        "defaults": LANDING_DEFAULTS,
+        "allowed_icons": ALLOWED_FEATURE_ICONS,
+        "has_unpublished_changes": await _landing_has_unpublished_changes(),
+        "updated_at": (doc or {}).get("updated_at"),
+        "published_at": (await db.landing_content.find_one({"id": PUBLISHED_ID}, {"_id": 0}) or {}).get("updated_at"),
+    }
+
+
+async def _landing_has_unpublished_changes() -> bool:
+    draft = await db.landing_content.find_one({"id": DRAFT_ID}, {"_id": 0, "content": 1})
+    pub = await db.landing_content.find_one({"id": PUBLISHED_ID}, {"_id": 0, "content": 1})
+    if not draft:
+        return False
+    return (draft.get("content") or {}) != ((pub or {}).get("content") or {})
+
+
+class LandingContentIn(BaseModel):
+    content: dict
+
+
+@api.put("/superadmin/landing/content")
+async def put_landing_content(body: LandingContentIn,
+                               user=Depends(require_role("superadmin"))):
+    """Save edits to the *draft*. Use POST /publish to make them public."""
+    if not isinstance(body.content, dict):
+        raise HTTPException(status_code=400, detail="content moet een object zijn")
+    await db.landing_content.update_one(
+        {"id": DRAFT_ID},
+        {"$set": {
+            "id": DRAFT_ID,
+            "content": body.content,
+            "updated_at": iso(now_utc()),
+            "updated_by": user.get("email"),
+        }},
+        upsert=True,
+    )
+    return {"ok": True, "has_unpublished_changes": await _landing_has_unpublished_changes()}
+
+
+@api.post("/superadmin/landing/publish")
+async def publish_landing(user=Depends(require_role("superadmin"))):
+    """Copy current draft into the published document."""
+    draft = await db.landing_content.find_one({"id": DRAFT_ID}, {"_id": 0})
+    if not draft:
+        raise HTTPException(status_code=400, detail="Geen concept om te publiceren.")
+    await db.landing_content.update_one(
+        {"id": PUBLISHED_ID},
+        {"$set": {
+            "id": PUBLISHED_ID,
+            "content": draft.get("content", {}),
+            "updated_at": iso(now_utc()),
+            "updated_by": user.get("email"),
+            "published_from_draft_at": draft.get("updated_at"),
+        }},
+        upsert=True,
+    )
+    await db.audit_log.insert_one({
+        "id": new_id(), "type": "landing_published",
+        "actor": user.get("email"), "at": iso(now_utc()),
+    })
+    return {"ok": True, "published_at": iso(now_utc())}
+
+
+@api.post("/superadmin/landing/discard")
+async def discard_landing_draft(user=Depends(require_role("superadmin"))):
+    """Reset the draft to match the published content (undo pending edits)."""
+    pub = await db.landing_content.find_one({"id": PUBLISHED_ID}, {"_id": 0})
+    await db.landing_content.update_one(
+        {"id": DRAFT_ID},
+        {"$set": {
+            "id": DRAFT_ID,
+            "content": (pub or {}).get("content", {}),
+            "updated_at": iso(now_utc()),
+            "updated_by": user.get("email"),
+        }},
+        upsert=True,
+    )
+    return {"ok": True}
+
+
+@api.post("/superadmin/landing/upload")
+async def upload_landing_asset(file: UploadFile = File(...),
+                                user=Depends(require_role("superadmin"))):
+    """Upload an image (max 5 MB). Returns {url, id} where url is
+    /api/landing/asset/{id} and can be saved into any image_url field."""
+    raw = await file.read()
+    if len(raw) > MAX_LANDING_ASSET_BYTES:
+        raise HTTPException(status_code=413, detail="Bestand groter dan 5 MB.")
+    ctype = (file.content_type or "").lower()
+    if not ctype.startswith("image/"):
+        raise HTTPException(status_code=400, detail="Alleen afbeeldingen toegestaan.")
+    asset_id = new_id()
+    await db.landing_assets.insert_one({
+        "id": asset_id,
+        "filename": file.filename or f"asset-{asset_id}",
+        "content_type": ctype,
+        "data_b64": base64.b64encode(raw).decode("ascii"),
+        "size": len(raw),
+        "uploaded_by": user.get("email"),
+        "uploaded_at": iso(now_utc()),
+    })
+    return {"id": asset_id, "url": f"/api/landing/asset/{asset_id}"}
+
+
+@api.get("/landing/asset/{asset_id}")
+async def get_landing_asset(asset_id: str):
+    doc = await db.landing_assets.find_one({"id": asset_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Asset niet gevonden")
+    try:
+        data = base64.b64decode(doc["data_b64"])
+    except Exception:
+        raise HTTPException(status_code=500, detail="Asset corrupt")
+    return StreamingResponse(io.BytesIO(data), media_type=doc.get("content_type", "image/png"),
+                              headers={"Cache-Control": "public, max-age=3600"})
 
 
 # =====================================================================

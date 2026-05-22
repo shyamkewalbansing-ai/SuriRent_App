@@ -4,7 +4,7 @@ import {
   Building2, Users, Receipt, LayoutDashboard, LogOut, Plus, Trash2, Pencil,
   X, Check, Loader2, Search, Home, Banknote, KeySquare, ChevronRight, Wallet,
   FileText, ShieldCheck, Wrench, FileSignature, Sparkles, Bell, Briefcase, Mail,
-  CreditCard, Zap, Power, Menu, MoreHorizontal, MapPin, Crown,
+  CreditCard, Zap, Power, Menu, MoreHorizontal, MapPin, Crown, Paintbrush,
 } from 'lucide-react';
 import { api, formatError, fmtMoney, MONTHS_NL } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
@@ -23,6 +23,7 @@ import PaymentRequests from './admin/PaymentRequests';
 import Locations from './admin/Locations';
 import Subscriptions from './admin/Subscriptions';
 import SaasSettings from './admin/SaasSettings';
+import LandingEditor from './admin/LandingEditor';
 import MijnAbonnement from './admin/MijnAbonnement';
 import TrialBanner from '../../components/TrialBanner';
 import ImpersonationBanner from '../../components/ImpersonationBanner';
@@ -48,6 +49,7 @@ const BASE_TABS = [
 const SUPER_TABS = [
   { id: 'subscriptions', label: 'SaaS Beheer', icon: Crown },
   { id: 'companies', label: 'Bedrijven', icon: Briefcase },
+  { id: 'landing_editor', label: 'Landing Editor', icon: Paintbrush },
   { id: 'saas_settings', label: 'SaaS Instellingen', icon: KeySquare },
 ];
 
@@ -1288,6 +1290,7 @@ export default function AdminDashboard() {
           {tab === 'companies' && <Companies />}
           {tab === 'subscriptions' && <Subscriptions />}
           {tab === 'saas_settings' && <SaasSettings />}
+          {tab === 'landing_editor' && <LandingEditor />}
           {tab === 'overview' && <Overview />}
           {tab === 'ai' && <AIChat />}
           {tab === 'locations' && <Locations />}
