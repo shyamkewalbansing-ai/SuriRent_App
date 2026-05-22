@@ -4,7 +4,7 @@ import {
   Building2, Users, Receipt, LayoutDashboard, LogOut, Plus, Trash2, Pencil,
   X, Check, Loader2, Search, Home, Banknote, KeySquare, ChevronRight, Wallet,
   FileText, ShieldCheck, Wrench, FileSignature, Sparkles, Bell, Briefcase, Mail,
-  CreditCard, Zap, Power, Menu, MoreHorizontal, MapPin, Crown, Paintbrush, Palette, Lock,
+  CreditCard, Zap, Power, Menu, MoreHorizontal, MapPin, Crown, Paintbrush, Palette,
 } from 'lucide-react';
 import { api, formatError, fmtMoney, MONTHS_NL } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
@@ -29,7 +29,6 @@ import MyUrlCard from '../../components/MyUrlCard';
 import MijnAbonnement from './admin/MijnAbonnement';
 import TrialBanner from '../../components/TrialBanner';
 import ImpersonationBanner from '../../components/ImpersonationBanner';
-import { useIdleLock } from '../../lib/useIdleLock';
 
 const BASE_TABS = [
   { id: 'overview', label: 'Overzicht', icon: LayoutDashboard },
@@ -61,10 +60,10 @@ function getTabsFor(user) {
   return user?.role === 'superadmin' ? SUPER_TABS : BASE_TABS;
 }
 
-function Sidebar({ active, onChange, onLogout, onLock, user, activeCompany, tabs }) {
+function Sidebar({ active, onChange, onLogout, user, tabs }) {
   return (
     <aside className="hidden md:flex flex-col w-64 bg-white border-r border-orange-100 p-5">
-      <div className="flex items-center gap-3 mb-4">
+      <div className="flex items-center gap-3 mb-6">
         <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-[#FF8A3D] to-[#C74600] p-1.5 shadow-[0_8px_20px_-5px_rgba(255,92,0,0.55)]">
           <img src="/kiosk-icons/kiosk-512.png" alt="SuriRent" className="w-full h-full object-contain" />
         </div>
@@ -72,19 +71,6 @@ function Sidebar({ active, onChange, onLogout, onLock, user, activeCompany, tabs
           <p className="text-base font-black text-slate-900 tracking-tight">SuriRent</p>
           <p className="text-[10px] text-[#FF5C00] font-bold tracking-[0.2em] uppercase">Beheer</p>
         </div>
-      </div>
-
-      <div data-testid="active-company-badge"
-        className={`rounded-xl px-3 py-2.5 mb-6 border ${user?.role === 'superadmin' ? 'bg-amber-50 border-amber-200' : 'bg-orange-50 border-orange-100'}`}>
-        <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
-          {user?.role === 'superadmin' ? 'Actief bedrijf' : 'Bedrijf'}
-        </p>
-        <p className="text-sm font-black text-slate-900 truncate" data-testid="active-company-name">
-          {activeCompany?.name || (user?.role === 'superadmin' ? 'Alle bedrijven' : '—')}
-        </p>
-        {activeCompany?.plan && (
-          <p className="text-[10px] text-slate-500 mt-0.5">/{activeCompany.slug} • {activeCompany.plan}</p>
-        )}
       </div>
 
       <nav className="flex-1 space-y-1 overflow-y-auto">
@@ -104,16 +90,10 @@ function Sidebar({ active, onChange, onLogout, onLock, user, activeCompany, tabs
         })}
       </nav>
 
-      <div className="border-t border-orange-100 pt-4 mt-4 space-y-2">
+      <div className="border-t border-orange-100 pt-3 mt-3 space-y-1">
         <p className="text-xs text-slate-500 px-3 truncate">{user?.email}</p>
-        {onLock && (
-          <button onClick={onLock} data-testid="lock-now-btn"
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold text-slate-600 hover:bg-orange-50 hover:text-[#FF5C00] transition-all">
-            <Lock className="w-4 h-4" /> Vergrendel nu
-          </button>
-        )}
         <button onClick={onLogout} data-testid="logout-btn"
-          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold text-slate-600 hover:bg-red-50 hover:text-red-600 transition-all">
+          className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-semibold text-slate-600 hover:bg-red-50 hover:text-red-600 transition-all">
           <LogOut className="w-4 h-4" /> Uitloggen
         </button>
       </div>
@@ -152,14 +132,14 @@ function MobileHeader({ activeCompany, user, onOpenMenu }) {
   );
 }
 
-function MobileDrawer({ open, onClose, active, onChange, onLogout, onLock, user, activeCompany, tabs }) {
+function MobileDrawer({ open, onClose, active, onChange, onLogout, user, tabs }) {
   if (!open) return null;
   return (
     <div className="md:hidden fixed inset-0 z-50" data-testid="mobile-drawer">
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
       <aside className="absolute left-0 top-0 bottom-0 w-72 max-w-[85%] bg-white shadow-2xl flex flex-col animate-slide-in"
         style={{ paddingTop: 'env(safe-area-inset-top)' }}>
-        <div className="flex items-center justify-between px-5 pt-4 pb-2">
+        <div className="flex items-center justify-between px-5 pt-4 pb-3">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#FF8A3D] to-[#C74600] p-1.5">
               <img src="/kiosk-icons/kiosk-512.png" alt="SuriRent" className="w-full h-full object-contain" />
@@ -173,18 +153,6 @@ function MobileDrawer({ open, onClose, active, onChange, onLogout, onLock, user,
             className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center">
             <X className="w-4 h-4" />
           </button>
-        </div>
-
-        <div className={`mx-5 my-3 rounded-xl px-3 py-2.5 border ${user?.role === 'superadmin' ? 'bg-amber-50 border-amber-200' : 'bg-orange-50 border-orange-100'}`}>
-          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
-            {user?.role === 'superadmin' ? 'Actief bedrijf' : 'Bedrijf'}
-          </p>
-          <p className="text-sm font-black text-slate-900 truncate">
-            {activeCompany?.name || (user?.role === 'superadmin' ? 'Alle bedrijven' : '—')}
-          </p>
-          {activeCompany?.plan && (
-            <p className="text-[10px] text-slate-500 mt-0.5">/{activeCompany.slug} • {activeCompany.plan}</p>
-          )}
         </div>
 
         <nav className="flex-1 overflow-y-auto px-3 pb-4 space-y-1">
@@ -205,17 +173,11 @@ function MobileDrawer({ open, onClose, active, onChange, onLogout, onLock, user,
           })}
         </nav>
 
-        <div className="border-t border-orange-100 px-5 py-4 space-y-2"
-          style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 1rem)' }}>
+        <div className="border-t border-orange-100 px-5 py-3 space-y-1"
+          style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 0.75rem)' }}>
           <p className="text-xs text-slate-500 truncate">{user?.email}</p>
-          {onLock && (
-            <button onClick={() => { onClose(); onLock(); }} data-testid="mobile-drawer-lock"
-              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold text-slate-700 hover:bg-orange-50 hover:text-[#FF5C00] transition-all">
-              <Lock className="w-4 h-4" /> Vergrendel nu
-            </button>
-          )}
           <button onClick={() => { onClose(); onLogout(); }} data-testid="mobile-drawer-logout"
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold text-red-600 hover:bg-red-50 transition-all">
+            className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-semibold text-red-600 hover:bg-red-50 transition-all">
             <LogOut className="w-4 h-4" /> Uitloggen
           </button>
         </div>
@@ -1299,32 +1261,10 @@ export default function AdminDashboard() {
   }, []);
   const doLogout = async () => { await logout(); navigate('/login'); };
 
-  // "Vergrendel nu" — gebruiker verlaat de PC bewust. We verwijderen het
-  // admin-token (zoals auto-lock doet) maar laten de kiosk_token + PIN-kennis
-  // intact, zodat heractivatie één PIN-tik kost. Hard navigation forceert
-  // AuthProvider remount.
-  const doLock = () => {
-    try { localStorage.removeItem('admin_token'); } catch { /* ignore */ }
-    window.location.assign('/login?locked=1');
-  };
-  // Lock-knop is alleen zinvol voor "gewone" admins. Superadmin heeft geen
-  // PIN-flow en zou daarmee niet meer terug kunnen komen.
-  const lockEnabled = !!user && user.role !== 'superadmin';
-
-  // Auto-lock: na 15 minuten inactiviteit → admin-token wegnemen en terug
-  // naar /login. De kiosk_token (en PIN) blijft behouden, dus opnieuw
-  // inloggen kost slechts één PIN-invoer i.p.v. een volledige wachtwoord-flow.
-  // Niet actief voor superadmin (die kan langer doorwerken op SaaS-zaken).
-  useIdleLock({
-    timeoutMs: 15 * 60 * 1000,
-    enabled: lockEnabled,
-    onLock: doLock,
-  });
   return (
     <div className="min-h-screen bg-[#FFF7F0] flex">
       <Sidebar active={tab} onChange={setTab} onLogout={doLogout}
-        onLock={lockEnabled ? doLock : undefined}
-        user={user} activeCompany={activeCompany} tabs={tabs} />
+        user={user} tabs={tabs} />
       <div className="flex-1 flex flex-col min-w-0">
         <MobileHeader activeCompany={activeCompany} user={user} onOpenMenu={() => setDrawerOpen(true)} />
         <ImpersonationBanner />
@@ -1357,8 +1297,7 @@ export default function AdminDashboard() {
         onOpenMenu={() => setDrawerOpen(true)} />
       <MobileDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)}
         active={tab} onChange={setTab} onLogout={doLogout}
-        onLock={lockEnabled ? doLock : undefined}
-        user={user} activeCompany={activeCompany} tabs={tabs} />
+        user={user} tabs={tabs} />
     </div>
   );
 }

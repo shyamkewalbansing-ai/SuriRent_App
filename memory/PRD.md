@@ -290,10 +290,12 @@ User koos voor **Optie C — minimale herbouw** (kern eerst), dan vroeg om **Fas
 - ✅ **Locked-banner** verschijnt op `/login?locked=1` met merkkleur: "Sessie vergrendeld door inactiviteit — voer uw PIN in om verder te gaan". Verdwijnt zodra de gebruiker een toets indrukt. Kiosk_token blijft behouden → PIN-invoer herstelt direct de admin-toegang (één tik PIN i.p.v. wachtwoord).
 - ✅ E2E getest via Playwright: PIN-pagina past op alle telefoonschermen, locked-banner toont correct.
 
-### "Vergrendel nu" knop in admin sidebar (2026-05-22) ✅
-- ✅ **Nieuwe `Vergrendel nu` knop** in zowel desktop sidebar (boven "Uitloggen") als mobiele drawer — met `Lock` icoon, slate→oranje hover. Roept dezelfde `doLock` aan als de auto-lock (verwijdert admin_token + hard navigate naar `/login?locked=1`).
-- ✅ **Niet zichtbaar voor superadmin** (die heeft geen PIN-flow → zou niet meer terug kunnen).
-- ✅ E2E getest: klik in sidebar → admin_token=false, kiosk_token=true → `/login?locked=1` met lock-banner zichtbaar. Eén PIN-tik herstelt admin-toegang via de bestaande backend flow.
+### Sidebar opgeschoond — Vergrendel/Open Kiosk/Bedrijfsbadge verwijderd (2026-05-22) ✅
+- ✅ **Verwijderd uit Sidebar én MobileDrawer**: bedrijfsbadge ("Bedrijf SuriRent N.V. /surirent • pro"), Snel-acties blok (Open Kiosk + Vergrendel nu).
+- ✅ **`useIdleLock` hook + bestand verwijderd** + auto-lock call uit AdminDashboard weggehaald. Geen onbedoelde sessie-vergrendeling meer.
+- ✅ **`locked` banner en `?locked=1` afhandeling uit LoginPage gehaald** — niet meer relevant zonder auto-lock.
+- ✅ Sidebar bevat nu: logo + tab-lijst (direct in beeld) + admin e-mail + Uitloggen. Beheerder kan direct alle tabs zien zonder afleiding.
+- ✅ "Open Kiosk" blijft beschikbaar als grote CTA-kaart op het Overzicht-scherm.
 
 ## Prioritized Backlog (Fases E-F)
 - 📧 **Email notificaties** — wacht op SendGrid / Resend credentials van user

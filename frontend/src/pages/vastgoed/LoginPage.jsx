@@ -53,12 +53,6 @@ function PinLanding({ onSuccess, onPassword, onRegister, branding }) {
   const [pin, setPin] = useState(['', '', '', '']);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  // Was the user kicked out by the idle-lock timer in /admin? Show a friendly
-  // notice once; clear it from the URL after first paint so it doesn't reappear.
-  const [locked, setLocked] = useState(() => {
-    try { return new URLSearchParams(window.location.search).get('locked') === '1'; }
-    catch { return false; }
-  });
   const primary = branding?.primary_color || '#FF5C00';
   const appName = branding?.app_name || 'Kiosk';
   const tagline = branding?.tagline || '';
@@ -85,7 +79,6 @@ function PinLanding({ onSuccess, onPassword, onRegister, branding }) {
   const handleKey = (k) => {
     if (loading) return;
     setError('');
-    if (locked) setLocked(false);
     if (k === 'DEL') {
       for (let i = 3; i >= 0; i--) {
         if (pin[i]) { const np = [...pin]; np[i] = ''; setPin(np); return; }
@@ -124,21 +117,6 @@ function PinLanding({ onSuccess, onPassword, onRegister, branding }) {
               data-testid="pin-app-name">Welkom bij {appName}</h2>
             {tagline && <p className="text-slate-400 leading-tight" style={{ fontSize: 'clamp(11px, 1.5vh, 13px)', marginTop: '2px' }}>{tagline}</p>}
           </div>
-
-          {locked && !error && (
-            <div className="rounded-xl text-center font-medium border"
-              style={{
-                fontSize: 'clamp(11px, 1.5vh, 13px)',
-                padding: 'clamp(6px, 1vh, 10px)',
-                marginBottom: 'clamp(6px, 1vh, 12px)',
-                backgroundColor: `${primary}10`,
-                borderColor: `${primary}40`,
-                color: primary,
-              }}
-              data-testid="pin-locked-msg">
-              Sessie vergrendeld door inactiviteit — voer uw PIN in om verder te gaan
-            </div>
-          )}
 
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-600 rounded-xl text-center font-medium"
