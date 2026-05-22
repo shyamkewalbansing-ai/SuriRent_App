@@ -22,6 +22,7 @@ import SettingsPage from './admin/Settings';
 import PaymentRequests from './admin/PaymentRequests';
 import Locations from './admin/Locations';
 import Subscriptions from './admin/Subscriptions';
+import SaasSettings from './admin/SaasSettings';
 import TrialBanner from '../../components/TrialBanner';
 
 const BASE_TABS = [
@@ -44,10 +45,11 @@ const BASE_TABS = [
 const SUPER_TABS = [
   { id: 'subscriptions', label: 'SaaS Beheer', icon: Crown },
   { id: 'companies', label: 'Bedrijven', icon: Briefcase },
+  { id: 'saas_settings', label: 'SaaS Instellingen', icon: KeySquare },
 ];
 
 function getTabsFor(user) {
-  return user?.role === 'superadmin' ? [...SUPER_TABS, ...BASE_TABS] : BASE_TABS;
+  return user?.role === 'superadmin' ? SUPER_TABS : BASE_TABS;
 }
 
 function Sidebar({ active, onChange, onLogout, user, activeCompany, tabs }) {
@@ -1281,6 +1283,7 @@ export default function AdminDashboard() {
         <main className="flex-1 p-5 md:p-8 pb-24 md:pb-8 max-w-7xl w-full">
           {tab === 'companies' && <Companies />}
           {tab === 'subscriptions' && <Subscriptions />}
+          {tab === 'saas_settings' && <SaasSettings />}
           {tab === 'overview' && <Overview />}
           {tab === 'ai' && <AIChat />}
           {tab === 'locations' && <Locations />}

@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Building2, Users, Loader2, TrendingUp, Clock, AlertCircle, CheckCircle, XCircle,
   Banknote, Receipt, Search, Mail, Phone, MoreVertical, Plus, X, Check, Calendar,
-  Pencil, ArrowRight, Crown,
+  Pencil, ArrowRight, Crown, LogIn, Landmark, CreditCard,
 } from 'lucide-react';
 import { api, formatError } from '../../../lib/api';
+import { useAuth } from '../../../lib/auth';
 
 const fmt = (n, c = 'SRD') => `${c} ${Number(n || 0).toLocaleString('nl-NL')}`;
 const fmtDate = (s) => s ? new Date(s).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
@@ -82,11 +84,169 @@ function ExtendModal({ company, onClose, onDone }) {
   );
 }
 
+function PaymentRegistrationModal({ companies, defaultCompanyId, onClose, onSaved }) {
+  const [companyId, setCompanyId] = useState(defaultCompanyId || (companies[0]?.id || ''));
+  const selectedCompany = companies.find((c) => c.id === companyId);
+  const [amount, setAmount] = useState(selectedCompany?.monthly_amount || 0);
+  const [currency, setCurrency] = useState(selectedCompany?.currency || 'SRD');
+  const [method, setMethod] = useState('bank');
+  const [reference, setReference] = useState('');
+  const [note, setNote] = useState('');
+  const [paidAt, setPaidAt] = useState(new Date().toISOString().slice(0, 10));
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState('');
+
+  useEffect(() => {
+    if (selectedCompany) {
+      setAmount(selectedCompany.monthly_amount || 0);
+      setCurrency(selectedCompany.currency || 'SRD');
+    }
+  }, [selectedCompany]);
+
+  const submit = async () => {
+    setLoading(true); setErr('');
+    try {
+      await api.post('/superadmin/subscription-payments', {
+        company_id: companyId,
+        amount: Number(amount) || 0,
+        currency, method, reference, note,
+        paid_at: new Date(paidAt).toISOString(),
+      });
+      onSaved();
+    } catch (e) { setErr(formatError(e)); }
+    finally { setLoading(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg p-6 sm:p-8 max-h-[90vh] overflow-y-auto" data-testid="register-payment-modal">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center">
+              <Banknote className="w-5 h-5 text-emerald-600" />
+            </div>
+            <h3 className="text-xl font-extrabold text-slate-900">Betaling registreren</h3>
+          </div>
+          <button onClick={onClose} data-testid="reg-pay-close"
+            className="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="space-y-3">
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">Bedrijf</label>
+            <select value={companyId} onChange={(e) => setCompanyId(e.target.value)} data-testid="reg-pay-company"
+              className="w-full h-11 px-3 rounded-xl border-2 border-slate-200 focus:border-orange-500 outline-none bg-white">
+              {companies.map((c) => (
+                <option key={c.id} value={c.id}>{c.name} · {c.plan}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="grid grid-cols-3 gap-2">
+            <div className="col-span-2">
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">Bedrag</label>
+              <input type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)}
+                data-testid="reg-pay-amount"
+                className="w-full h-11 px-3 rounded-xl border-2 border-slate-200 focus:border-orange-500 outline-none font-mono" />
+            </div>
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">Valuta</label>
+              <select value={currency} onChange={(e) => setCurrency(e.target.value)} data-testid="reg-pay-currency"
+                className="w-full h-11 px-3 rounded-xl border-2 border-slate-200 focus:border-orange-500 outline-none bg-white">
+                <option value="SRD">SRD</option>
+                <option value="USD">USD</option>
+                <option value="EUR">EUR</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">Betaalmethode</label>
+            <div className="grid grid-cols-4 gap-2">
+              {[
+                { v: 'bank', l: 'Bank', icon: Landmark },
+                { v: 'mope', l: 'Mope', icon: CreditCard },
+                { v: 'contant', l: 'Contant', icon: Banknote },
+                { v: 'overig', l: 'Overig', icon: MoreVertical },
+              ].map((m) => {
+                const Icon = m.icon;
+                const sel = method === m.v;
+                return (
+                  <button key={m.v} type="button" onClick={() => setMethod(m.v)} data-testid={`reg-pay-method-${m.v}`}
+                    className={`flex flex-col items-center gap-1 py-2 rounded-xl border-2 transition ${
+                      sel ? 'border-orange-500 bg-orange-50' : 'border-slate-200 hover:border-slate-300'
+                    }`}>
+                    <Icon className={`w-4 h-4 ${sel ? 'text-orange-600' : 'text-slate-500'}`} />
+                    <span className={`text-xs font-bold ${sel ? 'text-orange-700' : 'text-slate-700'}`}>{m.l}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">Referentie / Mededeling</label>
+            <input type="text" value={reference} onChange={(e) => setReference(e.target.value)}
+              placeholder="bv. ABONNEMENT — mei 2026" data-testid="reg-pay-reference"
+              className="w-full h-11 px-3 rounded-xl border-2 border-slate-200 focus:border-orange-500 outline-none font-mono text-sm" />
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">Datum ontvangen</label>
+            <input type="date" value={paidAt} onChange={(e) => setPaidAt(e.target.value)} data-testid="reg-pay-date"
+              className="w-full h-11 px-3 rounded-xl border-2 border-slate-200 focus:border-orange-500 outline-none" />
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">Notitie (intern)</label>
+            <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2}
+              data-testid="reg-pay-note"
+              className="w-full px-3 py-2 rounded-xl border-2 border-slate-200 focus:border-orange-500 outline-none text-sm" />
+          </div>
+        </div>
+
+        {err && <p className="text-sm text-red-600 mt-3" data-testid="reg-pay-error">{err}</p>}
+
+        <div className="rounded-xl bg-slate-50 border border-slate-200 p-3 mt-4 text-xs text-slate-600">
+          Bij registreren wordt automatisch een factuur aangemaakt en het bedrijf op <strong>actief</strong> gezet (30 dagen verlenging).
+        </div>
+
+        <div className="flex gap-2 mt-5">
+          <button onClick={onClose} disabled={loading}
+            className="flex-1 h-11 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold">Annuleer</button>
+          <button onClick={submit} disabled={loading || !companyId || amount <= 0} data-testid="reg-pay-submit"
+            className="flex-1 h-11 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-extrabold flex items-center justify-center gap-2 disabled:opacity-50">
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+            Registreer
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function CompanyDetailDrawer({ company, onClose, onChanged }) {
+  const navigate = useNavigate();
+  const { refresh } = useAuth();
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [showExtend, setShowExtend] = useState(false);
+  const [showPay, setShowPay] = useState(false);
   const status = STATUS_STYLES[company.billing_status] || STATUS_STYLES.active;
+
+  const impersonate = async () => {
+    if (!window.confirm(`Inloggen als beheerder van "${company.name}"? U verlaat het SaaS dashboard en kunt diens omgeving zien.`)) return;
+    setBusy(true); setErr('');
+    try {
+      const { data } = await api.post(`/superadmin/companies/${company.id}/impersonate`);
+      if (data?.token) localStorage.setItem('admin_token', data.token);
+      if (data?.company) localStorage.setItem('active_company', JSON.stringify(data.company));
+      await refresh();
+      navigate('/admin');
+    } catch (e) { setErr(formatError(e)); setBusy(false); }
+  };
 
   const activate = async () => {
     if (!window.confirm(`Abonnement van "${company.name}" markeren als actief? Dit maakt een betaalde factuur aan.`)) return;
@@ -170,17 +330,18 @@ function CompanyDetailDrawer({ company, onClose, onChanged }) {
         </div>
 
         <div className="sticky bottom-0 bg-white border-t border-slate-100 p-4 flex flex-col gap-2">
+          <button onClick={impersonate} disabled={busy} data-testid="drawer-impersonate"
+            className="w-full h-11 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-sm flex items-center justify-center gap-2 disabled:opacity-50">
+            <LogIn className="w-4 h-4" /> Login als beheerder
+          </button>
+          <button onClick={() => setShowPay(true)} disabled={busy} data-testid="drawer-register-payment"
+            className="w-full h-11 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-extrabold text-sm flex items-center justify-center gap-2">
+            <Banknote className="w-4 h-4" /> Betaling registreren
+          </button>
           {(company.billing_status === 'trial' || company.billing_status === 'expired') && (
             <button onClick={() => setShowExtend(true)} disabled={busy} data-testid="drawer-extend"
               className="w-full h-11 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-sm flex items-center justify-center gap-2">
               <Calendar className="w-4 h-4" /> Proefperiode verlengen
-            </button>
-          )}
-          {company.billing_status !== 'active' && (
-            <button onClick={activate} disabled={busy} data-testid="drawer-activate"
-              className="w-full h-11 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-extrabold text-sm flex items-center justify-center gap-2 disabled:opacity-50">
-              {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
-              Markeer als actief / Betaling ontvangen
             </button>
           )}
           {company.billing_status === 'active' && (
@@ -194,6 +355,11 @@ function CompanyDetailDrawer({ company, onClose, onChanged }) {
         {showExtend && (
           <ExtendModal company={company} onClose={() => setShowExtend(false)}
             onDone={() => { setShowExtend(false); onChanged(); }} />
+        )}
+        {showPay && (
+          <PaymentRegistrationModal companies={[company]} defaultCompanyId={company.id}
+            onClose={() => setShowPay(false)}
+            onSaved={() => { setShowPay(false); onChanged(); }} />
         )}
       </div>
     </div>
@@ -213,21 +379,24 @@ export default function Subscriptions() {
   const [overview, setOverview] = useState(null);
   const [companies, setCompanies] = useState([]);
   const [invoices, setInvoices] = useState([]);
+  const [payments, setPayments] = useState([]);
   const [tab, setTab] = useState('companies');
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
   const [selected, setSelected] = useState(null);
+  const [showPay, setShowPay] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [o, c, i] = await Promise.all([
+      const [o, c, i, p] = await Promise.all([
         api.get('/superadmin/overview'),
         api.get('/companies'),
         api.get('/superadmin/subscription-invoices'),
+        api.get('/superadmin/subscription-payments'),
       ]);
-      setOverview(o.data); setCompanies(c.data); setInvoices(i.data);
+      setOverview(o.data); setCompanies(c.data); setInvoices(i.data); setPayments(p.data);
     } finally { setLoading(false); }
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -250,11 +419,19 @@ export default function Subscriptions() {
 
   return (
     <div>
-      <div className="flex items-center gap-2 mb-2">
-        <Crown className="w-6 h-6 text-orange-500" />
-        <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900 tracking-tight">SaaS Beheer</h1>
+      <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
+        <div>
+          <div className="flex items-center gap-2 mb-2">
+            <Crown className="w-6 h-6 text-orange-500" />
+            <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900 tracking-tight">SaaS Beheer</h1>
+          </div>
+          <p className="text-sm text-slate-500">Alle bedrijven, abonnementen, facturen en betalingen op één plek.</p>
+        </div>
+        <button onClick={() => setShowPay(true)} data-testid="register-payment-btn"
+          className="px-5 h-11 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-extrabold flex items-center gap-2 shadow-lg shadow-emerald-500/25">
+          <Banknote className="w-4 h-4" /> Betaling registreren
+        </button>
       </div>
-      <p className="text-sm text-slate-500 mb-6">Alle bedrijven, abonnementen en facturen op één plek.</p>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
         <StatCard icon={TrendingUp} label="MRR" value={fmt(overview.mrr, overview.currency)}
@@ -267,15 +444,16 @@ export default function Subscriptions() {
           sub={`${overview.expired} verlopen · ${overview.cancelled} opgezegd`} color={overview.expired > 0 ? 'red' : 'slate'} />
       </div>
 
-      <div className="flex items-center gap-1.5 mb-4 border-b border-slate-100">
+      <div className="flex items-center gap-1.5 mb-4 border-b border-slate-100 overflow-x-auto">
         {[
           { id: 'companies', label: `Bedrijven (${companies.length})`, icon: Building2 },
           { id: 'invoices', label: `Facturen (${invoices.length})`, icon: Receipt },
+          { id: 'payments', label: `Betalingen (${payments.length})`, icon: Banknote },
         ].map((t) => {
           const Icon = t.icon;
           return (
             <button key={t.id} onClick={() => setTab(t.id)} data-testid={`sub-tab-${t.id}`}
-              className={`px-4 py-2.5 rounded-t-lg text-sm font-bold flex items-center gap-2 transition ${
+              className={`px-4 py-2.5 rounded-t-lg text-sm font-bold flex items-center gap-2 transition whitespace-nowrap ${
                 tab === t.id ? 'bg-white text-orange-600 border-b-2 border-orange-500 -mb-px' : 'text-slate-500 hover:text-slate-700'
               }`}>
               <Icon className="w-4 h-4" /> {t.label}
@@ -378,9 +556,43 @@ export default function Subscriptions() {
         </div>
       )}
 
+      {tab === 'payments' && (
+        <div className="space-y-2">
+          {payments.map((p) => (
+            <div key={p.id} data-testid={`sub-payment-${p.id}`}
+              className="bg-white rounded-2xl border border-slate-100 p-4 flex items-center gap-3">
+              <div className="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                <Banknote className="w-5 h-5" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="font-extrabold text-slate-900 truncate">{p.company_name}</p>
+                  <span className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">{p.method}</span>
+                </div>
+                <p className="text-xs text-slate-500 mt-0.5 truncate">
+                  {fmtDate(p.paid_at)}{p.reference ? ` · ${p.reference}` : ''}{p.note ? ` · ${p.note}` : ''}
+                </p>
+                {p.created_by && <p className="text-[10px] text-slate-400 mt-0.5">Geregistreerd door {p.created_by}</p>}
+              </div>
+              <p className="font-extrabold text-slate-900 text-right shrink-0">{fmt(p.amount, p.currency)}</p>
+            </div>
+          ))}
+          {payments.length === 0 && (
+            <div className="bg-white rounded-2xl border-2 border-dashed border-slate-200 p-10 text-center text-slate-400">
+              Nog geen betalingen geregistreerd. Klik op "Betaling registreren" om de eerste in te voeren.
+            </div>
+          )}
+        </div>
+      )}
+
       {selected && (
         <CompanyDetailDrawer company={selected} onClose={() => setSelected(null)}
           onChanged={() => { setSelected(null); load(); }} />
+      )}
+
+      {showPay && (
+        <PaymentRegistrationModal companies={companies} onClose={() => setShowPay(false)}
+          onSaved={() => { setShowPay(false); load(); }} />
       )}
     </div>
   );

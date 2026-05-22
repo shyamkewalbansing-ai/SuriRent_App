@@ -552,7 +552,7 @@ async def register(body: RegisterIn, response: Response):
     # Welcome email — best-effort, never fails registration
     if company_payload:
         try:
-            from email_service import send_platform_email, wrap_template
+            from email_service import send_email as _send_smtp, send_platform_email, wrap_template
             app_url = (os.environ.get("APP_PUBLIC_URL") or "https://app.surirent.sr").rstrip("/")
             plan_info = PLAN_PRICES.get(c.get("plan", "starter"), PLAN_PRICES["starter"])
             pin_row = ""
@@ -580,11 +580,18 @@ async def register(body: RegisterIn, response: Response):
 
                 <p style="margin-top:14px;">Bewaar deze e-mail goed. Heeft u vragen? Antwoord gerust op deze mail.</p>
             """.replace(",", ".")
-            await send_platform_email(
-                to=email,
-                subject=f"Welkom bij SuriRent — uw {plan_info['name']} omgeving is klaar",
-                body_html=wrap_template(content, footer=f"SuriRent · {app_url}"),
-            )
+            subject = f"Welkom bij SuriRent — uw {plan_info['name']} omgeving is klaar"
+            body_html = wrap_template(content, footer=f"SuriRent · {app_url}")
+            # Prefer SaaS DB settings, fall back to env-based platform SMTP
+            saas = await db.saas_settings.find_one({"id": SAAS_SETTINGS_ID}, {"_id": 0}) or {}
+            smtp = saas.get("smtp") or {}
+            if smtp.get("enabled") and smtp.get("host"):
+                try:
+                    await _send_smtp(smtp, to=email, subject=subject, body_html=body_html)
+                except Exception:
+                    await send_platform_email(to=email, subject=subject, body_html=body_html)
+            else:
+                await send_platform_email(to=email, subject=subject, body_html=body_html)
         except Exception:
             pass  # never block registration on email failure
 
@@ -694,16 +701,19 @@ async def billing_me(user=Depends(get_current_user)):
 
 @api.get("/billing/bank-details")
 async def billing_bank_details():
-    """Public bank details for offline / wire transfer subscription payments."""
+    """Public bank details for offline / wire transfer subscription payments.
+    Reads from saas_settings first, falls back to env vars."""
+    doc = await db.saas_settings.find_one({"id": SAAS_SETTINGS_ID}, {"_id": 0}) or {}
+    b = (doc.get("banking") or {}) if doc else {}
     return {
-        "bank_name": os.environ.get("BILLING_BANK_NAME", "DSB Bank N.V."),
-        "account_name": os.environ.get("BILLING_ACCOUNT_NAME", "SuriRent N.V."),
-        "account_number": os.environ.get("BILLING_ACCOUNT_NUMBER", "12.34.56.789"),
-        "swift": os.environ.get("BILLING_SWIFT", "DSBBSRPA"),
+        "bank_name": b.get("bank_name") or os.environ.get("BILLING_BANK_NAME", "DSB Bank N.V."),
+        "account_name": b.get("account_name") or os.environ.get("BILLING_ACCOUNT_NAME", "SuriRent N.V."),
+        "account_number": b.get("account_number") or os.environ.get("BILLING_ACCOUNT_NUMBER", "12.34.56.789"),
+        "swift": b.get("swift") or os.environ.get("BILLING_SWIFT", "DSBBSRPA"),
         "reference_template": "ABONNEMENT — <BEDRIJF> — <PERIODE>",
         "currency": "SRD",
-        "support_email": os.environ.get("BILLING_SUPPORT_EMAIL", "billing@surirent.sr"),
-        "whatsapp": os.environ.get("BILLING_WHATSAPP", "+597 8 555 0123"),
+        "support_email": b.get("support_email") or os.environ.get("BILLING_SUPPORT_EMAIL", "billing@surirent.sr"),
+        "whatsapp": b.get("whatsapp") or os.environ.get("BILLING_WHATSAPP", "+597 8 555 0123"),
     }
 
 
@@ -884,6 +894,210 @@ async def mark_invoice_paid(inv_id: str, user=Depends(require_role("superadmin")
     if not res:
         raise HTTPException(status_code=404, detail="Factuur niet gevonden")
     return res
+
+
+class SubscriptionPaymentIn(BaseModel):
+    company_id: str
+    amount: float
+    currency: Literal["SRD", "USD", "EUR"] = "SRD"
+    method: Literal["bank", "mope", "contant", "overig"] = "bank"
+    reference: Optional[str] = ""
+    note: Optional[str] = ""
+    paid_at: Optional[str] = None  # ISO date; defaults to now
+
+
+@api.get("/superadmin/subscription-payments")
+async def list_subscription_payments(user=Depends(require_role("superadmin"))):
+    docs = await db.subscription_payments.find({}, {"_id": 0}).sort("paid_at", -1).to_list(500)
+    return docs
+
+
+@api.post("/superadmin/subscription-payments")
+async def register_subscription_payment(body: SubscriptionPaymentIn, user=Depends(require_role("superadmin"))):
+    """Register an incoming SaaS payment (bank transfer or Mope) and auto-activate the company."""
+    c = await db.companies.find_one({"id": body.company_id}, {"_id": 0})
+    if not c:
+        raise HTTPException(status_code=404, detail="Bedrijf niet gevonden")
+    plan_id = c.get("plan", "starter")
+    now = now_utc()
+    paid_at = body.paid_at or iso(now)
+    period_end = now + timedelta(days=30)
+
+    # Create invoice (paid) + payment record
+    inv = {
+        "id": new_id(),
+        "company_id": body.company_id,
+        "company_name": c.get("name", ""),
+        "plan": plan_id,
+        "amount": body.amount,
+        "currency": body.currency,
+        "status": "paid",
+        "period_start": iso(now),
+        "period_end": iso(period_end),
+        "paid_at": paid_at,
+        "created_at": iso(now),
+        "created_by": user.get("email"),
+        "payment_method": body.method,
+    }
+    await db.subscription_invoices.insert_one(inv)
+
+    pay = {
+        "id": new_id(),
+        "invoice_id": inv["id"],
+        "company_id": body.company_id,
+        "company_name": c.get("name", ""),
+        "amount": body.amount,
+        "currency": body.currency,
+        "method": body.method,
+        "reference": (body.reference or "").strip(),
+        "note": (body.note or "").strip(),
+        "paid_at": paid_at,
+        "created_at": iso(now),
+        "created_by": user.get("email"),
+    }
+    await db.subscription_payments.insert_one(pay)
+
+    await db.companies.update_one({"id": body.company_id}, {"$set": {
+        "billing_status": "active",
+        "subscription_started_at": iso(now),
+        "subscription_renews_at": iso(period_end),
+    }})
+    inv.pop("_id", None)
+    pay.pop("_id", None)
+    return {"ok": True, "invoice": inv, "payment": pay}
+
+
+# Impersonation — superadmin can act as a company's admin to assist support
+IMPERSONATE_TOKEN_MIN = 60  # 1 hour
+
+
+@api.post("/superadmin/companies/{cid}/impersonate")
+async def impersonate_company(cid: str, response: Response, user=Depends(require_role("superadmin"))):
+    c = await db.companies.find_one({"id": cid}, {"_id": 0})
+    if not c:
+        raise HTTPException(status_code=404, detail="Bedrijf niet gevonden")
+    # Pick any admin of that company, or fall back to the superadmin email
+    admin = await db.users.find_one({"company_id": cid, "role": "admin"}, {"_id": 0})
+    target_user_id = (admin or user).get("id")
+    target_email = (admin or user).get("email")
+    payload = {
+        "sub": target_user_id, "email": target_email, "type": "access",
+        "company_id": cid, "role": "admin",
+        "impersonated_by": user.get("email"),
+    }
+    token = create_token(payload, IMPERSONATE_TOKEN_MIN)
+    _set_access_cookie(response, token, minutes=IMPERSONATE_TOKEN_MIN)
+    await db.audit_log.insert_one({
+        "id": new_id(), "type": "impersonate",
+        "actor": user.get("email"), "company_id": cid,
+        "company_name": c.get("name"), "at": iso(now_utc()),
+    })
+    return {
+        "token": token,
+        "company": {k: c.get(k) for k in ("id", "slug", "name", "plan")},
+        "expires_in_minutes": IMPERSONATE_TOKEN_MIN,
+    }
+
+
+# SaaS-level settings (banking, Mope creds, branding) stored centrally
+SAAS_SETTINGS_ID = "_saas_settings"
+
+
+@api.get("/superadmin/settings")
+async def get_saas_settings(user=Depends(require_role("superadmin"))):
+    doc = await db.saas_settings.find_one({"id": SAAS_SETTINGS_ID}, {"_id": 0}) or {}
+    # Mask Mope/SMTP secrets in response — only return whether they're set
+    mope = doc.get("mope", {}) or {}
+    smtp = doc.get("smtp", {}) or {}
+    return {
+        "banking": doc.get("banking", {
+            "bank_name": "", "account_name": "", "account_number": "", "swift": "",
+            "support_email": "", "whatsapp": "",
+        }),
+        "mope": {
+            "enabled": bool(mope.get("enabled")),
+            "merchant_id": mope.get("merchant_id", ""),
+            "api_key_set": bool(mope.get("api_key")),
+            "test_mode": bool(mope.get("test_mode", True)),
+        },
+        "smtp": {
+            "enabled": bool(smtp.get("enabled")),
+            "host": smtp.get("host", ""),
+            "port": smtp.get("port", 587),
+            "username": smtp.get("username", ""),
+            "password_set": bool(smtp.get("password")),
+            "from_name": smtp.get("from_name", "SuriRent"),
+            "from_email": smtp.get("from_email", ""),
+            "use_tls": bool(smtp.get("use_tls", True)),
+        },
+        "branding": doc.get("branding", {
+            "platform_name": "SuriRent", "app_url": "",
+        }),
+    }
+
+
+class SaasSettingsIn(BaseModel):
+    banking: Optional[dict] = None
+    mope: Optional[dict] = None
+    smtp: Optional[dict] = None
+    branding: Optional[dict] = None
+
+
+@api.put("/superadmin/settings")
+async def update_saas_settings(body: SaasSettingsIn, user=Depends(require_role("superadmin"))):
+    existing = await db.saas_settings.find_one({"id": SAAS_SETTINGS_ID}, {"_id": 0}) or {}
+    update = {}
+    if body.banking is not None:
+        update["banking"] = body.banking
+    if body.branding is not None:
+        update["branding"] = body.branding
+    if body.mope is not None:
+        cur = existing.get("mope", {}) or {}
+        new_mope = {
+            "enabled": bool(body.mope.get("enabled", cur.get("enabled", False))),
+            "merchant_id": body.mope.get("merchant_id", cur.get("merchant_id", "")),
+            "test_mode": bool(body.mope.get("test_mode", cur.get("test_mode", True))),
+            "api_key": body.mope.get("api_key") if body.mope.get("api_key") else cur.get("api_key", ""),
+        }
+        update["mope"] = new_mope
+    if body.smtp is not None:
+        cur = existing.get("smtp", {}) or {}
+        new_smtp = {
+            "enabled": bool(body.smtp.get("enabled", cur.get("enabled", False))),
+            "host": body.smtp.get("host", cur.get("host", "")),
+            "port": int(body.smtp.get("port", cur.get("port", 587))),
+            "username": body.smtp.get("username", cur.get("username", "")),
+            "password": body.smtp.get("password") if body.smtp.get("password") else cur.get("password", ""),
+            "from_name": body.smtp.get("from_name", cur.get("from_name", "SuriRent")),
+            "from_email": body.smtp.get("from_email", cur.get("from_email", "")),
+            "use_tls": bool(body.smtp.get("use_tls", cur.get("use_tls", True))),
+        }
+        update["smtp"] = new_smtp
+    await db.saas_settings.update_one(
+        {"id": SAAS_SETTINGS_ID},
+        {"$set": {"id": SAAS_SETTINGS_ID, **update, "updated_at": iso(now_utc()), "updated_by": user.get("email")}},
+        upsert=True,
+    )
+    return {"ok": True}
+
+
+@api.post("/superadmin/settings/test-smtp")
+async def test_saas_smtp(user=Depends(require_role("superadmin"))):
+    """Send a test e-mail to the superadmin's own address using saved SMTP."""
+    doc = await db.saas_settings.find_one({"id": SAAS_SETTINGS_ID}, {"_id": 0}) or {}
+    smtp = doc.get("smtp", {}) or {}
+    if not smtp.get("enabled") or not smtp.get("host"):
+        raise HTTPException(status_code=400, detail="SMTP is niet ingeschakeld of host ontbreekt")
+    from email_service import send_email, wrap_template, EmailError
+    try:
+        await send_email(
+            smtp, to=user.get("email"),
+            subject="SuriRent — SMTP test",
+            body_html=wrap_template("<h1>SMTP werkt!</h1><p>Dit is een testbericht vanuit de SaaS-omgeving.</p>"),
+        )
+    except EmailError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    return {"ok": True}
 
 
 @api.post("/companies", response_model=CompanyOut)
