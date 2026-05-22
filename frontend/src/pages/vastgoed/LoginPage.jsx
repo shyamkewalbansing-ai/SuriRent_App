@@ -17,10 +17,10 @@ function Clock() {
   }, []);
   return (
     <div className="text-right" data-testid="kiosk-clock">
-      <p className="text-base sm:text-2xl font-bold text-white tracking-tight leading-none">
+      <p className="font-bold text-white tracking-tight leading-none" style={{ fontSize: 'clamp(13px, 1.8vh, 22px)' }}>
         {t.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })}
       </p>
-      <p className="text-[10px] sm:text-sm text-white/80 capitalize mt-0.5">
+      <p className="text-white/80 capitalize" style={{ fontSize: 'clamp(9px, 1.2vh, 13px)', marginTop: '1px' }}>
         {t.toLocaleDateString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short' })}
       </p>
     </div>
@@ -32,14 +32,16 @@ function Header({ branding }) {
   const tagline = branding?.tagline || 'Beheer & Kiosk toegang';
   const logo = branding?._logoResolved || '/kiosk-icons/kiosk-192.png';
   return (
-    <div className="flex items-center justify-between px-4 sm:px-8 py-2.5 sm:py-4 bg-black/15 backdrop-blur-sm border-b border-white/20 shrink-0">
-      <div className="flex items-center gap-2.5 sm:gap-4">
-        <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-2xl bg-white flex items-center justify-center shadow-lg overflow-hidden p-1">
+    <div className="flex items-center justify-between bg-black/15 backdrop-blur-sm border-b border-white/20 shrink-0"
+      style={{ padding: 'clamp(6px, 1.2vh, 16px) clamp(12px, 4vw, 32px)' }}>
+      <div className="flex items-center" style={{ gap: 'clamp(8px, 2vw, 16px)' }}>
+        <div className="rounded-2xl bg-white flex items-center justify-center shadow-lg overflow-hidden"
+          style={{ width: 'clamp(32px, 5vh, 56px)', height: 'clamp(32px, 5vh, 56px)', padding: '4px' }}>
           <img src={logo} alt={appName} className="w-full h-full object-contain" data-testid="login-header-logo" />
         </div>
-        <div>
-          <h1 className="text-base sm:text-xl font-bold text-white tracking-tight leading-tight" data-testid="login-header-name">{appName}</h1>
-          <p className="text-[10px] sm:text-xs text-white/80 font-medium leading-tight">{tagline}</p>
+        <div className="min-w-0">
+          <h1 className="font-bold text-white tracking-tight leading-tight truncate" style={{ fontSize: 'clamp(13px, 2vh, 20px)' }} data-testid="login-header-name">{appName}</h1>
+          <p className="text-white/80 font-medium leading-tight truncate" style={{ fontSize: 'clamp(9px, 1.2vh, 13px)' }}>{tagline}</p>
         </div>
       </div>
       <Clock />
@@ -51,6 +53,12 @@ function PinLanding({ onSuccess, onPassword, onRegister, branding }) {
   const [pin, setPin] = useState(['', '', '', '']);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  // Was the user kicked out by the idle-lock timer in /admin? Show a friendly
+  // notice once; clear it from the URL after first paint so it doesn't reappear.
+  const [locked, setLocked] = useState(() => {
+    try { return new URLSearchParams(window.location.search).get('locked') === '1'; }
+    catch { return false; }
+  });
   const primary = branding?.primary_color || '#FF5C00';
   const appName = branding?.app_name || 'Kiosk';
   const tagline = branding?.tagline || '';
@@ -77,6 +85,7 @@ function PinLanding({ onSuccess, onPassword, onRegister, branding }) {
   const handleKey = (k) => {
     if (loading) return;
     setError('');
+    if (locked) setLocked(false);
     if (k === 'DEL') {
       for (let i = 3; i >= 0; i--) {
         if (pin[i]) { const np = [...pin]; np[i] = ''; setPin(np); return; }
@@ -93,30 +102,62 @@ function PinLanding({ onSuccess, onPassword, onRegister, branding }) {
   };
 
   return (
-    <div className="h-[100dvh] min-h-[100dvh] flex flex-col overflow-hidden" style={{ backgroundColor: primary }}>
+    <div className="h-[100dvh] w-full flex flex-col" style={{ backgroundColor: primary, paddingTop: 'env(safe-area-inset-top, 0px)', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
       <Header branding={branding} />
-      <div className="flex-1 flex items-center justify-center p-3 sm:p-6 min-h-0">
-        <div className="bg-white rounded-2xl sm:rounded-3xl shadow-[0_20px_60px_rgba(0,0,0,0.15)] w-full max-w-md p-4 sm:p-8" data-testid="pin-card">
-          <div className="text-center mb-3 sm:mb-5">
-            <div className="w-14 h-14 sm:w-20 sm:h-20 rounded-2xl sm:rounded-3xl flex items-center justify-center mx-auto mb-2 sm:mb-3 shadow-xl overflow-hidden p-2"
-              style={{ background: `linear-gradient(135deg, ${primary}, ${primary}CC)` }}>
+      <div className="flex-1 min-h-0 flex items-center justify-center px-2 py-2 sm:p-6 overflow-hidden">
+        <div className="bg-white rounded-2xl sm:rounded-3xl shadow-[0_20px_60px_rgba(0,0,0,0.15)] w-full max-w-md flex flex-col"
+          style={{ maxHeight: '100%', padding: 'clamp(12px, 2.5vh, 32px) clamp(14px, 4vw, 32px)' }}
+          data-testid="pin-card">
+          <div className="text-center" style={{ marginBottom: 'clamp(6px, 1.5vh, 16px)' }}>
+            <div className="rounded-2xl flex items-center justify-center mx-auto shadow-xl overflow-hidden"
+              style={{
+                background: `linear-gradient(135deg, ${primary}, ${primary}CC)`,
+                width: 'clamp(40px, 7vh, 72px)',
+                height: 'clamp(40px, 7vh, 72px)',
+                padding: 'clamp(4px, 0.8vh, 10px)',
+                marginBottom: 'clamp(4px, 1vh, 10px)',
+              }}>
               <img src={logoUrl} alt="logo" className="w-full h-full object-contain drop-shadow-md" data-testid="pin-logo" />
             </div>
-            <h2 className="text-lg sm:text-2xl font-bold text-slate-900 tracking-tight leading-tight" data-testid="pin-app-name">Welkom bij {appName}</h2>
-            {tagline && <p className="text-xs sm:text-sm text-slate-400 mt-0.5">{tagline}</p>}
+            <h2 className="font-bold text-slate-900 tracking-tight leading-tight"
+              style={{ fontSize: 'clamp(15px, 2.4vh, 22px)' }}
+              data-testid="pin-app-name">Welkom bij {appName}</h2>
+            {tagline && <p className="text-slate-400 leading-tight" style={{ fontSize: 'clamp(11px, 1.5vh, 13px)', marginTop: '2px' }}>{tagline}</p>}
           </div>
 
+          {locked && !error && (
+            <div className="rounded-xl text-center font-medium border"
+              style={{
+                fontSize: 'clamp(11px, 1.5vh, 13px)',
+                padding: 'clamp(6px, 1vh, 10px)',
+                marginBottom: 'clamp(6px, 1vh, 12px)',
+                backgroundColor: `${primary}10`,
+                borderColor: `${primary}40`,
+                color: primary,
+              }}
+              data-testid="pin-locked-msg">
+              Sessie vergrendeld door inactiviteit — voer uw PIN in om verder te gaan
+            </div>
+          )}
+
           {error && (
-            <div className="mb-3 p-2 bg-red-50 border border-red-200 text-red-600 rounded-xl text-center text-xs sm:text-sm font-medium" data-testid="pin-error">
+            <div className="bg-red-50 border border-red-200 text-red-600 rounded-xl text-center font-medium"
+              style={{ fontSize: 'clamp(11px, 1.5vh, 13px)', padding: 'clamp(6px, 1vh, 10px)', marginBottom: 'clamp(6px, 1vh, 12px)' }}
+              data-testid="pin-error">
               {error}
             </div>
           )}
 
-          <div className="flex justify-center gap-2 sm:gap-3 mb-3 sm:mb-5">
+          <div className="flex justify-center" style={{ gap: 'clamp(6px, 1.5vw, 12px)', marginBottom: 'clamp(8px, 1.5vh, 16px)' }}>
             {pin.map((digit, i) => (
               <div key={`pin-slot-${i}`} data-testid={`pin-input-${i}`}
-                style={digit && !error ? { borderColor: primary, color: primary, backgroundColor: `${primary}10` } : undefined}
-                className={`text-center font-bold rounded-xl border-2 transition-all w-11 h-12 sm:w-14 sm:h-16 text-xl sm:text-2xl flex items-center justify-center ${
+                style={{
+                  width: 'clamp(36px, 9vw, 56px)',
+                  height: 'clamp(40px, 6vh, 64px)',
+                  fontSize: 'clamp(18px, 2.5vh, 24px)',
+                  ...(digit && !error ? { borderColor: primary, color: primary, backgroundColor: `${primary}10` } : {}),
+                }}
+                className={`text-center font-bold rounded-xl border-2 transition-all flex items-center justify-center ${
                   error ? 'border-red-400 bg-red-50 text-red-600'
                     : digit ? ''
                     : 'border-slate-200 bg-[#F9FAFB] text-slate-300'
@@ -126,36 +167,40 @@ function PinLanding({ onSuccess, onPassword, onRegister, branding }) {
             ))}
           </div>
 
-          <div className="grid grid-cols-3 gap-1.5 sm:gap-3 max-w-[300px] sm:max-w-[320px] mx-auto">
+          <div className="grid grid-cols-3 mx-auto w-full"
+            style={{ gap: 'clamp(4px, 1vh, 12px)', maxWidth: 'min(320px, 90%)' }}>
             {['1','2','3','4','5','6','7','8','9','_e','0','DEL'].map((k) => (
               k === '_e' ? <div key="e" /> : (
                 <button key={k} type="button" onClick={() => handleKey(k)} disabled={loading}
                   data-testid={`keypad-${k}`}
-                  className={`h-10 sm:h-14 text-lg sm:text-2xl font-bold rounded-xl transition-all active:scale-90 disabled:opacity-50 flex items-center justify-center ${
+                  style={{ height: 'clamp(36px, 6vh, 56px)', fontSize: 'clamp(16px, 2.4vh, 24px)' }}
+                  className={`font-bold rounded-xl transition-all active:scale-90 disabled:opacity-50 flex items-center justify-center ${
                     k === 'DEL'
                       ? 'bg-red-50 text-red-500 hover:bg-red-100 border border-red-200'
                       : 'bg-[#F4F5F7] text-slate-800 hover:bg-orange-50 hover:text-orange-600 border border-slate-200'
                   }`}>
-                  {k === 'DEL' ? <Delete className="w-4 h-4 sm:w-5 sm:h-5" /> : k}
+                  {k === 'DEL' ? <Delete style={{ width: 'clamp(16px, 2.2vh, 22px)', height: 'clamp(16px, 2.2vh, 22px)' }} /> : k}
                 </button>
               )
             ))}
           </div>
 
           {loading && (
-            <div className="flex items-center justify-center gap-2 mt-3 text-slate-400">
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              <span className="text-xs font-medium">Verifiëren...</span>
+            <div className="flex items-center justify-center gap-2 text-slate-400"
+              style={{ marginTop: 'clamp(6px, 1vh, 12px)' }}>
+              <Loader2 className="w-3 h-3 animate-spin" />
+              <span style={{ fontSize: 'clamp(10px, 1.4vh, 12px)' }} className="font-medium">Verifiëren...</span>
             </div>
           )}
 
-          <div className="mt-3 sm:mt-5 pt-3 sm:pt-4 border-t border-slate-100 flex items-center justify-center gap-3 sm:gap-4 flex-wrap text-[11px] sm:text-xs font-medium">
+          <div className="border-t border-slate-100 flex items-center justify-center flex-wrap font-medium"
+            style={{ gap: 'clamp(8px, 2vw, 16px)', fontSize: 'clamp(10px, 1.4vh, 12px)', marginTop: 'clamp(8px, 1.5vh, 16px)', paddingTop: 'clamp(6px, 1.2vh, 12px)' }}>
             <button onClick={onPassword} data-testid="login-password-btn" className="flex items-center gap-1 text-slate-500 hover:text-orange-500 transition">
-              <KeyRound className="w-3 h-3 sm:w-3.5 sm:h-3.5" /> Beheerder Wachtwoord
+              <KeyRound style={{ width: 'clamp(11px, 1.6vh, 14px)', height: 'clamp(11px, 1.6vh, 14px)' }} /> Beheerder
             </button>
             <span className="text-slate-200">•</span>
             <button onClick={onRegister} data-testid="login-register-btn" className="flex items-center gap-1 text-slate-500 hover:text-orange-500 transition">
-              <UserPlus className="w-3 h-3 sm:w-3.5 sm:h-3.5" /> Nieuw account
+              <UserPlus style={{ width: 'clamp(11px, 1.6vh, 14px)', height: 'clamp(11px, 1.6vh, 14px)' }} /> Nieuw account
             </button>
           </div>
         </div>

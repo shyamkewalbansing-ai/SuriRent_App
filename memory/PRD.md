@@ -282,14 +282,13 @@ User koos voor **Optie C — minimale herbouw** (kern eerst), dan vroeg om **Fas
 - ✅ **Robuustheid**: try/except rond PDF + QR generatie zodat registratie nooit faalt door een email-issue. AI-quality check op generated PDF bevestigt: QR scannable, info tabel leesbaar, iOS/Android sectie gescheiden, branding accent zichtbaar.
 - ✅ Tested via curl-registratie van een dummy bedrijf — geen errors, PDF wordt correct gegenereerd en aangehecht.
 
-### Login-pagina opschoning + "Beheerder" knop fix (2026-05-22) ✅
-- ✅ **Verwijderd**: `CompanyCodePicker` ("Uw bedrijfscode" balk) onderaan de PIN-pagina — branding wordt nu uitsluitend via hostname/`?c=`/cache opgelost, geen manuele picker meer.
-- ✅ **Verwijderd**: `PwaRoleBadge` (zowel "Modus: …" als "Bedrijf: …" badge) — niet meer zichtbaar op de login-pagina; PWA role-memory blijft intern werken via `pwaRole.js`.
-- ✅ **PIN-pagina past op kleine telefoons** zonder scroll: container is nu `h-[100dvh] flex-col overflow-hidden`, paddings/marges, logo (14×14→20×20), PIN-slots (11×12→14×16), keypad-knoppen (h-10→h-14) en footer afgeslankt. "Standaard PIN: 1234" hint weggehaald. Document height = viewport height = 1080 op iPhone-SE viewport (no scroll).
-- ✅ **`LoginPage` accepteert nu `?view=admin` / `?view=register`** query parameters om direct in de Beheerder-Login of Register-modus te openen.
-- ✅ **Kiosk → "Beheerder" gaat nu direct naar `/admin`**: backend endpoint `/api/auth/kiosk-pin` retourneert nu ook een `admin_token` + `admin_user` (PIN is de gedeelde bedrijfs-secret, dus PIN-houder krijgt impliciet admin-toegang tot dat bedrijf). Frontend slaat `admin_token` op tijdens PIN-login; KioskLayout `adminMode` doet `window.location.assign('/admin')` zodat AuthProvider opnieuw `/auth/me` doet met het nieuwe token. Wachtwoord-fallback blijft beschikbaar als er nog geen admin-user is.
-- ✅ **PasswordView header** gebruikt nu ook de company branding (zelfde gradient/logo als PIN-pagina).
-- ✅ E2E getest via Playwright: clean state → PIN 1234 → /kiosk (admin_token set) → klik Beheerder → /admin dashboard met sidebar + bedrijf-badge direct zichtbaar.
+### PIN-pagina volledig viewport-responsive + Admin auto-lock (2026-05-22) ✅
+- ✅ **`PinLanding` volledig herschreven met `clamp()` + `vh`/`vw`-units**: logo, titel, tagline, PIN-slots, keypad-knoppen, footer en header schalen nu proportioneel mee met de viewport. Min-waarden zorgen voor leesbaarheid op de kleinste telefoons (iPhone-SE1 320×568), max-waarden voorkomen dat het te groot wordt op tablets.
+- ✅ **Container** gebruikt nu `h-[100dvh] w-full flex flex-col` + `env(safe-area-inset-*)` padding zodat de pagina exact past op alle phones (320–768px breed, 568–1366px hoog), inclusief PWA-standalone met notch/home indicator.
+- ✅ **Geverifieerd**: bij viewport 320×568 (iPhone SE), 375×667, 390×844 (iPhone 12+) → `document.height === viewport.height` (geen scroll). Card en DEL-knop blijven volledig binnen het scherm.
+- ✅ **Auto-lock (15 min idle)** in `/admin`: nieuw `lib/useIdleLock.js` hook luistert naar mouse/key/touch/scroll events. Bij inactiviteit → `admin_token` verwijderen → `window.location.assign('/login?locked=1')`. Niet actief voor superadmin (langere SaaS-sessies).
+- ✅ **Locked-banner** verschijnt op `/login?locked=1` met merkkleur: "Sessie vergrendeld door inactiviteit — voer uw PIN in om verder te gaan". Verdwijnt zodra de gebruiker een toets indrukt. Kiosk_token blijft behouden → PIN-invoer herstelt direct de admin-toegang (één tik PIN i.p.v. wachtwoord).
+- ✅ E2E getest via Playwright: PIN-pagina past op alle telefoonschermen, locked-banner toont correct.
 
 ## Prioritized Backlog (Fases E-F)
 - 📧 **Email notificaties** — wacht op SendGrid / Resend credentials van user

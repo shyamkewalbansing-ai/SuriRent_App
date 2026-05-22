@@ -29,6 +29,7 @@ import MyUrlCard from '../../components/MyUrlCard';
 import MijnAbonnement from './admin/MijnAbonnement';
 import TrialBanner from '../../components/TrialBanner';
 import ImpersonationBanner from '../../components/ImpersonationBanner';
+import { useIdleLock } from '../../lib/useIdleLock';
 
 const BASE_TABS = [
   { id: 'overview', label: 'Overzicht', icon: LayoutDashboard },
@@ -1285,6 +1286,16 @@ export default function AdminDashboard() {
     return () => window.removeEventListener('go-tab', handler);
   }, []);
   const doLogout = async () => { await logout(); navigate('/login'); };
+
+  // Auto-lock: na 15 minuten inactiviteit → admin-token wegnemen en terug
+  // naar /login. De kiosk_token (en PIN) blijft behouden, dus opnieuw
+  // inloggen kost slechts één PIN-invoer i.p.v. een volledige wachtwoord-flow.
+  // Niet actief voor superadmin (die kan langer doorwerken op SaaS-zaken).
+  useIdleLock({
+    timeoutMs: 15 * 60 * 1000,
+    enabled: !!user && user.role !== 'superadmin',
+    onLock: () => { window.location.assign('/login?locked=1'); },
+  });
   return (
     <div className="min-h-screen bg-[#FFF7F0] flex">
       <Sidebar active={tab} onChange={setTab} onLogout={doLogout} user={user} activeCompany={activeCompany} tabs={tabs} />
