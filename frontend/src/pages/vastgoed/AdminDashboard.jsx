@@ -189,9 +189,9 @@ function MobileTabBar({ active, onChange, tabs, onOpenMenu, user }) {
     .map((id) => tabs.find((t) => t.id === id))
     .filter(Boolean);
   return (
-    <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white border-t border-orange-100"
-      style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
-      <div className="grid grid-cols-5">
+    <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white border-t border-orange-100">
+      <div className="grid grid-cols-5"
+        style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
         {primary.map((t) => {
           const Icon = t.icon;
           const isActive = active === t.id;
@@ -1471,15 +1471,14 @@ export default function AdminDashboard() {
   const doLogout = async () => { await logout(); navigate('/login'); };
 
   return (
-    <div className="h-[100dvh] bg-[#FFF7F0] flex overflow-hidden">
+    <div className="min-h-screen bg-[#FFF7F0] flex">
       <Sidebar active={tab} onChange={setTab} onLogout={doLogout}
         user={user} tabs={tabs} />
-      <div className="flex-1 flex flex-col min-w-0 min-h-0">
+      <div className="flex-1 flex flex-col min-w-0">
         <MobileHeader activeCompany={activeCompany} user={user} onOpenMenu={() => setDrawerOpen(true)} />
         <ImpersonationBanner />
         <TrialBanner />
-        <main className="flex-1 overflow-y-auto p-5 md:p-8 pb-24 md:pb-8 w-full"
-          style={{ overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' }}>
+        <main className="flex-1 p-5 md:p-8 pb-24 md:pb-8 w-full">
           {tab === 'companies' && <Companies />}
           {tab === 'subscriptions' && <Subscriptions />}
           {tab === 'saas_settings' && <SaasSettings />}

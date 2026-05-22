@@ -35,34 +35,18 @@ body {
      too would double the padding and reveal the body color in the notch. */
 }
 
-/* In standalone (installed PWA) mode: stop body-scroll bouncing without
-   forcing position:fixed on the body. Some iOS versions misplace
-   `position: fixed` modals when the body itself is also fixed — modals
-   then appear to start below the sticky header. We use overflow:hidden on
-   the root scrollers instead, which kills overscroll AND keeps modal
-   fixed positioning relative to the true viewport. */
+/* In standalone (installed PWA) mode: kill rubber-band scroll bounce.
+   We DON'T use `position: fixed` on body here — iOS Safari has bugs where
+   that breaks fixed positioning of children (modals + bottom tab bars get
+   pushed inside their parent instead of attaching to the viewport).
+   `overscroll-behavior` alone is enough to stop document bounce. */
 @media (display-mode: standalone) {
   html, body {
     overscroll-behavior: none;
-    overflow: hidden;
-    height: 100%;
-    margin: 0;
-    /* Wit zodat eventuele 1px doorlek bij safe-area niet als oranje balk
-       onder de admin-tabbar of huurder-portaal zichtbaar wordt. De Kiosk
-       gebruikt zijn eigen `.kiosk-fullscreen` overlay die wel oranje is. */
     background-color: #ffffff;
   }
-  #root {
-    height: 100%;
-    overflow: hidden;
-    background-color: #ffffff;
-  }
-  /* Tijdens kiosk-mode (set by KioskLayout via body class) -> body en #root
-     krijgen brand-oranje zodat het safe-area-inset-bottom gebied (waar de
-     iPhone home-indicator zit) doorloopt in dezelfde kleur als de kiosk.
-     Heeft geen effect in normale browser-tab. */
-  body.kiosk-mode,
-  body.kiosk-mode #root { background-color: #FF5C00; }
+  /* Tijdens kiosk-mode -> brand-oranje voor home-indicator gebied. */
+  body.kiosk-mode { background-color: #FF5C00; }
 }
 
 /* Utility for screens that should respect safe area manually. */
