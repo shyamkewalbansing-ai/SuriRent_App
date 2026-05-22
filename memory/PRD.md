@@ -274,6 +274,14 @@ User koos voor **Optie C — minimale herbouw** (kern eerst), dan vroeg om **Fas
 - ✅ **Welkomstemail uitgebreid**: nieuwe registratie krijgt nu in de mail (1) een grote oranje "Open mijn omgeving" CTA-knop naar de universele query-URL, (2) de plain-text URL eronder voor kopiëren, (3) een aparte sectie met de subdomein-URL "Of gebruik later uw eigen subdomein (zodra DNS actief is)". Tip-regel onderaan over bookmark/install.
 - ✅ E2E getest: card visible op zowel Overview als Branding tab, copy button werkt, DNS status badge toont "Wildcard DNS actief" correct (preview env accepteert wildcard hostnames).
 
+### PDF-onboarding pakket + inline QR-code in welkomstemail (2026-05-22) ✅
+- ✅ **Nieuwe `pdf_gen.onboarding_pdf()`** functie: 2-koloms layout met QR-code (gegenereerd via `qrcode` lib), login-info tabel (bedrijf/email/wachtwoord/PIN/pakket/prijs/trial), aparte "iOS — iPhone/iPad" en "Android — Chrome/Edge" install-stappen kaarten, oranje brand-accents (gebruikt company's `primary_color` voor headers). 23 KB per PDF.
+- ✅ **`_make_qr_png()` helper** in pdf_gen.py: genereert PNG QR-codes (M error-correction, 360px default) — herbruikbaar voor zowel PDF als inline email image.
+- ✅ **email_service uitgebreid**: `_build_message()` parseert nu `'image/png; cid=loginqr; inline'` content-type strings → voegt inline image met Content-ID toe (referencable via `src="cid:loginqr"` in HTML body). `send_platform_email` accepteert nu `attachments` parameter.
+- ✅ **Welkomstemail aangepast**: bevat nu (1) een **inline gescande QR-code** in de e-mail HTML body voor mobile scanning, (2) een **PDF-bijlage** `SuriRent_welkomstpakket_<slug>.pdf` met complete onboarding info, (3) tekstuele tip "📎 Bijgevoegd: een PDF welkomstpakket met alle inloggegevens, QR-code en installatie-instructies".
+- ✅ **Robuustheid**: try/except rond PDF + QR generatie zodat registratie nooit faalt door een email-issue. AI-quality check op generated PDF bevestigt: QR scannable, info tabel leesbaar, iOS/Android sectie gescheiden, branding accent zichtbaar.
+- ✅ Tested via curl-registratie van een dummy bedrijf — geen errors, PDF wordt correct gegenereerd en aangehecht.
+
 ## Prioritized Backlog (Fases E-F)
 - 📧 **Email notificaties** — wacht op SendGrid / Resend credentials van user
 - 📱 **WhatsApp/SMS herinneringen** — wacht op Twilio credentials

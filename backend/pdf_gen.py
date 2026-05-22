@@ -286,3 +286,156 @@ def payslip_pdf(salary: dict, employee: dict) -> bytes:
         el.append(Spacer(1, 12))
         el.append(Paragraph("<b>Notitie:</b> " + salary["note"], s["Body"]))
     return _build(el)
+
+
+
+def _make_qr_png(url: str, size_px: int = 360) -> bytes:
+    """Generate a QR-code PNG for the given URL. Returns raw PNG bytes."""
+    import qrcode
+    qr = qrcode.QRCode(version=None, error_correction=qrcode.constants.ERROR_CORRECT_M,
+                       box_size=10, border=2)
+    qr.add_data(url)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="#1a1a1a", back_color="white")
+    img = img.resize((size_px, size_px))
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def onboarding_pdf(*, company_name: str, contact_name: str, email: str,
+                   plan_name: str, plan_price_text: str,
+                   login_url: str, subdomain_url: str | None,
+                   kiosk_pin: str | None,
+                   primary_hex: str = "#FF5C00") -> bytes:
+    """Premium onboarding PDF — login info + QR code + iOS/Android install steps.
+    Sent as attachment to the welcome email."""
+    from reportlab.platypus import Image as RLImage
+    s = _styles()
+    accent = colors.HexColor(primary_hex) if primary_hex.startswith("#") else ORANGE
+    elements = []
+
+    # Title
+    elements.append(Paragraph(
+        f'<font color="{accent.hexval()}">Welkom bij SuriRent!</font>', s["H1Orange"]
+    ))
+    elements.append(Paragraph(
+        f"Uw eigen Vastgoed-omgeving voor <b>{company_name}</b> is klaar.",
+        s["Sub"],
+    ))
+    elements.append(Spacer(1, 8))
+
+    # Two-column layout: QR (left) + Login info (right)
+    qr_png = _make_qr_png(login_url, size_px=360)
+    qr_img = RLImage(io.BytesIO(qr_png), width=55 * mm, height=55 * mm)
+
+    info_rows = [
+        ["Bedrijf", company_name],
+        ["Contactpersoon", contact_name],
+        ["E-mailadres", email],
+        ["Wachtwoord", "(zoals opgegeven bij registratie)"],
+    ]
+    if kiosk_pin:
+        info_rows.append(["Kiosk PIN", kiosk_pin])
+    info_rows.append(["Pakket", plan_name])
+    info_rows.append(["Prijs", plan_price_text])
+    info_rows.append(["Proefperiode", "14 dagen gratis"])
+
+    info_table = Table(info_rows, colWidths=[35 * mm, 75 * mm])
+    info_table.setStyle(TableStyle([
+        ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
+        ("FONTSIZE", (0, 0), (-1, -1), 9),
+        ("TEXTCOLOR", (0, 0), (0, -1), MUTED),
+        ("TEXTCOLOR", (1, 0), (1, -1), DARK),
+        ("FONTNAME", (1, 0), (1, -1), "Helvetica-Bold"),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+        ("TOPPADDING", (0, 0), (-1, -1), 5),
+        ("LINEBELOW", (0, 0), (-1, -2), 0.4, LIGHT),
+    ]))
+
+    qr_caption = Paragraph(
+        '<para align="center"><font size="8" color="#6b7280">Scan om direct in te loggen</font></para>',
+        s["Body"],
+    )
+    qr_block = Table([[qr_img], [qr_caption]], colWidths=[60 * mm])
+    qr_block.setStyle(TableStyle([
+        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("BOX", (0, 0), (-1, -1), 0.5, LIGHT),
+        ("BACKGROUND", (0, 0), (-1, -1), colors.white),
+        ("TOPPADDING", (0, 0), (-1, -1), 10),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
+    ]))
+
+    top = Table([[qr_block, info_table]], colWidths=[65 * mm, 115 * mm])
+    top.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP")]))
+    elements.append(top)
+
+    elements.append(Spacer(1, 14))
+    elements.append(Paragraph("UW LOGIN LINK", s["SectionHead"]))
+    elements.append(Paragraph(
+        f'<font color="{accent.hexval()}"><b><link href="{login_url}">{login_url}</link></b></font>',
+        ParagraphStyle("Link", parent=s["Body"], fontSize=10, leading=13, wordWrap="CJK"),
+    ))
+    if subdomain_url:
+        elements.append(Spacer(1, 4))
+        elements.append(Paragraph(
+            f'<font color="#6b7280" size="9">Zodra wildcard DNS actief is, kunt u ook gebruik maken van uw eigen subdomein:<br/><b>{subdomain_url}</b></font>',
+            s["Body"],
+        ))
+
+    elements.append(Spacer(1, 14))
+
+    # Install instructions: two columns (iOS / Android)
+    elements.append(Paragraph("INSTALLEER ALS APP OP UW TELEFOON", s["SectionHead"]))
+    elements.append(Paragraph(
+        "Voor een ware app-ervaring (eigen icoon, fullscreen) installeer SuriRent als PWA:",
+        s["Body"],
+    ))
+    elements.append(Spacer(1, 6))
+
+    ios_steps = [
+        ["1.", "Open de link op uw iPhone of iPad <b>via Safari</b>"],
+        ["2.", "Tik op het <b>Delen</b>-icoon (vierkant met pijl omhoog)"],
+        ["3.", "Scroll en kies <b>'Zet op beginscherm'</b>"],
+        ["4.", "Bevestig met <b>Voeg toe</b> — klaar!"],
+    ]
+    android_steps = [
+        ["1.", "Open de link in <b>Chrome</b> of <b>Edge</b>"],
+        ["2.", "Tik op de prompt <b>'Installeren'</b> onderaan"],
+        ["3.", "Of via het menu: <b>'App installeren'</b>"],
+        ["4.", "SuriRent verschijnt op uw startscherm — klaar!"],
+    ]
+
+    def _steps_table(title: str, rows):
+        body = [[Paragraph(f'<b><font color="{accent.hexval()}">{title}</font></b>', s["Body"])]]
+        body += [[Paragraph(f'<b>{n}</b> {t}', s["Body"])] for n, t in rows]
+        tbl = Table(body, colWidths=[85 * mm])
+        tbl.setStyle(TableStyle([
+            ("FONTSIZE", (0, 0), (-1, -1), 9),
+            ("BACKGROUND", (0, 0), (-1, 0), LIGHT),
+            ("BOX", (0, 0), (-1, -1), 0.4, LIGHT),
+            ("INNERGRID", (0, 0), (-1, -1), 0.3, LIGHT),
+            ("TOPPADDING", (0, 0), (-1, -1), 6),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+            ("LEFTPADDING", (0, 0), (-1, -1), 10),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 10),
+        ]))
+        return tbl
+
+    install_row = Table([[
+        _steps_table("iOS — iPhone / iPad", ios_steps),
+        _steps_table("Android — Chrome / Edge", android_steps),
+    ]], colWidths=[90 * mm, 90 * mm])
+    install_row.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP")]))
+    elements.append(install_row)
+
+    elements.append(Spacer(1, 14))
+    elements.append(Paragraph("HULP NODIG?", s["SectionHead"]))
+    elements.append(Paragraph(
+        "Heeft u vragen of loopt u ergens vast? Beantwoord de welkomst-mail "
+        "of stuur een bericht via WhatsApp. Wij helpen graag persoonlijk.",
+        s["Body"],
+    ))
+
+    return _build(elements)

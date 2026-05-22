@@ -28,8 +28,24 @@ def _build_message(cfg: dict, to: str, subject: str, body_html: str,
     msg.set_content(body_text or "Bekijk deze e-mail in een HTML-compatibele e-mailclient.")
     msg.add_alternative(body_html, subtype="html")
     for filename, content, content_type in attachments or []:
-        maintype, _, subtype = content_type.partition("/")
-        msg.add_attachment(content, maintype=maintype or "application", subtype=subtype or "octet-stream", filename=filename)
+        # Allow callers to flag an attachment as inline with a Content-ID by
+        # appending '; cid=<id>; inline' to the content_type string.
+        # Example: 'image/png; cid=loginqr; inline'
+        ctype = content_type or "application/octet-stream"
+        parts = [p.strip() for p in ctype.split(";")]
+        mime = parts[0] or "application/octet-stream"
+        params = dict(p.split("=", 1) for p in parts[1:] if "=" in p)
+        inline = any(p.lower() == "inline" for p in parts[1:])
+        cid = params.get("cid")
+        maintype, _, subtype = mime.partition("/")
+        kwargs = {"maintype": maintype or "application", "subtype": subtype or "octet-stream"}
+        if inline:
+            kwargs["disposition"] = "inline"
+            if cid:
+                kwargs["cid"] = f"<{cid}>"
+        else:
+            kwargs["filename"] = filename
+        msg.add_attachment(content, **kwargs)
     return msg
 
 
@@ -99,7 +115,8 @@ def get_platform_smtp_config() -> dict | None:
 
 
 async def send_platform_email(to: str, subject: str, body_html: str,
-                              body_text: str | None = None) -> None:
+                              body_text: str | None = None,
+                              attachments: list[tuple[str, bytes, str]] | None = None) -> None:
     """Send a transactional email using SuriRent's platform SMTP.
 
     Silently no-ops when not configured (so registration still succeeds
@@ -108,7 +125,7 @@ async def send_platform_email(to: str, subject: str, body_html: str,
     cfg = get_platform_smtp_config()
     if not cfg:
         return
-    msg = _build_message(cfg, to, subject, body_html, body_text)
+    msg = _build_message(cfg, to, subject, body_html, body_text, attachments)
     try:
         await asyncio.to_thread(_send_sync, cfg, msg)
     except EmailError:

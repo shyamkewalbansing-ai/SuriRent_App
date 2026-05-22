@@ -25,6 +25,7 @@ import secrets
 
 from pdf_gen import (
     receipt_pdf, contract_pdf, invoice_pdf, deposit_refund_pdf, payslip_pdf,
+    onboarding_pdf, _make_qr_png,
 )
 from landing_content import (
     LANDING_DEFAULTS, DRAFT_ID, PUBLISHED_ID, merge_with_defaults,
@@ -710,12 +711,43 @@ async def register(body: RegisterIn, response: Response):
                   <br /><a href="{login_subdomain_url}" style="color:#FF5C00;font-weight:700;text-decoration:none;">{login_subdomain_url}</a>
                 </p>
                 """
+            # Generate the onboarding PDF + inline QR for the email body
+            try:
+                qr_png_inline = _make_qr_png(login_query_url, size_px=320)
+                qr_block = """
+                <p style="margin:18px 0 6px;font-size:13px;color:#475569;text-align:center;">
+                  <strong>Scan om direct in te loggen op uw telefoon:</strong>
+                </p>
+                <p style="text-align:center;margin:0;">
+                  <img src="cid:loginqr" alt="QR code" width="200" height="200" style="border:1px solid #e2e8f0;border-radius:12px;padding:6px;background:#fff;" />
+                </p>
+                """
+            except Exception:
+                qr_png_inline = None
+                qr_block = ""
+            try:
+                primary_hex = ((c.get("branding") or {}).get("primary_color") or "#FF5C00")
+                kiosk_pin_val = body.kiosk_pin if (body.kiosk_pin or "").isdigit() and len(body.kiosk_pin) == 4 else None
+                onboarding_pdf_bytes = onboarding_pdf(
+                    company_name=company_payload["name"],
+                    contact_name=body.name,
+                    email=email,
+                    plan_name=plan_info["name"],
+                    plan_price_text=f"{plan_info['currency']} {int(plan_info['amount']):,}/maand".replace(",", "."),
+                    login_url=login_query_url,
+                    subdomain_url=login_subdomain_url,
+                    kiosk_pin=kiosk_pin_val,
+                    primary_hex=primary_hex,
+                )
+            except Exception:
+                onboarding_pdf_bytes = None
             content = f"""
                 <h1>Welkom bij SuriRent!</h1>
                 <p>Uw eigen Vastgoed omgeving is aangemaakt voor
                   <strong>{company_payload['name']}</strong>. U kunt direct inloggen op uw persoonlijke link:</p>
                 <p><a href="{login_query_url}" style="display:inline-block;background:#FF5C00;color:#fff;padding:12px 22px;border-radius:10px;text-decoration:none;font-weight:700;font-size:14px;">Open mijn omgeving</a></p>
                 <p style="font-size:12px;color:#64748b;word-break:break-all;">{login_query_url}</p>
+                {qr_block}
                 {sub_block}
 
                 <h1 style="font-size:16px;margin-top:24px;">Uw inloggegevens</h1>
@@ -732,20 +764,31 @@ async def register(body: RegisterIn, response: Response):
                   <tr><td>Proefperiode</td><td>14 dagen gratis</td></tr>
                 </table>
 
-                <p style="margin-top:18px;">Tip: <strong>bookmark</strong> de bovenstaande link of installeer hem als app op uw telefoon. Heeft u vragen? Antwoord gerust op deze mail.</p>
+                <p style="margin-top:18px;">📎 <strong>Bijgevoegd</strong>: een PDF welkomstpakket met alle inloggegevens, QR-code en installatie-instructies voor iOS en Android. Print of bewaar 'm voor uw administratie.</p>
+                <p>Tip: <strong>bookmark</strong> de bovenstaande link of installeer hem als app op uw telefoon. Heeft u vragen? Antwoord gerust op deze mail.</p>
             """.replace(",", ".")
             subject = f"Welkom bij SuriRent — uw {plan_info['name']} omgeving is klaar"
             body_html = wrap_template(content, footer=f"SuriRent · {app_url}")
+
+            # Build the attachments list — onboarding PDF + inline QR for HTML <img>
+            attachments = []
+            if onboarding_pdf_bytes:
+                pdf_name = f"SuriRent_welkomstpakket_{(c.get('slug') or 'nieuw').replace('-', '_')}.pdf"
+                attachments.append((pdf_name, onboarding_pdf_bytes, "application/pdf"))
+            if qr_png_inline:
+                # Use Content-ID inline image — referenced via src="cid:loginqr" above.
+                # Format: ('loginqr.png', bytes, 'image/png; cid=loginqr; inline').
+                attachments.append(("loginqr.png", qr_png_inline, "image/png; cid=loginqr; inline"))
             # Prefer SaaS DB settings, fall back to env-based platform SMTP
             saas = await db.saas_settings.find_one({"id": SAAS_SETTINGS_ID}, {"_id": 0}) or {}
             smtp = saas.get("smtp") or {}
             if smtp.get("enabled") and smtp.get("host"):
                 try:
-                    await _send_smtp(smtp, to=email, subject=subject, body_html=body_html)
+                    await _send_smtp(smtp, to=email, subject=subject, body_html=body_html, attachments=attachments or None)
                 except Exception:
-                    await send_platform_email(to=email, subject=subject, body_html=body_html)
+                    await send_platform_email(to=email, subject=subject, body_html=body_html, attachments=attachments or None)
             else:
-                await send_platform_email(to=email, subject=subject, body_html=body_html)
+                await send_platform_email(to=email, subject=subject, body_html=body_html, attachments=attachments or None)
         except Exception:
             pass  # never block registration on email failure
 
