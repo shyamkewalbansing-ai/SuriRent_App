@@ -79,6 +79,19 @@ body {
   .mobile-safe-top { padding-top: env(safe-area-inset-top, 0px); }
 }
 
+/* Hide mobile chrome (top header + bottom tab bar) whenever an admin modal
+   is open so the modal-backdrop covers literally everything underneath.
+   Targets the standard modal pattern `.fixed.inset-0.z-50.bg-black/*`.
+   Uses CSS :has() — supported on iOS 15.4+, Chrome 105+, Safari 15.4+
+   (i.e. effectively every modern phone). On older browsers the modal
+   still appears, the header/tabbar just stay visible (graceful fallback). */
+body:has(.fixed.inset-0.z-50.bg-black\/80) header.md\:hidden,
+body:has(.fixed.inset-0.z-50.bg-black\/80) nav.md\:hidden,
+body:has(.fixed.inset-0.z-50.bg-black\/60) header.md\:hidden,
+body:has(.fixed.inset-0.z-50.bg-black\/60) nav.md\:hidden {
+  display: none !important;
+}
+
 ::selection { background: #FF5C00; color: #fff; }
 
 /* Smooth scrolling */
