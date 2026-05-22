@@ -56,6 +56,12 @@ body {
     overflow: hidden;
     background-color: #ffffff;
   }
+  /* Tijdens kiosk-mode (set by KioskLayout via body class) -> body en #root
+     krijgen brand-oranje zodat het safe-area-inset-bottom gebied (waar de
+     iPhone home-indicator zit) doorloopt in dezelfde kleur als de kiosk.
+     Heeft geen effect in normale browser-tab. */
+  body.kiosk-mode,
+  body.kiosk-mode #root { background-color: #FF5C00; }
 }
 
 /* Utility for screens that should respect safe area manually. */

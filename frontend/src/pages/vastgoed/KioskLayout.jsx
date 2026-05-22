@@ -863,6 +863,15 @@ export default function KioskLayout() {
     setStep('welcome');
   }, [navigate]);
 
+  // Tijdens kiosk-modus moet body/root in PWA standalone ORANJE zijn (zodat
+  // het iPhone-home-indicator gebied en eventuele 1px doorlek aan de notch
+  // de huisstijl-kleur tonen, niet wit). De Admin gebruikt wit. We schakelen
+  // door middel van een body-class die alleen in standalone PWA effect heeft.
+  useEffect(() => {
+    document.body.classList.add('kiosk-mode');
+    return () => { document.body.classList.remove('kiosk-mode'); };
+  }, []);
+
   const exit = useCallback(() => {
     localStorage.removeItem('kiosk_token');
     localStorage.removeItem('kiosk_company');
