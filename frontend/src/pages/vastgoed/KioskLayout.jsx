@@ -898,7 +898,7 @@ export default function KioskLayout() {
         <motion.div key={step} variants={variants}
           initial="enter" animate="center" exit="exit"
           transition={{ duration: 0.25, ease: 'easeInOut' }}
-          className="absolute inset-0 overflow-y-auto overflow-x-hidden md:pb-16"
+          className="absolute inset-0 overflow-y-auto overflow-x-hidden md:pb-16 mobile-safe-bottom"
           style={{ paddingTop: 'env(safe-area-inset-top, 0px)', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' }}>
           {step === 'check' && (
             <div className="h-full bg-orange-500 flex items-center justify-center">

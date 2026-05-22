@@ -63,6 +63,15 @@ body {
 .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
 .safe-x { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right); }
 
+/* Mobile-only safe-area: respect iPhone notch / home-indicator inside scroll
+   containers, but on `md+` (≥768px / desktop) do nothing so desktop layouts
+   are not affected. Used by Kiosk + Admin to keep the bottom content out
+   of the iOS home-indicator on installed PWAs. */
+@media (max-width: 767px) {
+  .mobile-safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0px); }
+  .mobile-safe-top { padding-top: env(safe-area-inset-top, 0px); }
+}
+
 ::selection { background: #FF5C00; color: #fff; }
 
 /* Smooth scrolling */
