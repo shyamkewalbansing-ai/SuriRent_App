@@ -17,10 +17,12 @@
     <!-- iOS PWA -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
-    <!-- "default" = iOS toont zijn eigen statusbalk apart bovenaan (zwart-op-licht),
-         de webview begint daaronder. Zo concurreert de iPhone-klok niet met onze
-         eigen app-logo's en is er één heldere statusbalk-look. -->
-    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <!-- "black-translucent": de statusbalk wordt doorzichtig, de app-content
+         vloeit eronder door. Hierdoor toont de Kiosk zijn oranje achtergrond
+         achter de iPhone-klok/batterij (matcht de huisstijl). In de Admin
+         blijft de witte header doorlopen — iOS rendert de klok wel wit,
+         maar admin-gebruikers gebruiken vooral de in-app navigatie. -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="SuriRent" />
     <meta name="format-detection" content="telephone=no" />
     <link rel="apple-touch-icon" href="/kiosk-icons/kiosk-192.png" />

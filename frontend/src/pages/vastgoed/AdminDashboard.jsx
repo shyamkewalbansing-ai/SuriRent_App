@@ -106,8 +106,13 @@ const MOBILE_SUPER_PRIMARY_IDS = ['companies', 'overview', 'apartments', 'tenant
 
 function MobileHeader({ activeCompany, user, onOpenMenu }) {
   return (
-    <header className="md:hidden sticky top-0 z-30 bg-white border-b border-orange-100"
-      style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}>
+    <header className="md:hidden sticky top-0 z-30 bg-white border-b border-orange-100">
+      {/* iPhone PWA only: een dunne donkere strip ACHTER de status-bar zodat
+          iOS' witte klok/batterij leesbaar blijft. Hoogte = env(safe-area-
+          inset-top), dus 0 op Android/desktop (onzichtbaar daar). De
+          zichtbare bedrijfsbalk hieronder blijft volledig wit. */}
+      <div className="bg-slate-900" aria-hidden="true"
+        style={{ height: 'env(safe-area-inset-top, 0px)' }} />
       <div className="flex items-center gap-3 px-4 h-14">
         <button onClick={onOpenMenu} data-testid="mobile-menu-btn"
           className="w-10 h-10 -ml-2 rounded-xl flex items-center justify-center hover:bg-orange-50">
