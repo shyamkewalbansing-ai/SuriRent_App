@@ -17,7 +17,11 @@
     <!-- iOS PWA -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <!-- "black-translucent": status bar becomes see-through so the page background
+         (orange in Kiosk, cream in Admin) flows behind the iPhone's clock & battery.
+         Combined with safe-area-inset-top padding on each page header this gives the
+         "native app" feel with no white strip on top. -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="SuriRent" />
     <meta name="format-detection" content="telephone=no" />
     <link rel="apple-touch-icon" href="/kiosk-icons/kiosk-192.png" />
