@@ -106,21 +106,28 @@ const MOBILE_SUPER_PRIMARY_IDS = ['companies', 'overview', 'apartments', 'tenant
 
 function MobileHeader({ activeCompany, user, onOpenMenu }) {
   return (
-    <header className="md:hidden sticky top-0 z-30 bg-gradient-to-br from-[#FF8A3D] to-[#FF5C00] border-b border-white/10 text-white"
-      style={{ paddingTop: 'env(safe-area-inset-top)' }}>
+    <header className="md:hidden sticky top-0 z-30 bg-white border-b border-orange-100">
+      {/* Orange strip purely behind the iOS status bar (time / battery / signal).
+          iOS PWA with `apple-mobile-web-app-status-bar-style: black-translucent`
+          paints WHITE status-bar text on top of the page; this strip ensures
+          that text lands on the brand orange instead of the white header.
+          Outside iOS (Android / desktop) safe-area-inset-top = 0 so the strip
+          collapses to nothing and stays invisible. */}
+      <div className="bg-gradient-to-br from-[#FF8A3D] to-[#FF5C00]"
+        style={{ height: 'env(safe-area-inset-top, 0px)' }} aria-hidden="true" />
       <div className="flex items-center gap-3 px-4 h-14">
         <button onClick={onOpenMenu} data-testid="mobile-menu-btn"
-          className="w-10 h-10 -ml-2 rounded-xl flex items-center justify-center hover:bg-white/10">
-          <Menu className="w-6 h-6 text-white" />
+          className="w-10 h-10 -ml-2 rounded-xl flex items-center justify-center hover:bg-orange-50">
+          <Menu className="w-6 h-6 text-slate-700" />
         </button>
-        <div className="w-9 h-9 rounded-xl bg-white/15 backdrop-blur p-1.5">
+        <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#FF8A3D] to-[#C74600] p-1">
           <img src="/kiosk-icons/kiosk-512.png" alt="SuriRent" className="w-full h-full object-contain" />
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-black text-white leading-tight truncate">
+          <p className="text-sm font-black text-slate-900 leading-tight truncate">
             {activeCompany?.name || (user?.role === 'superadmin' ? 'Alle bedrijven' : 'SuriRent')}
           </p>
-          <p className="text-[10px] text-white/80 font-bold tracking-wider uppercase truncate">
+          <p className="text-[10px] text-[#FF5C00] font-bold tracking-wider uppercase truncate">
             {user?.role === 'superadmin' ? 'Superadmin' : 'Beheer'}{activeCompany?.plan ? ` · ${activeCompany.plan}` : ''}
           </p>
         </div>
