@@ -56,6 +56,61 @@ LANDING_DEFAULTS: dict = {
         {"value": "5+", "label": "Kernfuncties"},
         {"value": "100%", "label": "Mobile-first"},
     ],
+    "install": {
+        "eyebrow": "Installeer als app",
+        "title": "Kiosk én Huurportaal,",
+        "title_accent": "direct op je telefoon.",
+        "subtitle": ("Geen App Store of Play Store nodig. SuriRent is een "
+                     "Progressive Web App — installeer in 10 seconden vanuit "
+                     "je browser en open hem als een echte app, met eigen "
+                     "icoon en fullscreen."),
+        "qr": {
+            "eyebrow": "Snel scannen",
+            "title": "Scan met je telefoon",
+            "desc": ("Op je laptop? Richt je camera op de QR-code om SuriRent "
+                     "direct te openen op iPhone of Android. Daarna volg je "
+                     "de iOS / Android stappen hieronder."),
+            "qr_image_url": "/kiosk-icons/install-qr.svg",
+        },
+        "ios": {
+            "label": "iOS — iPhone & iPad",
+            "title": "Open in Safari",
+            "screenshot_url": "/kiosk-icons/screenshots/02_kiosk_pin.jpg",
+            "badge": "iPhone",
+            "steps": [
+                {"icon": "Globe", "title": "Open in Safari",
+                 "desc": "Bezoek deze pagina op je iPhone of iPad via Safari (niet Chrome — Apple staat alleen Safari toe)."},
+                {"icon": "Share", "title": "Tik op het Delen icoon",
+                 "desc": "Tik op het vierkantje met de pijl omhoog in de adresbalk onderaan."},
+                {"icon": "Plus", "title": "Kies 'Zet op beginscherm'",
+                 "desc": "Scroll naar beneden en tik op 'Zet op beginscherm'. Bevestig met 'Voeg toe'."},
+                {"icon": "Check", "title": "Klaar — open vanaf homescreen",
+                 "desc": "Het oranje SuriRent icoon staat op je homescherm. Open ervan voor fullscreen kiosk-modus."},
+            ],
+        },
+        "android": {
+            "label": "Android — Chrome of Edge",
+            "title": "1-tap installatie",
+            "screenshot_url": "/kiosk-icons/screenshots/03_tenant_login.jpg",
+            "badge": "Android",
+            "steps": [
+                {"icon": "Globe", "title": "Open in Chrome of Edge",
+                 "desc": "Bezoek deze pagina op je Android telefoon."},
+                {"icon": "Download", "title": "Tik op 'Installeren'",
+                 "desc": "Onderaan verschijnt een prompt, of kies uit het menu 'App installeren'."},
+                {"icon": "Check", "title": "Open vanaf homescreen",
+                 "desc": "SuriRent verschijnt als app icoon. Long-press voor snelle shortcuts naar Kiosk of Beheer."},
+            ],
+        },
+        "benefits": [
+            {"icon": "Zap", "title": "Direct beschikbaar",
+             "desc": "Geen Play Store / App Store wachttijden of review."},
+            {"icon": "Shield", "title": "Werkt offline",
+             "desc": "App shell blijft toegankelijk zonder netwerk."},
+            {"icon": "ScanFace", "title": "Native gevoel",
+             "desc": "Fullscreen, eigen icoon, push notificaties, en splash screen."},
+        ],
+    },
     "features_header": {
         "eyebrow": "Functies",
         "title": "Alles in één systeem,",
@@ -177,4 +232,5 @@ ALLOWED_FEATURE_ICONS = [
     "Shield", "Zap", "Cpu", "Sparkles", "Globe", "Phone", "Mail", "MapPin",
     "ChevronRight", "ArrowRight", "Check", "Star", "Clock", "MessageCircle",
     "Smartphone", "Home", "Calendar", "Lock", "Bell", "Settings", "FileText",
+    "Share", "Plus", "Download", "Apple", "ScanLine",
 ]

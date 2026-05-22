@@ -239,6 +239,12 @@ User koos voor **Optie C — minimale herbouw** (kern eerst), dan vroeg om **Fas
 - ✅ **LandingEditor.jsx** (730 regels): nieuwe superadmin tab "Landing Editor" met 8 sectie-tabs, form-based editor links + live iframe preview rechts. Wijzigingen worden direct in de iframe getoond via `postMessage` (zonder reload). Sticky action bar met `Concept`/`Gepubliceerd` status badge, "Opslaan concept", "Publiceer", "Reset" knoppen. Image upload met file + URL plak fallback. Repeatable lists voor menu-items, badges, stats, features, footer-links met add/remove/up-down sortering. Icon picker uit 27 allowed lucide icons.
 - ✅ **Draft → Publish workflow**: concept wijzigingen zichtbaar in iframe preview maar pas live na expliciete "Publiceer" klik. "Reset" knop restored draft naar gepubliceerde versie. End-to-end getest via Playwright: superadmin → edit "De complete" → "De ultieme" → publish → public landing h1 toont "De ultieme huurbeheer..." direct.
 
+### InstallSection (PWA) bewerkbaar (2026-05-22) ✅
+- ✅ **Backend schema**: `install` toegevoegd aan `LANDING_DEFAULTS` met sub-velden `qr` (eyebrow/title/desc/qr_image_url), `ios` (label/title/badge/screenshot_url + steps[]), `android` (idem), `benefits[]`. Allowed icons uitgebreid met `Share`, `Plus`, `Download`, `Apple`, `ScanLine`.
+- ✅ **Frontend**: `InstallSection` in MarketingLanding refactored om alle teksten, screenshots, QR-image en stappen uit `c.install` te lezen met defaults fallback. iOS + Android stappen worden gerenderd via `RepeatableList` (icoon + titel + omschrijving).
+- ✅ **LandingEditor**: nieuwe sectie-tab "Installeer" met formulier voor alle install-velden. Three nested groep-cards (QR-paneel / iOS-kaart / Android-kaart) elk met eigen Image upload + Repeatable steps lijst + icon picker. Benefits-lijst met add/remove/sort.
+- ✅ E2E getest: install eyebrow wijzigen → live preview updated direct via postMessage.
+
 ## Prioritized Backlog (Fases E-F)
 - 📧 **Email notificaties** — wacht op SendGrid / Resend credentials van user
 - 📱 **WhatsApp/SMS herinneringen** — wacht op Twilio credentials

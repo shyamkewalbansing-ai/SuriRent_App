@@ -226,6 +226,7 @@ export default function LandingEditor() {
     { id: 'nav', label: 'Navigatie' },
     { id: 'hero', label: 'Hero' },
     { id: 'stats', label: 'Statistieken' },
+    { id: 'install', label: 'Installeer' },
     { id: 'features', label: 'Functies' },
     { id: 'pricing', label: 'Prijzen' },
     { id: 'cta', label: 'CTA blok' },
@@ -362,6 +363,128 @@ export default function LandingEditor() {
                     <Field label="Label" value={it.label} onChange={(v) => upd({ label: v })} testid={`stats-label-${idx}`} />
                   </div>
                 )} />
+            </Section>
+          )}
+
+          {activeSection === 'install' && (
+            <Section title="Installeer sectie (PWA)" subtitle="QR-code, iOS-stappen, Android-stappen, voordelen" testid="sec-install">
+              <Field label="Eyebrow" value={draft.install?.eyebrow} onChange={(v) => patch('install', { eyebrow: v })} testid="install-eyebrow" />
+              <Field label="Titel — regel 1" value={draft.install?.title} onChange={(v) => patch('install', { title: v })} testid="install-title" />
+              <Field label="Titel — accent" value={draft.install?.title_accent} onChange={(v) => patch('install', { title_accent: v })} testid="install-title-accent" hint="Wordt oranje" />
+              <Field label="Subtitel" value={draft.install?.subtitle} onChange={(v) => patch('install', { subtitle: v })} multiline testid="install-subtitle" />
+
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
+                <h4 className="text-xs font-extrabold text-slate-700 mb-2">QR-code paneel</h4>
+                <Field label="Eyebrow" value={draft.install?.qr?.eyebrow} onChange={(v) => patch('install', { qr: { ...(draft.install?.qr || {}), eyebrow: v } })} testid="install-qr-eyebrow" />
+                <Field label="Titel" value={draft.install?.qr?.title} onChange={(v) => patch('install', { qr: { ...(draft.install?.qr || {}), title: v } })} testid="install-qr-title" />
+                <Field label="Omschrijving" value={draft.install?.qr?.desc} onChange={(v) => patch('install', { qr: { ...(draft.install?.qr || {}), desc: v } })} multiline testid="install-qr-desc" />
+                <div className="mt-2">
+                  <span className="block text-xs font-bold text-slate-700 mb-1">QR-code afbeelding</span>
+                  <ImageUploader value={draft.install?.qr?.qr_image_url}
+                    onChange={(v) => patch('install', { qr: { ...(draft.install?.qr || {}), qr_image_url: v } })}
+                    testid="install-qr-image" />
+                </div>
+              </div>
+
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
+                <h4 className="text-xs font-extrabold text-slate-700 mb-2">iOS kaart</h4>
+                <div className="grid grid-cols-2 gap-2">
+                  <Field label="Platform label" value={draft.install?.ios?.label} onChange={(v) => patch('install', { ios: { ...(draft.install?.ios || {}), label: v } })} testid="install-ios-label" />
+                  <Field label="Badge" value={draft.install?.ios?.badge} onChange={(v) => patch('install', { ios: { ...(draft.install?.ios || {}), badge: v } })} testid="install-ios-badge" />
+                </div>
+                <Field label="Titel" value={draft.install?.ios?.title} onChange={(v) => patch('install', { ios: { ...(draft.install?.ios || {}), title: v } })} testid="install-ios-title" />
+                <div className="mt-2">
+                  <span className="block text-xs font-bold text-slate-700 mb-1">Screenshot</span>
+                  <ImageUploader value={draft.install?.ios?.screenshot_url}
+                    onChange={(v) => patch('install', { ios: { ...(draft.install?.ios || {}), screenshot_url: v } })}
+                    testid="install-ios-screenshot" />
+                </div>
+                <div className="mt-3">
+                  <span className="block text-xs font-bold text-slate-700 mb-1">Installatie stappen</span>
+                  <RepeatableList
+                    items={draft.install?.ios?.steps || []}
+                    onChange={(steps) => patch('install', { ios: { ...(draft.install?.ios || {}), steps } })}
+                    addLabel="Stap toevoegen"
+                    testid="install-ios-steps"
+                    render={(it, idx, upd) => (
+                      <div className="space-y-2">
+                        <label className="block">
+                          <span className="block text-xs font-bold text-slate-700 mb-1">Icoon</span>
+                          <select value={it.icon || ''} onChange={(e) => upd({ icon: e.target.value })}
+                            data-testid={`install-ios-step-icon-${idx}`}
+                            className="w-full h-10 px-2 border-2 border-slate-200 rounded-lg text-xs">
+                            <option value="">— kies —</option>
+                            {allowedIcons.map((ic) => <option key={ic} value={ic}>{ic}</option>)}
+                          </select>
+                        </label>
+                        <Field label="Titel" value={it.title} onChange={(v) => upd({ title: v })} testid={`install-ios-step-title-${idx}`} />
+                        <Field label="Omschrijving" value={it.desc} onChange={(v) => upd({ desc: v })} multiline testid={`install-ios-step-desc-${idx}`} />
+                      </div>
+                    )} />
+                </div>
+              </div>
+
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
+                <h4 className="text-xs font-extrabold text-slate-700 mb-2">Android kaart</h4>
+                <div className="grid grid-cols-2 gap-2">
+                  <Field label="Platform label" value={draft.install?.android?.label} onChange={(v) => patch('install', { android: { ...(draft.install?.android || {}), label: v } })} testid="install-android-label" />
+                  <Field label="Badge" value={draft.install?.android?.badge} onChange={(v) => patch('install', { android: { ...(draft.install?.android || {}), badge: v } })} testid="install-android-badge" />
+                </div>
+                <Field label="Titel" value={draft.install?.android?.title} onChange={(v) => patch('install', { android: { ...(draft.install?.android || {}), title: v } })} testid="install-android-title" />
+                <div className="mt-2">
+                  <span className="block text-xs font-bold text-slate-700 mb-1">Screenshot</span>
+                  <ImageUploader value={draft.install?.android?.screenshot_url}
+                    onChange={(v) => patch('install', { android: { ...(draft.install?.android || {}), screenshot_url: v } })}
+                    testid="install-android-screenshot" />
+                </div>
+                <div className="mt-3">
+                  <span className="block text-xs font-bold text-slate-700 mb-1">Installatie stappen</span>
+                  <RepeatableList
+                    items={draft.install?.android?.steps || []}
+                    onChange={(steps) => patch('install', { android: { ...(draft.install?.android || {}), steps } })}
+                    addLabel="Stap toevoegen"
+                    testid="install-android-steps"
+                    render={(it, idx, upd) => (
+                      <div className="space-y-2">
+                        <label className="block">
+                          <span className="block text-xs font-bold text-slate-700 mb-1">Icoon</span>
+                          <select value={it.icon || ''} onChange={(e) => upd({ icon: e.target.value })}
+                            data-testid={`install-android-step-icon-${idx}`}
+                            className="w-full h-10 px-2 border-2 border-slate-200 rounded-lg text-xs">
+                            <option value="">— kies —</option>
+                            {allowedIcons.map((ic) => <option key={ic} value={ic}>{ic}</option>)}
+                          </select>
+                        </label>
+                        <Field label="Titel" value={it.title} onChange={(v) => upd({ title: v })} testid={`install-android-step-title-${idx}`} />
+                        <Field label="Omschrijving" value={it.desc} onChange={(v) => upd({ desc: v })} multiline testid={`install-android-step-desc-${idx}`} />
+                      </div>
+                    )} />
+                </div>
+              </div>
+
+              <div>
+                <span className="block text-xs font-bold text-slate-700 mb-1">Voordelen (3 kaartjes onderaan)</span>
+                <RepeatableList
+                  items={draft.install?.benefits || []}
+                  onChange={(benefits) => patch('install', { benefits })}
+                  addLabel="Voordeel toevoegen"
+                  testid="install-benefits"
+                  render={(it, idx, upd) => (
+                    <div className="space-y-2">
+                      <label className="block">
+                        <span className="block text-xs font-bold text-slate-700 mb-1">Icoon</span>
+                        <select value={it.icon || ''} onChange={(e) => upd({ icon: e.target.value })}
+                          data-testid={`install-benefit-icon-${idx}`}
+                          className="w-full h-10 px-2 border-2 border-slate-200 rounded-lg text-xs">
+                          <option value="">— kies —</option>
+                          {allowedIcons.map((ic) => <option key={ic} value={ic}>{ic}</option>)}
+                        </select>
+                      </label>
+                      <Field label="Titel" value={it.title} onChange={(v) => upd({ title: v })} testid={`install-benefit-title-${idx}`} />
+                      <Field label="Omschrijving" value={it.desc} onChange={(v) => upd({ desc: v })} multiline testid={`install-benefit-desc-${idx}`} />
+                    </div>
+                  )} />
+              </div>
             </Section>
           )}
 

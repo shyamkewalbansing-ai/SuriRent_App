@@ -283,7 +283,14 @@ function InstallStep({ num, icon: Icon, title, desc }) {
   );
 }
 
-function InstallSection() {
+function InstallSection({ c = {} }) {
+  const ins = c.install || {};
+  const qr = ins.qr || {};
+  const ios = ins.ios || {};
+  const android = ins.android || {};
+  const iosSteps = Array.isArray(ios.steps) && ios.steps.length ? ios.steps : [];
+  const androidSteps = Array.isArray(android.steps) && android.steps.length ? android.steps : [];
+  const benefits = Array.isArray(ins.benefits) && ins.benefits.length ? ins.benefits : [];
   return (
     <section id="install" className="relative py-20 md:py-28 bg-[#FFF7F0] overflow-hidden">
       <div className="absolute -top-32 -left-32 w-96 h-96 rounded-full bg-[#FF8A3D]/10 blur-3xl pointer-events-none" />
@@ -292,35 +299,33 @@ function InstallSection() {
       <div className="relative max-w-7xl mx-auto px-5 sm:px-8">
         <div className="text-center max-w-2xl mx-auto mb-14">
           <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-orange-100 border border-orange-200 text-[#FF5C00] text-xs font-black uppercase tracking-[0.2em]">
-            <Smartphone className="w-3.5 h-3.5" /> Installeer als app
+            <Smartphone className="w-3.5 h-3.5" /> {ins.eyebrow || 'Installeer als app'}
           </span>
           <h2 className="mt-5 text-3xl sm:text-4xl md:text-5xl font-black tracking-tight text-slate-900 leading-tight">
-            Kiosk én Huurportaal,<br />
-            <span className="bg-gradient-to-r from-[#FF8A3D] via-[#FF5C00] to-[#C74600] bg-clip-text text-transparent">direct op je telefoon.</span>
+            {ins.title || 'Kiosk én Huurportaal,'}<br />
+            <span className="bg-gradient-to-r from-[#FF8A3D] via-[#FF5C00] to-[#C74600] bg-clip-text text-transparent">{ins.title_accent || 'direct op je telefoon.'}</span>
           </h2>
           <p className="mt-5 text-base sm:text-lg text-slate-600 leading-relaxed">
-            Geen App Store of Play Store nodig. SuriRent is een Progressive Web App — installeer in 10 seconden vanuit je browser en open hem als een echte app, met eigen icoon en fullscreen.
+            {ins.subtitle || 'Geen App Store of Play Store nodig.'}
           </p>
         </div>
 
-        {/* QR code panel — only useful on desktop/tablet (md+), where the user is unlikely
-            to be on their phone already. Hidden on mobile. */}
         <div className="hidden md:block max-w-3xl mx-auto mb-14" data-testid="install-qr-panel">
           <div className="relative rounded-3xl bg-white border-2 border-orange-100 p-6 md:p-7 shadow-[0_20px_50px_-20px_rgba(255,92,0,0.25)] overflow-hidden">
             <div className="absolute -top-16 -right-16 w-48 h-48 rounded-full bg-orange-100/60 blur-3xl pointer-events-none" />
             <div className="relative flex items-center gap-6 md:gap-8">
               <div className="shrink-0 rounded-2xl bg-white border-2 border-orange-100 p-2 shadow-[0_8px_25px_-10px_rgba(255,92,0,0.4)]">
-                <img src="/kiosk-icons/install-qr.svg" alt="QR code installatie" className="w-32 h-32 md:w-40 md:h-40 block" data-testid="install-qr-img" />
+                <img src={resolveAsset(qr.qr_image_url) || '/kiosk-icons/install-qr.svg'} alt="QR code installatie" className="w-32 h-32 md:w-40 md:h-40 block" data-testid="install-qr-img" />
               </div>
               <div className="flex-1 min-w-0">
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-orange-50 border border-orange-200 text-[#FF5C00] text-[10px] font-black uppercase tracking-[0.2em]">
-                  <ScanLine className="w-3 h-3" /> Snel scannen
+                  <ScanLine className="w-3 h-3" /> {qr.eyebrow || 'Snel scannen'}
                 </span>
                 <h3 className="mt-3 text-xl md:text-2xl font-black tracking-tight text-slate-900 leading-tight">
-                  Scan met je telefoon
+                  {qr.title || 'Scan met je telefoon'}
                 </h3>
                 <p className="mt-2 text-sm text-slate-600 leading-relaxed">
-                  Op je laptop? Richt je camera op de QR-code om SuriRent direct te openen op iPhone of Android. Daarna volg je de iOS / Android stappen hieronder.
+                  {qr.desc || 'Op je laptop? Richt je camera op de QR-code om SuriRent direct te openen op iPhone of Android.'}
                 </p>
                 <p className="mt-3 text-xs font-mono text-slate-400 truncate">
                   {publicMarketingUrl().replace(/^https?:\/\//, '')}
@@ -339,26 +344,21 @@ function InstallSection() {
                 <Apple className="w-6 h-6 text-white" />
               </div>
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">iOS — iPhone & iPad</p>
-                <p className="text-lg font-black text-slate-900">Open in Safari</p>
+                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">{ios.label || 'iOS — iPhone & iPad'}</p>
+                <p className="text-lg font-black text-slate-900">{ios.title || 'Open in Safari'}</p>
               </div>
             </div>
 
             <PhoneMockup
-              src="/kiosk-icons/screenshots/02_kiosk_pin.jpg"
+              src={resolveAsset(ios.screenshot_url) || '/kiosk-icons/screenshots/02_kiosk_pin.jpg'}
               alt="Kiosk PIN scherm op iOS"
-              badge="iPhone"
+              badge={ios.badge || 'iPhone'}
             />
 
             <ol className="mt-8 space-y-4">
-              <InstallStep num={1} icon={Globe} title="Open in Safari"
-                desc="Bezoek deze pagina op je iPhone of iPad via Safari (niet Chrome — Apple staat alleen Safari toe)." />
-              <InstallStep num={2} icon={Share} title="Tik op het Delen icoon"
-                desc="Tik op het vierkantje met de pijl omhoog in de adresbalk onderaan." />
-              <InstallStep num={3} icon={Plus} title="Kies 'Zet op beginscherm'"
-                desc="Scroll naar beneden en tik op 'Zet op beginscherm'. Bevestig met 'Voeg toe'." />
-              <InstallStep num={4} icon={Check} title="Klaar — open vanaf homescreen"
-                desc="Het oranje SuriRent icoon staat op je homescherm. Open ervan voor fullscreen kiosk-modus." />
+              {iosSteps.map((s, i) => (
+                <InstallStep key={i} num={i + 1} icon={resolveIcon(s.icon)} title={s.title} desc={s.desc} />
+              ))}
             </ol>
           </div>
 
@@ -367,67 +367,47 @@ function InstallSection() {
             className="relative rounded-3xl bg-gradient-to-br from-[#FF8A3D] via-[#FF5C00] to-[#C74600] p-6 md:p-8 shadow-[0_25px_60px_-15px_rgba(255,92,0,0.55)] text-white overflow-hidden">
             <Noise opacity={0.12} />
             <div className="absolute -top-24 -right-24 w-64 h-64 bg-white/15 rounded-full blur-3xl pointer-events-none" />
-
             <div className="relative flex items-center gap-3 mb-6">
               <div className="w-12 h-12 rounded-2xl bg-white/95 flex items-center justify-center">
                 <ScanLine className="w-6 h-6 text-[#FF5C00]" />
               </div>
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/80">Android — Chrome of Edge</p>
-                <p className="text-lg font-black">1-tap installatie</p>
+                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/80">{android.label || 'Android — Chrome of Edge'}</p>
+                <p className="text-lg font-black">{android.title || '1-tap installatie'}</p>
               </div>
             </div>
-
             <div className="relative">
               <PhoneMockup
-                src="/kiosk-icons/screenshots/03_tenant_login.jpg"
+                src={resolveAsset(android.screenshot_url) || '/kiosk-icons/screenshots/03_tenant_login.jpg'}
                 alt="Huurportaal op Android"
-                badge="Android"
+                badge={android.badge || 'Android'}
               />
             </div>
-
             <ol className="relative mt-8 space-y-4">
-              <li className="flex gap-4">
-                <div className="shrink-0 w-10 h-10 rounded-xl bg-white text-[#FF5C00] flex items-center justify-center font-black shadow-lg">1</div>
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 text-sm font-black">
-                    <Globe className="w-4 h-4" strokeWidth={2.4} /> Open in Chrome of Edge
-                  </div>
-                  <p className="text-xs text-white/85 leading-snug mt-0.5">Bezoek deze pagina op je Android telefoon.</p>
-                </div>
-              </li>
-              <li className="flex gap-4">
-                <div className="shrink-0 w-10 h-10 rounded-xl bg-white text-[#FF5C00] flex items-center justify-center font-black shadow-lg">2</div>
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 text-sm font-black">
-                    <Download className="w-4 h-4" strokeWidth={2.4} /> Tik op 'Installeren'
-                  </div>
-                  <p className="text-xs text-white/85 leading-snug mt-0.5">Onderaan verschijnt een prompt, of kies uit het menu 'App installeren'.</p>
-                </div>
-              </li>
-              <li className="flex gap-4">
-                <div className="shrink-0 w-10 h-10 rounded-xl bg-white text-[#FF5C00] flex items-center justify-center font-black shadow-lg">3</div>
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 text-sm font-black">
-                    <Check className="w-4 h-4" strokeWidth={2.4} /> Open vanaf homescreen
-                  </div>
-                  <p className="text-xs text-white/85 leading-snug mt-0.5">SuriRent verschijnt als app icoon. Long-press voor snelle shortcuts naar Kiosk of Beheer.</p>
-                </div>
-              </li>
+              {androidSteps.map((s, i) => {
+                const Icon = resolveIcon(s.icon);
+                return (
+                  <li key={i} className="flex gap-4">
+                    <div className="shrink-0 w-10 h-10 rounded-xl bg-white text-[#FF5C00] flex items-center justify-center font-black shadow-lg">{i + 1}</div>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 text-sm font-black">
+                        <Icon className="w-4 h-4" strokeWidth={2.4} /> {s.title}
+                      </div>
+                      <p className="text-xs text-white/85 leading-snug mt-0.5">{s.desc}</p>
+                    </div>
+                  </li>
+                );
+              })}
             </ol>
           </div>
         </div>
 
         {/* Bottom call-out */}
         <div className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-4 max-w-4xl mx-auto">
-          {[
-            { icon: Zap, title: 'Direct beschikbaar', desc: 'Geen Play Store / App Store wachttijden of review.' },
-            { icon: Shield, title: 'Werkt offline', desc: 'App shell blijft toegankelijk zonder netwerk.' },
-            { icon: ScanFace, title: 'Native gevoel', desc: 'Fullscreen, eigen icoon, push notificaties, en splash screen.' },
-          ].map((b) => {
-            const Icon = b.icon;
+          {benefits.map((b, i) => {
+            const Icon = resolveIcon(b.icon);
             return (
-              <div key={b.title} data-testid={`install-benefit-${b.title.split(' ')[0].toLowerCase()}`}
+              <div key={i} data-testid={`install-benefit-${i}`}
                 className="bg-white rounded-2xl border border-orange-100 p-5 flex gap-3 items-start">
                 <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-50 to-orange-100 flex items-center justify-center shrink-0">
                   <Icon className="w-5 h-5 text-[#FF5C00]" strokeWidth={2.3} />
@@ -841,7 +821,7 @@ export default function MarketingLanding({ previewContent = null } = {}) {
       <TopNav onLogin={goLogin} c={c} />
       <Hero onLogin={goLogin} c={c} />
       <StatsStrip c={c} />
-      <InstallSection />
+      <InstallSection c={c} />
       <FeaturesSection c={c} />
       <PricingSection onLogin={goLogin} c={c} />
       <CTASection onLogin={goLogin} c={c} />
