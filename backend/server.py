@@ -915,6 +915,459 @@ async def billing_bank_details():
 
 
 # =====================================================================
+# Billing — FX (SRD -> EUR) + online checkout (Mope SaaS + SumUp)
+# =====================================================================
+SAAS_SETTINGS_ID = "_saas_settings"  # forward decl; redefined later for safety
+FX_CACHE_TTL_SECONDS = 6 * 3600
+FX_SOURCE_URL = "https://open.er-api.com/v6/latest/SRD"
+
+
+async def _fetch_fx_eur_per_srd() -> Optional[float]:
+    """Fetch live SRD->EUR rate from free public API. Returns None on failure."""
+    import httpx as _httpx
+    try:
+        async with _httpx.AsyncClient(timeout=8) as client:
+            r = await client.get(FX_SOURCE_URL)
+        if r.status_code >= 400:
+            return None
+        data = r.json()
+        rate = (data.get("rates") or {}).get("EUR")
+        if not rate or rate <= 0:
+            return None
+        return float(rate)
+    except Exception:
+        return None
+
+
+async def _get_eur_per_srd() -> dict:
+    """Return current SRD->EUR rate based on saas_settings.fx mode (auto|manual).
+    Auto refreshes from public API every FX_CACHE_TTL_SECONDS; falls back to manual."""
+    doc = await db.saas_settings.find_one({"id": SAAS_SETTINGS_ID}, {"_id": 0}) or {}
+    fx = doc.get("fx") or {}
+    mode = fx.get("mode", "auto")
+    manual = float(fx.get("manual_eur_per_srd") or 0)
+    cached_rate = float(fx.get("cached_rate") or 0)
+    cached_at = fx.get("cached_at")
+    cached_age = None
+    if cached_at:
+        try:
+            cached_age = (now_utc() - datetime.fromisoformat(cached_at.replace("Z", "+00:00"))).total_seconds()
+        except Exception:
+            cached_age = None
+
+    if mode == "manual":
+        if manual > 0:
+            return {"rate": manual, "source": "manual", "fetched_at": fx.get("cached_at")}
+        # Manual selected but no value → fall back to last cached or 0
+        if cached_rate > 0:
+            return {"rate": cached_rate, "source": "manual_fallback_cache", "fetched_at": cached_at}
+        return {"rate": 0, "source": "manual_missing", "fetched_at": None}
+
+    # Auto mode
+    if cached_rate > 0 and cached_age is not None and cached_age < FX_CACHE_TTL_SECONDS:
+        return {"rate": cached_rate, "source": "cache", "fetched_at": cached_at}
+    live = await _fetch_fx_eur_per_srd()
+    if live and live > 0:
+        await db.saas_settings.update_one(
+            {"id": SAAS_SETTINGS_ID},
+            {"$set": {
+                "id": SAAS_SETTINGS_ID,
+                "fx.mode": "auto",
+                "fx.cached_rate": live,
+                "fx.cached_at": iso(now_utc()),
+            }},
+            upsert=True,
+        )
+        return {"rate": live, "source": "live", "fetched_at": iso(now_utc())}
+    # Live failed → use last cache if any, else manual
+    if cached_rate > 0:
+        return {"rate": cached_rate, "source": "stale_cache", "fetched_at": cached_at}
+    if manual > 0:
+        return {"rate": manual, "source": "manual_fallback", "fetched_at": None}
+    return {"rate": 0, "source": "unavailable", "fetched_at": None}
+
+
+def _convert_to_eur(amount: float, currency: str, rate_eur_per_srd: float) -> float:
+    if (currency or "").upper() == "EUR":
+        return round(float(amount), 2)
+    if (currency or "").upper() == "SRD" and rate_eur_per_srd > 0:
+        return round(float(amount) * rate_eur_per_srd, 2)
+    # USD / other: not yet supported — return 0 to signal unavailable
+    return 0.0
+
+
+@api.get("/billing/fx")
+async def billing_fx():
+    """Public FX info — used by frontend to show EUR equivalent for SRD invoices."""
+    info = await _get_eur_per_srd()
+    return {"eur_per_srd": info["rate"], "source": info["source"], "fetched_at": info.get("fetched_at")}
+
+
+async def _saas_settings_doc() -> dict:
+    return await db.saas_settings.find_one({"id": SAAS_SETTINGS_ID}, {"_id": 0}) or {}
+
+
+def _app_base_url() -> str:
+    return (os.environ.get("APP_PUBLIC_URL") or "https://app.surirent.sr").rstrip("/")
+
+
+def _api_base_url() -> str:
+    # APP_PUBLIC_URL is reused — backend routes share host via /api prefix in preview/prod
+    return _app_base_url()
+
+
+@api.get("/billing/me/checkout-options")
+async def billing_me_checkout_options(user=Depends(get_current_user)):
+    """Returns which gateways are configured for SaaS subscription payments,
+    plus the EUR equivalent of the company's monthly amount."""
+    cid = company_id_of(user)
+    if not cid:
+        raise HTTPException(status_code=400, detail="Geen actief bedrijf")
+    c = await db.companies.find_one({"id": cid}, {"_id": 0}) or {}
+    plan = PLAN_PRICES.get(c.get("plan", "starter"), PLAN_PRICES["starter"])
+    fx = await _get_eur_per_srd()
+    doc = await _saas_settings_doc()
+    mope = doc.get("mope") or {}
+    sumup = doc.get("sumup") or {}
+    eur_amount = _convert_to_eur(plan["amount"], plan["currency"], fx["rate"])
+    return {
+        "amount": plan["amount"],
+        "currency": plan["currency"],
+        "eur_amount": eur_amount,
+        "eur_per_srd": fx["rate"],
+        "fx_source": fx["source"],
+        "mope": {
+            "enabled": bool(mope.get("enabled")) and bool((mope.get("api_key") or "").strip()),
+            "test_mode": bool(mope.get("test_mode", True)),
+        },
+        "sumup": {
+            "enabled": bool(sumup.get("enabled")) and bool((sumup.get("api_key") or "").strip()) and bool((sumup.get("merchant_code") or "").strip()),
+            "test_mode": bool(sumup.get("test_mode", True)),
+            "eur_amount": eur_amount,
+        },
+    }
+
+
+class SaasCheckoutIn(BaseModel):
+    invoice_id: Optional[str] = None  # optional — falls back to first open invoice for this company
+    provider: Literal["mope", "sumup"]
+
+
+async def _ensure_open_invoice_for_company(c: dict, user_email: str) -> dict:
+    """Find an open invoice for this company; if none, create one for the current plan
+    (so a customer in trial / expired state can pay even before any invoice was issued)."""
+    cid = c["id"]
+    inv = await db.subscription_invoices.find_one(
+        {"company_id": cid, "status": {"$ne": "paid"}},
+        {"_id": 0}, sort=[("created_at", -1)],
+    )
+    if inv:
+        return inv
+    plan_id = c.get("plan", "starter")
+    plan = PLAN_PRICES.get(plan_id, PLAN_PRICES["starter"])
+    now = now_utc()
+    inv = {
+        "id": new_id(),
+        "company_id": cid,
+        "company_name": c.get("name", ""),
+        "plan": plan_id,
+        "amount": plan["amount"],
+        "currency": plan["currency"],
+        "status": "open",
+        "kind": "subscription",
+        "period_start": iso(now),
+        "period_end": iso(now + timedelta(days=30)),
+        "created_at": iso(now),
+        "created_by": user_email or "self_checkout",
+    }
+    await db.subscription_invoices.insert_one(inv)
+    inv.pop("_id", None)
+    return inv
+
+
+@api.post("/billing/me/checkout")
+async def billing_me_checkout(body: SaasCheckoutIn, user=Depends(get_current_user)):
+    """Tenant-initiated checkout for the SaaS subscription invoice.
+    Provider: mope (SRD) or sumup (EUR). Returns the redirect URL."""
+    from payments_service import (
+        mope_create_payment_request, sumup_create_checkout, GatewayError,
+    )
+    cid = company_id_of(user)
+    if not cid:
+        raise HTTPException(status_code=400, detail="Geen actief bedrijf")
+    c = await db.companies.find_one({"id": cid}, {"_id": 0})
+    if not c:
+        raise HTTPException(status_code=404, detail="Bedrijf niet gevonden")
+
+    if body.invoice_id:
+        inv = await db.subscription_invoices.find_one({"id": body.invoice_id, "company_id": cid}, {"_id": 0})
+        if not inv:
+            raise HTTPException(status_code=404, detail="Factuur niet gevonden")
+        if inv.get("status") == "paid":
+            raise HTTPException(status_code=400, detail="Deze factuur is al voldaan")
+    else:
+        inv = await _ensure_open_invoice_for_company(c, user.get("email", ""))
+
+    doc = await _saas_settings_doc()
+    app_url = (doc.get("branding") or {}).get("app_url") or _app_base_url()
+    api_url = _api_base_url()
+    redirect_url = f"{app_url}/admin?tab=mijn_abonnement&checkout=done"
+    description = f"SuriRent abonnement — {(c.get('name') or '')[:40]}"
+
+    if body.provider == "mope":
+        cfg = (doc.get("mope") or {})
+        if not cfg.get("enabled") or not (cfg.get("api_key") or "").strip():
+            raise HTTPException(status_code=400, detail="Mope is niet ingeschakeld onder SaaS Instellingen.")
+        try:
+            res = await mope_create_payment_request(
+                cfg,
+                description=description,
+                amount=float(inv["amount"]),
+                currency=inv["currency"],
+                order_id=inv["id"],
+                redirect_url=redirect_url,
+            )
+        except GatewayError as e:
+            raise HTTPException(status_code=502, detail=str(e))
+        pr = {
+            "id": new_id(),
+            "invoice_id": inv["id"],
+            "company_id": cid,
+            "provider": "mope",
+            "provider_id": str(res["id"]),
+            "amount": float(inv["amount"]),
+            "currency": inv["currency"],
+            "url": res["url"],
+            "status": "open",
+            "created_at": iso(now_utc()),
+            "created_by": user.get("email"),
+        }
+        await db.saas_payment_requests.insert_one(pr)
+        pr.pop("_id", None)
+        return {"url": res["url"], "provider": "mope", "amount": pr["amount"], "currency": pr["currency"]}
+
+    # SumUp (EUR)
+    cfg = (doc.get("sumup") or {})
+    if not cfg.get("enabled") or not (cfg.get("api_key") or "").strip() or not (cfg.get("merchant_code") or "").strip():
+        raise HTTPException(status_code=400, detail="SumUp is niet ingeschakeld onder SaaS Instellingen.")
+    fx = await _get_eur_per_srd()
+    eur_amount = _convert_to_eur(inv["amount"], inv["currency"], fx["rate"])
+    if eur_amount <= 0:
+        raise HTTPException(status_code=400, detail="EUR-bedrag kon niet bepaald worden (wisselkoers ontbreekt).")
+    try:
+        res = await sumup_create_checkout(
+            cfg,
+            description=description,
+            amount_eur=eur_amount,
+            checkout_reference=f"saas_inv_{inv['id']}",
+            redirect_url=redirect_url,
+            return_url=f"{api_url}/api/webhooks/sumup-saas",
+        )
+    except GatewayError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    pr = {
+        "id": new_id(),
+        "invoice_id": inv["id"],
+        "company_id": cid,
+        "provider": "sumup",
+        "provider_id": str(res["id"]),
+        "amount": eur_amount,
+        "currency": "EUR",
+        "amount_srd_equivalent": float(inv["amount"]) if (inv["currency"] or "").upper() == "SRD" else None,
+        "eur_per_srd": fx["rate"],
+        "url": res["hosted_checkout_url"],
+        "status": "open",
+        "created_at": iso(now_utc()),
+        "created_by": user.get("email"),
+    }
+    await db.saas_payment_requests.insert_one(pr)
+    pr.pop("_id", None)
+    return {"url": res["hosted_checkout_url"], "provider": "sumup", "amount": eur_amount, "currency": "EUR"}
+
+
+async def _activate_company_after_saas_payment(company_id: str, plan_in_payment: Optional[str] = None):
+    """Shared post-payment routine: bumps company to active + applies pending plan."""
+    c = await db.companies.find_one({"id": company_id}, {"_id": 0}) or {}
+    now = now_utc()
+    update = {
+        "billing_status": "active",
+        "subscription_started_at": c.get("subscription_started_at") or iso(now),
+        "subscription_renews_at": iso(now + timedelta(days=30)),
+    }
+    pending = c.get("pending_plan")
+    if pending and pending != c.get("plan"):
+        update["plan"] = pending
+        update["pending_plan"] = None
+        update["pending_invoice_id"] = None
+        update["plan_changed_at"] = iso(now)
+    elif plan_in_payment and plan_in_payment != c.get("plan"):
+        update["plan"] = plan_in_payment
+    await db.companies.update_one({"id": company_id}, {"$set": update})
+
+
+async def _send_saas_payment_email(company: dict, amount: float, currency: str, method: str, invoice_id: str):
+    if not company.get("owner_email"):
+        return
+    try:
+        from email_service import send_email as _send_smtp, send_platform_email, wrap_template
+        saas = await _saas_settings_doc()
+        smtp = saas.get("smtp") or {}
+        app_url = (saas.get("branding") or {}).get("app_url") or _app_base_url()
+        plan_label = PLAN_PRICES.get(company.get("plan", "starter"), {}).get("name", "Starter")
+        content = f"""
+            <h1>Betaling ontvangen — bedankt!</h1>
+            <p>Wij hebben uw betaling van <strong>{currency} {float(amount):,.2f}</strong> ontvangen via {method}.</p>
+            <table class="kv">
+              <tr><td>Pakket</td><td>{plan_label}</td></tr>
+              <tr><td>Factuur</td><td>{invoice_id[:8].upper()}</td></tr>
+            </table>
+            <p style="margin-top:14px;">Uw abonnement is direct geactiveerd:</p>
+            <p><a href="{app_url}/admin" style="display:inline-block;background:#10B981;color:#fff;padding:10px 18px;border-radius:10px;text-decoration:none;font-weight:700;">Open dashboard</a></p>
+        """
+        subject = f"Betaling ontvangen — {plan_label} actief"
+        body_html = wrap_template(content, footer=f"SuriRent · {app_url}")
+        if smtp.get("enabled") and smtp.get("host"):
+            try:
+                await _send_smtp(smtp, to=company["owner_email"], subject=subject, body_html=body_html)
+            except Exception:
+                await send_platform_email(to=company["owner_email"], subject=subject, body_html=body_html)
+        else:
+            await send_platform_email(to=company["owner_email"], subject=subject, body_html=body_html)
+    except Exception:
+        pass
+
+
+async def _record_saas_payment_from_gateway(pr: dict, gateway_meta: dict) -> dict:
+    """Idempotently mark a SaaS payment_request + linked invoice as paid, create
+    a subscription_payment record, and activate the company."""
+    if pr.get("status") == "paid":
+        return pr
+    inv = await db.subscription_invoices.find_one({"id": pr["invoice_id"]}, {"_id": 0})
+    if not inv:
+        return pr
+    now = now_utc()
+    paid_at = iso(now)
+    company = await db.companies.find_one({"id": pr["company_id"]}, {"_id": 0}) or {}
+
+    # Mark request paid
+    await db.saas_payment_requests.update_one(
+        {"id": pr["id"]},
+        {"$set": {"status": "paid", "paid_at": paid_at, "gateway_meta": gateway_meta}},
+    )
+    # Mark invoice paid
+    if inv.get("status") != "paid":
+        await db.subscription_invoices.update_one(
+            {"id": inv["id"]},
+            {"$set": {"status": "paid", "paid_at": paid_at, "payment_method": pr["provider"]}},
+        )
+    # Create subscription_payment record
+    pay = {
+        "id": new_id(),
+        "invoice_id": inv["id"],
+        "company_id": pr["company_id"],
+        "company_name": company.get("name", ""),
+        "amount": pr["amount"],
+        "currency": pr["currency"],
+        "method": pr["provider"],
+        "reference": f"{pr['provider']}:{pr['provider_id']}",
+        "note": "Auto-registered via gateway webhook",
+        "paid_at": paid_at,
+        "created_at": paid_at,
+        "created_by": "webhook",
+        "amount_srd_equivalent": pr.get("amount_srd_equivalent"),
+        "eur_per_srd": pr.get("eur_per_srd"),
+    }
+    await db.subscription_payments.insert_one(pay)
+    # Activate company
+    await _activate_company_after_saas_payment(pr["company_id"], plan_in_payment=inv.get("plan"))
+    # Confirmation email (best-effort)
+    await _send_saas_payment_email(company, pr["amount"], pr["currency"], pr["provider"], inv["id"])
+    pr.update({"status": "paid", "paid_at": paid_at})
+    return pr
+
+
+@api.post("/webhooks/mope-saas")
+async def mope_saas_webhook(request: Request):
+    """Webhook for SaaS-level Mope payments (subscription billing).
+    Separate from the per-company kiosk Mope webhook at /api/webhooks/mope."""
+    from payments_service import mope_get_payment_request, GatewayError
+    try:
+        body = await request.json()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+    pr_provider_id = (body or {}).get("id")
+    if not pr_provider_id:
+        raise HTTPException(status_code=400, detail="Missing id")
+    pr = await db.saas_payment_requests.find_one(
+        {"provider_id": str(pr_provider_id), "provider": "mope"}, {"_id": 0}
+    )
+    if not pr:
+        return {"ok": True, "ignored": True}
+    doc = await _saas_settings_doc()
+    cfg = doc.get("mope") or {}
+    expected_token = (cfg.get("api_key") or "").strip()
+    auth_header = request.headers.get("authorization", "")
+    sent_token = auth_header[7:].strip() if auth_header.lower().startswith("bearer ") else ""
+    if expected_token and sent_token and sent_token != expected_token:
+        raise HTTPException(status_code=401, detail="Invalid webhook token")
+    try:
+        remote = await mope_get_payment_request(cfg, pr_provider_id)
+    except GatewayError:
+        return {"ok": True, "queued": True}
+    if (remote or {}).get("status") == "paid":
+        await _record_saas_payment_from_gateway(pr, remote)
+    else:
+        await db.saas_payment_requests.update_one(
+            {"id": pr["id"]}, {"$set": {"status": remote.get("status", pr["status"]), "gateway_meta": remote}}
+        )
+    return {"ok": True, "status": remote.get("status")}
+
+
+@api.post("/webhooks/sumup-saas")
+async def sumup_saas_webhook(request: Request):
+    """SumUp webhook for SaaS subscriptions. Payload: {event_type, id}.
+    See: https://developer.sumup.com/online-payments/webhooks/"""
+    from payments_service import sumup_get_checkout, GatewayError
+    try:
+        body = await request.json()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+    event_type = (body or {}).get("event_type")
+    checkout_id = (body or {}).get("id")
+    if not checkout_id:
+        raise HTTPException(status_code=400, detail="Missing id")
+    if event_type and event_type != "CHECKOUT_STATUS_CHANGED":
+        return {"ok": True, "ignored": True}
+    pr = await db.saas_payment_requests.find_one(
+        {"provider_id": str(checkout_id), "provider": "sumup"}, {"_id": 0}
+    )
+    if not pr:
+        return {"ok": True, "ignored": True}
+    doc = await _saas_settings_doc()
+    cfg = doc.get("sumup") or {}
+    try:
+        remote = await sumup_get_checkout(cfg, str(checkout_id))
+    except GatewayError:
+        return {"ok": True, "queued": True}
+    status_val = (remote or {}).get("status", "").upper()
+    # Validate amount/currency match to prevent stale/forged webhook from auto-marking paid
+    try:
+        if status_val == "PAID":
+            if float(remote.get("amount") or 0) + 0.01 < float(pr["amount"]) - 0.01:
+                return {"ok": True, "ignored": True, "reason": "amount mismatch"}
+            if (remote.get("currency") or "").upper() != "EUR":
+                return {"ok": True, "ignored": True, "reason": "currency mismatch"}
+            await _record_saas_payment_from_gateway(pr, remote)
+        else:
+            await db.saas_payment_requests.update_one(
+                {"id": pr["id"]}, {"$set": {"status": status_val.lower() or pr["status"], "gateway_meta": remote}}
+            )
+    except Exception:
+        return {"ok": True, "error": True}
+    return {"ok": True, "status": status_val}
+
+
+# =====================================================================
 # Companies (superadmin)
 # =====================================================================
 class CompanyIn(BaseModel):
@@ -1256,7 +1709,7 @@ async def stop_impersonating(response: Response, user=Depends(get_current_user))
 
 
 # SaaS-level settings (banking, Mope creds, branding) stored centrally
-SAAS_SETTINGS_ID = "_saas_settings"
+# (SAAS_SETTINGS_ID is declared earlier near the billing helpers)
 
 
 @api.get("/superadmin/settings")
@@ -1275,6 +1728,18 @@ async def get_saas_settings(user=Depends(require_role("superadmin"))):
             "merchant_id": mope.get("merchant_id", ""),
             "api_key_set": bool(mope.get("api_key")),
             "test_mode": bool(mope.get("test_mode", True)),
+        },
+        "sumup": {
+            "enabled": bool((doc.get("sumup") or {}).get("enabled")),
+            "merchant_code": (doc.get("sumup") or {}).get("merchant_code", ""),
+            "api_key_set": bool((doc.get("sumup") or {}).get("api_key")),
+            "test_mode": bool((doc.get("sumup") or {}).get("test_mode", True)),
+        },
+        "fx": {
+            "mode": (doc.get("fx") or {}).get("mode", "auto"),
+            "manual_eur_per_srd": (doc.get("fx") or {}).get("manual_eur_per_srd", 0),
+            "cached_rate": (doc.get("fx") or {}).get("cached_rate", 0),
+            "cached_at": (doc.get("fx") or {}).get("cached_at"),
         },
         "smtp": {
             "enabled": bool(smtp.get("enabled")),
@@ -1295,6 +1760,8 @@ async def get_saas_settings(user=Depends(require_role("superadmin"))):
 class SaasSettingsIn(BaseModel):
     banking: Optional[dict] = None
     mope: Optional[dict] = None
+    sumup: Optional[dict] = None
+    fx: Optional[dict] = None
     smtp: Optional[dict] = None
     branding: Optional[dict] = None
 
@@ -1316,6 +1783,26 @@ async def update_saas_settings(body: SaasSettingsIn, user=Depends(require_role("
             "api_key": body.mope.get("api_key") if body.mope.get("api_key") else cur.get("api_key", ""),
         }
         update["mope"] = new_mope
+    if body.sumup is not None:
+        cur = existing.get("sumup", {}) or {}
+        new_sumup = {
+            "enabled": bool(body.sumup.get("enabled", cur.get("enabled", False))),
+            "merchant_code": body.sumup.get("merchant_code", cur.get("merchant_code", "")),
+            "test_mode": bool(body.sumup.get("test_mode", cur.get("test_mode", True))),
+            "api_key": body.sumup.get("api_key") if body.sumup.get("api_key") else cur.get("api_key", ""),
+        }
+        update["sumup"] = new_sumup
+    if body.fx is not None:
+        cur = existing.get("fx", {}) or {}
+        new_fx = {
+            "mode": body.fx.get("mode", cur.get("mode", "auto")),
+            "manual_eur_per_srd": float(body.fx.get("manual_eur_per_srd", cur.get("manual_eur_per_srd", 0)) or 0),
+            "cached_rate": cur.get("cached_rate", 0),
+            "cached_at": cur.get("cached_at"),
+        }
+        if new_fx["mode"] not in ("auto", "manual"):
+            new_fx["mode"] = "auto"
+        update["fx"] = new_fx
     if body.smtp is not None:
         cur = existing.get("smtp", {}) or {}
         new_smtp = {

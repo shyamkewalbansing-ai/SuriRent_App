@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   Crown, Clock, CheckCircle, AlertCircle, ArrowUp, ArrowDown, Loader2,
-  Receipt, Landmark, CreditCard, Banknote, Copy, Check, X,
+  Receipt, Landmark, CreditCard, Banknote, Copy, Check, X, Zap, Euro,
 } from 'lucide-react';
 import { api, formatError } from '../../../lib/api';
 
@@ -44,6 +44,66 @@ function PlanCard({ plan, currentPlanId, onSelect, busy }) {
             plan.amount > 0 ? <ArrowUp className="w-4 h-4" /> : <ArrowDown className="w-4 h-4" />}
           Kies {plan.name}
         </button>
+      )}
+    </div>
+  );
+}
+
+function OnlinePayBox({ options, openInvoice, onErr }) {
+  const [busy, setBusy] = useState('');
+  if (!options) return null;
+  const mopeEnabled = options.mope?.enabled;
+  const sumupEnabled = options.sumup?.enabled;
+  if (!mopeEnabled && !sumupEnabled) return null;
+
+  const pay = async (provider) => {
+    setBusy(provider);
+    try {
+      const payload = openInvoice?.id ? { provider, invoice_id: openInvoice.id } : { provider };
+      const { data } = await api.post('/billing/me/checkout', payload);
+      if (data?.url) {
+        window.location.href = data.url;
+      } else {
+        onErr('Geen betaal-URL ontvangen van de gateway.');
+        setBusy('');
+      }
+    } catch (e) {
+      onErr(formatError(e));
+      setBusy('');
+    }
+  };
+
+  return (
+    <div className="rounded-2xl bg-gradient-to-br from-slate-900 to-slate-800 text-white p-5" data-testid="online-pay-box">
+      <div className="flex items-center gap-2 mb-3">
+        <Zap className="w-5 h-5 text-yellow-300" />
+        <h4 className="font-extrabold">Direct online betalen</h4>
+      </div>
+      <p className="text-xs text-white/70 mb-4">
+        Geen wachtkamer, abonnement is direct geactiveerd na betaling.
+      </p>
+      <div className="grid sm:grid-cols-2 gap-3">
+        {mopeEnabled && (
+          <button onClick={() => pay('mope')} disabled={!!busy} data-testid="pay-with-mope"
+            className="h-14 rounded-xl bg-emerald-500 hover:bg-emerald-400 transition text-white font-extrabold flex items-center justify-center gap-2 disabled:opacity-50">
+            {busy === 'mope' ? <Loader2 className="w-5 h-5 animate-spin" /> : <CreditCard className="w-5 h-5" />}
+            <span>Betaal met Mope</span>
+            <span className="text-xs opacity-80">· SRD {Number(options.amount).toLocaleString('nl-NL')}</span>
+          </button>
+        )}
+        {sumupEnabled && (
+          <button onClick={() => pay('sumup')} disabled={!!busy} data-testid="pay-with-sumup"
+            className="h-14 rounded-xl bg-sky-500 hover:bg-sky-400 transition text-white font-extrabold flex items-center justify-center gap-2 disabled:opacity-50">
+            {busy === 'sumup' ? <Loader2 className="w-5 h-5 animate-spin" /> : <Euro className="w-5 h-5" />}
+            <span>Betaal met SumUp</span>
+            <span className="text-xs opacity-80">· €{Number(options.sumup.eur_amount).toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+          </button>
+        )}
+      </div>
+      {sumupEnabled && options.eur_per_srd > 0 && options.currency === 'SRD' && (
+        <p className="text-[11px] text-white/50 mt-3">
+          Wisselkoers: 1 SRD = €{Number(options.eur_per_srd).toFixed(4)} ({options.fx_source === 'live' || options.fx_source === 'cache' ? 'live' : options.fx_source})
+        </p>
       )}
     </div>
   );
@@ -103,6 +163,7 @@ export default function MijnAbonnement() {
   const [bank, setBank] = useState(null);
   const [invoices, setInvoices] = useState([]);
   const [payments, setPayments] = useState([]);
+  const [checkoutOptions, setCheckoutOptions] = useState(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
@@ -111,18 +172,33 @@ export default function MijnAbonnement() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [m, p, b, inv, pay] = await Promise.all([
+      const [m, p, b, inv, pay, opt] = await Promise.all([
         api.get('/billing/me'),
         api.get('/billing/plans'),
         api.get('/billing/bank-details'),
         api.get('/billing/me/invoices'),
         api.get('/billing/me/payments'),
+        api.get('/billing/me/checkout-options').catch(() => ({ data: null })),
       ]);
       setMe(m.data); setPlans(p.data); setBank(b.data); setInvoices(inv.data); setPayments(pay.data);
+      setCheckoutOptions(opt.data);
     } catch (e) { setErr(formatError(e)); }
     finally { setLoading(false); }
   }, []);
   useEffect(() => { load(); }, [load]);
+
+  // Detect return from gateway (?checkout=done) and surface a success-pending message
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('checkout') === 'done') {
+      setMsg('Betaling ontvangen — uw abonnement wordt verwerkt. Dit kan een minuut duren.');
+      setTimeout(() => setMsg(''), 8000);
+      // Clean URL to avoid re-trigger on refresh
+      const url = new URL(window.location.href);
+      url.searchParams.delete('checkout');
+      window.history.replaceState({}, '', url.toString());
+    }
+  }, []);
 
   const changePlan = async (plan) => {
     const isUpgrade = plan.amount > (me?.monthly_amount || 0);
@@ -194,8 +270,11 @@ export default function MijnAbonnement() {
         )}
       </div>
 
-      {(me.status === 'trial' || me.status === 'expired' || openInvoices.length > 0) && bank && (
-        <BankBox details={bank} invoice={openInvoices[0]} company="UW BEDRIJF" />
+      {(me.status === 'trial' || me.status === 'expired' || openInvoices.length > 0) && (
+        <>
+          <OnlinePayBox options={checkoutOptions} openInvoice={openInvoices[0]} onErr={setErr} />
+          {bank && <BankBox details={bank} invoice={openInvoices[0]} company="UW BEDRIJF" />}
+        </>
       )}
 
       <div>

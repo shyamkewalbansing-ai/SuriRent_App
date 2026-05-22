@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
-  Landmark, CreditCard, Mail, Globe, Check, Loader2, Save, AlertCircle, Send,
+  Landmark, CreditCard, Mail, Globe, Check, Loader2, Save, AlertCircle, Send, Euro, RefreshCw,
 } from 'lucide-react';
 import { api, formatError } from '../../../lib/api';
 
@@ -76,6 +76,16 @@ export default function SaasSettings() {
           merchant_id: data.mope.merchant_id,
           test_mode: data.mope.test_mode,
           ...(data.mope.api_key ? { api_key: data.mope.api_key } : {}),
+        },
+        sumup: {
+          enabled: data.sumup?.enabled || false,
+          merchant_code: data.sumup?.merchant_code || '',
+          test_mode: data.sumup?.test_mode ?? true,
+          ...(data.sumup?.api_key ? { api_key: data.sumup.api_key } : {}),
+        },
+        fx: {
+          mode: data.fx?.mode || 'auto',
+          manual_eur_per_srd: Number(data.fx?.manual_eur_per_srd) || 0,
         },
         smtp: {
           enabled: data.smtp.enabled,
@@ -166,6 +176,56 @@ export default function SaasSettings() {
             hint={data.mope?.api_key_set ? 'Een sleutel is opgeslagen. Laat leeg om de bestaande te behouden.' : 'Verkrijg deze bij uw Mope-account.'} />
           <Toggle label="Test modus" hint="Gebruik de test-omgeving van Mope (geen echte betalingen)"
             value={data.mope?.test_mode} onChange={(v) => upd('mope', { test_mode: v })} testid="mope-test-mode" />
+        </Section>
+
+        <Section title="SumUp online betalen (EUR)" icon={Euro} accent="bg-sky-100 text-sky-600">
+          <Toggle label="SumUp ingeschakeld" hint="Voor Nederlandse / EU klanten — betaal in euro"
+            value={data.sumup?.enabled} onChange={(v) => upd('sumup', { enabled: v })} testid="sumup-enabled" />
+          <Field label="Merchant code" value={data.sumup?.merchant_code} mono
+            placeholder="bv. MCXXXXXX" hint="Dashboard SumUp · linksboven bij uw naam of onder Business settings."
+            onChange={(v) => upd('sumup', { merchant_code: v })} testid="sumup-merchant-code" />
+          <Field label={data.sumup?.api_key_set ? 'API Key (vervang om te wijzigen)' : 'API Key'} type="password"
+            value={data.sumup?.api_key || ''} placeholder={data.sumup?.api_key_set ? '••••••••••••' : ''}
+            onChange={(v) => upd('sumup', { api_key: v })} testid="sumup-api-key"
+            hint={data.sumup?.api_key_set ? 'Een sleutel is opgeslagen. Laat leeg om de bestaande te behouden.' : 'me.sumup.com → Settings → For Developers → Toolkit → API Keys.'} />
+          <Toggle label="Test modus (sandbox)" hint="Gebruik een SumUp sandbox-account voor testen zonder echt geld."
+            value={data.sumup?.test_mode} onChange={(v) => upd('sumup', { test_mode: v })} testid="sumup-test-mode" />
+          <div className="text-[11px] text-slate-500 bg-slate-50 border border-slate-200 rounded-xl p-2.5">
+            Webhook URL voor SumUp dashboard:
+            <code className="block font-mono text-[10px] mt-1 text-slate-700 break-all">
+              {(typeof window !== 'undefined' ? window.location.origin : '')}/api/webhooks/sumup-saas
+            </code>
+          </div>
+        </Section>
+
+        <Section title="Wisselkoers SRD → EUR" icon={RefreshCw} accent="bg-amber-100 text-amber-600">
+          <div className="flex gap-2">
+            {['auto', 'manual'].map((m) => (
+              <button key={m} type="button" onClick={() => upd('fx', { mode: m })}
+                data-testid={`fx-mode-${m}`}
+                className={`flex-1 h-11 rounded-xl font-bold text-sm transition ${
+                  (data.fx?.mode || 'auto') === m ? 'bg-orange-500 text-white' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                }`}>
+                {m === 'auto' ? 'Automatisch (live)' : 'Handmatig'}
+              </button>
+            ))}
+          </div>
+          {(data.fx?.mode || 'auto') === 'auto' && (
+            <div className="text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-1">
+              <p><strong>Live koers</strong> wordt elk 6 uur opgehaald van open.er-api.com (gratis).</p>
+              {data.fx?.cached_rate > 0 && (
+                <p>Laatst opgehaald: <span className="font-mono">1 SRD = €{Number(data.fx.cached_rate).toFixed(4)}</span>
+                  {data.fx?.cached_at && <> · {new Date(data.fx.cached_at).toLocaleString('nl-NL')}</>}
+                </p>
+              )}
+            </div>
+          )}
+          {(data.fx?.mode || 'auto') === 'manual' && (
+            <Field label="Vaste koers — EUR per 1 SRD" type="number" mono
+              value={data.fx?.manual_eur_per_srd || ''} placeholder="bv. 0.023"
+              onChange={(v) => upd('fx', { manual_eur_per_srd: v })} testid="fx-manual-rate"
+              hint="Wordt gebruikt voor EUR-equivalent op SumUp-knoppen. Sla op om te activeren." />
+          )}
         </Section>
 
         <Section title="Platform e-mail (SMTP)" icon={Mail} accent="bg-blue-100 text-blue-600">

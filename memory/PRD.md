@@ -210,6 +210,14 @@ User koos voor **Optie C — minimale herbouw** (kern eerst), dan vroeg om **Fas
 - ✅ **Bug fix**: backend crashte met `NameError: name 'app' is not defined` — `@app.on_event("shutdown")` en `@api.post("/superadmin/run-trial-reminders")` decorators stonden op regel 548/554, vóór `app = FastAPI(...)` op regel 561. Verplaatst: `app.on_event` (no-op) verwijderd, `run-trial-reminders` route nu vlak boven `app.include_router(api)` geplaatst zodat `api` al bestaat.
 - ✅ **Impersonation flow geverifieerd via Playwright**: superadmin login → `/api/superadmin/companies/{id}/impersonate` → hard reload naar `/admin` → `ImpersonationBanner` ("Support modus actief · Terug naar SaaS dashboard") zichtbaar, geen lingering dark overlay, "Mijn Abonnement" tab beschikbaar in sidebar. Exit-knop reset cleanly terug naar SaaS dashboard.
 
+### Online betalen voor SaaS-abonnement: Mope (SRD) + SumUp (EUR) (2026-05-22) ✅
+- ✅ **Backend**: nieuw `payments_service.sumup_create_checkout/get_checkout` (SumUp v0.1/checkouts, Hosted Checkout) + FX helper die SRD→EUR live haalt van `open.er-api.com` (6h cache) met `manual` override.
+- ✅ **Nieuwe endpoints**: `GET /api/billing/fx`, `GET /api/billing/me/checkout-options`, `POST /api/billing/me/checkout` (provider=mope|sumup), `POST /api/webhooks/mope-saas`, `POST /api/webhooks/sumup-saas` (CHECKOUT_STATUS_CHANGED + amount/currency-validatie tegen invoice).
+- ✅ **Idempotent payment activation**: `_record_saas_payment_from_gateway()` markeert invoice paid, maakt subscription_payment, activeert bedrijf, past pending_plan toe, stuurt bevestigingsmail — herbruikt door beide gateways.
+- ✅ **SaaS Instellingen UI** uitgebreid met aparte **SumUp (EUR)** sectie (merchant_code + API key + sandbox toggle + webhook URL) en **Wisselkoers SRD→EUR** sectie (Auto/Manual). Tijdens build verifieerd: PUT settings persistente, getoonde live koers `1 SRD = €0.0230`, manual override `0.025` werkt → €75,00 voor SRD 3.000.
+- ✅ **Mijn Abonnement UI**: nieuwe donkere "Direct online betalen" sectie boven bankgegevens met groene Mope-knop en blauwe SumUp-knop. Knoppen zijn alleen zichtbaar als gateway enabled + credentials aanwezig zijn. Wisselkoersregel toont bron (live/cache/manual).
+- ✅ Tested via Playwright: beide knoppen visible bij admin@vastgoed.sr met juiste bedragen, SaaS Settings secties operationeel, webhook URL automatisch afgeleid van window.location.origin.
+
 ## Prioritized Backlog (Fases E-F)
 - 📧 **Email notificaties** — wacht op SendGrid / Resend credentials van user
 - 📱 **WhatsApp/SMS herinneringen** — wacht op Twilio credentials
