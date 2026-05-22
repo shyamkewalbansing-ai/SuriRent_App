@@ -1265,7 +1265,7 @@ export default function AdminDashboard() {
         <MobileHeader activeCompany={activeCompany} user={user} onOpenMenu={() => setDrawerOpen(true)} />
         <ImpersonationBanner />
         <TrialBanner />
-        <main className="flex-1 p-5 md:p-8 pb-24 md:pb-8 max-w-7xl w-full">
+        <main className="flex-1 p-5 md:p-8 pb-24 md:pb-8 w-full">
           {tab === 'companies' && <Companies />}
           {tab === 'subscriptions' && <Subscriptions />}
           {tab === 'saas_settings' && <SaasSettings />}
