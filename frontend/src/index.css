@@ -37,7 +37,7 @@ body {
 
 /* In standalone (installed PWA) mode, lock the whole app so nothing can
    ever scroll the document itself — only nested scroll containers move.
-   This kills the orange-bounce-underneath that happens on iOS Safari and
+   This kills the rubber-band bounce that happens on iOS Safari and
    prevents pinch-to-zoom from revealing the chrome behind. */
 @media (display-mode: standalone) {
   html, body {
@@ -46,14 +46,15 @@ body {
     width: 100%;
     height: 100%;
     overflow: hidden;
-    /* Brand orange so any 1px overshoot at the notch / home-indicator
-       reveals the brand colour, never a stray white/cream strip. */
-    background-color: #FF5C00;
+    /* Wit zodat eventuele 1px doorlek bij safe-area niet als oranje balk
+       onder de admin-tabbar of huurder-portaal zichtbaar wordt. De Kiosk
+       gebruikt zijn eigen `.kiosk-fullscreen` overlay die wel oranje is. */
+    background-color: #ffffff;
   }
   #root {
     height: 100%;
     overflow: hidden;
-    background-color: #FF5C00;
+    background-color: #ffffff;
   }
 }
 

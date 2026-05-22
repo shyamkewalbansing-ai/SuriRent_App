@@ -106,15 +106,8 @@ const MOBILE_SUPER_PRIMARY_IDS = ['companies', 'overview', 'apartments', 'tenant
 
 function MobileHeader({ activeCompany, user, onOpenMenu }) {
   return (
-    <header className="md:hidden sticky top-0 z-30 bg-white border-b border-orange-100">
-      {/* Orange strip purely behind the iOS status bar (time / battery / signal).
-          iOS PWA with `apple-mobile-web-app-status-bar-style: black-translucent`
-          paints WHITE status-bar text on top of the page; this strip ensures
-          that text lands on the brand orange instead of the white header.
-          Outside iOS (Android / desktop) safe-area-inset-top = 0 so the strip
-          collapses to nothing and stays invisible. */}
-      <div className="bg-gradient-to-br from-[#FF8A3D] to-[#FF5C00]"
-        style={{ height: 'env(safe-area-inset-top, 0px)' }} aria-hidden="true" />
+    <header className="md:hidden sticky top-0 z-30 bg-white border-b border-orange-100"
+      style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}>
       <div className="flex items-center gap-3 px-4 h-14">
         <button onClick={onOpenMenu} data-testid="mobile-menu-btn"
           className="w-10 h-10 -ml-2 rounded-xl flex items-center justify-center hover:bg-orange-50">

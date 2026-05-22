@@ -397,9 +397,13 @@ function PaymentHistoryModal({ tenant, apartment, onClose }) {
   }, [tenant.id]);
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" data-testid="kiosk-history-modal">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
-        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center"
+      style={{
+        padding: 'max(env(safe-area-inset-top, 0px), 12px) max(env(safe-area-inset-right, 0px), 12px) max(env(safe-area-inset-bottom, 0px), 12px) max(env(safe-area-inset-left, 0px), 12px)',
+      }}
+      data-testid="kiosk-history-modal">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl h-full max-h-full overflow-hidden flex flex-col">
+        <div className="px-5 sm:px-6 py-3.5 border-b border-slate-100 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3 min-w-0">
             <div className="w-9 h-9 rounded-lg bg-orange-100 flex items-center justify-center shrink-0">
               <ClockIcon className="w-4 h-4 text-orange-500" />
@@ -410,11 +414,12 @@ function PaymentHistoryModal({ tenant, apartment, onClose }) {
             </div>
           </div>
           <button onClick={onClose} data-testid="history-close"
-            className="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center">
+            className="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center shrink-0">
             <X className="w-4 h-4" />
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto px-6 py-3">
+        <div className="flex-1 overflow-y-auto px-5 sm:px-6 py-3"
+          style={{ overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' }}>
           {err && <p className="text-red-500 text-sm py-4">{err}</p>}
           {!items && !err && <div className="py-10 flex items-center justify-center"><Loader2 className="w-7 h-7 animate-spin text-orange-500" /></div>}
           {items && items.length === 0 && (
@@ -453,7 +458,7 @@ function PaymentHistoryModal({ tenant, apartment, onClose }) {
             </div>
           ))}
         </div>
-        <div className="px-6 py-3 border-t border-slate-100">
+        <div className="px-5 sm:px-6 py-3 border-t border-slate-100 shrink-0">
           <button onClick={onClose}
             className="w-full h-11 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm">Sluiten</button>
         </div>
