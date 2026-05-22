@@ -280,7 +280,7 @@ function PasswordView({ initialMode = 'login', onBack, onRegistered, branding })
   }
 
   return (
-    <div className="min-h-screen flex flex-col" style={{ backgroundColor: branding?.primary_color || '#FF5C00' }}>
+    <div className="min-h-screen flex flex-col" style={{ backgroundColor: branding?.primary_color || '#FF5C00', paddingTop: 'env(safe-area-inset-top, 0px)', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
       <Header branding={branding} />
       <div className="flex-1 flex items-center justify-center p-4 sm:p-6">
         <div className="bg-white rounded-3xl shadow-[0_20px_60px_rgba(0,0,0,0.15)] w-full max-w-xl p-8 md:p-12" data-testid="auth-form">
@@ -450,7 +450,7 @@ function PasswordView({ initialMode = 'login', onBack, onRegistered, branding })
 function RegisterSuccess({ plan, company, bankDetails, onContinue }) {
   const ref = `ABONNEMENT — ${company || ''} — ${new Date().toLocaleDateString('nl-NL', { month: 'long', year: 'numeric' })}`;
   return (
-    <div className="min-h-screen bg-orange-500 flex flex-col">
+    <div className="min-h-screen bg-orange-500 flex flex-col" style={{ paddingTop: 'env(safe-area-inset-top, 0px)', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
       <Header />
       <div className="flex-1 flex items-center justify-center p-4 sm:p-6">
         <div className="bg-white rounded-3xl shadow-[0_20px_60px_rgba(0,0,0,0.15)] w-full max-w-2xl p-6 sm:p-10" data-testid="register-success">
@@ -539,6 +539,26 @@ export default function LoginPage() {
   useEffect(() => {
     document.title = 'Vastgoed Kiosk - Login';
   }, []);
+
+  // Login is volledig brand-oranje. We zetten body+#root in PWA standalone
+  // op oranje (via body class) zodat het home-indicator gebied en eventuele
+  // 1px doorlek aan de notch dezelfde kleur tonen. Ook updaten we de
+  // theme-color meta zodat de Android-statusbalk oranje wordt. Unmount
+  // (bv. navigatie naar /admin of /kiosk) herstelt automatisch.
+  useEffect(() => {
+    const primary = (branding?.primary_color || '#FF5C00');
+    document.body.classList.add('login-mode');
+    document.body.style.setProperty('--login-bg', primary);
+    const meta = document.querySelector('meta[name="theme-color"]:not([media])')
+      || document.querySelector('meta[name="theme-color"]');
+    const prev = meta?.getAttribute('content');
+    if (meta) meta.setAttribute('content', primary);
+    return () => {
+      document.body.classList.remove('login-mode');
+      document.body.style.removeProperty('--login-bg');
+      if (meta && prev) meta.setAttribute('content', prev);
+    };
+  }, [branding]);
 
   // Resolve and apply company branding on mount.
   useEffect(() => {

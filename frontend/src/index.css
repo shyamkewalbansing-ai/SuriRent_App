@@ -47,6 +47,8 @@ body {
   }
   /* Tijdens kiosk-mode -> brand-oranje voor home-indicator gebied. */
   body.kiosk-mode { background-color: #FF5C00; }
+  /* Tijdens login-mode -> brand kleur (var --login-bg, default oranje). */
+  body.login-mode { background-color: var(--login-bg, #FF5C00); }
 }
 
 /* Utility for screens that should respect safe area manually. */

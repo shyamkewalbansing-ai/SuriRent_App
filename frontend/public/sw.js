@@ -6,7 +6,7 @@
  * - Bypass /api/* (always go to network)
  * - Push notifications + click handler
  */
-const CACHE_VERSION = 'surirent-v17';
+const CACHE_VERSION = 'surirent-v18';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 
@@ -25,6 +25,16 @@ self.addEventListener('install', (event) => {
     caches.open(STATIC_CACHE).then((cache) => cache.addAll(PRECACHE)).catch(() => {})
   );
   self.skipWaiting();
+});
+
+// Listen for messages from the page (e.g. "activate me now, a new bundle
+// shipped"). When the page calls reg.update() and sees a new worker waiting,
+// it posts SKIP_WAITING — we activate immediately so klanten niet hoeven
+// te herinstalleren.
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
 });
 
 self.addEventListener('activate', (event) => {

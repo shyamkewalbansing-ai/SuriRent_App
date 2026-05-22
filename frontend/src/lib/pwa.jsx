@@ -11,10 +11,55 @@ export function useRegisterServiceWorker() {
     if (typeof window === 'undefined') return;
     if (!('serviceWorker' in navigator)) return;
     // Register on window load so we don't compete with critical render.
-    const onReady = () => {
-      navigator.serviceWorker.register('/sw.js').catch((err) => {
+    const onReady = async () => {
+      try {
+        const reg = await navigator.serviceWorker.register('/sw.js');
+
+        // Auto-update flow — installed PWAs check for updates without user
+        // interaction so klanten nooit handmatig hoeven te herinstalleren:
+        //
+        // 1) Listen for a NEW service worker arriving (`updatefound`).
+        //    When it finishes installing AND there is already a controller
+        //    (= we're an existing client running the old version), tell it
+        //    to skipWaiting and reload one time so the new bundle is live.
+        const handleUpdate = (newWorker) => {
+          newWorker.addEventListener('statechange', () => {
+            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+              // New version ready → activate immediately + reload page once.
+              newWorker.postMessage({ type: 'SKIP_WAITING' });
+            }
+          });
+        };
+        if (reg.waiting) handleUpdate(reg.waiting);
+        reg.addEventListener('updatefound', () => {
+          if (reg.installing) handleUpdate(reg.installing);
+        });
+
+        // 2) When the active controller changes (because a new SW took over)
+        //    do a one-shot reload so the user immediately runs the new code.
+        let refreshing = false;
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+          if (refreshing) return;
+          refreshing = true;
+          window.location.reload();
+        });
+
+        // 3) Poll for updates: every 60s (active tab) ask the SW to check
+        //    /sw.js. Also when the tab comes back into focus, force a check.
+        const checkForUpdates = () => { reg.update().catch(() => {}); };
+        const interval = setInterval(checkForUpdates, 60_000);
+        window.addEventListener('focus', checkForUpdates);
+        document.addEventListener('visibilitychange', () => {
+          if (document.visibilityState === 'visible') checkForUpdates();
+        });
+        return () => {
+          clearInterval(interval);
+          window.removeEventListener('focus', checkForUpdates);
+        };
+      } catch (err) {
         console.warn('Service worker registration failed:', err);
-      });
+      }
+      return undefined;
     };
     if (document.readyState === 'complete') onReady();
     else window.addEventListener('load', onReady, { once: true });
