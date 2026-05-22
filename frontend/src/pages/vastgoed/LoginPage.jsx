@@ -157,6 +157,16 @@ function PasswordView({ initialMode = 'login', onBack, onRegistered }) {
   const [telefoon, setTelefoon] = useState('');
   const [plan, setPlan] = useState('starter');
   const [kioskPin, setKioskPin] = useState('');
+  // Country selection: '' (auto), 'SR', 'NL', 'OTHER'.
+  // Initialized from localStorage.preferred_currency (set by landing page toggle).
+  const [country, setCountry] = useState(() => {
+    try {
+      const pref = (localStorage.getItem('preferred_currency') || '').toUpperCase();
+      if (pref === 'EUR') return 'NL';
+      if (pref === 'SRD') return 'SR';
+    } catch { /* localStorage unavailable */ }
+    return '';
+  });
   const [plans, setPlans] = useState([]);
   const [bankDetails, setBankDetails] = useState(null);
   const [showSuccess, setShowSuccess] = useState(false);
@@ -164,12 +174,19 @@ function PasswordView({ initialMode = 'login', onBack, onRegistered }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  // Build the query that drives the plan-currency on the registration form.
+  // Explicit country wins; otherwise the phone is used for auto-detect.
+  const planQuery = (() => {
+    if (country === 'NL') return '?currency=EUR';
+    if (country === 'SR' || country === 'OTHER') return '?currency=SRD';
+    return telefoon ? `?phone=${encodeURIComponent(telefoon)}` : '';
+  })();
+
   useEffect(() => {
     if (mode !== 'register') return;
-    const params = telefoon ? `?phone=${encodeURIComponent(telefoon)}` : '';
-    api.get(`/billing/plans${params}`).then((r) => setPlans(r.data)).catch(() => setPlans([]));
+    api.get(`/billing/plans${planQuery}`).then((r) => setPlans(r.data)).catch(() => setPlans([]));
     api.get('/billing/bank-details').then((r) => setBankDetails(r.data)).catch(() => setBankDetails(null));
-  }, [mode, telefoon]);
+  }, [mode, planQuery]);
 
   const submit = async (e) => {
     e?.preventDefault();
@@ -195,6 +212,7 @@ function PasswordView({ initialMode = 'login', onBack, onRegistered }) {
           telefoon: telefoon.trim(),
           plan,
           kiosk_pin: kioskPin.trim() || null,
+          ...(country ? { country } : {}),
         });
         if (onRegistered) onRegistered();
         setShowSuccess(true);
@@ -236,6 +254,33 @@ function PasswordView({ initialMode = 'login', onBack, onRegistered }) {
           <form onSubmit={submit} className="space-y-4">
             {mode === 'register' && (
               <>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Land &amp; valuta</label>
+                  <div className="grid grid-cols-3 gap-2" data-testid="country-picker">
+                    {[
+                      { code: 'SR', flag: '🇸🇷', label: 'Suriname', sub: 'SRD' },
+                      { code: 'NL', flag: '🇳🇱', label: 'Nederland', sub: 'EUR' },
+                      { code: 'OTHER', flag: '🌍', label: 'Anders', sub: 'SRD' },
+                    ].map((c) => {
+                      const sel = country === c.code;
+                      return (
+                        <button key={c.code} type="button" onClick={() => setCountry(c.code)}
+                          data-testid={`country-${c.code.toLowerCase()}`}
+                          className={`rounded-xl border-2 p-3 text-center transition-all ${
+                            sel ? 'border-[#FF5C00] bg-orange-50 shadow-md shadow-orange-500/10' : 'border-slate-200 bg-white hover:border-orange-300'
+                          }`}>
+                          <div className="text-2xl leading-none mb-1">{c.flag}</div>
+                          <div className={`text-xs font-extrabold ${sel ? 'text-[#C74600]' : 'text-slate-700'}`}>{c.label}</div>
+                          <div className="text-[10px] text-slate-400 font-bold mt-0.5">{c.sub}</div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p className="text-[11px] text-slate-400 mt-1.5">
+                    Bepaalt de valuta waarin u factureert en betaalt. Standaard: gedetecteerd uit uw telefoonnummer.
+                  </p>
+                </div>
+
                 <div>
                   <label className="block text-sm font-semibold text-slate-700 mb-2">Kies uw pakket</label>
                   <div className="grid sm:grid-cols-2 gap-3">

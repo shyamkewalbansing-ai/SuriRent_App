@@ -479,7 +479,12 @@ function FeaturesSection() {
 const STARTER = ['Tot 15 huurders', 'Alle kernfuncties', 'Digitale kwitanties', 'Mobile-first interface', 'SRD/USD/EUR support', 'Email support'];
 const PRO = ['Onbeperkt huurders', 'Alles uit Starter', 'Kiosk terminal (4-cijferige PIN)', 'Geavanceerde rapportages', 'Prioritaire WhatsApp support'];
 
-function PricingCard({ name, price, desc, features, cta, onCta, featured, testid }) {
+function PricingCard({ name, price, currency = 'SRD', desc, features, cta, onCta, featured, testid }) {
+  const isEUR = (currency || 'SRD').toUpperCase() === 'EUR';
+  const priceText = isEUR
+    ? Number(price).toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    : Number(price).toLocaleString('nl-NL');
+  const symbol = isEUR ? '€' : 'SRD';
   if (featured) {
     return (
       <div data-testid={testid}
@@ -492,8 +497,8 @@ function PricingCard({ name, price, desc, features, cta, onCta, featured, testid
         <h3 className="relative text-xl md:text-2xl font-black tracking-tight text-white">{name}</h3>
         <p className="relative text-sm text-white/85 mt-1.5">{desc}</p>
         <div className="relative mt-6 mb-7 flex items-baseline gap-1.5">
-          <span className="text-xs font-black text-white/80">SRD</span>
-          <span className="text-5xl md:text-6xl font-black tracking-tighter text-white">{price.toLocaleString('nl-NL')}</span>
+          <span className="text-xs font-black text-white/80">{symbol}</span>
+          <span className="text-5xl md:text-6xl font-black tracking-tighter text-white">{priceText}</span>
           <span className="text-sm text-white/80">/maand</span>
         </div>
         <button onClick={onCta} data-testid={`${testid}-cta`}
@@ -519,8 +524,8 @@ function PricingCard({ name, price, desc, features, cta, onCta, featured, testid
       <h3 className="text-xl md:text-2xl font-black tracking-tight text-slate-900">{name}</h3>
       <p className="text-sm text-slate-600 mt-1.5">{desc}</p>
       <div className="mt-6 mb-7 flex items-baseline gap-1.5">
-        <span className="text-xs font-bold text-slate-400">SRD</span>
-        <span className="text-5xl md:text-6xl font-black tracking-tighter text-slate-900">{price.toLocaleString('nl-NL')}</span>
+        <span className="text-xs font-bold text-slate-400">{symbol}</span>
+        <span className="text-5xl md:text-6xl font-black tracking-tighter text-slate-900">{priceText}</span>
         <span className="text-sm text-slate-500">/maand</span>
       </div>
       <button onClick={onCta} data-testid={`${testid}-cta`}
@@ -541,13 +546,36 @@ function PricingCard({ name, price, desc, features, cta, onCta, featured, testid
   );
 }
 
+const CURRENCY_KEY = 'preferred_currency';
+
 function PricingSection({ onLogin }) {
+  const [currency, setCurrency] = useState(() => {
+    try { return (localStorage.getItem(CURRENCY_KEY) || 'SRD').toUpperCase(); }
+    catch { return 'SRD'; }
+  });
+  const [plans, setPlans] = useState(null);
+
+  useEffect(() => {
+    try { localStorage.setItem(CURRENCY_KEY, currency); } catch (e) {
+      /* localStorage unavailable in some PWA modes */
+    }
+    const apiBase = (process.env.REACT_APP_BACKEND_URL || '').replace(/\/$/, '');
+    fetch(`${apiBase}/api/billing/plans?currency=${currency}`)
+      .then((r) => r.json())
+      .then((data) => setPlans(Array.isArray(data) ? data : null))
+      .catch(() => setPlans(null));
+  }, [currency]);
+
+  const planById = (id) => plans?.find((p) => p.id === id);
+  const starter = planById('starter');
+  const pro = planById('professional');
+
   return (
     <section id="pricing" className="relative py-24 md:py-32 bg-[#FFF7F0] overflow-hidden">
       <div className="absolute -top-20 left-1/2 -translate-x-1/2 w-[900px] h-[500px] bg-[radial-gradient(ellipse_at_center,rgba(255,92,0,0.15),transparent_60%)] pointer-events-none" />
       <Noise opacity={0.15} />
       <div className="relative max-w-6xl mx-auto px-5 sm:px-8">
-        <div className="max-w-2xl mx-auto text-center mb-14 md:mb-20">
+        <div className="max-w-2xl mx-auto text-center mb-10 md:mb-14">
           <p className="text-xs md:text-sm font-black uppercase tracking-[0.2em] text-[#FF5C00] mb-4">Prijzen</p>
           <h2 className="text-3xl md:text-4xl lg:text-5xl font-black tracking-tight leading-tight text-slate-900 mb-5">
             Eén prijs, <span className="text-slate-400">geen verrassingen.</span>
@@ -556,9 +584,44 @@ function PricingSection({ onLogin }) {
             Maandelijks opzegbaar. Geen setup-kosten. Geen verborgen fees.
           </p>
         </div>
+
+        <div className="flex items-center justify-center mb-10 md:mb-14">
+          <div className="inline-flex items-center bg-white border-2 border-orange-100 rounded-full p-1 shadow-[0_8px_20px_-6px_rgba(255,92,0,0.15)]" data-testid="currency-toggle">
+            {[
+              { code: 'SRD', label: 'SRD', flag: '🇸🇷' },
+              { code: 'EUR', label: 'EUR', flag: '🇳🇱' },
+            ].map((opt) => (
+              <button key={opt.code} type="button" onClick={() => setCurrency(opt.code)}
+                data-testid={`currency-${opt.code.toLowerCase()}`}
+                className={`relative px-5 sm:px-6 py-2.5 rounded-full text-sm font-black transition-all ${
+                  currency === opt.code ? 'bg-[#FF5C00] text-white shadow-lg shadow-orange-500/30' : 'text-slate-500 hover:text-slate-900'
+                }`}>
+                <span className="mr-1.5">{opt.flag}</span>{opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <div className="grid md:grid-cols-2 gap-6 md:gap-8">
-          <PricingCard name="Starter" price={3000} desc="Voor kleinere vastgoedbeheerders." features={STARTER} cta="Start met Starter" onCta={onLogin} testid="pricing-starter" />
-          <PricingCard name="Professional" price={5000} desc="Met Kiosk terminal en alle functies." features={PRO} cta="Start met Professional" onCta={onLogin} featured testid="pricing-professional" />
+          <PricingCard
+            name="Starter"
+            price={starter?.amount ?? 3000}
+            currency={starter?.currency || currency}
+            desc="Voor kleinere vastgoedbeheerders."
+            features={STARTER}
+            cta="Start met Starter"
+            onCta={onLogin}
+            testid="pricing-starter" />
+          <PricingCard
+            name="Professional"
+            price={pro?.amount ?? 5000}
+            currency={pro?.currency || currency}
+            desc="Met Kiosk terminal en alle functies."
+            features={PRO}
+            cta="Start met Professional"
+            onCta={onLogin}
+            featured
+            testid="pricing-professional" />
         </div>
       </div>
     </section>

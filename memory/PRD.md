@@ -226,6 +226,12 @@ User koos voor **Optie C — minimale herbouw** (kern eerst), dan vroeg om **Fas
 - ✅ **Frontend**: MijnAbonnement & LoginPage tonen `€75,00` voor EUR-klanten, `SRD 3.000` voor SR-klanten. PlanCards en register-flow herladen plans wanneer telefoonnummer verandert.
 - ✅ Tested via curl + Playwright: NL test-bedrijf ziet alleen SumUp €125,00, geen bank, plans in EUR. SR-bedrijf ziet alleen Mope, bank-box, plans in SRD.
 
+### Expliciete valuta-controle: landing SRD/EUR toggle + landenkeuze bij registratie (2026-05-22) ✅
+- ✅ **Marketing landing**: nieuwe `🇸🇷 SRD / 🇳🇱 EUR` pill-toggle in de Prijzen-sectie. Prijzen worden dynamisch herladen via `/api/billing/plans?currency=...`. Keuze persisteert in `localStorage.preferred_currency`.
+- ✅ **Registratiepagina**: nieuwe `Land & valuta` sectie met drie tegels (Suriname SRD / Nederland EUR / Anders SRD). Pre-selectie via localStorage van de landing-toggle. Plan-prijzen verversen direct bij wisselen tussen tegels.
+- ✅ **Backend**: `RegisterIn.country` (`SR`/`NL`/`OTHER`) overschrijft de phone-based detectie. `/billing/plans` accepteert nu zowel `?currency=` (expliciet) als `?phone=` (auto). Tested: SR-telefoon (+597) met `country=NL` → bedrijf krijgt `currency=EUR`. NL-telefoon zonder country override blijft EUR.
+- ✅ Klanten met een SR-nummer in NL of vice versa kunnen nu expliciet hun valuta kiezen — flexibiliteit toegevoegd zonder de automatische detectie te breken.
+
 ## Prioritized Backlog (Fases E-F)
 - 📧 **Email notificaties** — wacht op SendGrid / Resend credentials van user
 - 📱 **WhatsApp/SMS herinneringen** — wacht op Twilio credentials

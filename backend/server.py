@@ -210,6 +210,7 @@ class RegisterIn(BaseModel):
     telefoon: Optional[str] = ""
     plan: Optional[Literal["starter", "professional"]] = "starter"
     kiosk_pin: Optional[str] = None  # 4 digits — set the kiosk PIN at registration
+    country: Optional[Literal["SR", "NL", "OTHER"]] = None  # Explicit override; falls back to phone-based detection
 
 
 class LoginIn(BaseModel):
@@ -620,7 +621,15 @@ async def register(body: RegisterIn, response: Response):
             i += 1
         now = now_utc()
         trial_end = now + timedelta(days=14)
-        country, currency = _detect_country_currency(body.telefoon)
+        # Explicit country choice overrides phone-based detection
+        if body.country == "NL":
+            country, currency = "NL", "EUR"
+        elif body.country == "SR":
+            country, currency = "SR", "SRD"
+        elif body.country == "OTHER":
+            country, currency = "OTHER", "SRD"
+        else:
+            country, currency = _detect_country_currency(body.telefoon)
         c = {
             "id": new_id(),
             "name": body.company_name.strip(),
@@ -786,20 +795,20 @@ PLAN_PRICES = {
 
 
 @api.get("/billing/plans")
-async def list_plans(phone: Optional[str] = None):
+async def list_plans(phone: Optional[str] = None, currency: Optional[str] = None):
     """Public plan catalog — used by landing + registration flow.
-    If a phone number is provided, prices are returned in the matching currency
-    (NL: EUR, default: SRD)."""
-    if phone:
-        country, currency = _detect_country_currency(phone)
-        if currency == "EUR":
-            fx = await _get_eur_per_srd()
-            out = []
-            for k, v in PLAN_PRICES.items():
-                eur_amount = _convert_to_eur(v["amount"], v["currency"], fx["rate"])
-                out.append({"id": k, **v, "amount": eur_amount, "currency": "EUR",
-                            "original_amount": v["amount"], "original_currency": "SRD"})
-            return out
+    Currency resolution: explicit ?currency=EUR/SRD > ?phone=... auto-detect > SRD default."""
+    want = (currency or "").upper()
+    if not want and phone:
+        _, want = _detect_country_currency(phone)
+    if want == "EUR":
+        fx = await _get_eur_per_srd()
+        out = []
+        for k, v in PLAN_PRICES.items():
+            eur_amount = _convert_to_eur(v["amount"], v["currency"], fx["rate"])
+            out.append({"id": k, **v, "amount": eur_amount, "currency": "EUR",
+                        "original_amount": v["amount"], "original_currency": "SRD"})
+        return out
     return [{"id": k, **v} for k, v in PLAN_PRICES.items()]
 
 
