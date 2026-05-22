@@ -584,6 +584,22 @@ def _slugify(name: str) -> str:
     return s[:40] or "bedrijf"
 
 
+def _detect_country_currency(phone: str) -> tuple:
+    """Detect (country, currency) from international phone prefix.
+    NL (+31 / 0031) → EUR; everything else falls back to Suriname / SRD."""
+    cleaned = (phone or "").strip()
+    # Strip everything except digits and leading +
+    digits_plus = ""
+    for i, ch in enumerate(cleaned):
+        if ch == "+" and i == 0:
+            digits_plus += ch
+        elif ch.isdigit():
+            digits_plus += ch
+    if digits_plus.startswith("+31") or digits_plus.startswith("0031") or digits_plus.startswith("31") and len(digits_plus) >= 10:
+        return "NL", "EUR"
+    return "SR", "SRD"
+
+
 @api.post("/auth/register")
 async def register(body: RegisterIn, response: Response):
     email = body.email.lower().strip()
@@ -604,6 +620,7 @@ async def register(body: RegisterIn, response: Response):
             i += 1
         now = now_utc()
         trial_end = now + timedelta(days=14)
+        country, currency = _detect_country_currency(body.telefoon)
         c = {
             "id": new_id(),
             "name": body.company_name.strip(),
@@ -614,6 +631,8 @@ async def register(body: RegisterIn, response: Response):
             "trial_ends_at": iso(trial_end),
             "telefoon": (body.telefoon or "").strip(),
             "owner_email": email,
+            "country": country,
+            "currency": currency,
             "created_at": iso(now),
         }
         await db.companies.insert_one(c)
@@ -767,8 +786,20 @@ PLAN_PRICES = {
 
 
 @api.get("/billing/plans")
-async def list_plans():
-    """Public plan catalog — used by landing + registration flow."""
+async def list_plans(phone: Optional[str] = None):
+    """Public plan catalog — used by landing + registration flow.
+    If a phone number is provided, prices are returned in the matching currency
+    (NL: EUR, default: SRD)."""
+    if phone:
+        country, currency = _detect_country_currency(phone)
+        if currency == "EUR":
+            fx = await _get_eur_per_srd()
+            out = []
+            for k, v in PLAN_PRICES.items():
+                eur_amount = _convert_to_eur(v["amount"], v["currency"], fx["rate"])
+                out.append({"id": k, **v, "amount": eur_amount, "currency": "EUR",
+                            "original_amount": v["amount"], "original_currency": "SRD"})
+            return out
     return [{"id": k, **v} for k, v in PLAN_PRICES.items()]
 
 
@@ -780,7 +811,7 @@ async def billing_me(user=Depends(get_current_user)):
         return {"status": "none"}
     c = await db.companies.find_one({"id": cid}, {"_id": 0}) or {}
     plan_id = c.get("plan", "starter")
-    plan = PLAN_PRICES.get(plan_id, PLAN_PRICES["starter"])
+    plan = await _plan_for_company(plan_id, c)
     status = c.get("billing_status", "active")
     days_left = None
     trial_ends = c.get("trial_ends_at")
@@ -795,7 +826,7 @@ async def billing_me(user=Depends(get_current_user)):
         status = "expired"
 
     pending_plan_id = c.get("pending_plan")
-    pending_plan = PLAN_PRICES.get(pending_plan_id) if pending_plan_id else None
+    pending_plan = (await _plan_for_company(pending_plan_id, c)) if pending_plan_id else None
     pending_invoice = None
     if c.get("pending_invoice_id"):
         pending_invoice = await db.subscription_invoices.find_one(
@@ -810,11 +841,24 @@ async def billing_me(user=Depends(get_current_user)):
         "days_left": days_left,
         "monthly_amount": plan["amount"],
         "currency": plan["currency"],
+        "country": c.get("country"),
         "pending_plan_id": pending_plan_id,
         "pending_plan": pending_plan,
         "pending_invoice": pending_invoice,
         "renews_at": c.get("subscription_renews_at"),
     }
+
+
+@api.get("/billing/me/plans")
+async def billing_me_plans(user=Depends(get_current_user)):
+    """Plans in the current company's display currency (SRD for SR, EUR for NL)."""
+    cid = company_id_of(user)
+    c = await db.companies.find_one({"id": cid}, {"_id": 0}) if cid else {}
+    out = []
+    for pid in PLAN_PRICES.keys():
+        p = await _plan_for_company(pid, c or {})
+        out.append({"id": pid, **p})
+    return out
 
 
 class ChangePlanIn(BaseModel):
@@ -839,7 +883,7 @@ async def change_plan(body: ChangePlanIn, user=Depends(get_current_user)):
     if new_plan == old and not c.get("pending_plan"):
         return {"ok": True, "plan": new_plan, "effective": "already_active"}
 
-    new_price = PLAN_PRICES.get(new_plan, PLAN_PRICES["starter"])
+    new_price = await _plan_for_company(new_plan, c)
     now = now_utc()
 
     # Create an open invoice for the new plan (customer must pay this to activate)
@@ -874,7 +918,7 @@ async def change_plan(body: ChangePlanIn, user=Depends(get_current_user)):
     return {
         "ok": True, "plan": old, "pending_plan": new_plan, "invoice": inv,
         "effective": "after_payment",
-        "message": f"Maak {new_price['currency']} {int(new_price['amount']):,} over om over te stappen naar {new_price['name']}.".replace(",", "."),
+        "message": f"Maak {new_price['currency']} {new_price['amount']:,} over om over te stappen naar {new_price['name']}.".replace(",", "."),
     }
 
 
@@ -996,6 +1040,26 @@ def _convert_to_eur(amount: float, currency: str, rate_eur_per_srd: float) -> fl
     return 0.0
 
 
+def _company_display_currency(c: dict) -> str:
+    """Returns the currency the company should see prices in."""
+    return ((c or {}).get("currency") or "SRD").upper()
+
+
+async def _plan_for_company(plan_id: str, c: dict) -> dict:
+    """Return plan dict with amount converted to company's display currency."""
+    base = PLAN_PRICES.get(plan_id, PLAN_PRICES["starter"])
+    target = _company_display_currency(c)
+    if target == base["currency"]:
+        return {**base}
+    if target == "EUR" and base["currency"] == "SRD":
+        fx = await _get_eur_per_srd()
+        eur_amount = _convert_to_eur(base["amount"], "SRD", fx["rate"])
+        return {**base, "amount": eur_amount, "currency": "EUR",
+                "original_amount": base["amount"], "original_currency": "SRD",
+                "eur_per_srd": fx["rate"], "fx_source": fx["source"]}
+    return {**base}
+
+
 @api.get("/billing/fx")
 async def billing_fx():
     """Public FX info — used by frontend to show EUR equivalent for SRD invoices."""
@@ -1019,31 +1083,41 @@ def _api_base_url() -> str:
 @api.get("/billing/me/checkout-options")
 async def billing_me_checkout_options(user=Depends(get_current_user)):
     """Returns which gateways are configured for SaaS subscription payments,
-    plus the EUR equivalent of the company's monthly amount."""
+    plus the amount in the company's display currency.
+    Gateways are filtered by display currency:
+      - SRD companies: Mope only (SRD)
+      - EUR companies: SumUp only (EUR)
+    """
     cid = company_id_of(user)
     if not cid:
         raise HTTPException(status_code=400, detail="Geen actief bedrijf")
     c = await db.companies.find_one({"id": cid}, {"_id": 0}) or {}
-    plan = PLAN_PRICES.get(c.get("plan", "starter"), PLAN_PRICES["starter"])
+    plan = await _plan_for_company(c.get("plan", "starter"), c)
+    display_currency = _company_display_currency(c)
     fx = await _get_eur_per_srd()
     doc = await _saas_settings_doc()
     mope = doc.get("mope") or {}
     sumup = doc.get("sumup") or {}
-    eur_amount = _convert_to_eur(plan["amount"], plan["currency"], fx["rate"])
+    mope_creds_ok = bool(mope.get("enabled")) and bool((mope.get("api_key") or "").strip())
+    sumup_creds_ok = (bool(sumup.get("enabled"))
+                      and bool((sumup.get("api_key") or "").strip())
+                      and bool((sumup.get("merchant_code") or "").strip()))
     return {
         "amount": plan["amount"],
         "currency": plan["currency"],
-        "eur_amount": eur_amount,
+        "display_currency": display_currency,
+        "country": c.get("country"),
+        "eur_amount": plan["amount"] if display_currency == "EUR" else _convert_to_eur(plan["amount"], plan["currency"], fx["rate"]),
         "eur_per_srd": fx["rate"],
         "fx_source": fx["source"],
         "mope": {
-            "enabled": bool(mope.get("enabled")) and bool((mope.get("api_key") or "").strip()),
+            "enabled": mope_creds_ok and display_currency == "SRD",
             "test_mode": bool(mope.get("test_mode", True)),
         },
         "sumup": {
-            "enabled": bool(sumup.get("enabled")) and bool((sumup.get("api_key") or "").strip()) and bool((sumup.get("merchant_code") or "").strip()),
+            "enabled": sumup_creds_ok and display_currency == "EUR",
             "test_mode": bool(sumup.get("test_mode", True)),
-            "eur_amount": eur_amount,
+            "eur_amount": plan["amount"] if display_currency == "EUR" else _convert_to_eur(plan["amount"], plan["currency"], fx["rate"]),
         },
     }
 
@@ -1055,7 +1129,8 @@ class SaasCheckoutIn(BaseModel):
 
 async def _ensure_open_invoice_for_company(c: dict, user_email: str) -> dict:
     """Find an open invoice for this company; if none, create one for the current plan
-    (so a customer in trial / expired state can pay even before any invoice was issued)."""
+    (so a customer in trial / expired state can pay even before any invoice was issued).
+    Invoice is denominated in the company's display currency (SRD for SR, EUR for NL)."""
     cid = c["id"]
     inv = await db.subscription_invoices.find_one(
         {"company_id": cid, "status": {"$ne": "paid"}},
@@ -1064,7 +1139,7 @@ async def _ensure_open_invoice_for_company(c: dict, user_email: str) -> dict:
     if inv:
         return inv
     plan_id = c.get("plan", "starter")
-    plan = PLAN_PRICES.get(plan_id, PLAN_PRICES["starter"])
+    plan = await _plan_for_company(plan_id, c)
     now = now_utc()
     inv = {
         "id": new_id(),

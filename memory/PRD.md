@@ -218,6 +218,14 @@ User koos voor **Optie C — minimale herbouw** (kern eerst), dan vroeg om **Fas
 - ✅ **Mijn Abonnement UI**: nieuwe donkere "Direct online betalen" sectie boven bankgegevens met groene Mope-knop en blauwe SumUp-knop. Knoppen zijn alleen zichtbaar als gateway enabled + credentials aanwezig zijn. Wisselkoersregel toont bron (live/cache/manual).
 - ✅ Tested via Playwright: beide knoppen visible bij admin@vastgoed.sr met juiste bedragen, SaaS Settings secties operationeel, webhook URL automatisch afgeleid van window.location.origin.
 
+### Country-aware currency display (NL→EUR, SR→SRD) (2026-05-22) ✅
+- ✅ **Backend**: nieuwe helper `_detect_country_currency(phone)` — `+31`/`0031` → NL/EUR, default → SR/SRD. Registratie zet `country` + `currency` op de company.
+- ✅ Plan-pricing helper `_plan_for_company()` converteert SRD-prijzen on-the-fly naar EUR via FX-koers voor NL bedrijven. Nieuwe endpoints: `/api/billing/me/plans` (auth, gefilterd op display_currency), `/api/billing/plans?phone=...` (publiek, voor registratiepagina).
+- ✅ `/billing/me/checkout-options` filtert gateways op currency: NL → alleen SumUp, SR → alleen Mope. Bank-box wordt verborgen voor EUR-klanten.
+- ✅ Invoice-aanmaak (`change_plan`, `_ensure_open_invoice_for_company`) gebruikt nu de display currency van het bedrijf — NL bedrijf krijgt EUR-facturen, SR bedrijf SRD-facturen.
+- ✅ **Frontend**: MijnAbonnement & LoginPage tonen `€75,00` voor EUR-klanten, `SRD 3.000` voor SR-klanten. PlanCards en register-flow herladen plans wanneer telefoonnummer verandert.
+- ✅ Tested via curl + Playwright: NL test-bedrijf ziet alleen SumUp €125,00, geen bank, plans in EUR. SR-bedrijf ziet alleen Mope, bank-box, plans in SRD.
+
 ## Prioritized Backlog (Fases E-F)
 - 📧 **Email notificaties** — wacht op SendGrid / Resend credentials van user
 - 📱 **WhatsApp/SMS herinneringen** — wacht op Twilio credentials

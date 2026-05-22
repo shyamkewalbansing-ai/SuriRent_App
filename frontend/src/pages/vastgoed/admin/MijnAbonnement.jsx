@@ -5,7 +5,13 @@ import {
 } from 'lucide-react';
 import { api, formatError } from '../../../lib/api';
 
-const fmt = (n, c = 'SRD') => `${c} ${Number(n || 0).toLocaleString('nl-NL')}`;
+const fmt = (n, c = 'SRD') => {
+  const cur = (c || 'SRD').toUpperCase();
+  if (cur === 'EUR') {
+    return `€${Number(n || 0).toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  }
+  return `${cur} ${Number(n || 0).toLocaleString('nl-NL')}`;
+};
 const fmtDate = (s) => s ? new Date(s).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
 
 const STATUS = {
@@ -27,7 +33,9 @@ function PlanCard({ plan, currentPlanId, onSelect, busy }) {
       <h3 className="text-xl font-extrabold text-slate-900">{plan.name}</h3>
       <p className="text-sm text-slate-500 mt-0.5">{plan.description}</p>
       <p className="text-3xl font-extrabold text-slate-900 mt-4">
-        {plan.currency} {Number(plan.amount).toLocaleString('nl-NL')}
+        {(plan.currency || 'SRD').toUpperCase() === 'EUR'
+          ? `€${Number(plan.amount).toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+          : `${plan.currency} ${Number(plan.amount).toLocaleString('nl-NL')}`}
         <span className="text-xs font-medium text-slate-400 ml-1">/maand</span>
       </p>
       <ul className="mt-4 space-y-1.5 flex-1">
@@ -73,6 +81,9 @@ function OnlinePayBox({ options, openInvoice, onErr }) {
     }
   };
 
+  // Layout: 1 button = full width, 2 = grid
+  const single = (mopeEnabled && !sumupEnabled) || (!mopeEnabled && sumupEnabled);
+
   return (
     <div className="rounded-2xl bg-gradient-to-br from-slate-900 to-slate-800 text-white p-5" data-testid="online-pay-box">
       <div className="flex items-center gap-2 mb-3">
@@ -82,10 +93,10 @@ function OnlinePayBox({ options, openInvoice, onErr }) {
       <p className="text-xs text-white/70 mb-4">
         Geen wachtkamer, abonnement is direct geactiveerd na betaling.
       </p>
-      <div className="grid sm:grid-cols-2 gap-3">
+      <div className={single ? '' : 'grid sm:grid-cols-2 gap-3'}>
         {mopeEnabled && (
           <button onClick={() => pay('mope')} disabled={!!busy} data-testid="pay-with-mope"
-            className="h-14 rounded-xl bg-emerald-500 hover:bg-emerald-400 transition text-white font-extrabold flex items-center justify-center gap-2 disabled:opacity-50">
+            className="w-full h-14 rounded-xl bg-emerald-500 hover:bg-emerald-400 transition text-white font-extrabold flex items-center justify-center gap-2 disabled:opacity-50">
             {busy === 'mope' ? <Loader2 className="w-5 h-5 animate-spin" /> : <CreditCard className="w-5 h-5" />}
             <span>Betaal met Mope</span>
             <span className="text-xs opacity-80">· SRD {Number(options.amount).toLocaleString('nl-NL')}</span>
@@ -93,16 +104,16 @@ function OnlinePayBox({ options, openInvoice, onErr }) {
         )}
         {sumupEnabled && (
           <button onClick={() => pay('sumup')} disabled={!!busy} data-testid="pay-with-sumup"
-            className="h-14 rounded-xl bg-sky-500 hover:bg-sky-400 transition text-white font-extrabold flex items-center justify-center gap-2 disabled:opacity-50">
+            className="w-full h-14 rounded-xl bg-sky-500 hover:bg-sky-400 transition text-white font-extrabold flex items-center justify-center gap-2 disabled:opacity-50">
             {busy === 'sumup' ? <Loader2 className="w-5 h-5 animate-spin" /> : <Euro className="w-5 h-5" />}
             <span>Betaal met SumUp</span>
             <span className="text-xs opacity-80">· €{Number(options.sumup.eur_amount).toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
           </button>
         )}
       </div>
-      {sumupEnabled && options.eur_per_srd > 0 && options.currency === 'SRD' && (
+      {sumupEnabled && options.display_currency === 'EUR' && options.currency !== 'EUR' && options.eur_per_srd > 0 && (
         <p className="text-[11px] text-white/50 mt-3">
-          Wisselkoers: 1 SRD = €{Number(options.eur_per_srd).toFixed(4)} ({options.fx_source === 'live' || options.fx_source === 'cache' ? 'live' : options.fx_source})
+          Wisselkoers: 1 SRD = €{Number(options.eur_per_srd).toFixed(4)} ({options.fx_source})
         </p>
       )}
     </div>
@@ -174,7 +185,7 @@ export default function MijnAbonnement() {
     try {
       const [m, p, b, inv, pay, opt] = await Promise.all([
         api.get('/billing/me'),
-        api.get('/billing/plans'),
+        api.get('/billing/me/plans'),
         api.get('/billing/bank-details'),
         api.get('/billing/me/invoices'),
         api.get('/billing/me/payments'),
@@ -273,7 +284,9 @@ export default function MijnAbonnement() {
       {(me.status === 'trial' || me.status === 'expired' || openInvoices.length > 0) && (
         <>
           <OnlinePayBox options={checkoutOptions} openInvoice={openInvoices[0]} onErr={setErr} />
-          {bank && <BankBox details={bank} invoice={openInvoices[0]} company="UW BEDRIJF" />}
+          {bank && (me.currency || 'SRD') === 'SRD' && (
+            <BankBox details={bank} invoice={openInvoices[0]} company="UW BEDRIJF" />
+          )}
         </>
       )}
 

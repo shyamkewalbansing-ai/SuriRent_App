@@ -166,9 +166,10 @@ function PasswordView({ initialMode = 'login', onBack, onRegistered }) {
 
   useEffect(() => {
     if (mode !== 'register') return;
-    api.get('/billing/plans').then((r) => setPlans(r.data)).catch(() => setPlans([]));
+    const params = telefoon ? `?phone=${encodeURIComponent(telefoon)}` : '';
+    api.get(`/billing/plans${params}`).then((r) => setPlans(r.data)).catch(() => setPlans([]));
     api.get('/billing/bank-details').then((r) => setBankDetails(r.data)).catch(() => setBankDetails(null));
-  }, [mode]);
+  }, [mode, telefoon]);
 
   const submit = async (e) => {
     e?.preventDefault();
@@ -254,7 +255,9 @@ function PasswordView({ initialMode = 'login', onBack, onRegistered }) {
                           </div>
                           <p className="text-xs text-slate-500 mb-2 leading-snug">{p.description}</p>
                           <p className={`text-xl font-extrabold ${sel ? 'text-[#FF5C00]' : 'text-slate-900'}`}>
-                            {p.currency} {Number(p.amount).toLocaleString('nl-NL')}
+                            {(p.currency || 'SRD').toUpperCase() === 'EUR'
+                              ? `€${Number(p.amount).toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                              : `${p.currency} ${Number(p.amount).toLocaleString('nl-NL')}`}
                             <span className="text-xs font-medium text-slate-400 ml-1">/maand</span>
                           </p>
                           <ul className="mt-2 space-y-0.5 text-[11px] text-slate-500">
