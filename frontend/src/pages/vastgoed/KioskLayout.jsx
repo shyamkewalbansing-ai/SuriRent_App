@@ -55,66 +55,6 @@ function MobileHeaderButtons({ onAdmin, onExit }) {
 }
 
 // =====================================================================
-// Welcome
-// =====================================================================
-function Welcome({ company, onStart, onAdmin, onExit }) {
-  return (
-    <div className="h-full bg-orange-500 flex flex-col" style={{ padding: '1.5vh 1.5vw 0' }}>
-      <div className="flex items-center justify-between gap-2" style={{ minHeight: '7vh' }}>
-        <div className="flex items-center gap-2 text-white min-w-0">
-          <Building2 className="w-5 h-5 shrink-0" />
-          <span className="text-sm sm:text-base font-semibold truncate">{company?.name || 'Kiosk'}</span>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          {onAdmin && (
-            <button onClick={onAdmin} data-testid="welcome-admin-btn"
-              className="flex items-center gap-1.5 text-white font-bold bg-white/20 active:bg-white/30 hover:bg-white/25 rounded-xl px-3.5 py-2.5 sm:px-4 sm:py-2 min-h-[44px]">
-              <SettingsIcon className="w-4 h-4 sm:w-4 sm:h-4" />
-              <span className="text-sm font-bold">Beheerder</span>
-            </button>
-          )}
-          <button onClick={onExit} data-testid="welcome-exit-btn"
-            className="flex items-center gap-1.5 text-white font-bold bg-white/20 active:bg-white/30 hover:bg-white/25 rounded-xl px-3.5 py-2.5 sm:px-4 sm:py-2 min-h-[44px]">
-            <LogOut className="w-4 h-4" />
-            <span className="text-sm font-bold">Uit</span>
-          </button>
-        </div>
-      </div>
-
-      <div className="flex-1 flex min-h-0" style={{ paddingBottom: '1.5vh' }}>
-        <div className="flex-1 bg-white rounded-2xl flex flex-col items-center justify-center text-center px-6 py-10">
-          <div className="w-24 h-24 rounded-3xl bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center shadow-xl shadow-orange-500/40 p-4 mb-5">
-            <img src="/kiosk-icons/kiosk-512.png" alt="Kiosk" className="w-full h-full object-contain" />
-          </div>
-          <h1 className="text-4xl sm:text-5xl font-extrabold text-slate-900 tracking-tight mb-2">Welkom</h1>
-          <p className="text-base text-slate-400 mb-8">Betaal uw huur, servicekosten en meer</p>
-          <button onClick={onStart} data-testid="kiosk-start-btn"
-            className="bg-orange-500 hover:bg-orange-600 text-white text-lg sm:text-xl font-bold rounded-xl flex items-center gap-3 active:scale-[0.98] transition px-12 py-4 mb-10">
-            Start <ArrowRight className="w-6 h-6" />
-          </button>
-          <p className="text-xs uppercase tracking-widest font-bold text-slate-400 mb-3">Beschikbare diensten</p>
-          <div className="flex gap-3 sm:gap-5 justify-center flex-wrap">
-            {[
-              { icon: Banknote, label: 'Maandhuur' },
-              { icon: Droplets, label: 'Servicekosten' },
-              { icon: Wifi, label: 'Internet' },
-              { icon: Receipt, label: 'Boetes' },
-            ].map((s) => (
-              <div key={s.label} className="bg-slate-50 rounded-xl px-4 py-3 flex flex-col items-center">
-                <div className="w-9 h-9 rounded-lg bg-orange-100 flex items-center justify-center mb-1.5">
-                  <s.icon className="w-4 h-4 text-orange-500" />
-                </div>
-                <p className="text-xs font-bold text-slate-700">{s.label}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// =====================================================================
 // Apartment select (with optional inline location picker when ≥2 locations)
 // =====================================================================
 function ApartmentSelect({ onSelect, onAdmin, onExit }) {
@@ -864,7 +804,7 @@ export default function KioskLayout() {
     const tok = localStorage.getItem('kiosk_token');
     if (!tok) { navigate('/login', { replace: true }); return; }
     setCompany(getKioskCompany());
-    setStep('welcome');
+    setStep('select');
   }, [navigate]);
 
   // Tijdens kiosk-modus moet body/root in PWA standalone ORANJE zijn (zodat
@@ -909,10 +849,10 @@ export default function KioskLayout() {
 
   const reset = () => {
     setApartment(null); setOverview(null); setPaymentPayload(null); setPaymentResult(null);
-    setStep('welcome');
+    setStep('select');
   };
 
-  const showDesktopBar = step !== 'check' && step !== 'welcome';
+  const showDesktopBar = step !== 'check';
 
   return (
     <div className="kiosk-fullscreen bg-orange-500" data-testid="kiosk-root">
@@ -926,9 +866,6 @@ export default function KioskLayout() {
             <div className="h-full bg-orange-500 flex items-center justify-center">
               <Loader2 className="w-10 h-10 text-white animate-spin" />
             </div>
-          )}
-          {step === 'welcome' && (
-            <Welcome company={company} onStart={() => setStep('select')} onAdmin={adminMode} onExit={exit} />
           )}
           {step === 'select' && (
             <ApartmentSelect onSelect={(a) => { setApartment(a); setStep('overview'); }}
