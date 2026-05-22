@@ -863,7 +863,21 @@ export default function KioskLayout() {
     navigate('/login', { replace: true });
   }, [navigate]);
 
-  const adminMode = useCallback(() => navigate('/login?view=admin', { replace: true }), [navigate]);
+  // "Beheerder" knop in de kiosk: als de PIN-login een admin-token heeft
+  // afgegeven (PIN is shared secret van het bedrijf), spring direct naar
+  // /admin. We doen een hard navigation zodat AuthProvider zijn /auth/me
+  // opnieuw uitvoert met het nieuwe admin_token (en niet de oude user=null
+  // state uit de cache van vóór de PIN-login). Anders terug naar /login in
+  // admin-modus zodat de gebruiker met wachtwoord kan inloggen.
+  const adminMode = useCallback(() => {
+    let hasAdminToken = false;
+    try { hasAdminToken = !!localStorage.getItem('admin_token'); } catch { /* ignore */ }
+    if (hasAdminToken) {
+      window.location.assign('/admin');
+    } else {
+      navigate('/login?view=admin', { replace: true });
+    }
+  }, [navigate]);
 
   const reset = () => {
     setApartment(null); setOverview(null); setPaymentPayload(null); setPaymentResult(null);

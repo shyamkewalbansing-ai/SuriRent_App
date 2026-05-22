@@ -287,9 +287,9 @@ User koos voor **Optie C — minimale herbouw** (kern eerst), dan vroeg om **Fas
 - ✅ **Verwijderd**: `PwaRoleBadge` (zowel "Modus: …" als "Bedrijf: …" badge) — niet meer zichtbaar op de login-pagina; PWA role-memory blijft intern werken via `pwaRole.js`.
 - ✅ **PIN-pagina past op kleine telefoons** zonder scroll: container is nu `h-[100dvh] flex-col overflow-hidden`, paddings/marges, logo (14×14→20×20), PIN-slots (11×12→14×16), keypad-knoppen (h-10→h-14) en footer afgeslankt. "Standaard PIN: 1234" hint weggehaald. Document height = viewport height = 1080 op iPhone-SE viewport (no scroll).
 - ✅ **`LoginPage` accepteert nu `?view=admin` / `?view=register`** query parameters om direct in de Beheerder-Login of Register-modus te openen.
-- ✅ **Kiosk → "Beheerder"** navigeert nu naar `/login?view=admin` (i.p.v. naar de PIN-keypad) — gebruiker landt direct in het Beheerder-Loginformulier zonder eerst opnieuw door PIN heen te moeten. Bug "klik Beheer brengt me niet naar dashboard" opgelost.
+- ✅ **Kiosk → "Beheerder" gaat nu direct naar `/admin`**: backend endpoint `/api/auth/kiosk-pin` retourneert nu ook een `admin_token` + `admin_user` (PIN is de gedeelde bedrijfs-secret, dus PIN-houder krijgt impliciet admin-toegang tot dat bedrijf). Frontend slaat `admin_token` op tijdens PIN-login; KioskLayout `adminMode` doet `window.location.assign('/admin')` zodat AuthProvider opnieuw `/auth/me` doet met het nieuwe token. Wachtwoord-fallback blijft beschikbaar als er nog geen admin-user is.
 - ✅ **PasswordView header** gebruikt nu ook de company branding (zelfde gradient/logo als PIN-pagina).
-- ✅ E2E getest via Playwright: PIN → Kiosk OK; Kiosk → Beheerder → `/login?view=admin` (auth-form zichtbaar); login → `/admin` dashboard OK.
+- ✅ E2E getest via Playwright: clean state → PIN 1234 → /kiosk (admin_token set) → klik Beheerder → /admin dashboard met sidebar + bedrijf-badge direct zichtbaar.
 
 ## Prioritized Backlog (Fases E-F)
 - 📧 **Email notificaties** — wacht op SendGrid / Resend credentials van user

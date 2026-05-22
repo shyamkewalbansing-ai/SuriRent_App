@@ -62,6 +62,10 @@ function PinLanding({ onSuccess, onPassword, onRegister, branding }) {
       const { data } = await api.post('/auth/kiosk-pin', { pin: code });
       if (data?.token) localStorage.setItem('kiosk_token', data.token);
       if (data?.company) localStorage.setItem('kiosk_company', JSON.stringify(data.company));
+      // PIN is the company's shared secret — backend also returns an admin token
+      // for the company's primary admin so the Kiosk "Beheerder" button can drop
+      // directly into /admin without a second login.
+      if (data?.admin_token) localStorage.setItem('admin_token', data.admin_token);
       setPreferredRole('kiosk');
       onSuccess();
     } catch (e) {

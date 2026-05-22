@@ -2391,7 +2391,14 @@ async def seed_company_admin(cid: str, body: RegisterIn, user=Depends(require_ro
 # Kiosk PIN
 @api.post("/auth/kiosk-pin")
 async def kiosk_pin(body: PinIn, request: Request, response: Response):
-    """Try the PIN against every company. Each company has unique pin."""
+    """Try the PIN against every company. Each company has unique pin.
+
+    Returns both a kiosk_token (short-lived, kiosk-scope) AND an admin access
+    token for the company's primary admin user. The PIN is the company's
+    secret, so anyone who knows it is implicitly trusted to access admin
+    surfaces of that company. This lets the kiosk "Beheerder" button drop
+    the user straight into /admin without a second login.
+    """
     throttle_key = f"kiosk:{_client_ip(request)}"
     _pin_throttle_check(throttle_key)
     pin_docs = await db.kiosk_pins.find({}, {"_id": 0}).to_list(1000)
@@ -2409,7 +2416,36 @@ async def kiosk_pin(body: PinIn, request: Request, response: Response):
         "sub": "kiosk", "type": "kiosk", "company_id": matched_company_id,
     }, KIOSK_TOKEN_MIN)
     _set_access_cookie(response, token, name="kiosk_token", minutes=KIOSK_TOKEN_MIN)
-    return {"token": token, "company": c and {k: c[k] for k in ("id", "slug", "name")}}
+
+    # Find the company's primary admin (oldest admin user for this company),
+    # so we can also hand back an admin access token. Best-effort: if no admin
+    # exists yet (e.g. orphaned company), just return the kiosk token alone.
+    admin_token = None
+    admin_user_out = None
+    if matched_company_id:
+        admin_user = await db.users.find_one(
+            {"company_id": matched_company_id, "role": "admin"},
+            sort=[("created_at", 1)],
+        )
+        if admin_user:
+            admin_token = create_token({
+                "sub": admin_user["id"], "email": admin_user["email"], "type": "access",
+                "company_id": admin_user.get("company_id"), "role": admin_user.get("role", "admin"),
+            }, ACCESS_MIN)
+            admin_user_out = {
+                "id": admin_user["id"],
+                "email": admin_user["email"],
+                "name": admin_user.get("name", ""),
+                "role": admin_user.get("role", "admin"),
+                "company_id": admin_user.get("company_id"),
+                "created_at": admin_user.get("created_at"),
+            }
+    return {
+        "token": token,
+        "company": c and {k: c[k] for k in ("id", "slug", "name")},
+        "admin_token": admin_token,
+        "admin_user": admin_user_out,
+    }
 
 
 @api.post("/auth/kiosk-set-pin")
