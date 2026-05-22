@@ -863,7 +863,7 @@ export default function KioskLayout() {
     navigate('/login', { replace: true });
   }, [navigate]);
 
-  const adminMode = useCallback(() => navigate('/login', { replace: true }), [navigate]);
+  const adminMode = useCallback(() => navigate('/login?view=admin', { replace: true }), [navigate]);
 
   const reset = () => {
     setApartment(null); setOverview(null); setPaymentPayload(null); setPaymentResult(null);
