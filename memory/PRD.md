@@ -259,6 +259,14 @@ User koos voor **Optie C — minimale herbouw** (kern eerst), dan vroeg om **Fas
 - ✅ **Escape route**: `?pick=1` query parameter bypasst de auto-redirect zodat een gebruiker explicit kan kiezen.
 - ✅ End-to-end getest: admin token → /login?source=pwa → /admin redirect; tenant role → /huurder; ?pick=1 toont badge met "Beheerder · Wijzig"; reset clear-t de localStorage.
 
+### Per-bedrijf branding (logo + primaire kleur + naam) (2026-05-22) ✅
+- ✅ **Backend**: company schema uitgebreid met `branding.{app_name, primary_color, logo_url, tagline}` (hex validatie + fallback naar `#FF5C00`). 4 nieuwe endpoints: publiek `GET /api/public/companies/{slug}/branding`, auth `GET /api/companies/me/branding`, `PUT /api/companies/me/branding`, `POST /api/companies/me/branding/upload` (hergebruikt `landing_assets` collection met `scope: company`).
+- ✅ **`lib/branding.js`** helper: detecteert slug via URL `?c=`/`/c/...`, subdomain (`klant.app.surirent.sr`), of localStorage `pwa_company_slug`. Past primary color toe via CSS variable. Cached in localStorage voor instant render bij volgende load.
+- ✅ **LoginPage geheel branding-aware**: header, PIN-kaart, PIN-input borders, en page-achtergrond gebruiken nu de primaire kleur. `CompanyCodePicker` verschijnt wanneer geen branding gedetecteerd → klant tikt eenmalig "surirent" → branding actief. `PwaRoleBadge` uitgebreid met "Bedrijf: X · Wijzig" sectie.
+- ✅ **Admin Branding tab** (`Branding.jsx`): logo upload (max 5MB), preset color swatches + native color picker + hex input, app-naam + tagline veld, deelbare link `…/login?c=slug`, **live preview kaart** rechts toont exact wat klanten zien.
+- ✅ **Fallback**: onbekende slug → standaard SuriRent oranje branding + automatisch picker tonen zodat gebruiker kan corrigeren.
+- ✅ End-to-end getest via Playwright: `/login?c=surirent` met blauwe primary color (#1e88e5) renderde **complete blauwe achtergrond** + header "SuriRent Premium" + PIN-card "Welkom bij SuriRent Premium · Test branding live" + bedrijfs-badge onderaan. Unknown slug en picker-flow werken correct.
+
 ## Prioritized Backlog (Fases E-F)
 - 📧 **Email notificaties** — wacht op SendGrid / Resend credentials van user
 - 📱 **WhatsApp/SMS herinneringen** — wacht op Twilio credentials

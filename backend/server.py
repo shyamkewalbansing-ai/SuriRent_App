@@ -1602,6 +1602,114 @@ async def get_landing_asset(asset_id: str):
 
 
 # =====================================================================
+# Per-company branding (Logo + primary color + display name for PWA/login)
+# =====================================================================
+def _hex_color(v: Optional[str]) -> str:
+    """Validate & normalize a #RRGGBB hex color. Falls back to brand orange."""
+    if not v:
+        return "#FF5C00"
+    s = str(v).strip().lower()
+    if not s.startswith("#"):
+        s = "#" + s
+    if len(s) == 4:  # #abc → #aabbcc
+        s = "#" + "".join(ch * 2 for ch in s[1:])
+    if len(s) != 7:
+        return "#FF5C00"
+    try:
+        int(s[1:], 16)
+        return s
+    except ValueError:
+        return "#FF5C00"
+
+
+def _company_branding_response(c: dict) -> dict:
+    b = (c.get("branding") or {}) if c else {}
+    return {
+        "id": c.get("id"),
+        "slug": c.get("slug"),
+        "name": c.get("name"),
+        "app_name": b.get("app_name") or c.get("name") or "Vastgoed Kiosk",
+        "primary_color": _hex_color(b.get("primary_color")),
+        "logo_url": b.get("logo_url") or "",
+        "tagline": b.get("tagline") or "",
+    }
+
+
+@api.get("/public/companies/{slug}/branding")
+async def public_company_branding(slug: str):
+    """Public — pre-login branding lookup by slug (no auth)."""
+    if not slug or len(slug) > 80:
+        raise HTTPException(status_code=400, detail="Ongeldige slug")
+    c = await db.companies.find_one({"slug": slug.lower()}, {"_id": 0})
+    if not c:
+        raise HTTPException(status_code=404, detail="Bedrijf niet gevonden")
+    return _company_branding_response(c)
+
+
+@api.get("/companies/me/branding")
+async def get_my_branding(user=Depends(get_current_user)):
+    cid = company_id_of(user)
+    if not cid:
+        raise HTTPException(status_code=400, detail="Geen actief bedrijf")
+    c = await db.companies.find_one({"id": cid}, {"_id": 0})
+    if not c:
+        raise HTTPException(status_code=404, detail="Bedrijf niet gevonden")
+    return _company_branding_response(c)
+
+
+class BrandingIn(BaseModel):
+    app_name: Optional[str] = None
+    primary_color: Optional[str] = None
+    logo_url: Optional[str] = None
+    tagline: Optional[str] = None
+
+
+@api.put("/companies/me/branding")
+async def put_my_branding(body: BrandingIn, user=Depends(require_role("admin"))):
+    cid = company_id_of(user)
+    if not cid:
+        raise HTTPException(status_code=400, detail="Geen actief bedrijf")
+    update = {
+        "branding.app_name": (body.app_name or "").strip()[:80],
+        "branding.primary_color": _hex_color(body.primary_color),
+        "branding.logo_url": (body.logo_url or "").strip()[:500],
+        "branding.tagline": (body.tagline or "").strip()[:200],
+        "branding.updated_at": iso(now_utc()),
+        "branding.updated_by": user.get("email"),
+    }
+    await db.companies.update_one({"id": cid}, {"$set": update})
+    c = await db.companies.find_one({"id": cid}, {"_id": 0})
+    return _company_branding_response(c)
+
+
+@api.post("/companies/me/branding/upload")
+async def upload_branding_asset(file: UploadFile = File(...),
+                                 user=Depends(require_role("admin"))):
+    """Upload a company logo (max 5 MB). Stored in same collection as landing assets
+    so we reuse the public GET /api/landing/asset/{id} serve route."""
+    raw = await file.read()
+    if len(raw) > MAX_LANDING_ASSET_BYTES:
+        raise HTTPException(status_code=413, detail="Bestand groter dan 5 MB.")
+    ctype = (file.content_type or "").lower()
+    if not ctype.startswith("image/"):
+        raise HTTPException(status_code=400, detail="Alleen afbeeldingen toegestaan.")
+    cid = company_id_of(user)
+    asset_id = new_id()
+    await db.landing_assets.insert_one({
+        "id": asset_id,
+        "filename": file.filename or f"asset-{asset_id}",
+        "content_type": ctype,
+        "data_b64": base64.b64encode(raw).decode("ascii"),
+        "size": len(raw),
+        "scope": "company",
+        "company_id": cid,
+        "uploaded_by": user.get("email"),
+        "uploaded_at": iso(now_utc()),
+    })
+    return {"id": asset_id, "url": f"/api/landing/asset/{asset_id}"}
+
+
+# =====================================================================
 # Companies (superadmin)
 # =====================================================================
 class CompanyIn(BaseModel):

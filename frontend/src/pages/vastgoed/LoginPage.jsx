@@ -1,9 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Building2, Loader2, Lock, Delete, KeyRound, ArrowLeft, Eye, EyeOff, UserPlus, LogIn, Check, Smartphone, RotateCcw } from 'lucide-react';
+import { Building2, Loader2, Lock, Delete, KeyRound, ArrowLeft, Eye, EyeOff, UserPlus, LogIn, Check, Smartphone, RotateCcw, Pencil } from 'lucide-react';
 import { api, formatError } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { getPreferredRole, setPreferredRole, clearPreferredRole, isStandalonePWA, routeForRole } from '../../lib/pwaRole';
+import {
+  detectCompanySlug, setStoredSlug, fetchBranding, applyBranding,
+  resolveLogoUrl, readCachedBranding, clearBrandingCache,
+} from '../../lib/branding';
 
 function Clock() {
   const [t, setT] = useState(new Date());
@@ -23,16 +27,19 @@ function Clock() {
   );
 }
 
-function Header() {
+function Header({ branding }) {
+  const appName = branding?.app_name || 'Vastgoed Kiosk';
+  const tagline = branding?.tagline || 'Beheer & Kiosk toegang';
+  const logo = branding?._logoResolved || '/kiosk-icons/kiosk-192.png';
   return (
-    <div className="flex items-center justify-between px-4 sm:px-8 py-4 sm:py-5 bg-orange-600/20 backdrop-blur-sm border-b border-white/20">
+    <div className="flex items-center justify-between px-4 sm:px-8 py-4 sm:py-5 bg-black/15 backdrop-blur-sm border-b border-white/20">
       <div className="flex items-center gap-3 sm:gap-4">
         <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-white flex items-center justify-center shadow-lg overflow-hidden p-1">
-          <img src="/kiosk-icons/kiosk-192.png" alt="Kiosk" className="w-full h-full object-contain" data-testid="login-header-logo" />
+          <img src={logo} alt={appName} className="w-full h-full object-contain" data-testid="login-header-logo" />
         </div>
         <div>
-          <h1 className="text-lg sm:text-xl font-bold text-white tracking-tight">Vastgoed Kiosk</h1>
-          <p className="text-[11px] sm:text-xs text-white/80 font-medium">Beheer & Kiosk toegang</p>
+          <h1 className="text-lg sm:text-xl font-bold text-white tracking-tight" data-testid="login-header-name">{appName}</h1>
+          <p className="text-[11px] sm:text-xs text-white/80 font-medium">{tagline}</p>
         </div>
       </div>
       <Clock />
@@ -40,10 +47,14 @@ function Header() {
   );
 }
 
-function PinLanding({ onSuccess, onPassword, onRegister }) {
+function PinLanding({ onSuccess, onPassword, onRegister, branding }) {
   const [pin, setPin] = useState(['', '', '', '']);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const primary = branding?.primary_color || '#FF5C00';
+  const appName = branding?.app_name || 'Kiosk';
+  const tagline = branding?.tagline || '';
+  const logoUrl = branding?.logo_url ? branding._logoResolved : '/kiosk-icons/kiosk-512.png';
 
   const verify = async (code) => {
     setLoading(true); setError('');
@@ -78,16 +89,17 @@ function PinLanding({ onSuccess, onPassword, onRegister }) {
   };
 
   return (
-    <div className="min-h-screen bg-orange-500 flex flex-col">
-      <Header />
+    <div className="min-h-screen flex flex-col" style={{ backgroundColor: primary }}>
+      <Header branding={branding} />
       <div className="flex-1 flex items-center justify-center p-4 sm:p-6">
         <div className="bg-white rounded-3xl shadow-[0_20px_60px_rgba(0,0,0,0.15)] w-full max-w-md p-6 sm:p-10" data-testid="pin-card">
           <div className="text-center mb-6">
-            <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-3xl bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center mx-auto mb-4 shadow-xl shadow-orange-500/40 overflow-hidden p-3">
-              <img src="/kiosk-icons/kiosk-512.png" alt="logo" className="w-full h-full object-contain drop-shadow-md" />
+            <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-3xl flex items-center justify-center mx-auto mb-4 shadow-xl overflow-hidden p-3"
+              style={{ background: `linear-gradient(135deg, ${primary}, ${primary}CC)` }}>
+              <img src={logoUrl} alt="logo" className="w-full h-full object-contain drop-shadow-md" data-testid="pin-logo" />
             </div>
-            <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">Welkom bij Kiosk</h2>
-            <p className="text-sm text-slate-400 mt-1">Voer uw PIN code in om te beginnen</p>
+            <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight" data-testid="pin-app-name">Welkom bij {appName}</h2>
+            <p className="text-sm text-slate-400 mt-1">{tagline || 'Voer uw PIN code in om te beginnen'}</p>
             <p className="text-xs text-slate-300 mt-2">Standaard PIN: <span className="font-bold text-slate-500">1234</span></p>
           </div>
 
@@ -100,9 +112,10 @@ function PinLanding({ onSuccess, onPassword, onRegister }) {
           <div className="flex justify-center gap-3 sm:gap-4 mb-6">
             {pin.map((digit, i) => (
               <div key={`pin-slot-${i}`} data-testid={`pin-input-${i}`}
+                style={digit && !error ? { borderColor: primary, color: primary, backgroundColor: `${primary}10` } : undefined}
                 className={`text-center font-bold rounded-xl border-2 transition-all w-14 h-16 sm:w-16 sm:h-18 text-2xl flex items-center justify-center ${
                   error ? 'border-red-400 bg-red-50 text-red-600'
-                    : digit ? 'border-[#FF5C00] bg-orange-50 text-[#FF5C00]'
+                    : digit ? ''
                     : 'border-slate-200 bg-[#F9FAFB] text-slate-300'
                 }`}>
                 {digit ? '●' : ''}
@@ -465,19 +478,67 @@ function Bank({ label, value, mono }) {
   );
 }
 
-function PwaRoleBadge({ role, onReset }) {
-  if (!role) return null;
+function CompanyCodePicker({ onResolved }) {
+  const [code, setCode] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const submit = async (e) => {
+    e?.preventDefault?.();
+    const slug = code.trim().toLowerCase();
+    if (!slug) return;
+    setBusy(true); setErr('');
+    const data = await fetchBranding(slug);
+    setBusy(false);
+    if (!data) { setErr('Bedrijfscode niet gevonden.'); return; }
+    setStoredSlug(slug);
+    applyBranding(data);
+    onResolved(data);
+  };
+  return (
+    <form onSubmit={submit} className="bg-white/95 backdrop-blur border border-orange-200 rounded-2xl p-4 shadow-lg flex items-center gap-2 max-w-md mx-auto" data-testid="company-code-picker">
+      <Building2 className="w-5 h-5 text-slate-500 shrink-0" />
+      <input value={code} onChange={(e) => setCode(e.target.value)} placeholder="Uw bedrijfscode (bv. surirent)"
+        disabled={busy}
+        data-testid="company-code-input"
+        className="flex-1 h-10 px-2 bg-transparent text-sm font-medium text-slate-900 outline-none" />
+      <button type="submit" disabled={busy || !code.trim()}
+        data-testid="company-code-submit"
+        className="h-10 px-4 rounded-lg bg-slate-900 text-white text-xs font-extrabold disabled:opacity-60">
+        {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Activeer'}
+      </button>
+      {err && <p className="absolute -bottom-7 left-0 right-0 text-center text-xs text-rose-200 font-semibold">{err}</p>}
+    </form>
+  );
+}
+
+function PwaRoleBadge({ role, branding, onReset, onResetCompany }) {
+  if (!role && !branding?.slug) return null;
   const labels = { kiosk: 'Kiosk', admin: 'Beheerder', tenant: 'Huurder' };
   return (
-    <div className="fixed bottom-3 left-1/2 -translate-x-1/2 z-50 bg-white/95 backdrop-blur border border-orange-200 rounded-full pl-3 pr-1.5 py-1.5 shadow-lg flex items-center gap-2 text-xs"
+    <div className="fixed bottom-3 left-1/2 -translate-x-1/2 z-50 bg-white/95 backdrop-blur border border-slate-200 rounded-full pl-3 pr-1.5 py-1.5 shadow-lg flex items-center gap-2 text-xs"
       data-testid="pwa-role-badge">
-      <Smartphone className="w-3.5 h-3.5 text-[#FF5C00]" />
-      <span className="font-bold text-slate-700">Standaard modus: <span className="text-[#C74600]">{labels[role]}</span></span>
-      <button type="button" onClick={onReset}
-        data-testid="pwa-role-reset"
-        className="ml-1 inline-flex items-center gap-1 px-2 py-1 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold transition">
-        <RotateCcw className="w-3 h-3" /> Wijzig
-      </button>
+      <Smartphone className="w-3.5 h-3.5 text-slate-700" />
+      {branding?.slug && (
+        <>
+          <span className="font-bold text-slate-700">Bedrijf: <span className="text-slate-900">{branding.app_name || branding.name || branding.slug}</span></span>
+          <button type="button" onClick={onResetCompany}
+            data-testid="pwa-company-reset"
+            className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold transition">
+            <Pencil className="w-3 h-3" /> Wijzig
+          </button>
+        </>
+      )}
+      {role && (
+        <>
+          <span className="w-px h-3 bg-slate-200" />
+          <span className="font-bold text-slate-700">Modus: <span className="text-slate-900">{labels[role]}</span></span>
+          <button type="button" onClick={onReset}
+            data-testid="pwa-role-reset"
+            className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold transition">
+            <RotateCcw className="w-3 h-3" /> Reset
+          </button>
+        </>
+      )}
     </div>
   );
 }
@@ -489,8 +550,39 @@ export default function LoginPage() {
   const [skipRedirect, setSkipRedirect] = useState(false);
   const [pwaRole, setPwaRole] = useState(() => getPreferredRole());
 
+  // Branding state — start from cache for instant render, then fetch fresh.
+  const [branding, setBranding] = useState(() => {
+    const cached = readCachedBranding();
+    if (cached) {
+      return { ...cached, _logoResolved: resolveLogoUrl(cached.logo_url) };
+    }
+    return null;
+  });
+
   useEffect(() => {
     document.title = 'Vastgoed Kiosk - Login';
+  }, []);
+
+  // Resolve and apply company branding on mount.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const slug = detectCompanySlug();
+      if (!slug) { setBranding(null); return; }
+      const data = await fetchBranding(slug);
+      if (cancelled) return;
+      if (!data) {
+        // Stored slug is no longer valid (company deleted etc.) → fall back to default
+        clearBrandingCache();
+        setBranding(null);
+        return;
+      }
+      const enriched = { ...data, _logoResolved: resolveLogoUrl(data.logo_url) };
+      applyBranding(data);
+      setBranding(enriched);
+      document.title = `${data.app_name || data.name} - Login`;
+    })();
+    return () => { cancelled = true; };
   }, []);
 
   // PWA: if user has a stored preferred role AND a still-valid token for that role,
@@ -507,7 +599,7 @@ export default function LoginPage() {
       : 'kiosk_token';
     let hasToken = false;
     try { hasToken = !!localStorage.getItem(tokenKey); } catch { /* ignore */ }
-    if (!hasToken) return; // token gone → let the user re-authenticate
+    if (!hasToken) return;
     navigate(routeForRole(stored), { replace: true });
   }, [navigate]);
 
@@ -523,23 +615,37 @@ export default function LoginPage() {
     setPwaRole(null);
   };
 
+  const resetCompany = () => {
+    clearBrandingCache();
+    setBranding(null);
+    document.title = 'Vastgoed Kiosk - Login';
+  };
+
+  const showCompanyPicker = !branding;
+
   if (view === 'login' || view === 'register') {
     return (
       <>
         <PasswordView initialMode={view} onBack={() => setView('pin')}
           onRegistered={() => setSkipRedirect(true)} />
-        <PwaRoleBadge role={pwaRole} onReset={resetPwaRole} />
+        <PwaRoleBadge role={pwaRole} branding={branding} onReset={resetPwaRole} onResetCompany={resetCompany} />
       </>
     );
   }
   return (
     <>
       <PinLanding
+        branding={branding}
         onSuccess={() => navigate('/kiosk')}
         onPassword={() => setView('login')}
         onRegister={() => setView('register')}
       />
-      <PwaRoleBadge role={pwaRole} onReset={resetPwaRole} />
+      {showCompanyPicker && (
+        <div className="fixed bottom-16 left-0 right-0 px-4 z-40">
+          <CompanyCodePicker onResolved={(data) => setBranding({ ...data, _logoResolved: resolveLogoUrl(data.logo_url) })} />
+        </div>
+      )}
+      <PwaRoleBadge role={pwaRole} branding={branding} onReset={resetPwaRole} onResetCompany={resetCompany} />
     </>
   );
 }
