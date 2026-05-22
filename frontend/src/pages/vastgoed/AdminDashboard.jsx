@@ -133,8 +133,8 @@ function MobileDrawer({ open, onClose, active, onChange, onLogout, user, tabs })
   if (!open) return null;
   return (
     <div className="md:hidden fixed inset-0 z-50" data-testid="mobile-drawer">
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-      <aside className="absolute left-0 top-0 bottom-0 w-72 max-w-[85%] bg-white shadow-2xl flex flex-col animate-slide-in"
+      <div className="absolute inset-0 bg-white/70 backdrop-blur-xl" onClick={onClose} />
+      <aside className="absolute left-0 top-0 bottom-0 w-72 max-w-[85%] bg-white shadow-2xl flex flex-col animate-slide-in overflow-hidden"
         style={{ paddingTop: 'env(safe-area-inset-top)' }}>
         <div className="flex items-center justify-between px-5 pt-4 pb-3">
           <div className="flex items-center gap-3">
@@ -170,9 +170,9 @@ function MobileDrawer({ open, onClose, active, onChange, onLogout, user, tabs })
           })}
         </nav>
 
-        <div className="border-t border-orange-100 px-5 py-3 space-y-1"
-          style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 0.75rem)' }}>
-          <p className="text-xs text-slate-500 truncate">{user?.email}</p>
+        <div className="border-t border-orange-100 px-5 pt-3 bg-white"
+          style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 0.75rem)' }}>
+          <p className="text-xs text-slate-500 truncate mb-1">{user?.email}</p>
           <button onClick={() => { onClose(); onLogout(); }} data-testid="mobile-drawer-logout"
             className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-semibold text-red-600 hover:bg-red-50 transition-all">
             <LogOut className="w-4 h-4" /> Uitloggen
@@ -189,7 +189,8 @@ function MobileTabBar({ active, onChange, tabs, onOpenMenu, user }) {
     .map((id) => tabs.find((t) => t.id === id))
     .filter(Boolean);
   return (
-    <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white border-t border-orange-100">
+    <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white border-t border-orange-100"
+      style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
       <div className="grid grid-cols-5">
         {primary.map((t) => {
           const Icon = t.icon;
