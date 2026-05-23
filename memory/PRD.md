@@ -317,9 +317,9 @@ User koos voor **Optie C — minimale herbouw** (kern eerst), dan vroeg om **Fas
 ### Session 2026-05-23 — Bulk WhatsApp + iOS PWA + Auto-update ✅
 - ✅ **Bulk WhatsApp Wizard** in Facturen (Invoices.jsx): één klop per huurder, opent `wa.me` met vooringevulde achterstandstekst, progress-balk, skip-knop, waarschuwt voor huurders zonder telefoonnummer. Browser-veilig (geen popup-block).
 - ✅ **iOS PWA edge-to-edge oranje achtergrond** — PinLanding + PasswordView + RegisterSuccess wrappers herschreven naar `position: fixed; inset: 0` met safe-area-padding INSIDE. Geen `h-[100dvh]` of `min-h-screen` meer → witte strook onder home-indicator en notch-overlap zijn weg.
-- ✅ **First-paint bg fix** — inline `<script>` in `index.html` zet `documentElement.style.backgroundColor = '#FF5C00'` voor `/login`, `/kiosk`, `/` routes vóór React mount → geen witte flits meer op iOS PWA standalone.
-- ✅ **PWA auto-update toast** — `UpdateToast` component (rechtsboven) toont "Nieuwe versie · App wordt bijgewerkt…" met spinner zodra een nieuwe service worker activeert. Page reload volgt automatisch (600ms delay). Cache-versie bumped naar `surirent-v21`.
-- ✅ Smoke tested via Playwright: login + admin + Bulk WhatsApp modal allen werkend.
+- ✅ **First-paint bg fix v2** — inline `<script>` in `index.html` zet BOTH `documentElement.style.backgroundColor` ÉN `document.body.style.backgroundColor` op `#FF5C00` voor `/login`, `/kiosk`, `/` routes vóór React mount. Drie-laagse bescherming (html + body + wrapper) zodat geen witte strook of flits meer op iOS PWA, ook tijdens reload.
+- ✅ **PWA stille auto-update** — `controllerchange` reload wacht nu tot `document.visibilityState === 'hidden'` (gebruiker schakelt naar andere app). Geen UpdateToast meer, geen flikker meer mid-page. Bij volgende open van de PWA draait automatisch de nieuwe versie. Cache-versie bumped naar `surirent-v22`.
+- ✅ Smoke tested via Playwright: login + admin + Bulk WhatsApp modal werkend; html/body bg = rgb(255,92,0) op `/login`.
 
 ## Prioritized Backlog (Fases E-F)
 - 📧 **Email notificaties** — wacht op SendGrid / Resend credentials van user

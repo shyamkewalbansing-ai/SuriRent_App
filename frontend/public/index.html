@@ -61,15 +61,25 @@
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
     <title>SuriRent - Vastgoed Kiosk</title>
     <script>
-      // First-paint background: voorkomt witte flash op iOS PWA standalone bij
-      // start van /login (Kiosk PIN, Beheerder login/register) of /kiosk. React
-      // overschrijft dit nadien via body.login-mode / body.kiosk-mode klassen.
+      // First-paint background: voorkomt witte flits + witte strook onderaan
+      // op iOS PWA standalone bij start van /login, /kiosk, of /. We zetten
+      // zowel <html> als <body> op brand-oranje zodat ook het home-indicator
+      // gebied (onder safe-area) en de status-bar gebied gevuld zijn met de
+      // brand-kleur, niet wit. React overschrijft dit nadien via body.login-mode
+      // / body.kiosk-mode klassen.
       (function () {
         try {
           var p = (window.location.pathname || '').toLowerCase();
-          if (p === '/login' || p.indexOf('/login') === 0 || p === '/kiosk' || p.indexOf('/kiosk') === 0 || p === '/') {
-            document.documentElement.style.backgroundColor = '#FF5C00';
-          }
+          var isBrand = p === '/login' || p.indexOf('/login') === 0
+            || p === '/kiosk' || p.indexOf('/kiosk') === 0 || p === '/';
+          if (!isBrand) return;
+          var BG = '#FF5C00';
+          document.documentElement.style.backgroundColor = BG;
+          var applyBody = function () {
+            if (document.body) document.body.style.backgroundColor = BG;
+          };
+          if (document.body) applyBody();
+          else document.addEventListener('DOMContentLoaded', applyBody);
         } catch (e) { /* no-op */ }
       })();
     </script>

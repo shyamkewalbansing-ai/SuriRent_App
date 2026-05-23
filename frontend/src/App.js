@@ -1,6 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './lib/auth';
-import { useRegisterServiceWorker, InstallPrompt, UpdateToast } from './lib/pwa';
+import { useRegisterServiceWorker, InstallPrompt } from './lib/pwa';
 import { isMarketingHost, appUrl } from './lib/env';
 import MarketingLanding from './pages/vastgoed/MarketingLanding';
 import LoginPage from './pages/vastgoed/LoginPage';
@@ -83,7 +83,7 @@ function HybridRoutes() {
 }
 
 export default function App() {
-  const { updating } = useRegisterServiceWorker();
+  useRegisterServiceWorker();
   const mode = isMarketingHost() ? 'marketing' : (appUrl() ? 'app' : 'hybrid');
   return (
     <AuthProvider>
@@ -91,7 +91,6 @@ export default function App() {
       {mode === 'app' && <AppRoutes />}
       {mode === 'hybrid' && <HybridRoutes />}
       <InstallPrompt />
-      <UpdateToast visible={updating} />
     </AuthProvider>
   );
 }
