@@ -160,31 +160,59 @@ export function SendDialog({
             </button>
           </div>
 
-          {/* Manual WhatsApp — opent native WhatsApp app / web met huurder-nummer
-              vooringevuld. Heeft géén Twilio nodig en is gratis. */}
+          {/* Manual WhatsApp — twee opties:
+              1) PDF delen via native iOS share-sheet (Web Share API met
+                 files). De huurder krijgt het PDF-bestand direct in zijn
+                 chat, zonder link.
+              2) Fallback: wa.me URL met PDF-link als tekst (voor wanneer
+                 Web Share API niet beschikbaar is, bv. op desktop Chrome
+                 zonder PWA install). */}
           {(tenantPhone || to) && (
             <button
-              onClick={() => {
+              onClick={async () => {
                 const phone = (cur?.contact === 'phone' ? to : tenantPhone).replace(/\D/g, '');
-                if (!phone) return;
-                // PDF link in het bericht (publieke endpoint — huurder kan
-                // er direct op klikken om de PDF te downloaden).
-                const apiBase = `${process.env.REACT_APP_BACKEND_URL}/api`;
-                const pdfLink = `${apiBase}/${documentType}s/${documentId}/pdf`;
                 const greeting = `Beste ${tenantName || 'huurder'},`;
                 const intro = msg.trim() || `Hierbij uw ${documentLabel}.`;
-                const fullMsg = `${greeting}\n\n${intro}\n\nPDF: ${pdfLink}\n\nMet vriendelijke groet,\nSuriRent`;
+                const apiBase = `${process.env.REACT_APP_BACKEND_URL}/api`;
+                const pdfUrl = `${apiBase}/${documentType}s/${documentId}/pdf`;
+
+                // Probeer eerst PDF zelf delen via Web Share API
+                try {
+                  const resp = await fetch(pdfUrl, { credentials: 'include' });
+                  if (!resp.ok) throw new Error('PDF fetch failed');
+                  const blob = await resp.blob();
+                  const fname = `${documentLabel}-${documentId.slice(0, 8)}.pdf`;
+                  const file = new File([blob], fname, { type: 'application/pdf' });
+                  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                    await navigator.share({
+                      files: [file],
+                      title: documentLabel,
+                      text: `${greeting}\n\n${intro}\n\n— SuriRent`,
+                    });
+                    return;
+                  }
+                } catch (e) {
+                  // Doorvallen naar wa.me fallback
+                  console.warn('Web Share fallback:', e);
+                }
+
+                // Fallback: open wa.me met PDF link in de tekst
+                if (!phone) {
+                  setErr('Web Share niet ondersteund en geen telefoonnummer voor wa.me fallback');
+                  return;
+                }
+                const fullMsg = `${greeting}\n\n${intro}\n\nPDF: ${pdfUrl}\n\nMet vriendelijke groet,\nSuriRent`;
                 const waUrl = `https://wa.me/${phone}?text=${encodeURIComponent(fullMsg)}`;
                 window.open(waUrl, '_blank', 'noopener');
               }}
               data-testid="send-whatsapp-manual"
               className="w-full h-11 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-bold flex items-center justify-center gap-2 transition shadow-[0_8px_20px_-5px_rgba(16,185,129,0.5)]">
               <MessageCircle className="w-4 h-4" />
-              WhatsApp handmatig openen
+              PDF via WhatsApp delen
             </button>
           )}
           <p className="text-[10px] text-slate-400 text-center -mt-2">
-            Opent WhatsApp op je telefoon met huurder vooringevuld
+            Op iPhone: opent share-sheet → kies WhatsApp → kies huurder; PDF wordt direct meegestuurd
           </p>
         </div>
       </div>
