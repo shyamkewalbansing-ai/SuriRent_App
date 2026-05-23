@@ -1061,44 +1061,51 @@ export default function KioskLayout() {
 
   // Push huidige state naar het klantenscherm. Idempotent — we sturen
   // alleen waarden die de klant ook mag zien (geen pin_hash, geen company_id).
-  // Combinatie van 2 transports:
+  // Combinatie van 3 transports:
   //  1) BroadcastChannel — instant same-browser sync (2e tab / 2e monitor)
   //  2) Backend PUT — robuust voor cross-device (klant tablet in andere ruimte)
+  //  3) Heartbeat elke 3s — overwrite stale state in DB, voorkomt vastlopen
   useEffect(() => {
     if (step === 'check') return undefined;
-    const apt = apartment ? {
-      id: apartment.id, number: apartment.number, address: apartment.address || '',
-      rent_amount: apartment.rent_amount, currency: apartment.currency,
-      tenant_name: apartment.tenant_name,
-    } : null;
-    const tenant = overview?.tenant ? {
-      name: overview.tenant.name,
-      internet_amount: overview.tenant.internet_amount || 0,
-    } : (apartment?.tenant_name ? { name: apartment.tenant_name } : null);
-    const ovw = overview ? {
-      balance: overview.balance, apartment: overview.apartment,
-      internet: overview.internet || 0, total_due: overview.total_due || 0,
-    } : null;
-    const payload = paymentPayload ? {
-      amount: paymentPayload.amount, currency: paymentPayload.currency,
-      categories: paymentPayload.categories || [], method: paymentPayload.method,
-    } : null;
-    const payment = paymentResult ? {
-      amount: paymentResult.amount, currency: paymentResult.currency,
-      receipt_number: paymentResult.receipt_number, method: paymentResult.method,
-      paid_at: paymentResult.paid_at,
-    } : null;
-    const body = { step, apartment: apt, tenant, overview: ovw, payload, payment };
-    // 1) BroadcastChannel — instant
-    try {
-      if (typeof BroadcastChannel !== 'undefined') {
-        const bc = new BroadcastChannel('surirent-customer-display');
-        bc.postMessage({ state: { ...body, updated_at: new Date().toISOString() } });
-        bc.close();
-      }
-    } catch { /* ignore */ }
-    // 2) Backend — voor cross-device
-    api.put('/kiosk/customer-display', body).catch(() => {});
+    const buildBody = () => {
+      const apt = apartment ? {
+        id: apartment.id, number: apartment.number, address: apartment.address || '',
+        rent_amount: apartment.rent_amount, currency: apartment.currency,
+        tenant_name: apartment.tenant_name,
+      } : null;
+      const tenant = overview?.tenant ? {
+        name: overview.tenant.name,
+        internet_amount: overview.tenant.internet_amount || 0,
+      } : (apartment?.tenant_name ? { name: apartment.tenant_name } : null);
+      const ovw = overview ? {
+        balance: overview.balance, apartment: overview.apartment,
+        internet: overview.internet || 0, total_due: overview.total_due || 0,
+      } : null;
+      const payload = paymentPayload ? {
+        amount: paymentPayload.amount, currency: paymentPayload.currency,
+        categories: paymentPayload.categories || [], method: paymentPayload.method,
+      } : null;
+      const payment = paymentResult ? {
+        amount: paymentResult.amount, currency: paymentResult.currency,
+        receipt_number: paymentResult.receipt_number, method: paymentResult.method,
+        paid_at: paymentResult.paid_at,
+      } : null;
+      return { step, apartment: apt, tenant, overview: ovw, payload, payment };
+    };
+    const push = () => {
+      const body = buildBody();
+      try {
+        if (typeof BroadcastChannel !== 'undefined') {
+          const bc = new BroadcastChannel('surirent-customer-display');
+          bc.postMessage({ state: { ...body, updated_at: new Date().toISOString() } });
+          bc.close();
+        }
+      } catch { /* ignore */ }
+      api.put('/kiosk/customer-display', body).catch(() => {});
+    };
+    push();
+    const hb = setInterval(push, 3000);
+    return () => clearInterval(hb);
   }, [step, apartment, overview, paymentPayload, paymentResult]);
 
   // "Beheerder" knop in de kiosk: als de PIN-login een admin-token heeft
