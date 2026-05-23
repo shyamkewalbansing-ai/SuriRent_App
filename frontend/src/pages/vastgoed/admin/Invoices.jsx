@@ -572,15 +572,16 @@ export default function Invoices() {
   const [toast, setToast] = useState(null);
   const today = new Date();
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) setLoading(true);
     try {
       const [i, t] = await Promise.all([api.get('/invoices'), api.get('/tenants')]);
       setItems(i.data); setTenants(t.data);
-    } finally { setLoading(false); }
+    } finally { if (!silent) setLoading(false); }
   }, []);
   useEffect(() => { load(); }, [load]);
-  useAutoRefresh(load, { interval: 10000, enabled: !creating && !reminding && !bulkOpen });
+  // Stille polling — geen spinner / scroll-reset tijdens auto-refresh.
+  useAutoRefresh(() => load({ silent: true }), { interval: 10000, enabled: !creating && !reminding && !bulkOpen });
 
   const generateMonth = async () => {
     if (!window.confirm(`Maandfacturen voor ${MONTHS_NL[today.getMonth()]} ${today.getFullYear()} aanmaken voor alle bezette appartementen?`)) return;

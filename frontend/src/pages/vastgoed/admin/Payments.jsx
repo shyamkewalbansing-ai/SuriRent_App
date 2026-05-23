@@ -405,15 +405,16 @@ export default function Payments() {
   const [expanded, setExpanded] = useState(null);
   const today = useMemo(() => new Date(), []);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) setLoading(true);
     try {
       const [p, t] = await Promise.all([api.get('/payments'), api.get('/tenants')]);
       setItems(p.data); setTenants(t.data);
-    } finally { setLoading(false); }
+    } finally { if (!silent) setLoading(false); }
   }, []);
   useEffect(() => { load(); }, [load]);
-  useAutoRefresh(load, { interval: 8000, enabled: !creating && !emailing });
+  // Stille polling — geen spinner / scroll-reset tijdens auto-refresh.
+  useAutoRefresh(() => load({ silent: true }), { interval: 8000, enabled: !creating && !emailing });
 
   const apiBase = `${process.env.REACT_APP_BACKEND_URL}/api`;
 

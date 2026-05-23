@@ -224,8 +224,8 @@ function MobileTabBar({ active, onChange, tabs, onOpenMenu, user, badgeCount }) 
       data-testid="mobile-tab-bar"
     >
       <div
-        className="grid grid-cols-5 gap-1 px-2 pt-2"
-        style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 8px)' }}
+        className="grid grid-cols-5 gap-1 px-2 pt-3.5"
+        style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 10px)' }}
       >
         {primary.map((t) => {
           const Icon = t.icon;
@@ -236,7 +236,7 @@ function MobileTabBar({ active, onChange, tabs, onOpenMenu, user, badgeCount }) 
               key={t.id}
               onClick={() => onChange(t.id)}
               data-testid={`tab-mobile-${t.id}`}
-              className={`relative flex flex-col items-center justify-center gap-0.5 py-2 rounded-2xl transition-all active:scale-95 ${
+              className={`relative flex flex-col items-center justify-end gap-1 pt-3 pb-1.5 rounded-2xl transition-all active:scale-95 ${
                 isActive
                   ? 'bg-gradient-to-b from-orange-50 to-orange-100/80 text-[#FF5C00] shadow-[inset_0_0_0_1px_rgba(255,92,0,0.2)]'
                   : 'text-slate-500 hover:bg-orange-50/60'
@@ -263,7 +263,7 @@ function MobileTabBar({ active, onChange, tabs, onOpenMenu, user, badgeCount }) 
         <button
           onClick={onOpenMenu}
           data-testid="tab-mobile-more"
-          className="flex flex-col items-center justify-center gap-0.5 py-2 rounded-2xl text-slate-500 hover:bg-orange-50/60 active:scale-95 transition-all"
+          className="flex flex-col items-center justify-end gap-1 pt-3 pb-1.5 rounded-2xl text-slate-500 hover:bg-orange-50/60 active:scale-95 transition-all"
         >
           <MoreHorizontal className="w-5 h-5" />
           <span className="text-[10px] font-bold leading-tight tracking-wide opacity-80">Meer</span>
