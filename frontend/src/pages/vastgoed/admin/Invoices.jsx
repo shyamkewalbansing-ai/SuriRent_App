@@ -41,6 +41,7 @@ function groupByTenant(invoices) {
         tenant_id: inv.tenant_id,
         tenant_name: inv.tenant_name || 'Onbekend',
         apartment_number: inv.apartment_number,
+        location_name: inv.location_name,
         currency: inv.currency,
         all: [], open: [],
       });
@@ -48,8 +49,9 @@ function groupByTenant(invoices) {
     const g = map.get(key);
     g.all.push(inv);
     if (isUnpaid(inv)) g.open.push(inv);
-    // Houd het meest recente bekende appartement-nummer aan (in geval van verhuizing).
+    // Houd het meest recente bekende appartement-nummer + locatie aan.
     if (inv.apartment_number) g.apartment_number = inv.apartment_number;
+    if (inv.location_name) g.location_name = inv.location_name;
   }
   for (const g of map.values()) {
     g.open.sort((a, b) => (a.period_year - b.period_year) || (a.period_month - b.period_month));
@@ -197,11 +199,15 @@ function TenantRow({ group, expanded, onToggle, onReminder }) {
             {initials(group.tenant_name)}
           </div>
 
-          {/* Huurder name + appartement */}
+          {/* Huurder name + locatie · appartement */}
           <div className="min-w-0">
             <p className="font-bold text-slate-900 text-sm sm:text-[15px] truncate">{group.tenant_name}</p>
             <p className="text-[11px] sm:text-xs text-slate-500 font-medium truncate" data-testid={`tenant-apt-${group.tenant_id}`}>
-              {group.apartment_number ? `Appt. ${group.apartment_number}` : 'Geen appartement'}
+              {group.location_name && group.apartment_number
+                ? `${group.location_name} · ${group.apartment_number}`
+                : group.apartment_number
+                  ? group.apartment_number
+                  : 'Geen appartement'}
             </p>
             {/* Mobiel: status pill onder de naam (geen aparte Open maanden kolom op mobiel) */}
             <div className="mt-1 md:hidden">

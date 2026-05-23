@@ -3545,6 +3545,7 @@ class InvoiceOut(BaseModel):
     tenant_name: Optional[str] = None
     apartment_id: Optional[str] = None
     apartment_number: Optional[str] = None
+    location_name: Optional[str] = None
     amount: float
     currency: str
     period_month: int
@@ -3556,10 +3557,20 @@ class InvoiceOut(BaseModel):
 async def _enrich_invoice(i: dict) -> dict:
     t = await db.tenants.find_one({"id": i["tenant_id"]}, {"_id": 0, "name": 1})
     a = None
+    location_name = None
     if i.get("apartment_id"):
-        a = await db.apartments.find_one({"id": i["apartment_id"]}, {"_id": 0, "number": 1})
+        a = await db.apartments.find_one(
+            {"id": i["apartment_id"]}, {"_id": 0, "number": 1, "location_id": 1}
+        )
+        if a and a.get("location_id"):
+            loc = await db.locations.find_one(
+                {"id": a["location_id"]}, {"_id": 0, "name": 1}
+            )
+            if loc:
+                location_name = loc.get("name")
     return {**i, "tenant_name": t["name"] if t else None,
-            "apartment_number": a["number"] if a else None}
+            "apartment_number": a["number"] if a else None,
+            "location_name": location_name}
 
 
 @api.get("/invoices", response_model=List[InvoiceOut])
