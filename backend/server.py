@@ -3513,12 +3513,26 @@ class CustomerDisplayIn(BaseModel):
 
 
 @api.put("/kiosk/customer-display")
-async def update_customer_display(body: CustomerDisplayIn, _session=Depends(get_kiosk_session)):
-    """Admin Kiosk pusht hier de huidige stap-state naar. De klant-display
-    poll't deze waarde via een publiek endpoint per company-slug."""
-    cid = _session.get("company_id")
+async def update_customer_display(body: CustomerDisplayIn, request: Request):
+    """Admin Kiosk pusht hier de huidige stap-state naar. Accepteert zowel
+    kiosk-token (PIN sessie) als admin/staff token zodat de push werkt
+    onafhankelijk van welk token de browser meestuurt."""
+    cid = None
+    # Probeer kiosk-token eerst.
+    try:
+        ks = await get_kiosk_session(request)
+        cid = ks.get("company_id")
+    except HTTPException:
+        pass
     if not cid:
-        raise HTTPException(status_code=400, detail="Geen kiosk-bedrijfscontext")
+        # Val terug op admin/staff sessie.
+        try:
+            user = await get_current_user(request)
+            cid = company_id_of(user)
+        except HTTPException:
+            cid = None
+    if not cid:
+        raise HTTPException(status_code=401, detail="Niet ingelogd op kiosk")
     state = body.model_dump()
     state["updated_at"] = iso(now_utc())
     await db.customer_display.update_one(
@@ -3526,12 +3540,23 @@ async def update_customer_display(body: CustomerDisplayIn, _session=Depends(get_
         {"$set": {"company_id": cid, "state": state, "updated_at": state["updated_at"]}},
         upsert=True,
     )
-    return {"ok": True}
+    return {"ok": True, "updated_at": state["updated_at"]}
 
 
 @api.delete("/kiosk/customer-display")
-async def clear_customer_display(_session=Depends(get_kiosk_session)):
-    cid = _session.get("company_id")
+async def clear_customer_display(request: Request):
+    cid = None
+    try:
+        ks = await get_kiosk_session(request)
+        cid = ks.get("company_id")
+    except HTTPException:
+        pass
+    if not cid:
+        try:
+            user = await get_current_user(request)
+            cid = company_id_of(user)
+        except HTTPException:
+            cid = None
     if cid:
         await db.customer_display.update_one(
             {"company_id": cid},
@@ -3543,8 +3568,13 @@ async def clear_customer_display(_session=Depends(get_kiosk_session)):
 
 
 @api.get("/public/customer-display/{slug}")
-async def get_customer_display(slug: str):
-    """Publiek — het klantenscherm poll't dit endpoint elke 1.5s."""
+async def get_customer_display(slug: str, response: Response):
+    """Publiek — het klantenscherm poll't dit endpoint elke ~500ms."""
+    # Strikte no-cache headers — voorkomt dat iPhone Safari / PWA proxy
+    # een gecachte respons teruggeeft tijdens polling.
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
     if not slug or len(slug) > 80:
         raise HTTPException(status_code=400, detail="Ongeldige slug")
     c = await db.companies.find_one(

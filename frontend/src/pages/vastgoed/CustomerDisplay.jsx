@@ -10,7 +10,7 @@ import {
   detectCompanySlug, fetchBrandingByHost, applyBranding, resolveLogoUrl,
 } from '../../lib/branding';
 
-const POLL_MS = 1200;
+const POLL_MS = 500;
 const BROADCAST_CHANNEL = 'surirent-customer-display';
 
 // Tailwind-vrije fluid-clamp utility (px), responsive zonder breakpoint-explosies.
@@ -387,7 +387,7 @@ export default function CustomerDisplay() {
     let timer;
     const tick = async () => {
       try {
-        const { data: d } = await api.get(`/public/customer-display/${slug}`);
+        const { data: d } = await api.get(`/public/customer-display/${slug}?t=${Date.now()}`);
         if (stopped.current) return;
         if (d?.branding) {
           applyBranding(d.branding);
@@ -474,12 +474,31 @@ export default function CustomerDisplay() {
         {step === 'receipt' && <ReceiptScreen state={state} />}
       </AnimatePresence>
 
-      {/* Tiny footer met bedrijfsnaam */}
+      {/* Tiny footer met bedrijfsnaam + live indicator */}
       <div className="absolute bottom-2 left-3 right-3 flex items-center justify-between text-white/70 font-bold pointer-events-none"
         style={{ fontSize: clamp(9, 0.7, 12) }}>
         <span data-testid="cd-footer-company" className="truncate">{branding?.name}</span>
-        <span className="uppercase tracking-widest shrink-0">Klantenscherm</span>
+        <span className="flex items-center gap-2 shrink-0">
+          <LiveDot lastUpdate={lastUpdate.current} />
+          <span className="uppercase tracking-widest">Klantenscherm</span>
+        </span>
       </div>
     </div>
+  );
+}
+
+function LiveDot({ lastUpdate }) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  const stale = !lastUpdate || (now - lastUpdate) > 4000;
+  return (
+    <span title={lastUpdate ? new Date(lastUpdate).toLocaleTimeString('nl-NL') : 'geen update'}
+      data-testid="cd-live-dot"
+      className={`inline-block w-2 h-2 rounded-full ${
+        stale ? 'bg-red-400/80' : 'bg-emerald-400 animate-pulse'
+      }`} />
   );
 }
