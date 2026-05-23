@@ -3596,6 +3596,55 @@ async def customer_pick_method(slug: str, body: CustomerMethodIn):
 
 
 
+class CustomerStartPayIn(BaseModel):
+    pass
+
+
+@api.post("/public/customer-display/{slug}/start-payment")
+async def customer_start_payment(slug: str):
+    """Publiek — de klant tikt zelf op 'Betaal nu' op het klantenscherm
+    tijdens de overview-stap. We zetten de stap meteen naar 'method' en
+    kopiëren het totale openstaande bedrag in het payload. De admin Kiosk
+    poll't dit en gaat automatisch mee."""
+    c = await db.companies.find_one({"slug": slug.lower()}, {"_id": 0, "id": 1})
+    if not c:
+        raise HTTPException(status_code=404, detail="Bedrijf niet gevonden")
+    doc = await db.customer_display.find_one({"company_id": c["id"]}, {"_id": 0})
+    state = (doc or {}).get("state") or {}
+    if state.get("step") not in ("overview", "pay"):
+        raise HTTPException(status_code=409, detail="Niet in overzichtsfase")
+    overview = state.get("overview") or {}
+    bal = overview.get("balance") or {}
+    apt = overview.get("apartment") or state.get("apartment") or {}
+    tenant = state.get("tenant") or {}
+    open_rent = max(0.0, float(bal.get("balance") or 0))
+    internet = float(tenant.get("internet_amount") or overview.get("internet") or 0)
+    total_due = float(overview.get("total_due") or (open_rent + internet))
+    if total_due <= 0:
+        raise HTTPException(status_code=400, detail="Geen openstaand bedrag")
+    currency = bal.get("currency") or apt.get("currency") or "SRD"
+    categories = []
+    if open_rent > 0:
+        categories.append({"key": "huur", "value": open_rent})
+    if internet > 0:
+        categories.append({"key": "internet", "value": internet})
+    state["step"] = "method"
+    state["payload"] = {
+        "amount": total_due,
+        "currency": currency,
+        "categories": categories,
+        "method": None,
+        "customer_initiated": True,
+        "customer_initiated_at": iso(now_utc()),
+    }
+    state["updated_at"] = iso(now_utc())
+    await db.customer_display.update_one(
+        {"company_id": c["id"]},
+        {"$set": {"state": state, "updated_at": state["updated_at"]}},
+    )
+    return {"ok": True, "step": "method", "amount": total_due}
+
+
 @api.get("/public/customer-display/{slug}")
 async def get_customer_display(slug: str, response: Response):
     """Publiek — het klantenscherm poll't dit endpoint elke ~500ms."""

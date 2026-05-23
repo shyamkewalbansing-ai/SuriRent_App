@@ -1164,6 +1164,38 @@ export default function KioskLayout() {
     setStep('select');
   };
 
+  // Klant initieert betaling vanaf het klantenscherm — we synchroniseren
+  // hier de admin Kiosk zodat we direct naar de method-pick gaan.
+  useEffect(() => {
+    if (step !== 'overview' || !overview) return undefined;
+    const slug = (() => {
+      try { return localStorage.getItem('pwa_company_slug') || ''; } catch { return ''; }
+    })();
+    if (!slug) return undefined;
+    let stopped = false;
+    let timer;
+    const tick = async () => {
+      try {
+        const { data } = await api.get(`/public/customer-display/${slug}?t=${Date.now()}`);
+        const p = data?.state?.payload;
+        if (!stopped && p?.customer_initiated && p?.amount > 0) {
+          setPaymentPayload({
+            amount: p.amount,
+            currency: p.currency || 'SRD',
+            categories: p.categories || [],
+            tenant_id: overview.tenant?.id,
+            apartment_id: overview.apartment?.id,
+          });
+          setStep('method');
+          return;
+        }
+      } catch { /* ignore */ }
+      if (!stopped) timer = setTimeout(tick, 1000);
+    };
+    tick();
+    return () => { stopped = true; if (timer) clearTimeout(timer); };
+  }, [step, overview]);
+
   const showDesktopBar = step !== 'check';
 
   return (

@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   CheckCircle2, Wallet, Home as HomeIcon, FileText, Wifi,
-  CreditCard, Banknote, Smartphone, Loader2,
+  CreditCard, Banknote, Smartphone, Loader2, ChevronRight,
 } from 'lucide-react';
 import { api, fmtMoney, MONTHS_NL } from '../../lib/api';
 import {
@@ -97,7 +97,7 @@ function GreetScreen({ state, branding }) {
 // =====================================================================
 // Overview screen — split-screen + responsive
 // =====================================================================
-function OverviewScreen({ state }) {
+function OverviewScreen({ state, slug }) {
   const overview = state.overview || {};
   const balance = overview.balance || {};
   const apt = overview.apartment || state.apartment || {};
@@ -107,6 +107,20 @@ function OverviewScreen({ state }) {
   const totalDue = Number(overview.total_due || (openRent + internet) || 0);
   const cur = balance.currency || apt.currency || 'SRD';
   const hasBalance = totalDue > 0;
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  const startPayment = async () => {
+    if (busy || !slug) return;
+    setBusy(true); setErr('');
+    try {
+      await api.post(`/public/customer-display/${slug}/start-payment`);
+      // De polling/broadcast updates het scherm automatisch naar 'method'.
+    } catch (e) {
+      setErr(e?.response?.data?.detail || 'Kon betaling niet starten');
+      setBusy(false);
+    }
+  };
 
   const items = [
     { key: 'rent', label: 'Maandhuur', value: apt.rent_amount || 0, icon: HomeIcon },
@@ -195,8 +209,23 @@ function OverviewScreen({ state }) {
           </p>
           <p className={`mt-1 px-2 ${hasBalance ? 'text-slate-500' : 'text-white/90'}`}
             style={{ fontSize: clamp(11, 1.2, 16) }}>
-            {hasBalance ? 'De medewerker bereidt uw betaling voor…' : 'U heeft geen openstaand bedrag.'}
+            {hasBalance ? 'Tik hieronder om uw betaling te starten' : 'U heeft geen openstaand bedrag.'}
           </p>
+          {hasBalance && (
+            <>
+              <motion.button
+                whileTap={{ scale: 0.97 }} whileHover={{ scale: 1.02 }}
+                onClick={startPayment} disabled={busy || !slug}
+                data-testid="cd-start-payment"
+                className="mt-4 sm:mt-5 w-full max-w-xs rounded-2xl bg-gradient-to-r from-[#FF8A3D] to-[#FF5C00] text-white font-black shadow-xl disabled:opacity-60 flex items-center justify-center gap-2 transition active:shadow-md"
+                style={{ height: clamp(48, 6, 80), fontSize: clamp(14, 1.6, 24) }}>
+                {busy ? <Loader2 className="animate-spin" style={{ width: clamp(18, 1.6, 26), height: clamp(18, 1.6, 26) }} />
+                  : <>BETAAL NU <ChevronRight style={{ width: clamp(18, 1.8, 28), height: clamp(18, 1.8, 28) }} /></>}
+              </motion.button>
+              {err && <p className="mt-2 text-red-500 font-bold"
+                style={{ fontSize: clamp(11, 1.0, 14) }}>{err}</p>}
+            </>
+          )}
         </div>
       </div>
     </motion.div>
@@ -264,6 +293,10 @@ function MethodScreen({ state, slug }) {
   const cur = payload.currency || 'SRD';
   const amt = Number(payload.amount || 0);
   const chosen = (payload.method || '').toLowerCase();
+  // Toon de "U heeft gekozen"-bevestiging ALLEEN wanneer de klant zélf
+  // heeft getikt (method_chosen_at gezet). Als admin een methode pre-set
+  // had, blijft de tap-grid actief zodat de klant zelf kan kiezen.
+  const customerChose = !!payload.method_chosen_at;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
@@ -281,7 +314,7 @@ function MethodScreen({ state, slug }) {
   ];
 
   const pick = async (m) => {
-    if (busy || chosen) return;
+    if (busy || customerChose) return;
     setBusy(true); setError('');
     try {
       await api.post(`/public/customer-display/${slug}/select-method`, { method: m });
@@ -292,7 +325,7 @@ function MethodScreen({ state, slug }) {
   };
 
   // Wanneer de klant al een methode heeft gekozen → toon bevestig-scherm.
-  if (chosen) {
+  if (customerChose) {
     const Icon = ICONS[chosen] || CreditCard;
     return (
       <motion.div key="method-confirm"
@@ -554,7 +587,7 @@ export default function CustomerDisplay() {
       <AnimatePresence mode="wait">
         {(step === 'idle' || step === 'check') && <IdleScreen branding={branding} />}
         {step === 'select' && <GreetScreen state={state} branding={branding} />}
-        {step === 'overview' && <OverviewScreen state={state} />}
+        {step === 'overview' && <OverviewScreen state={state} slug={slug} />}
         {step === 'pay' && <PayScreen state={state} />}
         {(step === 'method' || step === 'confirm') && <MethodScreen state={state} slug={slug} />}
         {step === 'receipt' && <ReceiptScreen state={state} />}
