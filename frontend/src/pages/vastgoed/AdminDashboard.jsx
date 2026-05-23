@@ -126,22 +126,42 @@ function MobileHeader_REMOVED({ activeCompany, user, onOpenMenu }) {
   return null;
 }
 
+function splitNameHalf(name) {
+  // Splits de bedrijfsnaam visueel in twee delen: eerste helft zwart,
+  // tweede helft oranje. Probeert eerst een spatie op/na het midden te
+  // vinden zodat woorden niet midden in worden opgeknipt.
+  if (!name) return ['', ''];
+  const mid = Math.ceil(name.length / 2);
+  let idx = name.indexOf(' ', mid);
+  if (idx === -1) idx = name.lastIndexOf(' ', mid);
+  if (idx === -1) return [name.slice(0, mid), name.slice(mid)];
+  return [name.slice(0, idx), name.slice(idx + 1)];
+}
+
 function MobileTopLogo({ user, activeCompany }) {
   // Minimalistische topbar: brand-logo links + bedrijfsnaam (geen menu-knop,
   // geen Kiosk-knop, geen Live indicator — die zitten in de "+"-sheet).
+  const fullName = activeCompany?.name || (user?.role === 'superadmin' ? 'Alle bedrijven' : 'SuriRent');
+  const [namePart1, namePart2] = splitNameHalf(fullName);
   return (
     <header className="xl:hidden sticky top-0 z-30 bg-[#FFF7F0]/85 backdrop-blur-md"
       style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
       data-testid="mobile-top-logo">
-      <div className="px-4 py-2.5 flex items-center gap-3">
-        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#FF8A3D] to-[#C74600] p-1 shadow-[0_8px_18px_-6px_rgba(255,92,0,0.55)] shrink-0">
+      <div className="px-4 py-3 flex items-center gap-3">
+        <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#FF8A3D] to-[#C74600] p-1.5 shadow-[0_10px_22px_-6px_rgba(255,92,0,0.55)] shrink-0">
           <img src="/kiosk-icons/kiosk-512.png" alt="SuriRent" className="w-full h-full object-contain" />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-black text-slate-900 leading-tight truncate" data-testid="mobile-top-name">
-            {activeCompany?.name || (user?.role === 'superadmin' ? 'Alle bedrijven' : 'SuriRent')}
+          <p className="text-lg font-black tracking-tight leading-tight truncate" data-testid="mobile-top-name">
+            <span className="text-slate-900">{namePart1}</span>
+            {namePart2 && (
+              <>
+                {namePart1 ? ' ' : ''}
+                <span className="text-[#FF5C00]">{namePart2}</span>
+              </>
+            )}
           </p>
-          <p className="text-[10px] text-[#FF5C00] font-bold tracking-[0.18em] uppercase truncate">
+          <p className="text-[10px] text-slate-400 font-bold tracking-[0.18em] uppercase truncate">
             {user?.role === 'superadmin' ? 'Superadmin' : 'Beheer'}{activeCompany?.plan ? ` · ${activeCompany.plan}` : ''}
           </p>
         </div>
