@@ -6,7 +6,7 @@ import {
   X, Check, Loader2, Search, Home, Banknote, KeySquare, ChevronRight, Wallet,
   FileText, ShieldCheck, Wrench, FileSignature, Bell, Briefcase, Mail,
   Zap, Power, Menu, MoreHorizontal, MapPin, Crown, Paintbrush, Palette,
-  Gauge, Activity, Clock as ClockIcon,
+  Gauge, Activity, Clock as ClockIcon, Monitor,
 } from 'lucide-react';
 import { api, formatError, fmtMoney, MONTHS_NL } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
@@ -116,6 +116,7 @@ const MOBILE_PRIMARY_IDS = ['overview', 'apartments', 'tenants', 'payments'];
 const MOBILE_SUPER_PRIMARY_IDS = ['companies', 'overview', 'apartments', 'tenants'];
 
 function MobileHeader({ activeCompany, user, onOpenMenu }) {
+  const navigate = useNavigate();
   return (
     <header className="md:hidden sticky top-0 z-30 bg-white border-b border-orange-100"
       style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}>
@@ -135,6 +136,22 @@ function MobileHeader({ activeCompany, user, onOpenMenu }) {
             {user?.role === 'superadmin' ? 'Superadmin' : 'Beheer'}{activeCompany?.plan ? ` · ${activeCompany.plan}` : ''}
           </p>
         </div>
+        {/* Kiosk snel-toegang knop rechtsboven — alleen voor admin/owner.
+            Onthoudt de gewenste rol in localStorage zodat de PWA na sluiten
+            terugkomt in de Kiosk (zelfde gedrag als de homescreen shortcut). */}
+        {user?.role !== 'superadmin' && (
+          <button
+            onClick={() => {
+              try { localStorage.setItem('pwa_preferred_role', 'kiosk'); } catch { /* noop */ }
+              navigate('/kiosk');
+            }}
+            data-testid="mobile-kiosk-shortcut"
+            aria-label="Open Kiosk"
+            className="ml-1 inline-flex items-center justify-center h-10 px-3 rounded-xl bg-[#FF5C00] text-white font-bold text-xs shadow-[0_6px_16px_-4px_rgba(255,92,0,0.55)] active:scale-95 transition gap-1.5">
+            <Monitor className="w-4 h-4" />
+            <span>Kiosk</span>
+          </button>
+        )}
       </div>
     </header>
   );
