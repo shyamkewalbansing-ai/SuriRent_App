@@ -16,7 +16,7 @@ api.interceptors.request.use((config) => {
   const url = config.url || '';
   if (url.startsWith('/tenant-portal/') && tenantToken) {
     config.headers.Authorization = `Bearer ${tenantToken}`;
-  } else if (url.startsWith('/kiosk/payments') && kioskToken) {
+  } else if ((url.startsWith('/kiosk/payments') || url.startsWith('/kiosk/customer-display')) && kioskToken) {
     config.headers.Authorization = `Bearer ${kioskToken}`;
   } else if (adminToken) {
     config.headers.Authorization = `Bearer ${adminToken}`;
