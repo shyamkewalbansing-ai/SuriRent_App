@@ -186,66 +186,39 @@ function TenantRow({ group, expanded, onToggle, onReminder }) {
   return (
     <div className={`bg-white rounded-2xl border border-orange-100 border-l-4 ${left} overflow-hidden transition`}
       data-testid={`tenant-row-${group.tenant_id}`}>
-      <button onClick={onToggle} className="w-full text-left p-3 sm:p-4 hover:bg-orange-50/30 transition">
-        {/* ROW 1 — desktop has all in one line; mobile wraps onto multiple */}
-        <div className="grid grid-cols-[auto_1fr_auto] md:grid-cols-[auto_minmax(0,2fr)_minmax(0,1.4fr)_minmax(0,1.2fr)_minmax(0,1.2fr)_auto_16px] items-center gap-3">
+      <button onClick={onToggle} className="w-full text-left p-3 sm:p-3 hover:bg-orange-50/30 transition">
+        {/* ROW — compacter desktop grid: avatar | huurder | open maanden chips | laatste periode | bedrag | chevron */}
+        <div className="grid grid-cols-[auto_1fr_auto] md:grid-cols-[auto_minmax(0,1.8fr)_minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1.1fr)_16px] items-center gap-3">
           {/* Avatar */}
-          <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-full flex items-center justify-center font-black text-base shrink-0"
+          <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-full flex items-center justify-center font-black text-sm shrink-0"
             style={{ background: avatar.bg, color: avatar.fg }}>
             {initials(group.tenant_name)}
           </div>
 
-          {/* Huurder name + sublabel */}
+          {/* Huurder name + status pill */}
           <div className="min-w-0">
-            <p className="font-bold text-slate-900 text-sm sm:text-base truncate">{group.tenant_name}</p>
-            <div className="mt-0.5 md:hidden">
-              <StatusPill severity={sev} openCount={group.openCount} />
-            </div>
-            <div className="hidden md:block mt-0.5">
+            <p className="font-bold text-slate-900 text-sm sm:text-[15px] truncate">{group.tenant_name}</p>
+            <div className="mt-0.5">
               <StatusPill severity={sev} openCount={group.openCount} />
             </div>
           </div>
 
-          {/* Periode — desktop only (comma list of unpaid months) */}
-          <div className="hidden md:block text-sm text-slate-600 truncate">
-            {group.periodLabel || '—'}
-          </div>
-
-          {/* Status pill — desktop only (duplicate of name pill, but in own column for table align) */}
-          <div className="hidden md:flex justify-center">
-            {sev !== 'ok' ? (
-              <span className={`inline-flex items-center gap-1.5 text-[11px] font-bold px-3 py-1.5 rounded-md ${
-                sev === 'critical' ? 'bg-red-50 text-red-700' : 'bg-orange-50 text-orange-700'
-              }`}>
-                <span className={`w-1.5 h-1.5 rounded-full ${sev === 'critical' ? 'bg-red-500' : 'bg-orange-500'}`} />
-                {sev === 'critical' ? `${group.openCount} maanden achter` : '1 maand achter'}
-              </span>
-            ) : <CheckCircle2 className="w-5 h-5 text-emerald-400" />}
-          </div>
-
-          {/* Open maanden — desktop only */}
-          <div className="hidden md:flex flex-col items-center">
+          {/* Open maanden chips — desktop only */}
+          <div className="hidden md:flex flex-wrap gap-1 items-center justify-start">
             {group.openCount > 0 ? (
-              <>
-                <div className="flex gap-1.5 flex-wrap justify-center">
-                  {group.open.slice(-3).map((inv) => (
-                    <MonthChip key={inv.id} month={MONTHS_NL[inv.period_month - 1].slice(0, 3).toLowerCase()} severity={sev} />
-                  ))}
-                </div>
-                <p className={`text-[10px] font-bold mt-1 ${sev === 'critical' ? 'text-red-500' : 'text-orange-500'}`}>
-                  {group.openCount} openstaand
-                </p>
-              </>
+              group.open.slice(-4).map((inv) => (
+                <MonthChip key={inv.id} month={MONTHS_NL[inv.period_month - 1].slice(0, 3).toLowerCase()} severity={sev} />
+              ))
             ) : (
               <span className="text-emerald-600 font-semibold text-xs">—</span>
             )}
           </div>
 
-          {/* Laatste periode — desktop only */}
-          <div className="hidden md:block text-right text-xs whitespace-nowrap">
+          {/* Laatste periode — desktop only, compact */}
+          <div className="hidden md:block text-right text-xs whitespace-nowrap min-w-0">
             {last ? (
               <>
-                <p className="text-slate-700 font-semibold capitalize">{MONTHS_NL[last.period_month - 1]} {last.period_year}</p>
+                <p className="text-slate-700 font-semibold capitalize truncate">{MONTHS_NL[last.period_month - 1].slice(0, 3)} {last.period_year}</p>
                 <p className={`font-bold ${sev === 'critical' ? 'text-red-500' : 'text-orange-500'}`}>Niet betaald</p>
               </>
             ) : (
@@ -255,14 +228,13 @@ function TenantRow({ group, expanded, onToggle, onReminder }) {
 
           {/* Bedrag */}
           <div className="text-right shrink-0 whitespace-nowrap">
-            <p className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-slate-400">{group.currency}</p>
             <p className={`text-base sm:text-lg font-black tracking-tight ${amtCls}`}
               data-testid={`tenant-total-${group.tenant_id}`}>
-              {fmtAmount(group.totalOpen, group.currency)}
+              {group.currency} {fmtAmount(group.totalOpen, group.currency)}
             </p>
-            {group.openCount > 0 && (
+            {group.openCount > 1 && (
               <p className="text-[10px] text-slate-400 mt-0.5">
-                ({group.openCount} × {fmtAmount(group.totalOpen / group.openCount, group.currency)})
+                {group.openCount} × {fmtAmount(group.totalOpen / group.openCount, group.currency)}
               </p>
             )}
           </div>
@@ -438,7 +410,7 @@ export default function Invoices() {
   const [tab, setTab] = useState('all');  // 'all' | 'open' | 'paid'
   const [filterSeverity, setFilterSeverity] = useState('all'); // all|critical|late|ok
   const [filterOpen, setFilterOpen] = useState(false);
-  const [expanded, setExpanded] = useState(new Set());
+  const [expanded, setExpanded] = useState(null);  // single tenant_id of currently expanded row
   const [toast, setToast] = useState(null);
   const today = new Date();
 
@@ -508,11 +480,7 @@ export default function Invoices() {
   }, [groups, tab, filterSeverity, search]);
 
   const toggleExpand = (id) => {
-    setExpanded((cur) => {
-      const next = new Set(cur);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
+    setExpanded((cur) => (cur === id ? null : id));
   };
 
   const openReminder = (group, channel) => {
@@ -606,12 +574,11 @@ export default function Invoices() {
       </div>
 
       {/* COLUMN HEADERS — desktop only */}
-      <div className="hidden md:grid grid-cols-[auto_minmax(0,2fr)_minmax(0,1.4fr)_minmax(0,1.2fr)_minmax(0,1.2fr)_auto_16px] gap-3 px-4 text-[10px] font-black uppercase tracking-widest text-slate-400 items-center">
-        <span style={{ width: '44px' }} />
+      <div className="hidden md:grid grid-cols-[auto_minmax(0,1.8fr)_minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1.1fr)_16px] gap-3 px-3 text-[10px] font-black uppercase tracking-widest text-slate-400 items-center">
+        <span style={{ width: '40px' }} />
         <span>Huurder</span>
-        <span>Periode</span>
-        <span className="text-center">Status</span>
-        <span className="text-center">Open maanden</span>
+        <span>Open maanden</span>
+        <span className="text-right">Laatste</span>
         <span className="text-right">Totaal openstaand</span>
         <span />
       </div>
@@ -643,39 +610,12 @@ export default function Invoices() {
         <div className="space-y-2 sm:space-y-2.5">
           {filteredGroups.map((g) => (
             <TenantRow key={g.tenant_id} group={g}
-              expanded={expanded.has(g.tenant_id)}
+              expanded={expanded === g.tenant_id}
               onToggle={() => toggleExpand(g.tenant_id)}
               onReminder={openReminder} />
           ))}
         </div>
       )}
-
-      {/* LEGEND */}
-      <div className="bg-white rounded-2xl border border-orange-100 p-4 sm:p-5" data-testid="invoices-legend">
-        <div className="flex items-start gap-3">
-          <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0" style={{ background: ORANGE }}>
-            <Info className="w-4 h-4 text-white" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="font-bold text-slate-900 mb-2">Wat betekent dit?</p>
-            <div className="space-y-1.5 text-sm">
-              {[
-                { dot: 'bg-red-500', l: '2+ maanden achter', r: 'Kritiek', rCls: 'text-red-500' },
-                { dot: 'bg-orange-500', l: '1 maand achter', r: 'Te laat', rCls: 'text-orange-500' },
-                { dot: 'bg-emerald-500', l: 'Geen achterstand', r: 'Op tijd', rCls: 'text-emerald-500' },
-              ].map((row) => (
-                <div key={row.l} className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <span className={`w-2.5 h-2.5 rounded-full ${row.dot}`} />
-                    <span className="text-slate-600 text-sm">{row.l}</span>
-                  </div>
-                  <span className={`text-sm font-bold ${row.rCls}`}>{row.r}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
 
       {/* MODALS */}
       {creating && <InvoiceForm tenants={tenants}
