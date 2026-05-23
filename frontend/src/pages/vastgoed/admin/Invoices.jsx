@@ -176,7 +176,7 @@ function MonthChip({ month, severity }) {
   );
 }
 
-function TenantRow({ group, expanded, onToggle, onReminder }) {
+function TenantRow({ group, expanded, onToggle, onReminder, tenants }) {
   const sev = group.severity;
   const left = sev === 'critical' ? 'border-l-red-500'
     : sev === 'late' ? 'border-l-orange-500'
@@ -285,20 +285,42 @@ function TenantRow({ group, expanded, onToggle, onReminder }) {
               </div>
             </div>
 
-            {/* Action buttons */}
-            <div className="grid grid-cols-2 gap-2 mt-4">
+            {/* Action buttons — 3 herinnerings-kanalen */}
+            <div className="grid grid-cols-3 gap-2 mt-4">
               <button onClick={(e) => { e.stopPropagation(); onReminder(group, 'whatsapp'); }}
                 data-testid={`reminder-whatsapp-${group.tenant_id}`}
-                className="inline-flex items-center justify-center gap-2 px-3 py-3 bg-white border-2 border-emerald-300 hover:bg-emerald-50 text-emerald-700 font-bold rounded-xl text-sm">
+                className="inline-flex items-center justify-center gap-1.5 px-2 py-3 bg-white border-2 border-emerald-300 hover:bg-emerald-50 text-emerald-700 font-bold rounded-xl text-xs sm:text-sm">
                 <MessageCircle className="w-4 h-4" />
-                <span className="hidden sm:inline">Stuur herinnering</span>
-                <span className="sm:hidden">Herinnering</span>
+                <span className="hidden sm:inline">Twilio WA</span>
+                <span className="sm:hidden">Twilio</span>
               </button>
               <button onClick={(e) => { e.stopPropagation(); onReminder(group, 'email'); }}
                 data-testid={`reminder-email-${group.tenant_id}`}
-                className="inline-flex items-center justify-center gap-2 px-3 py-3 bg-white border-2 border-orange-300 hover:bg-orange-50 text-[#FF5C00] font-bold rounded-xl text-sm">
+                className="inline-flex items-center justify-center gap-1.5 px-2 py-3 bg-white border-2 border-orange-300 hover:bg-orange-50 text-[#FF5C00] font-bold rounded-xl text-xs sm:text-sm">
                 <Mail className="w-4 h-4" />
-                <span>Herinnering e-mail</span>
+                <span>E-mail</span>
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const t = tenants?.find((x) => x.id === group.tenant_id);
+                  const phone = (t?.phone || '').replace(/\D/g, '');
+                  if (!phone) {
+                    alert(`${group.tenant_name} heeft geen telefoonnummer. Voeg toe via Huurders.`);
+                    return;
+                  }
+                  const cur = group.currency;
+                  const list = group.open
+                    .map((i) => `• ${MONTHS_NL[i.period_month - 1]} ${i.period_year}: ${cur} ${Number(i.amount).toFixed(2)}`)
+                    .join('\n');
+                  const msg = `Beste ${group.tenant_name},\n\nVriendelijke herinnering — u heeft ${group.openCount} openstaande factu${group.openCount > 1 ? 'ren' : 'ur'}:\n\n${list}\n\n*Totaal openstaand: ${cur} ${Number(group.totalOpen).toFixed(2)}*\n\nGelieve zo spoedig mogelijk te betalen.\n\n— SuriRent`;
+                  window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank', 'noopener');
+                }}
+                data-testid={`reminder-wa-manual-${group.tenant_id}`}
+                className="inline-flex items-center justify-center gap-1.5 px-2 py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl text-xs sm:text-sm shadow-[0_6px_16px_-4px_rgba(16,185,129,0.5)]">
+                <MessageCircle className="w-4 h-4" />
+                <span className="hidden sm:inline">WhatsApp</span>
+                <span className="sm:hidden">WA</span>
               </button>
             </div>
 
@@ -613,7 +635,8 @@ export default function Invoices() {
             <TenantRow key={g.tenant_id} group={g}
               expanded={expanded === g.tenant_id}
               onToggle={() => toggleExpand(g.tenant_id)}
-              onReminder={openReminder} />
+              onReminder={openReminder}
+              tenants={tenants} />
           ))}
         </div>
       )}
