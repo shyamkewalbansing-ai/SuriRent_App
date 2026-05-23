@@ -339,6 +339,20 @@ User koos voor **Optie C — minimale herbouw** (kern eerst), dan vroeg om **Fas
 - ✅ **Admin UI**: nieuwe `QrCode`-icon-knop op elke appartement-kaart in Appartementen-tab — opent de sticker-PDF direct in een nieuw tabblad. Branded oranje (`bg-[#FFE6D3] text-[#C74600]`).
 - ✅ Geverifieerd: 9 nieuwe pytest cases (`test_kiosk_qr_sticker.py`) + frontend Playwright e2e (Welkom-prefill, geen email-input, fallback bij ongeldige apt-id, admin-knoppen aanwezig). Iteration 11 report.
 
+### Session 2026-05-23 — Huurder Kiosk: PIN-only + admin-kiosk redesign ✅
+- ✅ **Per-bedrijf PIN-uniqueness** afgedwongen op `POST /api/auth/tenant-set-pin`: wanneer admin een PIN instelt die al in gebruik is door een andere huurder van hetzelfde bedrijf → `409` met `detail` die de naam van de conflicterende huurder bevat. Zelfde-tenant idempotent (geen vals 409 tegen zichzelf). Cross-company isolation behouden — PIN `5678` kan in bedrijf A én bedrijf B bestaan.
+- ✅ **Nieuwe endpoint** `POST /api/tenant-portal/pin-login` body `{pin, company_slug?, company_id?}` → één unieke huurder zoeken binnen het bedrijf, token uitgeven. 401 bij verkeerde PIN, 400 zonder bedrijfscontext. Brute-force throttle (8 fails → 429) per IP+company.
+- ✅ **Frontend volledig herontworpen** (`TenantKioskLayout.jsx`) in admin-kiosk-stijl:
+  - **PIN-only login** — geen e-mail-stap meer (de QR-sticker geeft `apt=<id>` mee voor "Welkom &lt;Voornaam&gt;", standalone modus haalt `company_id` uit branding).
+  - **Branded oranje gradient** achtergrond (volgt `branding.primary_color`).
+  - **Hero-stijl welkom**: groot logo (of huis-icon), "HUURDER KIOSK" eyebrow, "Welkom &lt;naam&gt;", appartement-badge bij QR-mode.
+  - **Groot PIN-pad** met framer-motion: PinDots met shake-animatie bij fouten, knoppen met depth-shadow + active translate-Y, haptic feedback via `navigator.vibrate`.
+  - **Dashboard** met saldo-banner (rood bij achterstand, groen bij volledig bij) + 4 actie-tegels (Betalen/Onderhoud/Mijn gegevens/Contact), elk met eigen accent (oranje/sky/emerald/violet) + hover lift.
+  - **`framer-motion` AnimatePresence** voor view transities (slide-in/out).
+  - **Sticky witte footer** met bedrijfsnaam + huurder-naam + "Uit"-knop (matched admin-kiosk pattern).
+  - Idle auto-logout na 90s blijft behouden.
+- ✅ Geverifieerd: **15 nieuwe pytest cases + 24 regressie + frontend Playwright e2e (iteration 12)**. Wrong PIN → shake + auto-clear, juiste PIN → dashboard, alle 4 tegels navigeerbaar, QR-mode prefill, no-context graceful error. Zero issues.
+
 ## Prioritized Backlog (Fases E-F)
 - 📧 **Email notificaties** — wacht op SendGrid / Resend credentials van user
 - 📱 **WhatsApp/SMS herinneringen** — wacht op Twilio credentials
