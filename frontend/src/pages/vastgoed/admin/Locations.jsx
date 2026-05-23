@@ -1,12 +1,44 @@
-import { useState, useEffect, useCallback } from 'react';
-import { MapPin, Plus, Pencil, Trash2, X, Check, Loader2, Building2, Image as ImageIcon } from 'lucide-react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { MapPin, Plus, Pencil, Trash2, X, Check, Loader2, Building2, Image as ImageIcon, Upload } from 'lucide-react';
 import { api, formatError } from '../../../lib/api';
 import { useAutoRefresh } from '../../../lib/auto-refresh';
 
 function LocationForm({ initial, onCancel, onSaved }) {
   const [data, setData] = useState(initial || { name: '', address: '', photo_url: '' });
   const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
+  const fileInputRef = useRef(null);
+
+  const handleFile = async (file) => {
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      setError('Bestand is te groot (max 5 MB).');
+      return;
+    }
+    if (!file.type.startsWith('image/')) {
+      setError('Alleen afbeeldingen toegestaan.');
+      return;
+    }
+    setUploading(true); setError('');
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      // Hergebruikt de bestaande branding-upload endpoint (zelfde
+      // landing_assets opslag, 5 MB limiet, image-only validation).
+      // Resultaat: { id, url: '/api/landing/asset/<id>' }.
+      const { data: r } = await api.post('/companies/me/branding/upload', fd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      const apiBase = process.env.REACT_APP_BACKEND_URL || '';
+      const absolute = r.url?.startsWith('http') ? r.url : `${apiBase}${r.url}`;
+      setData((d) => ({ ...d, photo_url: absolute }));
+    } catch (e) {
+      setError(formatError(e));
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const save = async () => {
     if (!data.name.trim()) { setError('Naam is verplicht'); return; }
@@ -53,21 +85,69 @@ function LocationForm({ initial, onCancel, onSaved }) {
               className="w-full h-11 px-3 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] outline-none" />
           </div>
           <div>
-            <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">Foto URL</label>
-            <input value={data.photo_url || ''} onChange={(e) => setData({ ...data, photo_url: e.target.value })}
-              placeholder="https://… (optioneel)"
-              data-testid="loc-photo"
-              className="w-full h-11 px-3 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] outline-none font-mono text-xs" />
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">Foto</label>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              data-testid="loc-photo-file"
+              className="hidden"
+              onChange={(e) => handleFile(e.target.files?.[0])}
+            />
             {data.photo_url ? (
-              <div className="mt-2 h-32 rounded-xl bg-slate-100 overflow-hidden flex items-center justify-center">
+              <button type="button"
+                onClick={() => fileInputRef.current?.click()}
+                data-testid="loc-photo-preview"
+                className="relative w-full mt-1 h-40 rounded-xl bg-slate-100 overflow-hidden group cursor-pointer">
                 <img src={data.photo_url} alt="preview" className="w-full h-full object-cover"
                   onError={(e) => { e.currentTarget.style.display = 'none'; }} />
-              </div>
+                <div className="absolute inset-0 bg-slate-900/0 group-hover:bg-slate-900/40 transition flex items-center justify-center opacity-0 group-hover:opacity-100">
+                  <span className="inline-flex items-center gap-2 px-3 py-1.5 bg-white text-slate-900 rounded-lg font-bold text-sm">
+                    <Upload className="w-4 h-4" /> Wijzig foto
+                  </span>
+                </div>
+                {uploading && (
+                  <div className="absolute inset-0 bg-white/70 flex items-center justify-center">
+                    <Loader2 className="w-6 h-6 animate-spin text-[#FF5C00]" />
+                  </div>
+                )}
+                <button type="button"
+                  onClick={(e) => { e.stopPropagation(); setData((d) => ({ ...d, photo_url: '' })); }}
+                  className="absolute top-2 right-2 w-7 h-7 rounded-full bg-white shadow flex items-center justify-center hover:bg-red-50 text-slate-600 hover:text-red-600"
+                  aria-label="Foto verwijderen">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </button>
             ) : (
-              <div className="mt-2 h-32 rounded-xl bg-slate-50 border-2 border-dashed border-slate-200 flex items-center justify-center text-slate-400">
-                <ImageIcon className="w-8 h-8" />
-              </div>
+              <button type="button"
+                onClick={() => fileInputRef.current?.click()}
+                data-testid="loc-photo-empty"
+                className="w-full mt-1 h-40 rounded-xl bg-slate-50 border-2 border-dashed border-slate-300 hover:border-[#FF5C00] hover:bg-orange-50/40 transition flex flex-col items-center justify-center gap-2 text-slate-500 hover:text-[#FF5C00] cursor-pointer">
+                {uploading ? (
+                  <>
+                    <Loader2 className="w-7 h-7 animate-spin" />
+                    <span className="text-xs font-bold">Uploaden…</span>
+                  </>
+                ) : (
+                  <>
+                    <div className="w-12 h-12 rounded-full bg-white border border-slate-200 flex items-center justify-center">
+                      <ImageIcon className="w-5 h-5" />
+                    </div>
+                    <span className="text-xs font-bold">Klik om foto te uploaden</span>
+                    <span className="text-[10px] text-slate-400">JPG / PNG · max 5 MB</span>
+                  </>
+                )}
+              </button>
             )}
+            <details className="mt-2">
+              <summary className="text-[11px] text-slate-400 cursor-pointer hover:text-slate-600 select-none">
+                of plak een externe URL
+              </summary>
+              <input value={data.photo_url || ''} onChange={(e) => setData({ ...data, photo_url: e.target.value })}
+                placeholder="https://…"
+                data-testid="loc-photo"
+                className="mt-1.5 w-full h-9 px-3 rounded-xl border border-slate-200 focus:border-[#FF5C00] outline-none font-mono text-xs" />
+            </details>
           </div>
         </div>
         {error && <p className="text-sm text-red-600 mt-3" data-testid="loc-form-error">{error}</p>}
