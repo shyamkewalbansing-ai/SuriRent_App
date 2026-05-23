@@ -149,7 +149,7 @@ function MobileTopLogo({ user, activeCompany }) {
   const fullName = activeCompany?.name || (user?.role === 'superadmin' ? 'Alle bedrijven' : 'SuriRent');
   const [namePart1, namePart2] = splitNameHalf(fullName);
   return (
-    <header className="xl:hidden sticky top-0 z-30 bg-[#FFF7F0]/85 backdrop-blur-md"
+    <header className="sticky top-0 z-30 bg-[#FFF7F0]/85 backdrop-blur-md"
       style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
       data-testid="mobile-top-logo">
       <div className="px-4 py-3 landscape:py-1.5 flex items-center gap-3 landscape:gap-2">
@@ -188,10 +188,10 @@ function MobileSheet({ open, onClose, active, onChange, onLogout, user, tabs, ac
   const navigate = useNavigate();
   if (!open) return null;
   return (
-    <div className="xl:hidden fixed inset-0 z-50" data-testid="mobile-sheet">
+    <div className="fixed inset-0 z-50" data-testid="mobile-sheet">
       <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm animate-fade-in" onClick={onClose} />
       <aside
-        className="absolute left-0 right-0 bottom-0 bg-white rounded-t-3xl shadow-[0_-24px_60px_-12px_rgba(15,23,42,0.35)] flex flex-col animate-slide-up overflow-hidden"
+        className="absolute left-0 right-0 bottom-0 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 sm:w-[480px] bg-white rounded-t-3xl shadow-[0_-24px_60px_-12px_rgba(15,23,42,0.35)] flex flex-col animate-slide-up overflow-hidden"
         style={{ maxHeight: '85dvh' }}
       >
         {/* Handle / grip */}
@@ -240,7 +240,7 @@ function MobileSheet({ open, onClose, active, onChange, onLogout, user, tabs, ac
 
         {/* TABS — alle modules in een grid */}
         <div className="flex-1 overflow-y-auto px-3 pb-2">
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
             {tabs.map((t) => {
               const Icon = t.icon;
               const isActive = active === t.id;
@@ -337,14 +337,14 @@ function MobileTabBar({ active, onChange, tabs, onOpenMenu, user, badgeCount }) 
 
   return (
     <nav
-      className="xl:hidden fixed bottom-0 inset-x-0 z-40 bg-white/90 backdrop-blur-xl border-t border-orange-100/70 shadow-[0_-12px_36px_-12px_rgba(15,23,42,0.18)]"
+      className="fixed bottom-0 inset-x-0 z-40 bg-white/90 backdrop-blur-xl border-t border-orange-100/70 shadow-[0_-12px_36px_-12px_rgba(15,23,42,0.18)]"
       data-testid="mobile-tab-bar"
     >
       {/* Brand accent line top-center */}
       <div aria-hidden className="absolute top-0 left-1/2 -translate-x-1/2 w-12 h-[3px] rounded-full bg-gradient-to-r from-[#FF8A3D] to-[#FF5C00] opacity-90" />
 
       <div
-        className="grid grid-cols-5 gap-0.5 px-1.5 pt-3 landscape:pt-1"
+        className="grid grid-cols-5 gap-0.5 px-1.5 pt-3 landscape:pt-1 max-w-6xl mx-auto"
         style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 12px)' }}
       >
         {left.map(renderTab)}
@@ -1451,35 +1451,31 @@ export default function AdminDashboard() {
   const doLogout = async () => { await logout(); navigate('/login'); };
 
   return (
-    <div className="min-h-screen bg-[#FFF7F0] flex">
-      <Sidebar active={tab} onChange={handleSetTab} onLogout={doLogout}
-        user={user} tabs={tabs} badgeCount={badgeCount} />
-      <div className="flex-1 flex flex-col min-w-0">
-        <MobileTopLogo user={user} activeCompany={activeCompany} />
-        <ImpersonationBanner />
-        <TrialBanner />
-        <main className="flex-1 p-5 xl:p-8 pb-32 xl:pb-8 w-full">
-          {tab === 'companies' && <Companies />}
-          {tab === 'subscriptions' && <Subscriptions />}
-          {tab === 'saas_settings' && <SaasSettings />}
-          {tab === 'landing_editor' && <LandingEditor />}
-          {tab === 'branding' && <Branding />}
-          {tab === 'overview' && <Overview />}
-          {tab === 'locations' && <Locations />}
-          {tab === 'apartments' && <Apartments />}
-          {tab === 'tenants' && <Tenants />}
-          {tab === 'contracts' && <Contracts />}
-          {tab === 'payments' && <Payments />}
-          {tab === 'invoices' && <Invoices />}
-          {tab === 'deposits' && <Deposits />}
-          {tab === 'maintenance' && <Maintenance />}
-          {tab === 'kasgeld' && <Kasgeld />}
-          {tab === 'employees' && <Employees />}
-          {tab === 'notifications' && <Notifications />}
-          {tab === 'mijn_abonnement' && <MijnAbonnement />}
-          {tab === 'settings' && <SettingsPage />}
-        </main>
-      </div>
+    <div className="min-h-screen bg-[#FFF7F0] flex flex-col">
+      <MobileTopLogo user={user} activeCompany={activeCompany} />
+      <ImpersonationBanner />
+      <TrialBanner />
+      <main className="flex-1 p-5 sm:p-6 lg:p-8 pb-32 w-full max-w-6xl mx-auto">
+        {tab === 'companies' && <Companies />}
+        {tab === 'subscriptions' && <Subscriptions />}
+        {tab === 'saas_settings' && <SaasSettings />}
+        {tab === 'landing_editor' && <LandingEditor />}
+        {tab === 'branding' && <Branding />}
+        {tab === 'overview' && <Overview />}
+        {tab === 'locations' && <Locations />}
+        {tab === 'apartments' && <Apartments />}
+        {tab === 'tenants' && <Tenants />}
+        {tab === 'contracts' && <Contracts />}
+        {tab === 'payments' && <Payments />}
+        {tab === 'invoices' && <Invoices />}
+        {tab === 'deposits' && <Deposits />}
+        {tab === 'maintenance' && <Maintenance />}
+        {tab === 'kasgeld' && <Kasgeld />}
+        {tab === 'employees' && <Employees />}
+        {tab === 'notifications' && <Notifications />}
+        {tab === 'mijn_abonnement' && <MijnAbonnement />}
+        {tab === 'settings' && <SettingsPage />}
+      </main>
       <MobileTabBar active={tab} onChange={handleSetTab} tabs={tabs} user={user}
         onOpenMenu={() => setDrawerOpen(true)} badgeCount={badgeCount} />
       <MobileSheet open={drawerOpen} onClose={() => setDrawerOpen(false)}
