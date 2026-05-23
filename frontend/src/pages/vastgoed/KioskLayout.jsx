@@ -337,7 +337,7 @@ function PaymentHistoryModal({ tenant, apartment, onClose }) {
   }, [tenant.id]);
 
   return (
-    <div className="fixed inset-0 z-50 backdrop-blur-sm flex items-center justify-center p-4 md:p-6"
+    <div className="fixed inset-0 z-50 backdrop-blur-md flex items-center justify-center p-4 md:p-6"
       style={{
         paddingTop: 'max(env(safe-area-inset-top, 0px), 1rem)',
         paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 1rem)',
@@ -347,7 +347,7 @@ function PaymentHistoryModal({ tenant, apartment, onClose }) {
         backgroundColor: 'rgba(199, 70, 0, 0.55)',
       }}
       data-testid="kiosk-history-modal">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl h-full md:h-auto md:max-h-[85vh] overflow-hidden flex flex-col">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] my-auto overflow-hidden flex flex-col">
         <div className="px-5 sm:px-6 py-3.5 border-b border-slate-100 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3 min-w-0">
             <div className="w-9 h-9 rounded-lg bg-orange-100 flex items-center justify-center shrink-0">
@@ -656,20 +656,23 @@ function MethodSelect({ payload, overview, onBack, onConfirm }) {
           <p className="text-[10px] sm:text-xs opacity-70">Appt. {apt.number}</p>
         </div>
       </div>
-      <div className="flex-1 min-h-0 flex items-center justify-center pb-6">
-        <div className="grid sm:grid-cols-3 gap-4 max-w-4xl w-full px-2">
+      <div className="flex-1 min-h-0 flex items-center justify-center pb-6 overflow-auto">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 max-w-4xl w-full px-2">
           {methods.map((m) => {
             const Icon = m.icon;
             return (
               <button key={m.v} onClick={() => onConfirm({ ...payload, method: m.v })} data-testid={`method-${m.v}`}
-                className="bg-white rounded-3xl p-8 text-center hover:scale-[1.03] active:scale-[0.98] transition aspect-[3/4] flex flex-col items-center justify-center shadow-2xl">
-                <div className={`w-20 h-20 rounded-full flex items-center justify-center mb-4 ${
+                className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-8 flex sm:flex-col items-center sm:justify-center text-left sm:text-center gap-4 sm:gap-0 hover:scale-[1.02] sm:hover:scale-[1.03] active:scale-[0.98] transition sm:aspect-[3/4] shadow-2xl">
+                <div className={`w-14 h-14 sm:w-20 sm:h-20 rounded-full flex items-center justify-center shrink-0 sm:mb-4 ${
                   m.accent === 'red' ? 'bg-red-50 text-red-500' : 'bg-emerald-50 text-emerald-500'
                 }`}>
-                  <Icon className="w-10 h-10" />
+                  <Icon className="w-7 h-7 sm:w-10 sm:h-10" />
                 </div>
-                <p className="text-2xl font-extrabold text-slate-900">{m.l}</p>
-                <p className="text-sm text-slate-500 mt-1">{m.sub}</p>
+                <div className="min-w-0 flex-1 sm:flex-none">
+                  <p className="text-lg sm:text-2xl font-extrabold text-slate-900">{m.l}</p>
+                  <p className="text-xs sm:text-sm text-slate-500 mt-0.5 sm:mt-1">{m.sub}</p>
+                </div>
+                <ArrowRight className="w-5 h-5 text-slate-300 sm:hidden ml-auto shrink-0" />
               </button>
             );
           })}
@@ -742,20 +745,92 @@ function Row({ label, value }) {
   );
 }
 
-function ReceiptScreen({ payment, onDone }) {
+function ReceiptScreen({ payment, overview, onDone }) {
+  // Bereken openstaand saldo NA deze betaling (vorig totaal - betaald bedrag).
+  const cur = payment.currency || overview?.balance?.currency || 'SRD';
+  const prevDue = Number(overview?.total_due || 0);
+  const remaining = Math.max(0, prevDue - Number(payment.amount || 0));
+
+  // Print-geluid synthese (Web Audio API) — een korte mechanische "ratel"
+  // gevolgd door een chime. Geen externe audio-assets nodig.
+  useEffect(() => {
+    let ctx;
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      ctx = new AC();
+      const now = ctx.currentTime;
+
+      // 1) "Ratel" (printer head) — gefilterde witte ruis pulserend voor 0.9s
+      const bufferSize = Math.floor(ctx.sampleRate * 0.9);
+      const noiseBuf = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+      const data = noiseBuf.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        // Pulserende ruis (snelle aan/uit modulatie = printer-klik)
+        const pulse = Math.sin((i / ctx.sampleRate) * 2 * Math.PI * 28) > 0 ? 1 : 0.15;
+        data[i] = (Math.random() * 2 - 1) * pulse * 0.6;
+      }
+      const noise = ctx.createBufferSource();
+      noise.buffer = noiseBuf;
+      const noiseFilter = ctx.createBiquadFilter();
+      noiseFilter.type = 'bandpass';
+      noiseFilter.frequency.value = 1400;
+      noiseFilter.Q.value = 1.2;
+      const noiseGain = ctx.createGain();
+      noiseGain.gain.setValueAtTime(0.0001, now);
+      noiseGain.gain.exponentialRampToValueAtTime(0.25, now + 0.05);
+      noiseGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.9);
+      noise.connect(noiseFilter).connect(noiseGain).connect(ctx.destination);
+      noise.start(now);
+      noise.stop(now + 0.9);
+
+      // 2) Chime — twee korte tonen aan het einde (success ding-ding)
+      const tone = (freq, start, dur, vol = 0.25) => {
+        const osc = ctx.createOscillator();
+        const g = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        g.gain.setValueAtTime(0.0001, start);
+        g.gain.exponentialRampToValueAtTime(vol, start + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, start + dur);
+        osc.connect(g).connect(ctx.destination);
+        osc.start(start);
+        osc.stop(start + dur);
+      };
+      tone(880, now + 0.95, 0.22);
+      tone(1318, now + 1.18, 0.32);
+    } catch { /* audio kan geweigerd zijn — niet kritiek */ }
+
+    return () => { try { ctx && ctx.close(); } catch { /* noop */ } };
+  }, []);
+
+  // Auto-terug naar beginscherm na 10 seconden.
+  useEffect(() => {
+    const t = setTimeout(onDone, 10000);
+    return () => clearTimeout(t);
+  }, [onDone]);
+
   return (
-    <div className="h-full bg-orange-500 flex flex-col items-center justify-center p-4 sm:p-8">
-      <div className="bg-white rounded-3xl w-full max-w-md p-6 sm:p-8 text-center shadow-2xl">
-        <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-3">
+    <div className="h-full bg-orange-500 flex flex-col items-center justify-start sm:justify-center p-4 sm:p-8 overflow-hidden">
+      <div className="text-center mb-3 mt-2 sm:mt-0" data-testid="receipt-thanks">
+        <div className="w-16 h-16 rounded-full bg-white/95 flex items-center justify-center mx-auto mb-2 shadow-lg">
           <Check className="w-10 h-10 text-emerald-600" strokeWidth={3} />
         </div>
-        <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900">Bedankt!</h2>
-        <p className="text-sm text-slate-500 mb-5">Uw betaling is succesvol verwerkt</p>
-        <div className="bg-slate-50 rounded-2xl p-5 mb-5 text-left border-2 border-dashed border-slate-200">
+        <h2 className="text-2xl sm:text-3xl font-extrabold text-white">Bedankt!</h2>
+        <p className="text-sm text-white/90">Uw betaling is succesvol verwerkt</p>
+      </div>
+
+      <motion.div
+        initial={{ y: '-110%', opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ type: 'spring', stiffness: 60, damping: 14, delay: 0.15, duration: 1.1 }}
+        className="bg-white rounded-3xl w-full max-w-md p-6 sm:p-8 shadow-2xl"
+        data-testid="receipt-card">
+        <div className="bg-slate-50 rounded-2xl p-5 mb-4 text-left border-2 border-dashed border-slate-200">
           <div className="flex items-center justify-between pb-3 border-b border-slate-200 mb-3">
             <div>
               <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Kwitantie</p>
-              <p className="font-mono text-base font-extrabold text-slate-900">{payment.receipt_number}</p>
+              <p className="font-mono text-base font-extrabold text-slate-900" data-testid="receipt-number">{payment.receipt_number}</p>
             </div>
             <div className="w-9 h-9 rounded-lg bg-orange-500 flex items-center justify-center">
               <Building2 className="w-5 h-5 text-white" />
@@ -770,8 +845,18 @@ function ReceiptScreen({ payment, onDone }) {
             <RowSlim label="Datum" value={new Date(payment.paid_at).toLocaleString('nl-NL')} />
             {payment.approved_by && <RowSlim label="Goedgekeurd door" value={payment.approved_by} />}
             <div className="flex justify-between pt-2 border-t border-dashed border-slate-200 mt-2">
-              <span className="text-slate-500 font-bold">Totaal</span>
-              <span className="font-extrabold text-slate-900 text-lg">{fmtMoney(payment.amount, payment.currency)}</span>
+              <span className="text-slate-500 font-bold">Betaald</span>
+              <span className="font-extrabold text-slate-900 text-lg" data-testid="receipt-paid">{fmtMoney(payment.amount, payment.currency)}</span>
+            </div>
+            <div className={`flex justify-between items-center pt-2 mt-1 rounded-lg px-2 py-1.5 ${
+              remaining > 0 ? 'bg-orange-50' : 'bg-emerald-50'
+            }`} data-testid="receipt-remaining-row">
+              <span className={`text-sm font-bold ${remaining > 0 ? 'text-orange-700' : 'text-emerald-700'}`}>
+                Openstaand saldo
+              </span>
+              <span className={`font-extrabold text-base ${remaining > 0 ? 'text-orange-700' : 'text-emerald-700'}`} data-testid="receipt-remaining">
+                {fmtMoney(remaining, cur)}
+              </span>
             </div>
           </div>
         </div>
@@ -779,7 +864,10 @@ function ReceiptScreen({ payment, onDone }) {
           className="w-full h-12 bg-orange-500 hover:bg-orange-600 text-white text-base font-extrabold rounded-xl">
           Klaar
         </button>
-      </div>
+        <p className="text-center text-xs text-slate-400 mt-2" data-testid="receipt-autoreturn">
+          Automatisch terug naar startscherm in 10 seconden
+        </p>
+      </motion.div>
     </div>
   );
 }
@@ -888,7 +976,7 @@ export default function KioskLayout() {
               onSuccess={(r) => { setPaymentResult(r); setStep('receipt'); }} />
           )}
           {step === 'receipt' && paymentResult && (
-            <ReceiptScreen payment={paymentResult} onDone={reset} />
+            <ReceiptScreen payment={paymentResult} overview={overview} onDone={reset} />
           )}
         </motion.div>
       </AnimatePresence>
