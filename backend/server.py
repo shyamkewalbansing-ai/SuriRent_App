@@ -3567,6 +3567,35 @@ async def clear_customer_display(request: Request):
     return {"ok": True}
 
 
+class CustomerMethodIn(BaseModel):
+    method: Literal["contant", "bank", "mope", "sumup", "uni5pay"]
+
+
+@api.post("/public/customer-display/{slug}/select-method")
+async def customer_pick_method(slug: str, body: CustomerMethodIn):
+    """Publiek — wordt aangeroepen door het klantenscherm zelf wanneer de
+    klant op een betaalmethode-tegel tapt. De admin Kiosk poll't dit veld
+    en gaat dan automatisch door naar het bevestig-scherm."""
+    c = await db.companies.find_one({"slug": slug.lower()}, {"_id": 0, "id": 1})
+    if not c:
+        raise HTTPException(status_code=404, detail="Bedrijf niet gevonden")
+    doc = await db.customer_display.find_one({"company_id": c["id"]}, {"_id": 0})
+    state = (doc or {}).get("state") or {}
+    if state.get("step") not in ("method", "confirm", "pay"):
+        raise HTTPException(status_code=409, detail="Niet in betaalfase")
+    payload = state.get("payload") or {}
+    payload["method"] = body.method
+    payload["method_chosen_at"] = iso(now_utc())
+    state["payload"] = payload
+    state["updated_at"] = iso(now_utc())
+    await db.customer_display.update_one(
+        {"company_id": c["id"]},
+        {"$set": {"state": state, "updated_at": state["updated_at"]}},
+    )
+    return {"ok": True, "method": body.method}
+
+
+
 @api.get("/public/customer-display/{slug}")
 async def get_customer_display(slug: str, response: Response):
     """Publiek — het klantenscherm poll't dit endpoint elke ~500ms."""

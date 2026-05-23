@@ -641,6 +641,32 @@ function MethodSelect({ payload, overview, onBack, onConfirm }) {
     { v: 'mope', l: 'Mope', sub: 'Scan QR-code', icon: QrCode, accent: 'emerald' },
     { v: 'uni5pay', l: 'Uni5Pay', sub: 'Scan QR-code', icon: Smartphone, accent: 'red' },
   ];
+  // Poll het klantenscherm: zodra de klant zelf een methode kiest, gaan we
+  // automatisch door naar het bevestig-scherm. De company-slug komt uit
+  // localStorage (gezet bij PIN-login of via branding).
+  const slug = (() => {
+    try { return localStorage.getItem('pwa_company_slug') || ''; } catch { return ''; }
+  })();
+  const [customerPicked, setCustomerPicked] = useState(null);
+  useEffect(() => {
+    if (!slug) return undefined;
+    let stopped = false;
+    let timer;
+    const tick = async () => {
+      try {
+        const { data } = await api.get(`/public/customer-display/${slug}?t=${Date.now()}`);
+        const m = data?.state?.payload?.method;
+        if (m && !stopped) setCustomerPicked(m);
+      } catch { /* ignore */ }
+      if (!stopped) timer = setTimeout(tick, 800);
+    };
+    tick();
+    return () => { stopped = true; if (timer) clearTimeout(timer); };
+  }, [slug]);
+  useEffect(() => {
+    if (customerPicked) onConfirm({ ...payload, method: customerPicked });
+  }, [customerPicked, onConfirm, payload]);
+
   return (
     <div className="h-full bg-orange-500 flex flex-col" style={{ padding: '1.5vh 1.5vw 0' }}>
       <div className="flex items-center justify-between flex-wrap gap-2 px-1 sm:px-2 py-2">
@@ -656,6 +682,15 @@ function MethodSelect({ payload, overview, onBack, onConfirm }) {
           <p className="text-[10px] sm:text-xs opacity-70">Appt. {apt.number}</p>
         </div>
       </div>
+      {slug && (
+        <div className="px-2 sm:px-4 mb-1">
+          <div className="bg-white/20 backdrop-blur-sm rounded-xl px-4 py-2 text-white text-center text-sm font-bold"
+            data-testid="method-waiting-customer">
+            <Loader2 className="inline-block w-4 h-4 mr-2 animate-spin" />
+            Wacht op klant: laat hen op het klantenscherm de betaalmethode kiezen — of tik hieronder voor handmatige invoer.
+          </div>
+        </div>
+      )}
       <div className="flex-1 min-h-0 flex items-center justify-center pb-6 overflow-auto">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 max-w-4xl w-full px-2">
           {methods.map((m) => {

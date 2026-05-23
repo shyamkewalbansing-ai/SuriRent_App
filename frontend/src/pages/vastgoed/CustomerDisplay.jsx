@@ -255,42 +255,128 @@ function PayScreen({ state }) {
 }
 
 // =====================================================================
-// MethodSelect
+// MethodSelect — klant kiest zelf betaalmethode op het klantenscherm.
+// Toont 5 grote tap-tegels; na tap wordt de keuze naar de backend
+// gestuurd zodat de admin Kiosk automatisch verder kan.
 // =====================================================================
-function MethodScreen({ state }) {
+function MethodScreen({ state, slug }) {
   const payload = state.payload || {};
   const cur = payload.currency || 'SRD';
   const amt = Number(payload.amount || 0);
-  const method = (payload.method || '').toLowerCase();
+  const chosen = (payload.method || '').toLowerCase();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
   const ICONS = { contant: Banknote, bank: CreditCard, mope: Smartphone, sumup: CreditCard, uni5pay: Smartphone };
   const LABELS = { contant: 'Contant', bank: 'Bankoverschrijving', mope: 'Mope', sumup: 'SumUp', uni5pay: 'Uni5Pay' };
-  const Icon = ICONS[method] || CreditCard;
+  const SUBS = { contant: 'Betaal contant aan de balie', bank: 'Overschrijving naar bankrekening',
+    mope: 'Scan QR met de Mope-app', sumup: 'Kaart of contactloos', uni5pay: 'Scan QR-code' };
+
+  const METHODS = [
+    { v: 'contant', accent: 'emerald' },
+    { v: 'mope', accent: 'sky' },
+    { v: 'sumup', accent: 'violet' },
+    { v: 'uni5pay', accent: 'red' },
+    { v: 'bank', accent: 'amber' },
+  ];
+
+  const pick = async (m) => {
+    if (busy || chosen) return;
+    setBusy(true); setError('');
+    try {
+      await api.post(`/public/customer-display/${slug}/select-method`, { method: m });
+    } catch (e) {
+      setError(e?.response?.data?.detail || 'Kon keuze niet doorgeven');
+      setBusy(false);
+    }
+  };
+
+  // Wanneer de klant al een methode heeft gekozen → toon bevestig-scherm.
+  if (chosen) {
+    const Icon = ICONS[chosen] || CreditCard;
+    return (
+      <motion.div key="method-confirm"
+        initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}
+        transition={{ duration: 0.3 }}
+        className="absolute inset-0 flex flex-col items-center justify-center px-4 sm:px-8 text-white"
+        data-testid="cd-method">
+        <p className="font-black uppercase tracking-[0.3em] text-white/85 mb-3"
+          style={{ fontSize: clamp(10, 1.0, 16) }}>U heeft gekozen</p>
+        <div className="w-full max-w-2xl bg-white rounded-2xl sm:rounded-3xl shadow-2xl p-6 sm:p-10 lg:p-12 text-center">
+          <div className="rounded-2xl bg-orange-100 text-[#FF5C00] flex items-center justify-center mx-auto mb-3 sm:mb-5"
+            style={{ width: clamp(56, 7, 120), height: clamp(56, 7, 120) }}>
+            <Icon style={{ width: '55%', height: '55%' }} strokeWidth={2.2} />
+          </div>
+          <p className="font-black text-slate-900 tracking-tight mt-1"
+            style={{ fontSize: clamp(26, 3.6, 62) }}>{LABELS[chosen] || chosen}</p>
+          <div className="my-4 sm:my-6 h-px bg-slate-100" />
+          <p className="font-black uppercase tracking-widest text-slate-400"
+            style={{ fontSize: clamp(10, 1.0, 16) }}>Bedrag</p>
+          <p className="font-black text-[#FF5C00] tracking-tight mt-1 whitespace-nowrap"
+            style={{ fontSize: clamp(34, 6, 100) }} data-testid="cd-method-total">
+            {fmtMoney(amt, cur)}
+          </p>
+          <p className="mt-4 sm:mt-6 text-slate-500"
+            style={{ fontSize: clamp(12, 1.2, 18) }}>
+            <Loader2 className="inline-block mr-2 animate-spin text-[#FF5C00]" style={{ width: clamp(14, 1.4, 20), height: clamp(14, 1.4, 20) }} />
+            De medewerker bevestigt uw betaling…
+          </p>
+        </div>
+      </motion.div>
+    );
+  }
+
+  // Anders: tap-grid om methode te kiezen.
+  const accentMap = {
+    emerald: 'bg-emerald-50 text-emerald-600',
+    sky: 'bg-sky-50 text-sky-600',
+    violet: 'bg-violet-50 text-violet-600',
+    red: 'bg-red-50 text-red-600',
+    amber: 'bg-amber-50 text-amber-700',
+  };
 
   return (
-    <motion.div key="method"
+    <motion.div key="method-pick"
       initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }}
       transition={{ duration: 0.3 }}
-      className="absolute inset-0 flex flex-col items-center justify-center px-4 sm:px-8 text-white"
-      data-testid="cd-method">
-      <p className="font-black uppercase tracking-[0.3em] text-white/85 mb-3"
-        style={{ fontSize: clamp(10, 1.0, 16) }}>Bevestig uw betaling</p>
-      <div className="w-full max-w-2xl bg-white rounded-2xl sm:rounded-3xl shadow-2xl p-6 sm:p-10 lg:p-12 text-center">
-        <div className="rounded-2xl bg-orange-100 text-[#FF5C00] flex items-center justify-center mx-auto mb-3 sm:mb-5"
-          style={{ width: clamp(56, 7, 120), height: clamp(56, 7, 120) }}>
-          <Icon style={{ width: '55%', height: '55%' }} strokeWidth={2.2} />
-        </div>
-        <p className="font-bold text-slate-500 uppercase tracking-widest"
-          style={{ fontSize: clamp(11, 1.2, 18) }}>Betaalmethode</p>
-        <p className="font-black text-slate-900 tracking-tight mt-1"
-          style={{ fontSize: clamp(26, 3.6, 62) }}>{LABELS[method] || method || '—'}</p>
-        <div className="my-4 sm:my-6 h-px bg-slate-100" />
-        <p className="font-black uppercase tracking-widest text-slate-400"
-          style={{ fontSize: clamp(10, 1.0, 16) }}>Bedrag</p>
-        <p className="font-black text-[#FF5C00] tracking-tight mt-1 whitespace-nowrap"
-          style={{ fontSize: clamp(34, 6, 100) }} data-testid="cd-method-total">
+      className="absolute inset-0 flex flex-col items-center justify-center px-3 sm:px-6 lg:px-10 py-4 text-white"
+      data-testid="cd-method-pick">
+      <div className="text-center mb-3 sm:mb-5">
+        <p className="font-black uppercase tracking-[0.3em] text-white/85"
+          style={{ fontSize: clamp(10, 1.1, 18) }}>Hoe wilt u betalen?</p>
+        <p className="font-black text-white tracking-tight whitespace-nowrap"
+          style={{ fontSize: clamp(28, 5, 80) }} data-testid="cd-method-pick-amount">
           {fmtMoney(amt, cur)}
         </p>
       </div>
+      <div className="w-full max-w-5xl grid grid-cols-2 lg:grid-cols-5 gap-2 sm:gap-3 lg:gap-4 px-1">
+        {METHODS.map((m) => {
+          const Icon = ICONS[m.v];
+          return (
+            <motion.button
+              key={m.v}
+              whileTap={{ scale: 0.96 }} whileHover={{ y: -3 }}
+              onClick={() => pick(m.v)} disabled={busy}
+              data-testid={`cd-method-${m.v}`}
+              className="bg-white rounded-2xl sm:rounded-3xl p-3 sm:p-5 lg:p-6 flex flex-col items-center justify-center text-center shadow-2xl active:shadow-lg disabled:opacity-50 transition aspect-[3/4] lg:aspect-auto lg:min-h-[200px]">
+              <div className={`rounded-2xl flex items-center justify-center mb-2 sm:mb-3 ${accentMap[m.accent]}`}
+                style={{ width: clamp(40, 5.5, 80), height: clamp(40, 5.5, 80) }}>
+                <Icon style={{ width: '55%', height: '55%' }} strokeWidth={2.2} />
+              </div>
+              <p className="font-black text-slate-900 tracking-tight"
+                style={{ fontSize: clamp(14, 1.7, 28) }}>{LABELS[m.v]}</p>
+              <p className="text-slate-500 mt-0.5 hidden sm:block"
+                style={{ fontSize: clamp(10, 1.0, 14) }}>{SUBS[m.v]}</p>
+            </motion.button>
+          );
+        })}
+      </div>
+      {error && (
+        <p className="text-white bg-red-500/30 px-3 py-1 rounded-full font-bold mt-4"
+          style={{ fontSize: clamp(11, 1.0, 14) }}>{error}</p>
+      )}
+      <p className="text-white/70 mt-3 sm:mt-5 font-bold uppercase tracking-widest text-center px-4"
+        style={{ fontSize: clamp(9, 0.95, 14) }}>Tik op de gewenste methode</p>
     </motion.div>
   );
 }
@@ -470,7 +556,7 @@ export default function CustomerDisplay() {
         {step === 'select' && <GreetScreen state={state} branding={branding} />}
         {step === 'overview' && <OverviewScreen state={state} />}
         {step === 'pay' && <PayScreen state={state} />}
-        {(step === 'method' || step === 'confirm') && <MethodScreen state={state} />}
+        {(step === 'method' || step === 'confirm') && <MethodScreen state={state} slug={slug} />}
         {step === 'receipt' && <ReceiptScreen state={state} />}
       </AnimatePresence>
 
