@@ -364,6 +364,24 @@ User koos voor **Optie C — minimale herbouw** (kern eerst), dan vroeg om **Fas
 - ✅ **Admin TenantPinModal verbeterd**: na opslaan toont de modal een groen succesblok met "PIN &lt;X&gt; is ingesteld voor &lt;Naam&gt;", de complete Huurder-Kiosk URL (`window.location.origin/kiosk/huurder?c=&lt;slug&gt;`) met "Kopieer"-knop, een "Open Huurder Kiosk" anchor (opens new tab) én een "Sluiten" knop. Admin weet nu direct waar de huurder kan inloggen.
 - ✅ Geverifieerd: **4 nieuwe pytest + 43 regressie + frontend Playwright e2e (iteration 13)** — alle groen. PIN dots visueel duidelijk, dashboard 1-op-1 admin-kiosk stijl, picker werkt, modal-flow met copy/open knoppen volledig functioneel.
 
+### Session 2026-05-23 — Klantenscherm (Customer Display) ✅
+- ✅ **Live-mirror display** voor de admin Kiosk — een aparte read-only pagina op `/kiosk/klant?c=<slug>` die toont wat de receptie/admin op dat moment doet. Werkt op een 2e monitor, tablet of TV in de wachtruimte.
+- ✅ **Backend (3 nieuwe endpoints)**:
+  - `PUT /api/kiosk/customer-display` — admin Kiosk pusht state (kiosk_token vereist). Body: `{step, apartment?, tenant?, overview?, payload?, payment?}`. Upserts naar nieuwe collection `customer_display` per `company_id`.
+  - `DELETE /api/kiosk/customer-display` — reset naar idle bij uitloggen (kiosk_token).
+  - `GET /api/public/customer-display/{slug}` — publiek polling endpoint (1.5s cadence). Geeft `{branding, state}` terug. Stale state (>5 min geen update) → auto-reset naar idle.
+- ✅ **Admin Kiosk wijziging**: `KioskLayout` heeft een nieuwe `useEffect` die op elke state-verandering automatisch `PUT /api/kiosk/customer-display` doet. Geen kostbare info gestuurd — alleen wat de klant mag zien (geen pin_hash, geen company_id).
+- ✅ **6 phases op het klantenscherm** met framer-motion transitions:
+  - `idle/check` → **IdleScreen**: groot bedrijfslogo, "WELKOM BIJ &lt;naam&gt;", subtitel "Een medewerker helpt u zo", pulse-animatie op logo.
+  - `select` → **GreetScreen**: "WELKOM &lt;voornaam&gt;" + appartement-badge.
+  - `overview` → **OverviewScreen**: zelfde split-screen layout als de admin Kiosk's TenantOverview — links specificatie (Maandhuur / Openstaande huur / Servicekosten / Boetes / Internet), rechts groot "Te betalen" bedrag.
+  - `pay` → **PayScreen**: checklist van geselecteerde categorieën + groot lopend totaal in oranje.
+  - `method / confirm` → **MethodScreen**: betaalmethode icoon (Banknote/CreditCard/Smartphone) + bedrag in mega-letters.
+  - `receipt` → **ReceiptScreen**: groene CheckCircle spring-bounce + bedrag + kwitantienummer + "Bedankt voor uw betaling!".
+- ✅ **Slug picker fallback** wanneer `/kiosk/klant` zonder `?c=` geopend wordt — eenmalige bedrijfscode-invoer, daarna start het scherm.
+- ✅ **Branded oranje gradient** achtergrond volgt `branding.primary_color`. Footer rechtsonder toont "KLANTENSCHERM" + bedrijfsnaam.
+- ✅ Geverifieerd: **10 nieuwe pytest cases (`test_customer_display.py`) + 43 regressie + frontend Playwright e2e live-sync (iteration 14)** — admin tab selecteert appartement → klant tab toont GreetScreen binnen 2s. Polling cadence 1.5s werkend.
+
 ## Prioritized Backlog (Fases E-F)
 - 📧 **Email notificaties** — wacht op SendGrid / Resend credentials van user
 - 📱 **WhatsApp/SMS herinneringen** — wacht op Twilio credentials
