@@ -13,7 +13,7 @@ import jwt
 from datetime import datetime, timezone, timedelta
 from typing import List, Optional, Literal
 
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, Response, Query, UploadFile, File
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, Response, Query, UploadFile, File, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, EmailStr, Field
@@ -4615,6 +4615,97 @@ async def message_invoice(invoice_id: str, body: MessageSendIn, user=Depends(get
     )
     await _twilio_send(cfg, body.channel, to, msg)
     return {"ok": True, "sent_to": to, "channel": body.channel}
+
+
+@api.post("/tenants/{tenant_id}/reminder")
+async def tenant_payment_reminder(
+    tenant_id: str,
+    body: dict = Body(default={}),
+    user=Depends(get_current_user),
+):
+    """Stuur een herinnering naar een huurder met een overzicht van ALLE
+    openstaande facturen (één bericht met opsomming van maanden + totaal).
+
+    body = {channel: 'whatsapp' | 'sms' | 'email', message?: str}
+    """
+    channel = (body.get("channel") or "whatsapp").lower()
+    custom_msg = (body.get("message") or "").strip()
+    if channel not in ("whatsapp", "sms", "email"):
+        raise HTTPException(status_code=400, detail="Onbekend kanaal")
+
+    sc = scope(user)
+    tenant = await db.tenants.find_one({"id": tenant_id, **sc}, {"_id": 0})
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Huurder niet gevonden")
+
+    invs = await db.invoices.find(
+        {**sc, "tenant_id": tenant_id, "status": {"$in": ["open", "sent", "pending", "overdue"]}},
+        {"_id": 0},
+    ).sort([("period_year", 1), ("period_month", 1)]).to_list(60)
+    if not invs:
+        raise HTTPException(status_code=400, detail="Deze huurder heeft geen openstaande facturen")
+
+    months_nl = ["januari", "februari", "maart", "april", "mei", "juni",
+                 "juli", "augustus", "september", "oktober", "november", "december"]
+    cur = invs[0].get("currency", "SRD")
+    total = sum(float(i.get("amount", 0)) for i in invs)
+    lines = [f"• {months_nl[i['period_month']-1].capitalize()} {i['period_year']}: {cur} {float(i['amount']):.2f}" for i in invs]
+    period_label = ", ".join(f"{months_nl[i['period_month']-1].capitalize()} {i['period_year']}" for i in invs[:3])
+    if len(invs) > 3:
+        period_label += f" (+{len(invs) - 3} meer)"
+
+    if channel == "email":
+        from email_service import send_email, wrap_template, EmailError
+        cfg = await _smtp_or_400(user)
+        to = (tenant.get("email") or "").strip()
+        if not to:
+            raise HTTPException(status_code=400, detail="Geen e-mailadres bij huurder")
+        extra_note = f"<p>{custom_msg}</p>" if custom_msg else ""
+        rows = "".join(
+            f"<tr><td>{months_nl[i['period_month']-1].capitalize()} {i['period_year']}</td>"
+            f"<td style='text-align:right'><b>{cur} {float(i['amount']):.2f}</b></td></tr>"
+            for i in invs
+        )
+        content = f"""
+            {extra_note}
+            <h1>Betalingsherinnering</h1>
+            <p>Beste {tenant.get('name', 'huurder')},<br />
+            U heeft op dit moment <b>{len(invs)}</b> openstaande factu{'ren' if len(invs) > 1 else 'ur'}.
+            Graag verzoeken wij u deze zo spoedig mogelijk te voldoen.</p>
+            <table class="kv" style="width:100%;border-collapse:collapse">
+              {rows}
+              <tr style="border-top:2px solid #e2e8f0">
+                <td><b>Totaal openstaand</b></td>
+                <td style='text-align:right;color:#dc2626'><b>{cur} {total:.2f}</b></td>
+              </tr>
+            </table>
+            <p style="margin-top:20px">Heeft u vragen? Neem gerust contact met ons op.</p>
+        """
+        try:
+            await send_email(cfg, to, "Betalingsherinnering openstaande facturen",
+                             wrap_template(content))
+        except EmailError as e:
+            raise HTTPException(status_code=502, detail=str(e))
+        return {"sent": True, "channel": "email", "to": to, "count": len(invs)}
+
+    # WhatsApp / SMS
+    cfg = await _twilio_or_400(user)
+    to = (tenant.get("phone") or "").strip()
+    if not to:
+        raise HTTPException(status_code=400, detail="Geen telefoonnummer bij huurder")
+    extra = f"{custom_msg}\n\n" if custom_msg else ""
+    msg = (
+        f"{extra}"
+        f"Hallo {tenant.get('name', 'huurder')},\n\n"
+        f"Vriendelijke herinnering — u heeft {len(invs)} openstaande "
+        f"factu{'ren' if len(invs) > 1 else 'ur'}:\n\n"
+        + "\n".join(lines)
+        + f"\n\nTotaal openstaand: *{cur} {total:.2f}*\n\n"
+        f"Periodes: {period_label}\n\n"
+        f"Gelieve zo spoedig mogelijk te betalen.\n\n— SuriRent"
+    )
+    await _twilio_send(cfg, channel, to, msg)
+    return {"sent": True, "channel": channel, "to": to, "count": len(invs)}
 
 
 @api.post("/message/contract/{contract_id}")
