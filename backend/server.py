@@ -316,6 +316,7 @@ class PaymentOut(BaseModel):
     tenant_name: Optional[str] = None
     apartment_id: Optional[str] = None
     apartment_number: Optional[str] = None
+    location_name: Optional[str] = None
     amount: float
     currency: str
     method: str
@@ -2887,13 +2888,21 @@ async def _next_receipt_number() -> str:
 async def _enrich_payment(p: dict) -> dict:
     tenant_name = None
     apt_number = None
+    location_name = None
     if p.get("tenant_id"):
         t = await db.tenants.find_one({"id": p["tenant_id"]}, {"_id": 0, "name": 1})
         tenant_name = t["name"] if t else None
     if p.get("apartment_id"):
-        a = await db.apartments.find_one({"id": p["apartment_id"]}, {"_id": 0, "number": 1})
-        apt_number = a["number"] if a else None
-    return {**p, "tenant_name": tenant_name, "apartment_number": apt_number}
+        a = await db.apartments.find_one(
+            {"id": p["apartment_id"]}, {"_id": 0, "number": 1, "location_id": 1}
+        )
+        if a:
+            apt_number = a.get("number")
+            if a.get("location_id"):
+                loc = await db.locations.find_one({"id": a["location_id"]}, {"_id": 0, "name": 1})
+                if loc:
+                    location_name = loc.get("name")
+    return {**p, "tenant_name": tenant_name, "apartment_number": apt_number, "location_name": location_name}
 
 
 async def _create_payment_doc(body: PaymentIn, company_id: Optional[str] = None, approved_by: Optional[str] = None) -> dict:
