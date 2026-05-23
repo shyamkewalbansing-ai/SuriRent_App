@@ -755,6 +755,8 @@ function ReceiptScreen({ payment, overview, onDone }) {
     return Math.max(0, prevDue - Number(payment.amount || 0));
   });
   const [remainingLoading, setRemainingLoading] = useState(true);
+  // E-mail status — null = bezig, {sent:true,to} = verstuurd, {sent:false} = overgeslagen/mislukt.
+  const [emailStatus, setEmailStatus] = useState(null);
 
   useEffect(() => {
     const tid = payment.tenant_id || overview?.tenant?.id;
@@ -770,6 +772,18 @@ function ReceiptScreen({ payment, overview, onDone }) {
       .catch(() => { /* val terug op lokale schatting */ })
       .finally(() => setRemainingLoading(false));
   }, [payment.tenant_id, overview]);
+
+  // E-mail PDF-kwitantie naar huurder (fire-and-forget, getriggerd zodra
+  // de tear-animatie klaar is — voelt alsof de balie automatisch ook
+  // digitaal verstuurt). Endpoint faalt zelf nooit hard.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      api.post(`/kiosk/payments/${payment.id}/email`)
+        .then((r) => setEmailStatus(r.data || { sent: false }))
+        .catch(() => setEmailStatus({ sent: false, reason: 'network' }));
+    }, 2900);  // direct na de tear-snap
+    return () => clearTimeout(t);
+  }, [payment.id]);
 
   // Bon-printer geluid — gesynthetiseerd via Web Audio API.
   // Imiteert een thermische kassa-printer: continue mechanische "zip" met
@@ -963,6 +977,15 @@ function ReceiptScreen({ payment, overview, onDone }) {
         <p className="text-center text-xs text-slate-400 mt-2" data-testid="receipt-autoreturn">
           Automatisch terug naar startscherm in 10 seconden
         </p>
+        {emailStatus !== null && (
+          <p className={`text-center text-[11px] mt-1 font-medium ${
+            emailStatus.sent ? 'text-emerald-600' : 'text-slate-300'
+          }`} data-testid="receipt-email-status">
+            {emailStatus.sent
+              ? `Digitale kopie verzonden naar ${emailStatus.to}`
+              : 'Geen e-mail verzonden'}
+          </p>
+        )}
       </div>
     </div>
   );

@@ -3140,6 +3140,66 @@ async def kiosk_receipt(payment_id: str):
     return await _enrich_payment(p)
 
 
+@api.post("/kiosk/payments/{payment_id}/email")
+async def kiosk_email_receipt(payment_id: str, _session=Depends(get_kiosk_session)):
+    """Stuur PDF-kwitantie naar het huurder-e-mailadres (best-effort vanuit Kiosk).
+    Bedoeld als "fire-and-forget" call vanuit de KioskLayout direct na de
+    tear-animatie. Faalt nooit met 5xx — als SMTP niet ingericht is of de
+    huurder geen e-mailadres heeft, retourneren we {sent: false} zodat de
+    UX onverstoord blijft. Echte fouten worden in de logs gerapporteerd.
+    """
+    from email_service import send_email, wrap_template, EmailError
+    sc = kiosk_scope(_session)
+    p = await db.payments.find_one({"id": payment_id, **sc}, {"_id": 0})
+    if not p:
+        # Niet bestaan = bewust 200/no-op om client side niet te blokkeren.
+        return {"sent": False, "reason": "not_found"}
+    cid = _session.get("company_id")
+    if not cid:
+        return {"sent": False, "reason": "no_company"}
+    cfg = await get_company_section(cid, "smtp")
+    if not cfg.get("enabled"):
+        return {"sent": False, "reason": "smtp_disabled"}
+
+    p_enriched = await _enrich_payment(p)
+    tenant = await db.tenants.find_one({"id": p_enriched.get("tenant_id"), **sc}, {"_id": 0}) or {}
+    to = (tenant.get("email") or "").strip()
+    if not to:
+        return {"sent": False, "reason": "no_tenant_email"}
+
+    try:
+        pdf_bytes = receipt_pdf(p_enriched)
+        content = f"""
+            <h1>Kwitantie {p_enriched['receipt_number']}</h1>
+            <p>Beste {tenant.get('name', 'huurder')},<br />
+            Hierbij ontvangt u een digitale kopie van uw kwitantie zoals
+            zojuist afgegeven via de Kiosk.</p>
+            <table class="kv">
+              <tr><td>Datum</td><td>{p_enriched.get('paid_at', '')[:10]}</td></tr>
+              <tr><td>Bedrag</td><td>{p_enriched['currency']} {p_enriched['amount']:.2f}</td></tr>
+              <tr><td>Betaalmethode</td><td>{p_enriched.get('method', '')}</td></tr>
+              <tr><td>Appartement</td><td>{p_enriched.get('apartment_number', '-')}</td></tr>
+              <tr><td>Categorie</td><td>{p_enriched.get('category', '-')}</td></tr>
+            </table>
+            <p style="margin-top:20px;color:#64748b;font-size:13px">
+              Bewaar deze e-mail als bewijs van betaling.
+            </p>
+        """
+        await send_email(
+            cfg, to,
+            f"Kwitantie {p_enriched['receipt_number']}",
+            wrap_template(content),
+            attachments=[(f"kwitantie-{p_enriched['receipt_number']}.pdf", pdf_bytes, "application/pdf")],
+        )
+        return {"sent": True, "to": to}
+    except EmailError as e:
+        print(f"[kiosk-email] send_failed payment={payment_id} err={e}")
+        return {"sent": False, "reason": "send_failed"}
+    except Exception as e:  # pragma: no cover - defensive
+        print(f"[kiosk-email] unexpected payment={payment_id} err={e}")
+        return {"sent": False, "reason": "unexpected"}
+
+
 # =====================================================================
 # Dashboard stats
 # =====================================================================
