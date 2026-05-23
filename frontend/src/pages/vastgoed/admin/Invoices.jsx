@@ -265,13 +265,29 @@ function TenantRow({ group, expanded, onToggle, onReminder, tenants }) {
                 </p>
                 <div className="space-y-1.5">
                   {group.open.map((inv) => (
-                    <div key={inv.id} className="flex items-center justify-between text-sm"
+                    <div key={inv.id} className="flex items-center justify-between gap-2 text-sm"
                       data-testid={`invoice-row-${inv.id}`}>
-                      <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="flex items-center gap-2.5 min-w-0 flex-1">
                         <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${sev === 'critical' ? 'bg-red-500' : 'bg-orange-500'}`} />
-                        <span className="text-slate-700 capitalize">{MONTHS_NL[inv.period_month - 1]} {inv.period_year}</span>
+                        <span className="text-slate-700 capitalize truncate">{MONTHS_NL[inv.period_month - 1]} {inv.period_year}</span>
+                        <span className="text-[10px] text-slate-400 hidden sm:inline">· {inv.invoice_number}</span>
                       </div>
                       <span className="text-slate-700 font-semibold whitespace-nowrap">{fmtMoney(inv.amount, inv.currency)}</span>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          // Open de payment-form direct met deze factuur vooringevuld.
+                          try {
+                            window.dispatchEvent(new CustomEvent('quick-pay-open', { detail: { invoice: inv } }));
+                          } catch { /* noop */ }
+                          try { window.dispatchEvent(new CustomEvent('go-tab', { detail: 'payments' })); } catch { /* noop */ }
+                        }}
+                        data-testid={`invoice-pay-btn-${inv.id}`}
+                        title="Registreer betaling"
+                        className="shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-full bg-emerald-500 hover:bg-emerald-600 text-white shadow-sm active:scale-95 transition"
+                      >
+                        <Check className="w-3.5 h-3.5" strokeWidth={3} />
+                      </button>
                     </div>
                   ))}
                 </div>

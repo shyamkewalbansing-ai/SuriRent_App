@@ -34,6 +34,7 @@ import ImpersonationBanner from '../../components/ImpersonationBanner';
 import LiveIndicator from '../../components/LiveIndicator';
 import OverdueBell from '../../components/OverdueBell';
 import ApartmentsBell from '../../components/ApartmentsBell';
+import QuickPayButton from '../../components/QuickPayButton';
 
 const BASE_TABS = [
   { id: 'overview', label: 'Overzicht', icon: LayoutDashboard },
@@ -173,6 +174,7 @@ function MobileTopLogo({ user, activeCompany }) {
             Alleen voor admin/owner (superadmin krijgt geen bedrijfsspecifieke data). */}
         {user?.role !== 'superadmin' && (
           <div className="flex items-center gap-2 landscape:gap-1.5 shrink-0">
+            <QuickPayButton />
             <ApartmentsBell />
             <OverdueBell />
           </div>

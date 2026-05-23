@@ -323,6 +323,8 @@ class PaymentOut(BaseModel):
     category: str
     period_month: Optional[int] = None
     period_year: Optional[int] = None
+    invoice_id: Optional[str] = None
+    invoice_number: Optional[str] = None
     receipt_number: str
     paid_at: str
     note: Optional[str] = ""
@@ -400,6 +402,54 @@ async def lifespan(app: FastAPI):
             update["company_id"] = DEFAULT_COMPANY_ID
         if update:
             await db.users.update_one({"email": admin_email}, {"$set": update})
+
+    # --- Backfill: koppel oude payments aan facturen (één keer per server-restart).
+    # Voor elke huur-payment zonder invoice_id: zoek matching open factuur op
+    # tenant + period_month + period_year. Markeer die factuur als 'paid'.
+    try:
+        cur = db.payments.find({
+            "category": "huur",
+            "invoice_id": {"$in": [None, ""]},
+            "period_month": {"$ne": None},
+            "period_year": {"$ne": None},
+        }, {"_id": 0, "id": 1, "tenant_id": 1, "company_id": 1,
+            "period_month": 1, "period_year": 1, "amount": 1,
+            "receipt_number": 1, "paid_at": 1, "method": 1})
+        backfilled = 0
+        async for p in cur:
+            inv = await db.invoices.find_one({
+                "tenant_id": p["tenant_id"],
+                "company_id": p.get("company_id"),
+                "period_month": p["period_month"],
+                "period_year": p["period_year"],
+            }, {"_id": 0})
+            if not inv:
+                continue
+            await db.payments.update_one(
+                {"id": p["id"]},
+                {"$set": {"invoice_id": inv["id"], "invoice_number": inv.get("invoice_number")}}
+            )
+            if inv.get("status") != "paid":
+                try:
+                    paid_pct = float(p.get("amount", 0)) >= float(inv.get("amount", 0)) * 0.95
+                except Exception:
+                    paid_pct = True
+                if paid_pct:
+                    await db.invoices.update_one(
+                        {"id": inv["id"]},
+                        {"$set": {
+                            "status": "paid",
+                            "paid_at": p.get("paid_at"),
+                            "payment_id": p["id"],
+                            "receipt_number": p.get("receipt_number"),
+                            "paid_method": p.get("method"),
+                        }}
+                    )
+            backfilled += 1
+        if backfilled:
+            print(f"[startup] linked {backfilled} legacy payments to invoices")
+    except Exception as e:
+        print(f"[startup] payment↔invoice backfill failed: {e}")
 
     # --- Seed superadmin ---
     super_email = "super@surirent.sr"
@@ -2918,6 +2968,23 @@ async def _create_payment_doc(body: PaymentIn, company_id: Optional[str] = None,
     if company_id:
         c = await db.companies.find_one({"id": company_id}, {"_id": 0, "name": 1})
         company_name = (c or {}).get("name", "")
+    paid_at = iso(now_utc())
+    # Automatisch koppelen aan een openstaande factuur:
+    #  • Alleen voor categorie "huur" (overige categorieën hebben geen factuur).
+    #  • Match op tenant + period_month + period_year wanneer beide aanwezig zijn.
+    #  • Anders: pak de oudst openstaande huur-factuur van deze huurder.
+    matched_invoice = None
+    if body.category == "huur":
+        inv_q = {"tenant_id": body.tenant_id, "status": {"$ne": "paid"}}
+        if company_id:
+            inv_q["company_id"] = company_id
+        if body.period_month and body.period_year:
+            scoped = {**inv_q, "period_month": body.period_month, "period_year": body.period_year}
+            matched_invoice = await db.invoices.find_one(scoped, {"_id": 0})
+        if not matched_invoice:
+            matched_invoice = await db.invoices.find_one(
+                inv_q, {"_id": 0}, sort=[("period_year", 1), ("period_month", 1)]
+            )
     doc = {
         "id": new_id(),
         "company_id": company_id or tenant.get("company_id"),
@@ -2927,16 +2994,38 @@ async def _create_payment_doc(body: PaymentIn, company_id: Optional[str] = None,
         "currency": body.currency,
         "method": body.method,
         "category": body.category,
-        "period_month": body.period_month,
-        "period_year": body.period_year,
+        "period_month": body.period_month or (matched_invoice or {}).get("period_month"),
+        "period_year": body.period_year or (matched_invoice or {}).get("period_year"),
+        "invoice_id": matched_invoice["id"] if matched_invoice else None,
+        "invoice_number": matched_invoice.get("invoice_number") if matched_invoice else None,
         "receipt_number": receipt_no,
-        "paid_at": iso(now_utc()),
+        "paid_at": paid_at,
         "note": body.note or "",
         "received_by": (body.received_by or "").strip(),
         "approved_by": approved_by or company_name,
     }
     await db.payments.insert_one(doc)
     doc.pop("_id", None)
+    # Factuur sluiten — bedrag controleren tegen factuurbedrag is best-effort:
+    # huurder kan teveel of te weinig betalen. We sluiten als er minstens 95%
+    # van het factuurbedrag is voldaan; anders blijft de factuur open zodat
+    # de beheerder een tweede deel-betaling kan registreren.
+    if matched_invoice:
+        try:
+            tot_paid = float(body.amount or 0)
+            inv_amt = float(matched_invoice.get("amount", 0))
+            should_close = inv_amt <= 0 or tot_paid >= inv_amt * 0.95
+            update_set = {
+                "payment_id": doc["id"],
+                "receipt_number": receipt_no,
+                "paid_method": body.method,
+            }
+            if should_close:
+                update_set["status"] = "paid"
+                update_set["paid_at"] = paid_at
+            await db.invoices.update_one({"id": matched_invoice["id"]}, {"$set": update_set})
+        except Exception as e:
+            print(f"[payments] invoice auto-close failed: {e}")
     return doc
 
 
@@ -3695,6 +3784,10 @@ class InvoiceOut(BaseModel):
     period_year: int
     status: str
     created_at: str
+    paid_at: Optional[str] = None
+    payment_id: Optional[str] = None
+    receipt_number: Optional[str] = None
+    paid_method: Optional[str] = None
 
 
 async def _enrich_invoice(i: dict) -> dict:

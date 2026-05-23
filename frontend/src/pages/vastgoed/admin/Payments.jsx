@@ -162,6 +162,11 @@ function PaymentRow({ p, expanded, onToggle, onEmail, apiBase }) {
             <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-4">
               <div className="space-y-1.5 text-sm">
                 <DetailRow label="Kwitantienummer" value={<span className="font-mono font-bold text-slate-900">{p.receipt_number}</span>} />
+                {p.invoice_number && (
+                  <DetailRow label="Factuur" value={
+                    <span className="font-mono font-bold text-[#FF5C00]">{p.invoice_number}</span>
+                  } />
+                )}
                 <DetailRow label="Datum" value={date.toLocaleString('nl-NL')} />
                 <DetailRow label="Categorie" value={CATEGORY_LABELS[p.category] || p.category} />
                 <DetailRow label="Methode" value={METHOD_LABELS[p.method] || p.method} />
@@ -215,22 +220,37 @@ function DetailRow({ label, value }) {
 // =====================================================================
 // Payment creation modal
 // =====================================================================
-function PaymentForm({ tenants, onCancel, onSaved }) {
-  const [data, setData] = useState({
-    tenant_id: '', amount: 0, currency: 'SRD', method: 'contant', category: 'huur',
-    period_month: new Date().getMonth() + 1, period_year: new Date().getFullYear(), note: '',
+function PaymentForm({ tenants, onCancel, onSaved, initialInvoice = null }) {
+  const [data, setData] = useState(() => {
+    const base = {
+      tenant_id: '', amount: 0, currency: 'SRD', method: 'contant', category: 'huur',
+      period_month: new Date().getMonth() + 1, period_year: new Date().getFullYear(), note: '',
+    };
+    if (initialInvoice) {
+      return {
+        ...base,
+        tenant_id: initialInvoice.tenant_id,
+        amount: initialInvoice.amount,
+        currency: initialInvoice.currency || 'SRD',
+        period_month: initialInvoice.period_month,
+        period_year: initialInvoice.period_year,
+        note: `Factuur ${initialInvoice.invoice_number}`,
+      };
+    }
+    return base;
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
+    if (initialInvoice) return; // bedrag al ingevuld vanuit factuur
     if (data.tenant_id) {
       const t = tenants.find((x) => x.id === data.tenant_id);
       if (t && t.rent_amount && data.category === 'huur') {
         setData((d) => ({ ...d, amount: t.rent_amount, currency: t.currency || 'SRD' }));
       }
     }
-  }, [data.tenant_id, data.category, tenants]);
+  }, [data.tenant_id, data.category, tenants, initialInvoice]);
 
   const save = async () => {
     setLoading(true); setError('');
@@ -416,6 +436,18 @@ export default function Payments() {
     } finally { if (!silent) setLoading(false); }
   }, []);
   useEffect(() => { load(); }, [load]);
+  // Globale event-listener: andere componenten (zoals de QuickPay knop in
+  // de top header, of de "Betaal"-knop op Facturen) kunnen `quick-pay-open`
+  // dispatchen om de PaymentForm direct te openen. Werkt vanuit elke route.
+  const [prefillInvoice, setPrefillInvoice] = useState(null);
+  useEffect(() => {
+    const onOpen = (e) => {
+      setPrefillInvoice(e?.detail?.invoice || null);
+      setCreating(true);
+    };
+    window.addEventListener('quick-pay-open', onOpen);
+    return () => window.removeEventListener('quick-pay-open', onOpen);
+  }, []);
   // Stille polling — geen spinner / scroll-reset tijdens auto-refresh.
   useAutoRefresh(() => load({ silent: true }), { interval: 8000, enabled: !creating && !emailing });
 
@@ -593,9 +625,9 @@ export default function Payments() {
       )}
 
       {/* MODALS */}
-      {creating && <PaymentForm tenants={tenants}
-        onCancel={() => setCreating(false)}
-        onSaved={() => { setCreating(false); load(); }} />}
+      {creating && <PaymentForm tenants={tenants} initialInvoice={prefillInvoice}
+        onCancel={() => { setCreating(false); setPrefillInvoice(null); }}
+        onSaved={() => { setCreating(false); setPrefillInvoice(null); load(); }} />}
       {emailing && (
         <SendDialog
           documentType="payment"
