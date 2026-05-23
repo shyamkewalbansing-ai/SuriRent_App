@@ -1,0 +1,43 @@
+{
+  "summary": "Iteration 14 — Customer Display (klantenscherm). Backend: NEW pytest test_customer_display.py with 10 tests covering PUT /api/kiosk/customer-display (auth, success, validation), DELETE (reset, auth), GET /api/public/customer-display/{slug} (public, branding+state shape, 404 unknown, persistence through select→overview→pay→method→receipt). All 10 PASS. Regression run of test_tenant_kiosk + test_kiosk_qr_sticker + test_tenant_pin_unique_and_pinlogin + test_branding_default → 43 PASS, 1 SKIP (pre-existing). Frontend: /kiosk/klant?c=surirent loads cd-root + cd-idle correctly, footer 'KLANTENSCHERM' + branding name 'SuriRent N.V.' shown bottom-bar. Live e2e sync verified — opened klant tab (cd-idle) in same browser context, then admin PIN-logged in via /login → /kiosk in tab 2; within ~2s the klant tab polled new state and switched to cd-greet (text 'WELKOM Gewaardeerde huurder' visible). Polling cadence = 1500ms working as designed. The customer-display state-sync POC works end-to-end.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "CustomerDisplay.jsx (slug picker)", "issue": "When localStorage is empty and no ?c= param, the picker (cd-picker) is supposed to render. On the preview host vastgoed-app.preview.emergentagent.com, detectCompanySlug() falls through to readFromSubdomain() and returns 'vastgoed-app' (first sub of the 4-segment host). The component therefore sets slug='vastgoed-app' which does not exist → /api/public/customer-display/vastgoed-app returns 404 → error 'Onbekende bedrijfscode' is shown forever next to a loading spinner, the picker NEVER appears. Fix: when API returns 404 for a non-user-supplied slug (i.e. slug came from detectCompanySlug, not ?c=), clear slug and surface cd-picker. Easiest: in the polling effect, on 404 setSlug(''). Or: don't seed slug from subdomain on /kiosk/klant route.", "selector": "[data-testid='cd-picker']", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "cd-idle (welkom)", "issues": ["IdleScreen shows branding.app_name OR branding.name as the welcome heading. For SuriRent the app_name field in DB is currently 'KEWALBANSING' (a tenant surname — admin's app_name override), which is shown 7xl-bold center-screen on a customer-facing display. Looks unprofessional and not customer-appropriate. Carry-over from iter 12/13. Recommendation: on CustomerDisplay IdleScreen, prefer branding.name (e.g. 'SuriRent N.V.') instead of app_name — app_name was meant for the admin PWA install title, not for customer signage."]},
+      {"screen": "cd-greet (geselecteerde huurder)", "issues": ["When admin advances state but tenant.name is empty, the fallback 'Gewaardeerde huurder' renders — fine. White text on orange has good contrast here."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_customer_display.py",
+    "/app/test_reports/pytest/iteration14_customer_display.xml",
+    "/app/test_reports/pytest/iteration14_regression.xml"
+  ],
+  "action_items": [
+    "(MEDIUM) CustomerDisplay.jsx: don't accept subdomain-derived slug on /kiosk/klant — on the preview/main host this returns a non-existent slug 'vastgoed-app' and the picker never gets a chance to render. Either skip readFromSubdomain() in the slug detection on this route, or fall back to cd-picker when the very first poll returns 404.",
+    "(LOW/Design) CustomerDisplay IdleScreen: render branding.name (company name) instead of branding.app_name. The app_name field is currently 'KEWALBANSING' for SuriRent and is shown as the customer-facing welcome — should be 'SuriRent N.V.'.",
+    "(Carry-over from iter 13, no progress) AdminDashboard TenantPinModal still builds kiosk URL from localStorage('pwa_company_slug') — pass company.slug from useAuth() instead."
+  ],
+  "critical_code_review_comments": [
+    "server.py:3545-3568 (GET /public/customer-display/{slug}) — implementation is clean: 80-char slug guard, lowercased lookup, _id excluded, defaults to {step:'idle'}, auto-idle after 300s based on ISO timestamp. Good defensive coding. One nit: if datetime.fromisoformat fails it silently passes — could log at debug level for visibility.",
+    "server.py:3515-3529 (PUT) — proper kiosk_session dependency + company_id binding so a kiosk for company X can never push to company Y. upsert on company_id ensures only one document per company. Good.",
+    "server.py:3532-3542 (DELETE) — resets to idle in-place rather than deleting the doc (keeps the company_id row). Good — no race condition where a poll between DELETE and next PUT would 404.",
+    "CustomerDisplay.jsx — slug picker fallback is guarded only by `if (!slug)`. Should also reset slug on 404 from the polling endpoint when the slug was auto-detected (not user-supplied) — otherwise the picker is unreachable on hosts whose first subdomain segment doesn't match a real company.",
+    "CustomerDisplay.jsx — POLL_MS=1500 fires unconditionally, even when document.hidden. For a 24/7 lobby screen this is fine, but consider visibilitychange-aware throttling if multiple klant tabs run on the same device.",
+    "Polling endpoint has no authentication and no rate-limit — at 1.5s poll * N klantenschermen this could add up. Consider adding ETag/If-None-Match or a debounce field server-side (cheap win)."
+  ],
+  "updated_files": ["/app/backend/tests/test_customer_display.py (NEW — 10 tests)"],
+  "success_rate": {
+    "backend": "10/10 new + 43/44 regression PASS (1 pre-existing env-skip) = 100% effective pass rate.",
+    "frontend": "Core flow VERIFIED: cd-root + cd-idle + footer + polling + state sync to cd-greet on admin action ✓. Picker fallback (no ?c=) on preview host is BLOCKED by subdomain-slug detection — see MEDIUM bug above."
+  },
+  "test_credentials": "admin@vastgoed.sr/admin123, kiosk PIN 1234 (Company A — SuriRent). No new credentials needed.",
+  "seed_data_creation": "Test data created during pytest run was cleaned up by the final DELETE in test_state_persists_through_full_flow.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Re-run: `pytest backend/tests/test_customer_display.py backend/tests/test_tenant_kiosk.py backend/tests/test_kiosk_qr_sticker.py backend/tests/test_tenant_pin_unique_and_pinlogin.py backend/tests/test_branding_default.py -v`. To repro picker bug: localStorage.clear() → navigate to /kiosk/klant (no query). On preview host you'll see a spinning loader + 'Onbekende bedrijfscode' instead of cd-picker because detectCompanySlug() reads the first segment 'vastgoed-app' from the 4-segment preview host. To verify the e2e sync without going through admin UI: in one tab open /kiosk/klant?c=surirent (cd-idle visible), in a curl get a kiosk_token via POST /api/auth/kiosk-pin {pin:'1234'}, then PUT /api/kiosk/customer-display {step:'select', tenant:{name:'Test'}, apartment:{number:'A-1'}} — within 2s the klant tab switches to cd-greet. DELETE resets to cd-idle. All endpoints work.",
+  "rca of the issue": "Frontend picker bug RCA: CustomerDisplay.jsx line 301 sets initial slug = slugParam || detectCompanySlug(). detectCompanySlug() chains readFromUrl → readFromSubdomain → getStoredSlug. readFromSubdomain (branding.js:38-52) splits the hostname on '.', requires >=3 parts and returns the first segment if it's not 'www'/'app' and matches /^[a-z0-9][a-z0-9-]*$/. For 'vastgoed-app.preview.emergentagent.com' this returns 'vastgoed-app' — a valid-looking slug that does NOT exist in db.companies. The polling effect (line 319) then keeps GET-ing /api/public/customer-display/vastgoed-app → 404 → setError('Onbekende bedrijfscode'). The picker guard `if (!slug)` (line 353) is never reached because slug is non-empty. Mitigation (one of): (a) On 404 from the polling endpoint, if the slug was auto-detected (track its origin), reset slug to '' to surface the picker. (b) Skip readFromSubdomain() entirely on the /kiosk/klant route since this device is supposed to be configured per-tenant. (c) Add a soft cd-picker overlay/CTA when error state is set, so the user can recover."
+}

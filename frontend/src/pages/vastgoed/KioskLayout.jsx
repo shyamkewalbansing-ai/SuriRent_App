@@ -1052,10 +1052,42 @@ export default function KioskLayout() {
   }, []);
 
   const exit = useCallback(() => {
+    // Reset customer-display naar idle bij uitloggen.
+    api.delete('/kiosk/customer-display').catch(() => {});
     localStorage.removeItem('kiosk_token');
     localStorage.removeItem('kiosk_company');
     navigate('/login', { replace: true });
   }, [navigate]);
+
+  // Push huidige state naar het klantenscherm. Idempotent — we sturen
+  // alleen waarden die de klant ook mag zien (geen pin_hash, geen company_id).
+  useEffect(() => {
+    if (step === 'check') return undefined;
+    const apt = apartment ? {
+      id: apartment.id, number: apartment.number, address: apartment.address || '',
+      rent_amount: apartment.rent_amount, currency: apartment.currency,
+      tenant_name: apartment.tenant_name,
+    } : null;
+    const tenant = overview?.tenant ? {
+      name: overview.tenant.name,
+      internet_amount: overview.tenant.internet_amount || 0,
+    } : (apartment?.tenant_name ? { name: apartment.tenant_name } : null);
+    const ovw = overview ? {
+      balance: overview.balance, apartment: overview.apartment,
+      internet: overview.internet || 0, total_due: overview.total_due || 0,
+    } : null;
+    const payload = paymentPayload ? {
+      amount: paymentPayload.amount, currency: paymentPayload.currency,
+      categories: paymentPayload.categories || [], method: paymentPayload.method,
+    } : null;
+    const payment = paymentResult ? {
+      amount: paymentResult.amount, currency: paymentResult.currency,
+      receipt_number: paymentResult.receipt_number, method: paymentResult.method,
+      paid_at: paymentResult.paid_at,
+    } : null;
+    const body = { step, apartment: apt, tenant, overview: ovw, payload, payment };
+    api.put('/kiosk/customer-display', body).catch(() => {});
+  }, [step, apartment, overview, paymentPayload, paymentResult]);
 
   // "Beheerder" knop in de kiosk: als de PIN-login een admin-token heeft
   // afgegeven (PIN is shared secret van het bedrijf), spring direct naar

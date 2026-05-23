@@ -3499,6 +3499,77 @@ async def kiosk_tenant_overview(tenant_id: str, _session=Depends(get_kiosk_sessi
     }
 
 
+# =====================================================================
+# Customer Display (klantenscherm)
+# =====================================================================
+class CustomerDisplayIn(BaseModel):
+    step: str  # 'idle'|'select'|'overview'|'pay'|'method'|'confirm'|'receipt'
+    apartment: Optional[dict] = None
+    tenant: Optional[dict] = None
+    overview: Optional[dict] = None
+    payload: Optional[dict] = None  # selected categories + total
+    payment: Optional[dict] = None  # final receipt
+    note: Optional[str] = ""
+
+
+@api.put("/kiosk/customer-display")
+async def update_customer_display(body: CustomerDisplayIn, _session=Depends(get_kiosk_session)):
+    """Admin Kiosk pusht hier de huidige stap-state naar. De klant-display
+    poll't deze waarde via een publiek endpoint per company-slug."""
+    cid = _session.get("company_id")
+    if not cid:
+        raise HTTPException(status_code=400, detail="Geen kiosk-bedrijfscontext")
+    state = body.model_dump()
+    state["updated_at"] = iso(now_utc())
+    await db.customer_display.update_one(
+        {"company_id": cid},
+        {"$set": {"company_id": cid, "state": state, "updated_at": state["updated_at"]}},
+        upsert=True,
+    )
+    return {"ok": True}
+
+
+@api.delete("/kiosk/customer-display")
+async def clear_customer_display(_session=Depends(get_kiosk_session)):
+    cid = _session.get("company_id")
+    if cid:
+        await db.customer_display.update_one(
+            {"company_id": cid},
+            {"$set": {"state": {"step": "idle", "updated_at": iso(now_utc())},
+                      "updated_at": iso(now_utc())}},
+            upsert=True,
+        )
+    return {"ok": True}
+
+
+@api.get("/public/customer-display/{slug}")
+async def get_customer_display(slug: str):
+    """Publiek — het klantenscherm poll't dit endpoint elke 1.5s."""
+    if not slug or len(slug) > 80:
+        raise HTTPException(status_code=400, detail="Ongeldige slug")
+    c = await db.companies.find_one(
+        {"slug": slug.lower()},
+        {"_id": 0, "id": 1, "name": 1, "slug": 1, "branding": 1},
+    )
+    if not c:
+        raise HTTPException(status_code=404, detail="Bedrijf niet gevonden")
+    doc = await db.customer_display.find_one({"company_id": c["id"]}, {"_id": 0})
+    branding = _company_branding_response(c)
+    state = (doc or {}).get("state") or {"step": "idle"}
+    # Auto-idle wanneer er meer dan 5 minuten geen update is geweest.
+    updated_at = state.get("updated_at")
+    try:
+        if updated_at:
+            t = datetime.fromisoformat(str(updated_at).replace("Z", "+00:00"))
+            if (now_utc() - t).total_seconds() > 300:
+                state = {"step": "idle"}
+    except Exception:
+        pass
+    return {"branding": branding, "state": state}
+
+
+
+
 @api.post("/kiosk/payments", response_model=PaymentOut)
 async def kiosk_create_payment(body: PaymentIn, _session=Depends(get_kiosk_session)):
     cid = _session.get("company_id")
