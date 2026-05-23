@@ -773,14 +773,17 @@ function ReceiptScreen({ payment, overview, onDone }) {
       .finally(() => setRemainingLoading(false));
   }, [payment.tenant_id, overview]);
 
-  // E-mail PDF-kwitantie naar huurder (fire-and-forget, getriggerd zodra
-  // de tear-animatie klaar is — voelt alsof de balie automatisch ook
-  // digitaal verstuurt). Endpoint faalt zelf nooit hard.
+  // Digitale kopie verzenden — e-mail (PDF-bijlage) + WhatsApp/SMS (PDF-link)
+  // tegelijk, getriggerd op het tear-moment. Beide endpoints zijn best-effort
+  // en faken nooit een fout; UX blijft soepel.
   useEffect(() => {
     const t = setTimeout(() => {
-      api.post(`/kiosk/payments/${payment.id}/email`)
-        .then((r) => setEmailStatus(r.data || { sent: false }))
-        .catch(() => setEmailStatus({ sent: false, reason: 'network' }));
+      Promise.all([
+        api.post(`/kiosk/payments/${payment.id}/email`).then((r) => r.data).catch(() => ({ sent: false })),
+        api.post(`/kiosk/payments/${payment.id}/whatsapp`).then((r) => r.data).catch(() => ({ sent: false })),
+      ]).then(([email, msg]) => {
+        setEmailStatus({ email, msg });
+      });
     }, 2900);  // direct na de tear-snap
     return () => clearTimeout(t);
   }, [payment.id]);
@@ -978,13 +981,21 @@ function ReceiptScreen({ payment, overview, onDone }) {
           Automatisch terug naar startscherm in 10 seconden
         </p>
         {emailStatus !== null && (
-          <p className={`text-center text-[11px] mt-1 font-medium ${
-            emailStatus.sent ? 'text-emerald-600' : 'text-slate-300'
-          }`} data-testid="receipt-email-status">
-            {emailStatus.sent
-              ? `Digitale kopie verzonden naar ${emailStatus.to}`
-              : 'Geen e-mail verzonden'}
-          </p>
+          <div className="text-center text-[11px] mt-1 font-medium space-y-0.5" data-testid="receipt-delivery-status">
+            {emailStatus.email?.sent && (
+              <p className="text-emerald-600" data-testid="receipt-email-status">
+                E-mail verzonden naar {emailStatus.email.to}
+              </p>
+            )}
+            {emailStatus.msg?.sent && (
+              <p className="text-emerald-600" data-testid="receipt-whatsapp-status">
+                {emailStatus.msg.channel === 'whatsapp' ? 'WhatsApp' : 'SMS'} verzonden naar {emailStatus.msg.to}
+              </p>
+            )}
+            {!emailStatus.email?.sent && !emailStatus.msg?.sent && (
+              <p className="text-slate-300">Geen digitale kopie verzonden</p>
+            )}
+          </div>
         )}
       </div>
     </div>

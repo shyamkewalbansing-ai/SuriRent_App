@@ -3200,6 +3200,65 @@ async def kiosk_email_receipt(payment_id: str, _session=Depends(get_kiosk_sessio
         return {"sent": False, "reason": "unexpected"}
 
 
+@api.post("/kiosk/payments/{payment_id}/whatsapp")
+async def kiosk_whatsapp_receipt(payment_id: str, _session=Depends(get_kiosk_session)):
+    """Stuur WhatsApp/SMS-melding met PDF-link naar huurder (best-effort).
+
+    Vergelijkbaar met /kiosk/payments/{id}/email maar via Twilio. Probeert
+    eerst WhatsApp, valt terug op SMS als WhatsApp niet werkt / niet
+    geconfigureerd. Faalt nooit hard — UX-vriendelijk vanuit de Kiosk.
+    """
+    from twilio_service import send_whatsapp, send_sms, TwilioError
+    sc = kiosk_scope(_session)
+    p = await db.payments.find_one({"id": payment_id, **sc}, {"_id": 0})
+    if not p:
+        return {"sent": False, "reason": "not_found"}
+    cid = _session.get("company_id")
+    if not cid:
+        return {"sent": False, "reason": "no_company"}
+    cfg = await get_company_section(cid, "twilio")
+    if not cfg.get("enabled"):
+        return {"sent": False, "reason": "twilio_disabled"}
+
+    p_enriched = await _enrich_payment(p)
+    tenant = await db.tenants.find_one({"id": p_enriched.get("tenant_id"), **sc}, {"_id": 0}) or {}
+    to = (tenant.get("phone") or "").strip()
+    if not to:
+        return {"sent": False, "reason": "no_tenant_phone"}
+
+    pdf_link = _public_url(f"/api/payments/{payment_id}/pdf")
+    msg = (
+        f"Hallo {tenant.get('name', 'huurder')},\n\n"
+        f"Uw betaling is succesvol verwerkt.\n"
+        f"Kwitantie: {p_enriched['receipt_number']}\n"
+        f"Bedrag: {p_enriched['currency']} {p_enriched['amount']:.2f}\n"
+        f"Methode: {p_enriched.get('method', '')}\n\n"
+        f"PDF kwitantie: {pdf_link}"
+    )
+
+    # Probeer WhatsApp eerst (als geconfigureerd), val terug op SMS.
+    has_wa = bool((cfg.get("whatsapp_from") or "").strip())
+    has_sms = bool((cfg.get("sms_from") or "").strip())
+
+    if has_wa:
+        try:
+            await send_whatsapp(cfg, to, msg)
+            return {"sent": True, "channel": "whatsapp", "to": to}
+        except TwilioError as e:
+            print(f"[kiosk-twilio] whatsapp failed payment={payment_id} err={e}")
+            # blijf hieronder doorgaan met SMS fallback
+
+    if has_sms:
+        try:
+            await send_sms(cfg, to, msg)
+            return {"sent": True, "channel": "sms", "to": to}
+        except TwilioError as e:
+            print(f"[kiosk-twilio] sms failed payment={payment_id} err={e}")
+            return {"sent": False, "reason": "send_failed"}
+
+    return {"sent": False, "reason": "no_channel_configured"}
+
+
 # =====================================================================
 # Dashboard stats
 # =====================================================================
