@@ -124,13 +124,13 @@ export default function OverdueBell() {
         onClick={() => setOpen((v) => !v)}
         data-testid="overdue-bell-btn"
         aria-label={count > 0 ? `${count} huurders met achterstand` : 'Geen achterstanden'}
-        className={`relative w-11 h-11 rounded-2xl flex items-center justify-center transition active:scale-95 ${
+        className={`relative w-11 h-11 landscape:w-9 landscape:h-9 rounded-2xl landscape:rounded-xl flex items-center justify-center transition active:scale-95 ${
           count > 0
             ? 'bg-red-50 text-red-600 hover:bg-red-100 shadow-[0_6px_16px_-6px_rgba(239,68,68,0.45)]'
             : 'bg-white text-slate-500 hover:bg-orange-50 hover:text-[#FF5C00] border border-slate-200/70'
         }`}
       >
-        <Bell className="w-5 h-5" strokeWidth={count > 0 ? 2.4 : 2} />
+        <Bell className="w-5 h-5 landscape:w-4 landscape:h-4" strokeWidth={count > 0 ? 2.4 : 2} />
         {count > 0 && (
           <>
             <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-black flex items-center justify-center ring-2 ring-[#FFF7F0]"
@@ -144,11 +144,10 @@ export default function OverdueBell() {
 
       {open && (
         <div
-          className="absolute right-0 top-[calc(100%+8px)] w-[min(92vw,360px)] z-50 origin-top-right"
+          className="fixed inset-x-3 z-50 sm:left-auto sm:right-3 sm:w-[360px]"
+          style={{ top: 'calc(env(safe-area-inset-top, 0px) + 68px)' }}
           data-testid="overdue-panel"
         >
-          {/* Pijltje naar de bell */}
-          <div className="absolute -top-1.5 right-3 w-3 h-3 rotate-45 bg-white border-t border-l border-orange-100" />
           <div className="bg-white rounded-2xl border border-orange-100 shadow-[0_24px_48px_-12px_rgba(15,23,42,0.25)] overflow-hidden animate-slide-up">
             <div className="px-4 py-3 bg-gradient-to-br from-[#FFF4EC] to-[#FFE6D3] border-b border-orange-100">
               <div className="flex items-center justify-between gap-2">
@@ -164,7 +163,7 @@ export default function OverdueBell() {
               </div>
             </div>
 
-            <div className="max-h-[60vh] overflow-y-auto">
+            <div className="max-h-[60vh] landscape:max-h-[40vh] overflow-y-auto">
               {count === 0 ? (
                 <div className="px-4 py-8 text-center" data-testid="overdue-empty">
                   <div className="w-12 h-12 rounded-full bg-emerald-50 flex items-center justify-center mx-auto mb-2">

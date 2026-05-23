@@ -143,19 +143,20 @@ function splitNameHalf(name) {
 function MobileTopLogo({ user, activeCompany }) {
   // Minimalistische topbar: brand-logo links + bedrijfsnaam + notificatie-bell
   // rechtsboven (achterstanden). Geen menu-knop, geen Kiosk-knop, geen Live
-  // indicator — die zitten in de "+"-sheet.
+  // indicator — die zitten in de "+"-sheet. In landscape (telefoon zijwaarts)
+  // schalen we de top bar omlaag zodat er voldoende ruimte voor content blijft.
   const fullName = activeCompany?.name || (user?.role === 'superadmin' ? 'Alle bedrijven' : 'SuriRent');
   const [namePart1, namePart2] = splitNameHalf(fullName);
   return (
     <header className="xl:hidden sticky top-0 z-30 bg-[#FFF7F0]/85 backdrop-blur-md"
       style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
       data-testid="mobile-top-logo">
-      <div className="px-4 py-3 flex items-center gap-3">
-        <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#FF8A3D] to-[#C74600] p-1.5 shadow-[0_10px_22px_-6px_rgba(255,92,0,0.55)] shrink-0">
+      <div className="px-4 py-3 landscape:py-1.5 flex items-center gap-3 landscape:gap-2">
+        <div className="w-12 h-12 landscape:w-9 landscape:h-9 rounded-2xl landscape:rounded-xl bg-gradient-to-br from-[#FF8A3D] to-[#C74600] p-1.5 landscape:p-1 shadow-[0_10px_22px_-6px_rgba(255,92,0,0.55)] shrink-0">
           <img src="/kiosk-icons/kiosk-512.png" alt="SuriRent" className="w-full h-full object-contain" />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-lg font-black tracking-tight leading-tight truncate" data-testid="mobile-top-name">
+          <p className="text-lg landscape:text-sm font-black tracking-tight leading-tight truncate" data-testid="mobile-top-name">
             <span className="text-slate-900">{namePart1}</span>
             {namePart2 && (
               <>
@@ -164,14 +165,14 @@ function MobileTopLogo({ user, activeCompany }) {
               </>
             )}
           </p>
-          <p className="text-[10px] text-slate-400 font-bold tracking-[0.18em] uppercase truncate">
+          <p className="text-[10px] landscape:text-[9px] text-slate-400 font-bold tracking-[0.18em] uppercase truncate">
             {user?.role === 'superadmin' ? 'Superadmin' : 'Beheer'}{activeCompany?.plan ? ` · ${activeCompany.plan}` : ''}
           </p>
         </div>
         {/* Rechtsboven — kleine bel-achtige actie-iconen.
             Alleen voor admin/owner (superadmin krijgt geen bedrijfsspecifieke data). */}
         {user?.role !== 'superadmin' && (
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-2 landscape:gap-1.5 shrink-0">
             <ApartmentsBell />
             <OverdueBell />
           </div>
@@ -302,7 +303,7 @@ function MobileTabBar({ active, onChange, tabs, onOpenMenu, user, badgeCount }) 
         key={t.id}
         onClick={() => onChange(t.id)}
         data-testid={`tab-mobile-${t.id}`}
-        className="relative flex flex-col items-center justify-end gap-1 pt-2 pb-1 rounded-xl active:scale-95 transition-all"
+        className="relative flex flex-col items-center justify-end gap-1 landscape:gap-0.5 pt-2 pb-1 landscape:pt-1 landscape:pb-0.5 rounded-xl active:scale-95 transition-all"
       >
         {isActive && (
           <span
@@ -341,7 +342,7 @@ function MobileTabBar({ active, onChange, tabs, onOpenMenu, user, badgeCount }) 
       <div aria-hidden className="absolute top-0 left-1/2 -translate-x-1/2 w-12 h-[3px] rounded-full bg-gradient-to-r from-[#FF8A3D] to-[#FF5C00] opacity-90" />
 
       <div
-        className="grid grid-cols-5 gap-0.5 px-1.5 pt-3"
+        className="grid grid-cols-5 gap-0.5 px-1.5 pt-3 landscape:pt-1"
         style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 12px)' }}
       >
         {left.map(renderTab)}
@@ -353,9 +354,9 @@ function MobileTabBar({ active, onChange, tabs, onOpenMenu, user, badgeCount }) 
             onClick={onOpenMenu}
             data-testid="mobile-fab-menu"
             aria-label="Open menu"
-            className="relative -mt-4 w-11 h-11 rounded-full bg-gradient-to-br from-[#FF8A3D] to-[#FF5C00] text-white flex items-center justify-center shadow-[0_8px_20px_-6px_rgba(255,92,0,0.65)] ring-[3px] ring-white active:scale-95 transition-all"
+            className="relative -mt-4 landscape:-mt-2 w-11 h-11 landscape:w-9 landscape:h-9 rounded-full bg-gradient-to-br from-[#FF8A3D] to-[#FF5C00] text-white flex items-center justify-center shadow-[0_8px_20px_-6px_rgba(255,92,0,0.65)] ring-[3px] ring-white active:scale-95 transition-all"
           >
-            <Plus className="w-5 h-5" strokeWidth={2.8} />
+            <Plus className="w-5 h-5 landscape:w-4 landscape:h-4" strokeWidth={2.8} />
             {badgeCount > 0 && (
               <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-black flex items-center justify-center ring-2 ring-white"
                 data-testid="mobile-fab-badge">

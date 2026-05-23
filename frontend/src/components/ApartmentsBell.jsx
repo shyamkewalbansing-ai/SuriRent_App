@@ -91,9 +91,9 @@ export default function ApartmentsBell() {
         onClick={() => setOpen((v) => !v)}
         data-testid="apartments-bell-btn"
         aria-label={`${occupiedCount} bezet, ${vacantCount} vacant`}
-        className="relative w-11 h-11 rounded-2xl flex items-center justify-center bg-white text-slate-600 hover:bg-orange-50 hover:text-[#FF5C00] border border-slate-200/70 transition active:scale-95"
+        className="relative w-11 h-11 landscape:w-9 landscape:h-9 rounded-2xl landscape:rounded-xl flex items-center justify-center bg-white text-slate-600 hover:bg-orange-50 hover:text-[#FF5C00] border border-slate-200/70 transition active:scale-95"
       >
-        <Building2 className="w-5 h-5" strokeWidth={2.2} />
+        <Building2 className="w-5 h-5 landscape:w-4 landscape:h-4" strokeWidth={2.2} />
         {vacantCount > 0 && (
           <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-[#FF5C00] text-white text-[10px] font-black flex items-center justify-center ring-2 ring-[#FFF7F0]"
             data-testid="apartments-bell-count">
@@ -104,10 +104,10 @@ export default function ApartmentsBell() {
 
       {open && (
         <div
-          className="absolute right-0 top-[calc(100%+8px)] w-[min(92vw,380px)] z-50 origin-top-right"
+          className="fixed inset-x-3 z-50 sm:left-auto sm:right-3 sm:w-[380px]"
+          style={{ top: 'calc(env(safe-area-inset-top, 0px) + 68px)' }}
           data-testid="apartments-panel"
         >
-          <div className="absolute -top-1.5 right-3 w-3 h-3 rotate-45 bg-white border-t border-l border-orange-100" />
           <div className="bg-white rounded-2xl border border-orange-100 shadow-[0_24px_48px_-12px_rgba(15,23,42,0.25)] overflow-hidden animate-slide-up">
             {/* HEADER met totalen */}
             <div className="px-4 py-3 bg-gradient-to-br from-[#FFF4EC] to-[#FFE6D3] border-b border-orange-100">
@@ -158,7 +158,7 @@ export default function ApartmentsBell() {
             </div>
 
             {/* LIJST */}
-            <div className="max-h-[55vh] overflow-y-auto">
+            <div className="max-h-[55vh] landscape:max-h-[40vh] overflow-y-auto">
               {list.length === 0 ? (
                 <div className="px-4 py-8 text-center" data-testid={`apartments-empty-${tab}`}>
                   <div className={`w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-2 ${
