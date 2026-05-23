@@ -61,7 +61,7 @@ function getTabsFor(user) {
 
 function Sidebar({ active, onChange, onLogout, user, tabs, badgeCount }) {
   return (
-    <aside className="hidden md:flex flex-col w-64 bg-white border-r border-orange-100 p-5">
+    <aside className="hidden lg:flex flex-col w-64 bg-white border-r border-orange-100 p-5">
       <div className="flex items-center gap-3 mb-6">
         <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-[#FF8A3D] to-[#C74600] p-1.5 shadow-[0_8px_20px_-5px_rgba(255,92,0,0.55)]">
           <img src="/kiosk-icons/kiosk-512.png" alt="SuriRent" className="w-full h-full object-contain" />
@@ -119,7 +119,7 @@ const MOBILE_SUPER_PRIMARY_IDS = ['companies', 'overview', 'apartments', 'tenant
 function MobileHeader({ activeCompany, user, onOpenMenu }) {
   const navigate = useNavigate();
   return (
-    <header className="md:hidden sticky top-0 z-30 bg-white border-b border-orange-100"
+    <header className="lg:hidden sticky top-0 z-30 bg-white border-b border-orange-100"
       style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}>
       <div className="flex items-center gap-3 px-4 h-14">
         <button onClick={onOpenMenu} data-testid="mobile-menu-btn"
@@ -161,7 +161,7 @@ function MobileHeader({ activeCompany, user, onOpenMenu }) {
 function MobileDrawer({ open, onClose, active, onChange, onLogout, user, tabs }) {
   if (!open) return null;
   return (
-    <div className="md:hidden fixed inset-0 z-50" data-testid="mobile-drawer">
+    <div className="lg:hidden fixed inset-0 z-50" data-testid="mobile-drawer">
       <div className="absolute inset-0 bg-white/30 backdrop-blur-md" onClick={onClose} />
       <aside className="absolute left-0 top-0 bottom-0 w-72 max-w-[85%] bg-white shadow-2xl flex flex-col animate-slide-in overflow-hidden"
         style={{ paddingTop: 'env(safe-area-inset-top)' }}>
@@ -218,7 +218,7 @@ function MobileTabBar({ active, onChange, tabs, onOpenMenu, user }) {
     .map((id) => tabs.find((t) => t.id === id))
     .filter(Boolean);
   return (
-    <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white border-t border-orange-100">
+    <nav className="lg:hidden fixed bottom-0 inset-x-0 z-40 bg-white border-t border-orange-100">
       <div className="grid grid-cols-5"
         style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
         {primary.map((t) => {
@@ -1315,7 +1315,7 @@ export default function AdminDashboard() {
         <MobileHeader activeCompany={activeCompany} user={user} onOpenMenu={() => setDrawerOpen(true)} />
         <ImpersonationBanner />
         <TrialBanner />
-        <main className="flex-1 p-5 md:p-8 pb-24 md:pb-8 w-full">
+        <main className="flex-1 p-5 lg:p-8 pb-24 lg:pb-8 w-full">
           {tab === 'companies' && <Companies />}
           {tab === 'subscriptions' && <Subscriptions />}
           {tab === 'saas_settings' && <SaasSettings />}
