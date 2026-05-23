@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Plus, X, Check, Loader2, FileText, Wand2, Mail, Search,
   SlidersHorizontal, CalendarDays, CheckCircle2, Info, ChevronRight,
-  ChevronDown, MessageCircle,
+  ChevronDown, MessageCircle, Send, SkipForward, Users,
 } from 'lucide-react';
 import { api, formatError, fmtMoney, MONTHS_NL } from '../../../lib/api';
 
@@ -419,6 +419,139 @@ function InvoiceForm({ tenants, onCancel, onSaved }) {
 }
 
 // =====================================================================
+// Bulk WhatsApp herinneringen — wizard die door alle openstaande huurders
+// heen loopt. Browser security staat geen "alles tegelijk" toe (popup-block);
+// dus 1 tik per huurder, met progress-balk en skip-functie.
+// =====================================================================
+function BulkWhatsAppModal({ groups, tenants, onClose }) {
+  const [idx, setIdx] = useState(0);
+  const [done, setDone] = useState([]);   // tenant_ids die afgehandeld zijn
+  const [skipped, setSkipped] = useState([]);
+
+  // Filter groups: alleen openstaande huurders met telefoonnummer.
+  const queue = useMemo(() => {
+    return groups
+      .filter((g) => g.openCount > 0)
+      .map((g) => {
+        const t = tenants.find((x) => x.id === g.tenant_id);
+        return { ...g, phone: (t?.phone || '').replace(/\D/g, '') };
+      });
+  }, [groups, tenants]);
+
+  const withPhone = queue.filter((g) => g.phone);
+  const withoutPhone = queue.filter((g) => !g.phone);
+  const cur = withPhone[idx];
+
+  const buildMsg = (g) => {
+    const list = g.open
+      .map((i) => `• ${MONTHS_NL[i.period_month - 1]} ${i.period_year}: ${g.currency} ${Number(i.amount).toFixed(2)}`)
+      .join('\n');
+    return `Beste ${g.tenant_name},\n\nVriendelijke herinnering — u heeft ${g.openCount} openstaande factu${g.openCount > 1 ? 'ren' : 'ur'}:\n\n${list}\n\n*Totaal openstaand: ${g.currency} ${Number(g.totalOpen).toFixed(2)}*\n\nGelieve zo spoedig mogelijk te betalen.\n\n— SuriRent`;
+  };
+
+  const openWhatsApp = () => {
+    if (!cur) return;
+    const url = `https://wa.me/${cur.phone}?text=${encodeURIComponent(buildMsg(cur))}`;
+    window.open(url, '_blank', 'noopener');
+    setDone((d) => [...d, cur.tenant_id]);
+    // Verschuif naar volgende — kleine delay zodat WhatsApp tab opent voordat we doorgaan
+    setTimeout(() => setIdx((i) => i + 1), 200);
+  };
+
+  const skipCurrent = () => {
+    if (!cur) return;
+    setSkipped((s) => [...s, cur.tenant_id]);
+    setIdx((i) => i + 1);
+  };
+
+  const total = withPhone.length;
+  const allDone = idx >= total;
+  const progress = total > 0 ? Math.round(((done.length + skipped.length) / total) * 100) : 100;
+
+  return (
+    <div className="fixed inset-0 z-50 bg-white/30 backdrop-blur-md flex items-center justify-center p-4 modal-open"
+      onClick={onClose} data-testid="bulk-wa-modal">
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="p-6 sm:p-8">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-xl font-black text-slate-900">WhatsApp herinneringen</h3>
+            <button onClick={onClose} className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Progress */}
+          <div className="mb-5">
+            <div className="flex justify-between text-xs font-bold text-slate-500 mb-1.5">
+              <span>{Math.min(idx, total)} / {total} huurders</span>
+              <span>{progress}%</span>
+            </div>
+            <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+              <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${progress}%` }} />
+            </div>
+          </div>
+
+          {withoutPhone.length > 0 && (
+            <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800" data-testid="missing-phones-warning">
+              <p className="font-bold mb-1">{withoutPhone.length} huurder{withoutPhone.length !== 1 ? 's' : ''} zonder telefoonnummer:</p>
+              <ul className="list-disc pl-4 space-y-0.5">
+                {withoutPhone.slice(0, 5).map((g) => <li key={g.tenant_id}>{g.tenant_name}</li>)}
+                {withoutPhone.length > 5 && <li>+{withoutPhone.length - 5} anderen</li>}
+              </ul>
+              <p className="mt-1 text-amber-700">Voeg toe via Huurders om mee te sturen.</p>
+            </div>
+          )}
+
+          {!allDone && cur ? (
+            <>
+              {/* Current tenant */}
+              <div className="bg-emerald-50 border-2 border-emerald-200 rounded-2xl p-4 mb-4" data-testid="bulk-current-tenant">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-emerald-700 mb-1">
+                  Huurder {idx + 1} van {total}
+                </p>
+                <p className="text-lg font-black text-slate-900">{cur.tenant_name}</p>
+                <p className="text-xs text-slate-500">+{cur.phone}</p>
+                <p className="text-sm font-bold text-emerald-700 mt-2">
+                  {cur.openCount} openstaande factu{cur.openCount > 1 ? 'ren' : 'ur'} · {cur.currency} {Number(cur.totalOpen).toFixed(2)}
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <button onClick={skipCurrent} data-testid="bulk-skip"
+                  className="h-11 rounded-xl border-2 border-slate-200 text-slate-700 font-bold inline-flex items-center justify-center gap-2 hover:bg-slate-50">
+                  <SkipForward className="w-4 h-4" /> Sla over
+                </button>
+                <button onClick={openWhatsApp} data-testid="bulk-open-wa"
+                  className="h-11 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-extrabold inline-flex items-center justify-center gap-2 shadow-[0_8px_20px_-5px_rgba(16,185,129,0.5)]">
+                  <Send className="w-4 h-4" /> Open
+                </button>
+              </div>
+              <p className="text-[11px] text-slate-400 text-center mt-3 leading-snug">
+                Tik <b>Open</b> → WhatsApp opent met {cur.tenant_name} → tik Send in WhatsApp → kom terug naar deze pagina voor de volgende huurder
+              </p>
+            </>
+          ) : (
+            <div className="text-center py-6" data-testid="bulk-complete">
+              <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-3">
+                <Check className="w-8 h-8 text-emerald-600" strokeWidth={3} />
+              </div>
+              <p className="text-lg font-black text-slate-900 mb-1">Klaar!</p>
+              <p className="text-sm text-slate-500 mb-4">
+                {done.length} verzonden{skipped.length > 0 ? ` · ${skipped.length} overgeslagen` : ''}
+              </p>
+              <button onClick={onClose} data-testid="bulk-close"
+                className="w-full h-11 rounded-xl bg-[#FF5C00] hover:bg-[#E05200] text-white font-bold">
+                Sluiten
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// =====================================================================
 // Main page
 // =====================================================================
 export default function Invoices() {
@@ -429,6 +562,7 @@ export default function Invoices() {
   const [generating, setGenerating] = useState(false);
   const [reminding, setReminding] = useState(null);
   const [reminderChannel, setReminderChannel] = useState('whatsapp');
+  const [bulkOpen, setBulkOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [tab, setTab] = useState('all');  // 'all' | 'open' | 'paid'
   const [filterSeverity, setFilterSeverity] = useState('all'); // all|critical|late|ok
@@ -556,7 +690,7 @@ export default function Invoices() {
       </div>
 
       {/* ACTION BUTTONS */}
-      <div className="grid grid-cols-2 gap-2 sm:gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3">
         <button onClick={generateMonth} disabled={generating} data-testid="invoice-generate-btn"
           className="inline-flex items-center justify-center gap-2 px-4 py-3 sm:py-3.5 bg-white border-2 border-orange-200 hover:border-[#FF5C00] text-[#FF5C00] font-bold rounded-2xl text-sm sm:text-base">
           {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4 sm:w-5 sm:h-5" />}
@@ -565,6 +699,12 @@ export default function Invoices() {
         <button onClick={() => setCreating(true)} data-testid="invoice-new-btn"
           className="inline-flex items-center justify-center gap-2 px-4 py-3 sm:py-3.5 bg-[#FF5C00] hover:bg-[#E05200] text-white font-bold rounded-2xl text-sm sm:text-base shadow-[0_10px_25px_-5px_rgba(255,92,0,0.5)]">
           <Plus className="w-4 h-4 sm:w-5 sm:h-5" /> Nieuwe factuur
+        </button>
+        <button onClick={() => setBulkOpen(true)} disabled={openCount === 0}
+          data-testid="invoice-bulk-wa-btn"
+          className="col-span-2 lg:col-span-1 inline-flex items-center justify-center gap-2 px-4 py-3 sm:py-3.5 bg-emerald-500 hover:bg-emerald-600 disabled:bg-slate-200 disabled:text-slate-400 text-white font-bold rounded-2xl text-sm sm:text-base shadow-[0_10px_25px_-5px_rgba(16,185,129,0.45)]">
+          <Users className="w-4 h-4 sm:w-5 sm:h-5" />
+          Stuur alle herinneringen ({openCount})
         </button>
       </div>
 
@@ -642,6 +782,10 @@ export default function Invoices() {
       )}
 
       {/* MODALS */}
+      {/* MODALS */}
+      {bulkOpen && (
+        <BulkWhatsAppModal groups={groups} tenants={tenants} onClose={() => setBulkOpen(false)} />
+      )}
       {creating && <InvoiceForm tenants={tenants}
         onCancel={() => setCreating(false)} onSaved={() => { setCreating(false); load(); }} />}
       {reminding && (
