@@ -121,97 +121,124 @@ function Sidebar({ active, onChange, onLogout, user, tabs, badgeCount }) {
 const MOBILE_PRIMARY_IDS = ['overview', 'apartments', 'tenants', 'payments'];
 const MOBILE_SUPER_PRIMARY_IDS = ['companies', 'overview', 'apartments', 'tenants'];
 
-function MobileHeader({ activeCompany, user, onOpenMenu }) {
-  const navigate = useNavigate();
+function MobileHeader_REMOVED({ activeCompany, user, onOpenMenu }) {
+  void activeCompany; void user; void onOpenMenu;
+  return null;
+}
+
+function MobileTopLogo({ user, activeCompany }) {
+  // Minimalistische topbar: alleen het brand-logo links, geen menu-knop,
+  // geen bedrijfsnaam (die staat in de "+"-sheet). Houdt het scherm rustig
+  // en geeft maximale ruimte aan de content.
+  void user; void activeCompany; // niet meer gebruikt — bewaard voor eventuele toekomstige badge
   return (
-    <header className="xl:hidden sticky top-0 z-30 bg-white border-b border-orange-100"
-      style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}>
-      <div className="flex items-center gap-3 px-4 h-14">
-        <button onClick={onOpenMenu} data-testid="mobile-menu-btn"
-          className="w-10 h-10 -ml-2 rounded-xl flex items-center justify-center hover:bg-orange-50">
-          <Menu className="w-6 h-6 text-slate-700" />
-        </button>
-        <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#FF8A3D] to-[#C74600] p-1">
+    <header className="xl:hidden sticky top-0 z-30 bg-[#FFF7F0]/85 backdrop-blur-md"
+      style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
+      data-testid="mobile-top-logo">
+      <div className="px-4 py-2.5 flex items-center">
+        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#FF8A3D] to-[#C74600] p-1 shadow-[0_8px_18px_-6px_rgba(255,92,0,0.55)]">
           <img src="/kiosk-icons/kiosk-512.png" alt="SuriRent" className="w-full h-full object-contain" />
         </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 min-w-0">
-            <p className="text-sm font-black text-slate-900 leading-tight truncate">
-              {activeCompany?.name || (user?.role === 'superadmin' ? 'Alle bedrijven' : 'SuriRent')}
-            </p>
-            <LiveIndicator compact />
-          </div>
-          <p className="text-[10px] text-[#FF5C00] font-bold tracking-wider uppercase truncate">
-            {user?.role === 'superadmin' ? 'Superadmin' : 'Beheer'}{activeCompany?.plan ? ` · ${activeCompany.plan}` : ''}
-          </p>
-        </div>
-        {/* Kiosk snel-toegang knop rechtsboven — alleen voor admin/owner.
-            Onthoudt de gewenste rol in localStorage zodat de PWA na sluiten
-            terugkomt in de Kiosk (zelfde gedrag als de homescreen shortcut). */}
-        {user?.role !== 'superadmin' && (
-          <button
-            onClick={() => {
-              try { localStorage.setItem('pwa_preferred_role', 'kiosk'); } catch { /* noop */ }
-              navigate('/kiosk');
-            }}
-            data-testid="mobile-kiosk-shortcut"
-            aria-label="Open Kiosk"
-            className="ml-1 inline-flex items-center justify-center h-10 px-3 rounded-xl bg-white border border-slate-200 text-slate-900 font-bold text-xs shadow-sm active:scale-95 transition gap-1.5 hover:border-[#FF5C00]">
-            <Monitor className="w-4 h-4" />
-            <span>Kiosk</span>
-          </button>
-        )}
       </div>
     </header>
   );
 }
 
-function MobileDrawer({ open, onClose, active, onChange, onLogout, user, tabs }) {
+function MobileSheet({ open, onClose, active, onChange, onLogout, user, tabs, activeCompany, badgeCount }) {
+  const navigate = useNavigate();
   if (!open) return null;
   return (
-    <div className="xl:hidden fixed inset-0 z-50" data-testid="mobile-drawer">
-      <div className="absolute inset-0 bg-white/30 backdrop-blur-md" onClick={onClose} />
-      <aside className="absolute left-0 top-0 bottom-0 w-72 max-w-[85%] bg-white shadow-2xl flex flex-col animate-slide-in overflow-hidden"
-        style={{ paddingTop: 'env(safe-area-inset-top)' }}>
-        <div className="flex items-center justify-between px-5 pt-4 pb-3">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#FF8A3D] to-[#C74600] p-1.5">
-              <img src="/kiosk-icons/kiosk-512.png" alt="SuriRent" className="w-full h-full object-contain" />
-            </div>
-            <div>
-              <p className="text-base font-black text-slate-900 leading-tight">SuriRent</p>
-              <p className="text-[10px] text-[#FF5C00] font-bold tracking-[0.2em] uppercase">Beheer</p>
-            </div>
+    <div className="xl:hidden fixed inset-0 z-50" data-testid="mobile-sheet">
+      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm animate-fade-in" onClick={onClose} />
+      <aside
+        className="absolute left-0 right-0 bottom-0 bg-white rounded-t-3xl shadow-[0_-24px_60px_-12px_rgba(15,23,42,0.35)] flex flex-col animate-slide-up overflow-hidden"
+        style={{ maxHeight: '85dvh' }}
+      >
+        {/* Handle / grip */}
+        <div className="pt-2 pb-1 flex justify-center">
+          <div className="w-10 h-1 rounded-full bg-slate-300" />
+        </div>
+
+        {/* HEADER — company name + Live + Kiosk-shortcut + close */}
+        <div className="px-5 pt-2 pb-3 flex items-center gap-3">
+          <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-[#FF8A3D] to-[#C74600] p-1.5 shadow-md shrink-0">
+            <img src="/kiosk-icons/kiosk-512.png" alt="SuriRent" className="w-full h-full object-contain" />
           </div>
-          <button onClick={onClose} data-testid="mobile-drawer-close"
-            className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center">
-            <X className="w-4 h-4" />
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 min-w-0">
+              <p className="text-base font-black text-slate-900 leading-tight truncate">
+                {activeCompany?.name || (user?.role === 'superadmin' ? 'Alle bedrijven' : 'SuriRent')}
+              </p>
+              <LiveIndicator compact />
+            </div>
+            <p className="text-[10px] text-[#FF5C00] font-bold tracking-[0.18em] uppercase truncate">
+              {user?.role === 'superadmin' ? 'Superadmin' : 'Beheer'}{activeCompany?.plan ? ` · ${activeCompany.plan}` : ''}
+            </p>
+          </div>
+          <button onClick={onClose} data-testid="mobile-sheet-close"
+            className="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center shrink-0">
+            <X className="w-4 h-4 text-slate-600" />
           </button>
         </div>
 
-        <nav className="flex-1 overflow-y-auto px-3 pb-4 space-y-1">
-          {tabs.map((t) => {
-            const Icon = t.icon;
-            const isActive = active === t.id;
-            return (
-              <button key={t.id}
-                onClick={() => { onChange(t.id); onClose(); }}
-                data-testid={`tab-drawer-${t.id}`}
-                className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-semibold transition-all ${
-                  isActive ? 'bg-[#FF5C00] text-white shadow-[0_8px_20px_-5px_rgba(255,92,0,0.55)]'
-                    : 'text-slate-700 hover:bg-orange-50 hover:text-[#FF5C00]'
-                }`}>
-                <Icon className="w-5 h-5" /> {t.label}
-              </button>
-            );
-          })}
-        </nav>
+        {/* QUICK-ACTIONS */}
+        {user?.role !== 'superadmin' && (
+          <div className="px-5 pb-3">
+            <button
+              onClick={() => {
+                try { localStorage.setItem('pwa_preferred_role', 'kiosk'); } catch { /* noop */ }
+                onClose();
+                navigate('/kiosk');
+              }}
+              data-testid="mobile-sheet-kiosk"
+              className="w-full inline-flex items-center justify-center gap-2 h-11 rounded-2xl bg-gradient-to-br from-[#FF8A3D] to-[#FF5C00] text-white font-bold text-sm shadow-[0_10px_24px_-8px_rgba(255,92,0,0.6)] active:scale-95 transition"
+            >
+              <Monitor className="w-4 h-4" /> Open Kiosk
+            </button>
+          </div>
+        )}
 
-        <div className="border-t border-orange-100 px-5 pt-3 bg-white"
+        {/* TABS — alle modules in een grid */}
+        <div className="flex-1 overflow-y-auto px-3 pb-2">
+          <div className="grid grid-cols-3 gap-2">
+            {tabs.map((t) => {
+              const Icon = t.icon;
+              const isActive = active === t.id;
+              const showBadge = t.id === 'notifications' && badgeCount > 0;
+              return (
+                <button
+                  key={t.id}
+                  onClick={() => { onChange(t.id); onClose(); }}
+                  data-testid={`tab-sheet-${t.id}`}
+                  className={`relative flex flex-col items-center justify-center gap-1.5 py-4 rounded-2xl text-xs font-bold transition-all active:scale-95 ${
+                    isActive
+                      ? 'bg-gradient-to-br from-[#FF8A3D] to-[#FF5C00] text-white shadow-[0_8px_20px_-5px_rgba(255,92,0,0.55)]'
+                      : 'bg-slate-50 text-slate-700 hover:bg-orange-50 hover:text-[#FF5C00]'
+                  }`}
+                >
+                  <span className="relative">
+                    <Icon className={`w-5 h-5 ${isActive ? '' : 'text-slate-500'}`} strokeWidth={isActive ? 2.4 : 2} />
+                    {showBadge && (
+                      <span className="absolute -top-1.5 -right-2 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[10px] font-black flex items-center justify-center ring-2 ring-white">
+                        {badgeCount > 9 ? '9+' : badgeCount}
+                      </span>
+                    )}
+                  </span>
+                  <span className="text-center leading-tight text-[11px]">{t.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* FOOTER — email + logout */}
+        <div className="border-t border-slate-100 px-5 pt-3 bg-white"
           style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 0.75rem)' }}>
-          <p className="text-xs text-slate-500 truncate mb-1">{user?.email}</p>
-          <button onClick={() => { onClose(); onLogout(); }} data-testid="mobile-drawer-logout"
-            className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-semibold text-red-600 hover:bg-red-50 transition-all">
+          <div className="flex items-center justify-between gap-2 mb-1">
+            <p className="text-xs text-slate-500 truncate">{user?.email}</p>
+          </div>
+          <button onClick={() => { onClose(); onLogout(); }} data-testid="mobile-sheet-logout"
+            className="w-full flex items-center justify-center gap-2 h-11 rounded-xl text-sm font-bold text-red-600 hover:bg-red-50 transition-all">
             <LogOut className="w-4 h-4" /> Uitloggen
           </button>
         </div>
@@ -225,73 +252,92 @@ function MobileTabBar({ active, onChange, tabs, onOpenMenu, user, badgeCount }) 
   const primary = primaryIds
     .map((id) => tabs.find((t) => t.id === id))
     .filter(Boolean);
+  // Splits in 2 links + 2 rechts (de "+" zit in het midden).
+  const left = primary.slice(0, 2);
+  const right = primary.slice(2, 4);
+
+  const renderTab = (t) => {
+    const Icon = t.icon;
+    const isActive = active === t.id;
+    const showBadge = t.id === 'notifications' && badgeCount > 0;
+    return (
+      <button
+        key={t.id}
+        onClick={() => onChange(t.id)}
+        data-testid={`tab-mobile-${t.id}`}
+        className="relative flex flex-col items-center justify-end gap-1 pt-2 pb-1 rounded-xl active:scale-95 transition-all"
+      >
+        {isActive && (
+          <span
+            aria-hidden
+            className="absolute inset-x-2 top-1 bottom-1 rounded-xl bg-gradient-to-b from-orange-50 to-orange-100/70 shadow-[inset_0_0_0_1px_rgba(255,92,0,0.18)]"
+          />
+        )}
+        <span className="relative">
+          <Icon
+            className={`transition-all ${isActive ? 'w-[22px] h-[22px] text-[#FF5C00]' : 'w-[20px] h-[20px] text-slate-500'}`}
+            strokeWidth={isActive ? 2.4 : 2}
+          />
+          {showBadge && (
+            <span className="absolute -top-1.5 -right-2 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[10px] font-black flex items-center justify-center shadow-[0_2px_6px_-1px_rgba(239,68,68,0.55)] ring-2 ring-white">
+              {badgeCount > 9 ? '9+' : badgeCount}
+            </span>
+          )}
+        </span>
+        <span
+          className={`relative text-[10px] leading-tight tracking-wide truncate max-w-[68px] transition-all ${
+            isActive ? 'font-black text-[#FF5C00]' : 'font-semibold text-slate-500'
+          }`}
+        >
+          {t.label}
+        </span>
+      </button>
+    );
+  };
+
   return (
     <nav
       className="xl:hidden fixed bottom-0 inset-x-0 z-40 bg-white/90 backdrop-blur-xl border-t border-orange-100/70 shadow-[0_-12px_36px_-12px_rgba(15,23,42,0.18)]"
       data-testid="mobile-tab-bar"
     >
-      {/* Bovenste dunne brand-accent-lijn voor pro look (refereert aan oranje
-          uit de sidebar's actieve pill). */}
+      {/* Brand accent line top-center */}
       <div aria-hidden className="absolute top-0 left-1/2 -translate-x-1/2 w-12 h-[3px] rounded-full bg-gradient-to-r from-[#FF8A3D] to-[#FF5C00] opacity-90" />
 
       <div
         className="grid grid-cols-5 gap-0.5 px-1.5 pt-3"
         style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 12px)' }}
       >
-        {primary.map((t) => {
-          const Icon = t.icon;
-          const isActive = active === t.id;
-          const showBadge = t.id === 'notifications' && badgeCount > 0;
-          return (
-            <button
-              key={t.id}
-              onClick={() => onChange(t.id)}
-              data-testid={`tab-mobile-${t.id}`}
-              className="relative flex flex-col items-center justify-end gap-1 pt-2 pb-1 rounded-xl active:scale-95 transition-all"
-            >
-              {/* Active state: drijvende pill in plaats van background-overlay.
-                  Geeft een veel modernere "iOS-app" look. */}
-              {isActive && (
-                <span
-                  aria-hidden
-                  className="absolute inset-x-2 top-1 bottom-1 rounded-xl bg-gradient-to-b from-orange-50 to-orange-100/70 shadow-[inset_0_0_0_1px_rgba(255,92,0,0.18)]"
-                />
-              )}
-              <span className="relative">
-                <Icon
-                  className={`transition-all ${isActive ? 'w-[22px] h-[22px] text-[#FF5C00]' : 'w-[20px] h-[20px] text-slate-500'}`}
-                  strokeWidth={isActive ? 2.4 : 2}
-                />
-                {showBadge && (
-                  <span
-                    className="absolute -top-1.5 -right-2 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[10px] font-black flex items-center justify-center shadow-[0_2px_6px_-1px_rgba(239,68,68,0.55)] ring-2 ring-white"
-                    data-testid={`tab-mobile-badge-${t.id}`}
-                  >
-                    {badgeCount > 9 ? '9+' : badgeCount}
-                  </span>
-                )}
+        {left.map(renderTab)}
+
+        {/* Center FAB — opent het volledige menu (alles wat voorheen in de
+            bovenste menubar zat). Verhoogd, oranje gradient, met witte ring
+            zodat hij visueel "drijft" boven de bar. */}
+        <div className="flex items-end justify-center pb-0.5">
+          <button
+            onClick={onOpenMenu}
+            data-testid="mobile-fab-menu"
+            aria-label="Open menu"
+            className="relative -mt-7 w-14 h-14 rounded-2xl bg-gradient-to-br from-[#FF8A3D] to-[#FF5C00] text-white flex items-center justify-center shadow-[0_12px_28px_-8px_rgba(255,92,0,0.7)] ring-4 ring-white active:scale-95 transition-all"
+          >
+            <Plus className="w-7 h-7" strokeWidth={2.6} />
+            {badgeCount > 0 && (
+              <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-black flex items-center justify-center ring-2 ring-white"
+                data-testid="mobile-fab-badge">
+                {badgeCount > 9 ? '9+' : badgeCount}
               </span>
-              <span
-                className={`relative text-[10px] leading-tight tracking-wide truncate max-w-[68px] transition-all ${
-                  isActive ? 'font-black text-[#FF5C00]' : 'font-semibold text-slate-500'
-                }`}
-              >
-                {t.label}
-              </span>
-            </button>
-          );
-        })}
-        <button
-          onClick={onOpenMenu}
-          data-testid="tab-mobile-more"
-          className="relative flex flex-col items-center justify-end gap-1 pt-2 pb-1 rounded-xl active:scale-95 transition-all"
-        >
-          <MoreHorizontal className="w-[20px] h-[20px] text-slate-500" strokeWidth={2} />
-          <span className="text-[10px] font-semibold text-slate-500 leading-tight tracking-wide">Meer</span>
-        </button>
+            )}
+          </button>
+        </div>
+
+        {right.map(renderTab)}
       </div>
     </nav>
   );
+}
+
+function MobileTabBar_REMOVED({ active, onChange, tabs, onOpenMenu, user, badgeCount }) {
+  void active; void onChange; void tabs; void onOpenMenu; void user; void badgeCount;
+  return null;
 }
 
 function PageHeader({ title, subtitle, action }) {
@@ -1370,10 +1416,10 @@ export default function AdminDashboard() {
       <Sidebar active={tab} onChange={handleSetTab} onLogout={doLogout}
         user={user} tabs={tabs} badgeCount={badgeCount} />
       <div className="flex-1 flex flex-col min-w-0">
-        <MobileHeader activeCompany={activeCompany} user={user} onOpenMenu={() => setDrawerOpen(true)} />
+        <MobileTopLogo user={user} activeCompany={activeCompany} />
         <ImpersonationBanner />
         <TrialBanner />
-        <main className="flex-1 p-5 xl:p-8 pb-24 xl:pb-8 w-full">
+        <main className="flex-1 p-5 xl:p-8 pb-32 xl:pb-8 w-full">
           {tab === 'companies' && <Companies />}
           {tab === 'subscriptions' && <Subscriptions />}
           {tab === 'saas_settings' && <SaasSettings />}
@@ -1397,9 +1443,9 @@ export default function AdminDashboard() {
       </div>
       <MobileTabBar active={tab} onChange={handleSetTab} tabs={tabs} user={user}
         onOpenMenu={() => setDrawerOpen(true)} badgeCount={badgeCount} />
-      <MobileDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)}
+      <MobileSheet open={drawerOpen} onClose={() => setDrawerOpen(false)}
         active={tab} onChange={handleSetTab} onLogout={doLogout}
-        user={user} tabs={tabs} />
+        user={user} tabs={tabs} activeCompany={activeCompany} badgeCount={badgeCount} />
     </div>
   );
 }
