@@ -160,40 +160,21 @@ export function SendDialog({
             </button>
           </div>
 
-          {/* WhatsApp opties — twee knoppen omdat WhatsApp's URL-scheme geen
-              bijlagen accepteert. Optie A opent direct de juiste huurder
-              (handmatig PDF bijvoegen via paperclip). Optie B opent de
-              share-sheet met PDF (kies dan zelf de huurder). */}
-          {(tenantPhone || to) && (
-            <div className="space-y-2">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 text-center">WhatsApp opties</p>
-
-              {/* OPTIE A: Open chat met huurder + auto-download PDF zodat je
-                  hem direct in WhatsApp kunt bijvoegen via paperclip */}
+          {/* WhatsApp handmatig — opent chat met juiste huurder + bericht
+              met PDF-link. Huurder kan direct op de link tikken om de PDF
+              te openen/downloaden. Geen Twilio nodig, gratis. */}
+          {tenantPhone && (
+            <>
               <button
-                onClick={async () => {
-                  const phone = (cur?.contact === 'phone' ? to : tenantPhone).replace(/\D/g, '');
-                  if (!phone) { setErr('Geen telefoonnummer'); return; }
+                onClick={() => {
+                  const phone = tenantPhone.replace(/\D/g, '');
+                  if (!phone) return;
                   const apiBase = `${process.env.REACT_APP_BACKEND_URL}/api`;
                   const pdfUrl = `${apiBase}/${documentType}s/${documentId}/pdf`;
-                  // 1) Download PDF naar device zodat hij in Foto's/Bestanden staat
-                  try {
-                    const resp = await fetch(pdfUrl, { credentials: 'include' });
-                    const blob = await resp.blob();
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `${documentLabel}-${documentId.slice(0, 8)}.pdf`;
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
-                    setTimeout(() => URL.revokeObjectURL(url), 1500);
-                  } catch (e) {
-                    console.warn('PDF download fallback:', e);
-                  }
-                  // 2) Open WhatsApp met de juiste huurder
-                  const greeting = `Beste ${tenantName || 'huurder'},\n\n${msg.trim() || `Hierbij uw ${documentLabel}.`}\n\n— SuriRent`;
-                  const waUrl = `https://wa.me/${phone}?text=${encodeURIComponent(greeting)}`;
+                  const greeting = `Beste ${tenantName || 'huurder'},`;
+                  const intro = msg.trim() || `Hierbij uw ${documentLabel}.`;
+                  const fullMsg = `${greeting}\n\n${intro}\n\n${pdfUrl}\n\nMet vriendelijke groet,\nSuriRent`;
+                  const waUrl = `https://wa.me/${phone}?text=${encodeURIComponent(fullMsg)}`;
                   window.open(waUrl, '_blank', 'noopener');
                 }}
                 data-testid="send-whatsapp-open"
@@ -201,44 +182,10 @@ export function SendDialog({
                 <MessageCircle className="w-4 h-4" />
                 Open WhatsApp met huurder
               </button>
-              <p className="text-[10px] text-slate-400 text-center px-2 leading-snug">
-                Opent chat met {tenantName || 'huurder'} + downloadt PDF naar je toestel.
-                Tik daarna op de paperclip in WhatsApp om de PDF bij te voegen.
+              <p className="text-[10px] text-slate-400 text-center -mt-2 leading-snug">
+                Opent WhatsApp met {tenantName || 'huurder'} en bericht met PDF-link klaar om te versturen
               </p>
-
-              {/* OPTIE B: Deel PDF via share-sheet (kies zelf contact) */}
-              <button
-                onClick={async () => {
-                  const apiBase = `${process.env.REACT_APP_BACKEND_URL}/api`;
-                  const pdfUrl = `${apiBase}/${documentType}s/${documentId}/pdf`;
-                  try {
-                    const resp = await fetch(pdfUrl, { credentials: 'include' });
-                    if (!resp.ok) throw new Error('PDF fetch failed');
-                    const blob = await resp.blob();
-                    const fname = `${documentLabel}-${documentId.slice(0, 8)}.pdf`;
-                    const file = new File([blob], fname, { type: 'application/pdf' });
-                    if (navigator.canShare && navigator.canShare({ files: [file] })) {
-                      await navigator.share({
-                        files: [file],
-                        title: documentLabel,
-                        text: `Beste ${tenantName || 'huurder'},\n\n${msg.trim() || `Hierbij uw ${documentLabel}.`}\n\n— SuriRent`,
-                      });
-                    } else {
-                      setErr('Web Share API niet ondersteund op deze browser');
-                    }
-                  } catch (e) {
-                    if (e.name !== 'AbortError') setErr(formatError(e));
-                  }
-                }}
-                data-testid="send-whatsapp-share"
-                className="w-full h-11 rounded-xl bg-white border-2 border-emerald-300 hover:bg-emerald-50 text-emerald-700 font-bold flex items-center justify-center gap-2 transition">
-                <MessageCircle className="w-4 h-4" />
-                Deel PDF via share-sheet
-              </button>
-              <p className="text-[10px] text-slate-400 text-center px-2 leading-snug">
-                Opent iOS share-sheet → kies WhatsApp → kies contact → PDF wordt direct meegestuurd
-              </p>
-            </div>
+            </>
           )}
         </div>
       </div>
