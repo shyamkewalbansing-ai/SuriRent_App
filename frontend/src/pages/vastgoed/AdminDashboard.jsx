@@ -32,6 +32,7 @@ import MijnAbonnement from './admin/MijnAbonnement';
 import TrialBanner from '../../components/TrialBanner';
 import ImpersonationBanner from '../../components/ImpersonationBanner';
 import LiveIndicator from '../../components/LiveIndicator';
+import OverdueBell from '../../components/OverdueBell';
 
 const BASE_TABS = [
   { id: 'overview', label: 'Overzicht', icon: LayoutDashboard },
@@ -139,8 +140,9 @@ function splitNameHalf(name) {
 }
 
 function MobileTopLogo({ user, activeCompany }) {
-  // Minimalistische topbar: brand-logo links + bedrijfsnaam (geen menu-knop,
-  // geen Kiosk-knop, geen Live indicator — die zitten in de "+"-sheet).
+  // Minimalistische topbar: brand-logo links + bedrijfsnaam + notificatie-bell
+  // rechtsboven (achterstanden). Geen menu-knop, geen Kiosk-knop, geen Live
+  // indicator — die zitten in de "+"-sheet.
   const fullName = activeCompany?.name || (user?.role === 'superadmin' ? 'Alle bedrijven' : 'SuriRent');
   const [namePart1, namePart2] = splitNameHalf(fullName);
   return (
@@ -165,6 +167,10 @@ function MobileTopLogo({ user, activeCompany }) {
             {user?.role === 'superadmin' ? 'Superadmin' : 'Beheer'}{activeCompany?.plan ? ` · ${activeCompany.plan}` : ''}
           </p>
         </div>
+        {/* Notificatie-bell rechtsboven — toont badge bij achterstanden,
+            opent paneel met alle huurders die achter zijn. Alleen voor
+            admin/owner (superadmin krijgt geen bedrijfsspecifieke data). */}
+        {user?.role !== 'superadmin' && <OverdueBell />}
       </div>
     </header>
   );
