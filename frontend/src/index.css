@@ -49,6 +49,9 @@ body {
   body.kiosk-mode { background-color: #FF5C00; }
   /* Tijdens login-mode -> brand kleur (var --login-bg, default oranje). */
   body.login-mode { background-color: var(--login-bg, #FF5C00); }
+  /* Tijdens huurder-portaal -> brand cream zodat home-indicator
+     en notch hetzelfde voelen als de portal-achtergrond. */
+  body.tenant-mode { background-color: #FFF7F0; }
 }
 
 /* Utility for screens that should respect safe area manually. */

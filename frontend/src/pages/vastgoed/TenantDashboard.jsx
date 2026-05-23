@@ -16,19 +16,21 @@ function fmtDateTime(iso) {
 
 function Header({ tenantName, onLogout }) {
   return (
-    <div className="bg-gradient-to-r from-[#FF8A3D] via-[#FF5C00] to-[#C74600] text-white">
-      <div className="px-5 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-white p-1.5 shadow-lg">
+    <div className="bg-gradient-to-r from-[#FF8A3D] via-[#FF5C00] to-[#C74600] text-white relative overflow-hidden">
+      {/* Subtiele lichtschijn-overlay voor premium look */}
+      <div aria-hidden className="absolute inset-0 bg-gradient-to-b from-white/10 to-transparent pointer-events-none" />
+      <div className="relative px-5 py-4 flex items-center justify-between">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-11 h-11 rounded-2xl bg-white/95 backdrop-blur-sm p-1.5 shadow-[0_8px_20px_-6px_rgba(0,0,0,0.25)] shrink-0">
             <img src="/kiosk-icons/kiosk-512.png" alt="logo" className="w-full h-full object-contain" />
           </div>
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-widest text-white/80">Mijn Huurportaal</p>
-            <p className="text-base font-black tracking-tight">{tenantName}</p>
+          <div className="min-w-0">
+            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/85 leading-tight">Mijn Huurportaal</p>
+            <p className="text-base font-black tracking-tight leading-tight truncate">{tenantName}</p>
           </div>
         </div>
         <button onClick={onLogout} data-testid="tenant-logout"
-          className="p-2.5 rounded-xl bg-white/15 hover:bg-white/25 backdrop-blur-sm">
+          className="p-2.5 rounded-xl bg-white/15 hover:bg-white/25 backdrop-blur-sm active:scale-95 transition shrink-0">
           <LogOut className="w-4 h-4" />
         </button>
       </div>
@@ -163,6 +165,22 @@ export default function TenantDashboard() {
     loadAll();
   }, [loadAll, navigate]);
 
+  // Edge-to-edge brand cream achtergrond + body class zodat iOS PWA
+  // standalone geen witte strook onderaan of bij de notch toont.
+  useEffect(() => {
+    const BRAND_CREAM = '#FFF7F0';
+    document.body.classList.add('tenant-mode');
+    const prevHtmlBg = document.documentElement.style.backgroundColor;
+    const prevBodyBg = document.body.style.backgroundColor;
+    document.documentElement.style.backgroundColor = BRAND_CREAM;
+    document.body.style.backgroundColor = BRAND_CREAM;
+    return () => {
+      document.body.classList.remove('tenant-mode');
+      document.documentElement.style.backgroundColor = prevHtmlBg;
+      document.body.style.backgroundColor = prevBodyBg;
+    };
+  }, []);
+
   const logout = async () => {
     try { await api.post('/tenant-portal/logout'); } catch (err) { console.warn('Tenant logout API failed (continuing client-side):', err); }
     localStorage.removeItem('tenant_token');
@@ -171,7 +189,14 @@ export default function TenantDashboard() {
 
   if (loading || !overview) {
     return (
-      <div className="min-h-screen bg-[#FFF7F0] flex items-center justify-center">
+      <div
+        className="flex items-center justify-center"
+        style={{
+          position: 'fixed', inset: 0, backgroundColor: '#FFF7F0',
+          paddingTop: 'env(safe-area-inset-top, 0px)',
+          paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+        }}
+      >
         <Loader2 className="w-10 h-10 animate-spin text-[#FF5C00]" />
       </div>
     );
@@ -182,10 +207,19 @@ export default function TenantDashboard() {
   const apiBase = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
   return (
-    <div className="min-h-screen bg-[#FFF7F0]">
+    <div
+      style={{
+        position: 'fixed', inset: 0, backgroundColor: '#FFF7F0',
+        overflowY: 'auto', WebkitOverflowScrolling: 'touch',
+        paddingTop: 'env(safe-area-inset-top, 0px)',
+        paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+        paddingLeft: 'env(safe-area-inset-left, 0px)',
+        paddingRight: 'env(safe-area-inset-right, 0px)',
+      }}
+    >
       <Header tenantName={tenant.name} onLogout={logout} />
 
-      <main className="max-w-2xl mx-auto px-5 py-6 pb-20">
+      <main className="max-w-2xl mx-auto px-5 py-6 pb-24">
         {apartment ? (
           <div className="bg-white rounded-2xl border border-orange-100 p-5 mb-6 shadow-sm">
             <div className="flex items-center gap-3 mb-3">

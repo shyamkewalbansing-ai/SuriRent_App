@@ -19,6 +19,23 @@ export default function TenantLoginPage() {
     }
   }, [navigate]);
 
+  // Edge-to-edge brand achtergrond + body class zodat iOS PWA standalone
+  // geen witte strook onderaan of bij de notch toont (zelfde patroon als
+  // de Beheerder Login en de Kiosk).
+  useEffect(() => {
+    const BRAND_CREAM = '#FFF7F0';
+    document.body.classList.add('tenant-mode');
+    const prevHtmlBg = document.documentElement.style.backgroundColor;
+    const prevBodyBg = document.body.style.backgroundColor;
+    document.documentElement.style.backgroundColor = BRAND_CREAM;
+    document.body.style.backgroundColor = BRAND_CREAM;
+    return () => {
+      document.body.classList.remove('tenant-mode');
+      document.documentElement.style.backgroundColor = prevHtmlBg;
+      document.body.style.backgroundColor = prevBodyBg;
+    };
+  }, []);
+
   const verify = async (code) => {
     setLoading(true); setError('');
     try {
@@ -51,7 +68,18 @@ export default function TenantLoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#FFF7F0] to-[#FFEAD3] flex flex-col">
+    <div
+      className="flex flex-col"
+      style={{
+        position: 'fixed', inset: 0,
+        background: 'linear-gradient(135deg, #FFF7F0 0%, #FFEAD3 100%)',
+        overflowY: 'auto', WebkitOverflowScrolling: 'touch',
+        paddingTop: 'env(safe-area-inset-top, 0px)',
+        paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+        paddingLeft: 'env(safe-area-inset-left, 0px)',
+        paddingRight: 'env(safe-area-inset-right, 0px)',
+      }}
+    >
       <header className="px-5 py-4 flex items-center gap-3">
         <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-[#FF8A3D] to-[#C74600] p-2 shadow-lg">
           <img src="/kiosk-icons/kiosk-512.png" alt="SuriRent" className="w-full h-full object-contain" />
