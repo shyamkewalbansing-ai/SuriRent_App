@@ -563,12 +563,13 @@ export default function Invoices() {
   const [generating, setGenerating] = useState(false);
   const [reminding, setReminding] = useState(null);
   const [reminderChannel, setReminderChannel] = useState('whatsapp');
-  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkOpen] = useState(false); // legacy — Bulk WhatsApp button removed; kept as no-op
   const [search, setSearch] = useState('');
   const [tab, setTab] = useState('all');  // 'all' | 'open' | 'paid'
   const [filterSeverity, setFilterSeverity] = useState('all'); // all|critical|late|ok
   const [filterOpen, setFilterOpen] = useState(false);
   const [expanded, setExpanded] = useState(null);  // single tenant_id of currently expanded row
+  const [userToggled, setUserToggled] = useState(false); // gebruiker heeft handmatig een rij geopend/gesloten
   const [toast, setToast] = useState(null);
   const today = new Date();
 
@@ -640,8 +641,19 @@ export default function Invoices() {
   }, [groups, tab, filterSeverity, search]);
 
   const toggleExpand = (id) => {
+    setUserToggled(true);
     setExpanded((cur) => (cur === id ? null : id));
   };
+
+  // Default: eerste huurder in de huidige filter staat altijd open.
+  // Zodra de gebruiker zelf iets aanklikt (open óf sluiten), respecteren we
+  // diens keuze en stoppen we met auto-openen. Zo blijft de bovenste rij
+  // (meest urgente, want gesorteerd op severity + bedrag) standaard zichtbaar.
+  useEffect(() => {
+    if (userToggled) return;
+    const firstId = filteredGroups[0]?.tenant_id || null;
+    if (firstId && expanded !== firstId) setExpanded(firstId);
+  }, [filteredGroups, expanded, userToggled]);
 
   const openReminder = (group, channel) => {
     setReminderChannel(channel);
@@ -693,7 +705,7 @@ export default function Invoices() {
       </div>
 
       {/* ACTION BUTTONS */}
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3">
+      <div className="grid grid-cols-2 gap-2 sm:gap-3">
         <button onClick={generateMonth} disabled={generating} data-testid="invoice-generate-btn"
           className="inline-flex items-center justify-center gap-2 px-4 py-3 sm:py-3.5 bg-white border-2 border-orange-200 hover:border-[#FF5C00] text-[#FF5C00] font-bold rounded-2xl text-sm sm:text-base">
           {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4 sm:w-5 sm:h-5" />}
@@ -702,12 +714,6 @@ export default function Invoices() {
         <button onClick={() => setCreating(true)} data-testid="invoice-new-btn"
           className="inline-flex items-center justify-center gap-2 px-4 py-3 sm:py-3.5 bg-[#FF5C00] hover:bg-[#E05200] text-white font-bold rounded-2xl text-sm sm:text-base shadow-[0_10px_25px_-5px_rgba(255,92,0,0.5)]">
           <Plus className="w-4 h-4 sm:w-5 sm:h-5" /> Nieuwe factuur
-        </button>
-        <button onClick={() => setBulkOpen(true)} disabled={openCount === 0}
-          data-testid="invoice-bulk-wa-btn"
-          className="col-span-2 lg:col-span-1 inline-flex items-center justify-center gap-2 px-4 py-3 sm:py-3.5 bg-emerald-500 hover:bg-emerald-600 disabled:bg-slate-200 disabled:text-slate-400 text-white font-bold rounded-2xl text-sm sm:text-base shadow-[0_10px_25px_-5px_rgba(16,185,129,0.45)]">
-          <Users className="w-4 h-4 sm:w-5 sm:h-5" />
-          Stuur alle herinneringen ({openCount})
         </button>
       </div>
 
@@ -785,10 +791,6 @@ export default function Invoices() {
       )}
 
       {/* MODALS */}
-      {/* MODALS */}
-      {bulkOpen && (
-        <BulkWhatsAppModal groups={groups} tenants={tenants} onClose={() => setBulkOpen(false)} />
-      )}
       {creating && <InvoiceForm tenants={tenants}
         onCancel={() => setCreating(false)} onSaved={() => { setCreating(false); load(); }} />}
       {reminding && (
