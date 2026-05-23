@@ -33,6 +33,7 @@ import TrialBanner from '../../components/TrialBanner';
 import ImpersonationBanner from '../../components/ImpersonationBanner';
 import LiveIndicator from '../../components/LiveIndicator';
 import OverdueBell from '../../components/OverdueBell';
+import ApartmentsBell from '../../components/ApartmentsBell';
 
 const BASE_TABS = [
   { id: 'overview', label: 'Overzicht', icon: LayoutDashboard },
@@ -167,10 +168,14 @@ function MobileTopLogo({ user, activeCompany }) {
             {user?.role === 'superadmin' ? 'Superadmin' : 'Beheer'}{activeCompany?.plan ? ` · ${activeCompany.plan}` : ''}
           </p>
         </div>
-        {/* Notificatie-bell rechtsboven — toont badge bij achterstanden,
-            opent paneel met alle huurders die achter zijn. Alleen voor
-            admin/owner (superadmin krijgt geen bedrijfsspecifieke data). */}
-        {user?.role !== 'superadmin' && <OverdueBell />}
+        {/* Rechtsboven — kleine bel-achtige actie-iconen.
+            Alleen voor admin/owner (superadmin krijgt geen bedrijfsspecifieke data). */}
+        {user?.role !== 'superadmin' && (
+          <div className="flex items-center gap-2 shrink-0">
+            <ApartmentsBell />
+            <OverdueBell />
+          </div>
+        )}
       </div>
     </header>
   );
