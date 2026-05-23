@@ -69,6 +69,33 @@ export function useRegisterServiceWorker() {
 const DISMISS_KEY = 'surirent_pwa_install_dismissed_at';
 const DISMISS_TTL_MS = 1000 * 60 * 60 * 24 * 30; // 30 days
 
+/**
+ * useBadge() — luistert naar BADGE_CHANGED van de service worker en
+ * geeft de huidige in-app badge count terug. Reset met `clearBadge()`.
+ * Stuur een CLEAR_BADGE message naar de SW zodat ook de OS-badge
+ * (rode cijfer op het app-icoon) leeggemaakt wordt.
+ */
+export function useBadge() {
+  const [count, setCount] = useState(0);
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return;
+    const handler = (event) => {
+      if (event.data && event.data.type === 'BADGE_CHANGED') {
+        setCount(event.data.count || 0);
+      }
+    };
+    navigator.serviceWorker.addEventListener('message', handler);
+    return () => navigator.serviceWorker.removeEventListener('message', handler);
+  }, []);
+  const clearBadge = () => {
+    setCount(0);
+    try {
+      navigator.serviceWorker?.controller?.postMessage({ type: 'CLEAR_BADGE' });
+    } catch { /* noop */ }
+  };
+  return { count, clearBadge };
+}
+
 function isIOS() {
   if (typeof navigator === 'undefined') return false;
   const ua = navigator.userAgent || '';

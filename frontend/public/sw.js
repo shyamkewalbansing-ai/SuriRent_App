@@ -6,7 +6,7 @@
  * - Bypass /api/* (always go to network)
  * - Push notifications + click handler
  */
-const CACHE_VERSION = 'surirent-v19';
+const CACHE_VERSION = 'surirent-v20';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 
@@ -123,40 +123,83 @@ self.addEventListener('fetch', (event) => {
 });
 
 // ============== Push notifications ==============
+
+// Globale badge teller — bewaard in IndexedDB-vrij geheugen via een eenvoudige
+// counter in een SW-globale variabele + ook in caches (overleeft restart).
+let _badgeCount = 0;
+
+async function _loadBadge() {
+  try {
+    const cache = await caches.open('surirent-state');
+    const r = await cache.match('badge-count');
+    if (r) {
+      const v = parseInt(await r.text(), 10);
+      if (!isNaN(v)) _badgeCount = v;
+    }
+  } catch { /* noop */ }
+}
+async function _saveBadge() {
+  try {
+    const cache = await caches.open('surirent-state');
+    await cache.put('badge-count', new Response(String(_badgeCount)));
+  } catch { /* noop */ }
+}
+async function _setAppBadge(n) {
+  // Badging API werkt op Chrome desktop, Edge, Safari iOS 16.4+ PWA.
+  // Bij niet-ondersteunde browsers blijft het stil falen.
+  try {
+    if (n > 0) {
+      if (self.navigator && self.navigator.setAppBadge) {
+        await self.navigator.setAppBadge(n);
+      }
+    } else {
+      if (self.navigator && self.navigator.clearAppBadge) {
+        await self.navigator.clearAppBadge();
+      }
+    }
+  } catch { /* noop */ }
+}
+
 self.addEventListener('push', (event) => {
   let data = { title: 'SuriRent', body: '' };
   if (event.data) {
     try { data = event.data.json(); } catch { data.body = event.data.text(); }
   }
   const kind = (data.data && data.data.kind) || 'info';
+  const inc = (data.data && data.data.badge_inc) || 1;
   const options = {
     body: data.body || '',
     icon: '/kiosk-icons/kiosk-192.png',
     badge: '/kiosk-icons/kiosk-72.png',
     data: data.data || {},
-    // Pittig vibratiepatroon — geeft "ping" gevoel
     vibrate: [200, 100, 200, 100, 300],
-    // Actiebar onder de notificatie
     actions: [
       { action: 'open', title: 'Bekijk' },
       { action: 'dismiss', title: 'Sluiten' },
     ],
-    // tag groepeert oudere notifs zodat we maar 1 zichtbaar hebben per type
     tag: `surirent-${kind}`,
-    renotify: true,            // ook bij hetzelfde tag opnieuw piepen
-    requireInteraction: kind === 'overdue',  // belangrijke alerts blijven staan
-    silent: false,             // expliciet niet stil
+    renotify: true,
+    requireInteraction: kind === 'overdue',
+    silent: false,
     timestamp: Date.now(),
   };
-  event.waitUntil(self.registration.showNotification(data.title, options));
+  event.waitUntil((async () => {
+    await _loadBadge();
+    _badgeCount += inc;
+    await _saveBadge();
+    await _setAppBadge(_badgeCount);
+    // Vertel evt. open tabs zodat React de badge ook in-app kan tonen
+    try {
+      const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+      for (const c of clients) c.postMessage({ type: 'BADGE_CHANGED', count: _badgeCount });
+    } catch { /* noop */ }
+    await self.registration.showNotification(data.title, options);
+  })());
 });
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   if (event.action === 'dismiss') return;
-  // Bepaal navigatie-target:
-  // 1) expliciete data.url
-  // 2) heuristisch op basis van kind (overdue → /admin/invoices, test → /admin/notifications)
   const data = event.notification.data || {};
   let target = data.url;
   if (!target) {
@@ -167,21 +210,33 @@ self.addEventListener('notificationclick', (event) => {
       default:        target = '/admin'; break;
     }
   }
-  event.waitUntil(
-    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
-      // Focus bestaande tab als deze open is, en navigeer ernaartoe.
-      for (const c of clients) {
-        if ('focus' in c) {
-          c.navigate(target).catch(() => {});
-          return c.focus();
-        }
+  event.waitUntil((async () => {
+    // Reset badge — gebruiker heeft de melding gezien
+    _badgeCount = 0;
+    await _saveBadge();
+    await _setAppBadge(0);
+    const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const c of clients) c.postMessage({ type: 'BADGE_CHANGED', count: 0 });
+    for (const c of clients) {
+      if ('focus' in c) {
+        c.navigate(target).catch(() => {});
+        return c.focus();
       }
-      if (self.clients.openWindow) return self.clients.openWindow(target);
-    })
-  );
+    }
+    if (self.clients.openWindow) return self.clients.openWindow(target);
+  })());
 });
 
-// Allow page to trigger SKIP_WAITING (used by update prompts)
+// Bericht vanuit pagina: handmatig badge reset (bv. wanneer admin
+// /admin/notifications opent).
 self.addEventListener('message', (event) => {
   if (event.data === 'SKIP_WAITING') self.skipWaiting();
+  if (event.data && event.data.type === 'CLEAR_BADGE') {
+    event.waitUntil((async () => {
+      _badgeCount = 0;
+      await _saveBadge();
+      await _setAppBadge(0);
+    })());
+  }
 });
+

@@ -590,7 +590,7 @@ async def _send_overdue_pushes():
             await _notify_company_admins(
                 cid, "Achterstallige huur",
                 body,
-                {"kind": "overdue", "url": "/admin/invoices", "count": len(overdue)},
+                {"kind": "overdue", "url": "/admin/invoices", "count": len(overdue), "badge_inc": 1},
             )
             await db.companies.update_one({"id": cid}, {"$set": {"overdue_push_last": today_key}})
         except Exception as e:
@@ -2951,10 +2951,12 @@ async def create_payment(body: PaymentIn, user=Depends(get_current_user)):
     enriched = await _enrich_payment(doc)
     # Push notificatie naar andere admins van dezelfde company
     try:
+        cur = enriched.get('currency', '')
+        amt = float(enriched.get('amount', 0))
         await _notify_company_admins(
-            cid, "Betaling geregistreerd",
-            f"{enriched.get('tenant_name', 'Onbekend')} — {enriched.get('currency', '')} {float(enriched.get('amount', 0)):,.2f} ({enriched.get('method', '')})",
-            {"kind": "payment", "url": "/admin/payments", "payment_id": enriched.get("id")},
+            cid, f"Betaling {cur} {amt:,.2f}",
+            f"{enriched.get('tenant_name', 'Onbekend')} via {enriched.get('method', '')}",
+            {"kind": "payment", "url": "/admin/payments", "payment_id": enriched.get("id"), "badge_inc": 1},
         )
     except Exception as e:
         print(f"[push] admin payment notify failed: {e}")
@@ -3202,16 +3204,19 @@ async def kiosk_create_payment(body: PaymentIn, _session=Depends(get_kiosk_sessi
         apt = enriched.get("apartment_number")
         method = enriched.get("method", "")
         apt_str = f" · Appt. {apt}" if apt else ""
+        # Concreet in de TITEL zodat het bedrag direct zichtbaar is, ook
+        # naast de iOS "From [app]" badge.
         await _notify_company_admins(
             cid,
-            "Nieuwe betaling ontvangen",
-            f"{tenant}{apt_str} betaalde {currency} {amount:,.2f} via {method}",
+            f"Betaling {currency} {amount:,.2f}",
+            f"{tenant}{apt_str} via {method}",
             {
                 "kind": "payment",
                 "url": "/admin/payments",
                 "payment_id": enriched.get("id"),
                 "amount": amount,
                 "tenant": tenant,
+                "badge_inc": 1,
             },
         )
     except Exception as e:

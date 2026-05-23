@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useBadge } from '../../lib/pwa';
 import {
   Building2, Users, Receipt, LayoutDashboard, LogOut, Plus, Trash2, Pencil,
   X, Check, Loader2, Search, Home, Banknote, KeySquare, ChevronRight, Wallet,
@@ -57,7 +58,7 @@ function getTabsFor(user) {
   return user?.role === 'superadmin' ? SUPER_TABS : BASE_TABS;
 }
 
-function Sidebar({ active, onChange, onLogout, user, tabs }) {
+function Sidebar({ active, onChange, onLogout, user, tabs, badgeCount }) {
   return (
     <aside className="hidden md:flex flex-col w-64 bg-white border-r border-orange-100 p-5">
       <div className="flex items-center gap-3 mb-6">
@@ -74,6 +75,7 @@ function Sidebar({ active, onChange, onLogout, user, tabs }) {
         {tabs.map((t) => {
           const Icon = t.icon;
           const isActive = active === t.id;
+          const showBadge = t.id === 'notifications' && badgeCount > 0;
           return (
             <button key={t.id} onClick={() => onChange(t.id)}
               data-testid={`tab-${t.id}`}
@@ -81,7 +83,16 @@ function Sidebar({ active, onChange, onLogout, user, tabs }) {
                 isActive ? 'bg-[#FF5C00] text-white shadow-[0_8px_20px_-5px_rgba(255,92,0,0.55)]'
                   : 'text-slate-600 hover:bg-orange-50 hover:text-[#FF5C00]'
               }`}>
-              <Icon className="w-4 h-4" /> {t.label}
+              <span className="relative shrink-0">
+                <Icon className="w-4 h-4" />
+                {showBadge && (
+                  <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[10px] font-black flex items-center justify-center"
+                    data-testid="sidebar-badge">
+                    {badgeCount > 9 ? '9+' : badgeCount}
+                  </span>
+                )}
+              </span>
+              {t.label}
             </button>
           );
         })}
@@ -1454,6 +1465,7 @@ export default function AdminDashboard() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
+  const { count: badgeCount } = useBadge();
 
   // URL → tab sync. Bij paden zoals /admin/invoices, /admin/payments etc.
   // wordt de tab automatisch ingesteld. Belangrijk voor:
@@ -1504,7 +1516,7 @@ export default function AdminDashboard() {
   return (
     <div className="min-h-screen bg-[#FFF7F0] flex">
       <Sidebar active={tab} onChange={handleSetTab} onLogout={doLogout}
-        user={user} tabs={tabs} />
+        user={user} tabs={tabs} badgeCount={badgeCount} />
       <div className="flex-1 flex flex-col min-w-0">
         <MobileHeader activeCompany={activeCompany} user={user} onOpenMenu={() => setDrawerOpen(true)} />
         <ImpersonationBanner />

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Bell, BellOff, Loader2, Check, AlertTriangle, Send, Shield, FileText, RotateCw, Smartphone } from 'lucide-react';
 import { api, formatError } from '../../../lib/api';
+import { useBadge } from '../../../lib/pwa';
 
 function urlBase64ToUint8Array(base64String) {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
@@ -12,6 +13,7 @@ function urlBase64ToUint8Array(base64String) {
 }
 
 export default function Notifications() {
+  const { clearBadge } = useBadge();
   const [supported, setSupported] = useState(true);
   const [permission, setPermission] = useState('default');
   const [subscribed, setSubscribed] = useState(false);
@@ -20,6 +22,10 @@ export default function Notifications() {
   const [error, setError] = useState('');
   const [msg, setMsg] = useState('');
   const [vapidKey, setVapidKey] = useState('');
+
+  // Bij openen van de pagina: clear de app-icon badge — gebruiker heeft
+  // alles gezien.
+  useEffect(() => { clearBadge(); }, [clearBadge]);
 
   const refreshStatus = useCallback(async () => {
     try {
