@@ -15,54 +15,31 @@ export function useRegisterServiceWorker() {
       try {
         const reg = await navigator.serviceWorker.register('/sw.js');
 
-        // Auto-update flow — installed PWAs check for updates without user
-        // interaction so klanten nooit handmatig hoeven te herinstalleren.
-        // Strategie: nieuwe SW installeert → skipWaiting → reload PAS wanneer
-        // de tab niet zichtbaar is (visibilityState === 'hidden'). Zo ziet de
-        // gebruiker NOOIT een witte flits of mid-page refresh. Wanneer hij/zij
-        // de app opent vanuit de achtergrond, draait de nieuwe versie al.
-        const handleUpdate = (newWorker) => {
+        // Stille update-strategie — NOOIT mid-session reload.
+        // Wanneer een nieuwe SW gevonden wordt:
+        //   1) installeert hij in de achtergrond,
+        //   2) we sturen SKIP_WAITING zodat hij meteen actief wordt,
+        //   3) de OUDE pagina blijft draaien tot de gebruiker zelf de app
+        //      opnieuw opent / navigeert / refresht. Geen flikker, geen
+        //      "loading" — gewoon de volgende cold-start draait al de
+        //      nieuwe versie (omdat de SW dan nieuw HTML serveert).
+        const activate = (newWorker) => {
           newWorker.addEventListener('statechange', () => {
             if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
               newWorker.postMessage({ type: 'SKIP_WAITING' });
             }
           });
         };
-        if (reg.waiting) handleUpdate(reg.waiting);
+        if (reg.waiting) activate(reg.waiting);
         reg.addEventListener('updatefound', () => {
-          if (reg.installing) handleUpdate(reg.installing);
+          if (reg.installing) activate(reg.installing);
         });
 
-        // Silent reload — alleen wanneer de tab al verborgen is. Anders
-        // wachten tot de gebruiker wegklikt; dan stilletjes herladen zonder
-        // dat hij de flits ziet.
-        let scheduled = false;
-        navigator.serviceWorker.addEventListener('controllerchange', () => {
-          if (scheduled) return;
-          scheduled = true;
-          const reload = () => window.location.reload();
-          if (document.visibilityState === 'hidden') {
-            reload();
-          } else {
-            const onHidden = () => {
-              if (document.visibilityState === 'hidden') {
-                document.removeEventListener('visibilitychange', onHidden);
-                reload();
-              }
-            };
-            document.addEventListener('visibilitychange', onHidden);
-            // Vangnet: als de tab een uur lang zichtbaar blijft, doe alsnog
-            // een reload bij de volgende focus-event (gewenst: app updaten
-            // gebeurt sowieso binnen redelijke termijn).
-            setTimeout(() => {
-              document.removeEventListener('visibilitychange', onHidden);
-              if (document.visibilityState === 'hidden') reload();
-            }, 60 * 60 * 1000);
-          }
-        });
+        // BEWUST GEEN controllerchange→reload meer. Update is volledig
+        // stil; geen reload, geen toast, geen loading-state.
 
-        // Periodieke check voor nieuwe versies (60s actieve tab, ook bij
-        // focus / visibility changes).
+        // Periodieke check voor nieuwe versies zodat de nieuwe SW snel
+        // klaar staat (60s actieve tab + bij focus / visibility changes).
         const checkForUpdates = () => { reg.update().catch(() => {}); };
         const interval = setInterval(checkForUpdates, 60_000);
         window.addEventListener('focus', checkForUpdates);
