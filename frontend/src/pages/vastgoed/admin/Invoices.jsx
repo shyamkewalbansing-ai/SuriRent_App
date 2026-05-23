@@ -195,22 +195,24 @@ function TenantRow({ group, expanded, onToggle, onReminder }) {
             {initials(group.tenant_name)}
           </div>
 
-          {/* Huurder name + status pill */}
+          {/* Huurder name */}
           <div className="min-w-0">
             <p className="font-bold text-slate-900 text-sm sm:text-[15px] truncate">{group.tenant_name}</p>
-            <div className="mt-0.5">
+            {/* Mobiel: status pill onder de naam (geen aparte Open maanden kolom op mobiel) */}
+            <div className="mt-0.5 md:hidden">
               <StatusPill severity={sev} openCount={group.openCount} />
             </div>
           </div>
 
-          {/* Open maanden chips — desktop only */}
-          <div className="hidden md:flex flex-wrap gap-1 items-center justify-start">
-            {group.openCount > 0 ? (
-              group.open.slice(-4).map((inv) => (
-                <MonthChip key={inv.id} month={MONTHS_NL[inv.period_month - 1].slice(0, 3).toLowerCase()} severity={sev} />
-              ))
-            ) : (
-              <span className="text-emerald-600 font-semibold text-xs">—</span>
+          {/* Open maanden + status pill — desktop only */}
+          <div className="hidden md:flex flex-col items-start gap-1">
+            <StatusPill severity={sev} openCount={group.openCount} />
+            {group.openCount > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {group.open.slice(-4).map((inv) => (
+                  <MonthChip key={inv.id} month={MONTHS_NL[inv.period_month - 1].slice(0, 3).toLowerCase()} severity={sev} />
+                ))}
+              </div>
             )}
           </div>
 
