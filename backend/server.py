@@ -2911,6 +2911,77 @@ async def remove_tenant(apt_id: str, user=Depends(get_current_user)):
     return {"ok": True}
 
 
+@api.get("/tenant-portal/lookup-apartment/{apt_id}")
+async def tenant_portal_lookup_apartment(apt_id: str):
+    """Publiek (zonder auth): wordt aangeroepen door de Huurder Kiosk wanneer
+    de QR-sticker bij de voordeur is gescand met `?apt=<id>` in de URL.
+
+    Geeft minimaal genoeg info terug om de PIN-stap voor te bereiden:
+    - tenant naam + e-mailadres (nodig voor `/tenant-portal/login`)
+    - appartement-nummer en eventuele bedrijfsnaam (voor de header)
+
+    De PIN blijft de enige beveiligingslaag — niemand kan zonder PIN inloggen.
+    """
+    apt = await db.apartments.find_one({"id": apt_id}, {"_id": 0})
+    if not apt:
+        raise HTTPException(status_code=404, detail="Appartement niet gevonden")
+    tenant = None
+    if apt.get("tenant_id"):
+        tenant = await db.tenants.find_one(
+            {"id": apt["tenant_id"]},
+            {"_id": 0, "name": 1, "email": 1, "phone": 1, "pin_hash": 1},
+        )
+    if not tenant or not tenant.get("pin_hash"):
+        raise HTTPException(status_code=404, detail="Geen huurder met PIN op dit appartement")
+    company_name = None
+    if apt.get("company_id"):
+        c = await db.companies.find_one({"id": apt["company_id"]}, {"_id": 0, "name": 1})
+        company_name = (c or {}).get("name")
+    return {
+        "apartment": {"id": apt["id"], "number": apt["number"], "address": apt.get("address", "")},
+        "tenant": {
+            "name": tenant.get("name"),
+            "email": tenant.get("email"),
+            "first_name": (tenant.get("name") or "").split(" ")[0] or None,
+        },
+        "company": {"name": company_name},
+    }
+
+
+@api.get("/apartments/{apt_id}/kiosk-sticker.pdf")
+async def apartment_kiosk_sticker(apt_id: str):
+    """Genereert een A4 print-poster met QR-code → `/kiosk/huurder?apt=<id>`.
+    Publiek (geen auth) zodat de beheerder de link direct in een nieuw
+    tabblad kan openen — het PDF bevat enkel het appartement-nummer en
+    de huurder-naam (al fysiek leesbaar bij de voordeur)."""
+    apt = await db.apartments.find_one({"id": apt_id}, {"_id": 0})
+    if not apt:
+        raise HTTPException(status_code=404, detail="Appartement niet gevonden")
+    tenant_name = None
+    if apt.get("tenant_id"):
+        t = await db.tenants.find_one({"id": apt["tenant_id"]}, {"_id": 0, "name": 1})
+        tenant_name = (t or {}).get("name")
+    company_name = "SuriRent"
+    primary_hex = "#FF5C00"
+    cid = apt.get("company_id")
+    if cid:
+        c = await db.companies.find_one({"id": cid}, {"_id": 0, "name": 1, "branding": 1})
+        if c:
+            company_name = c.get("name") or company_name
+            primary_hex = ((c.get("branding") or {}).get("primary_color")) or primary_hex
+    kiosk_url = _public_url(f"/kiosk/huurder?apt={apt_id}")
+    from pdf_gen import kiosk_sticker_pdf
+    pdf = kiosk_sticker_pdf(
+        apartment_number=apt.get("number", "—"),
+        address=apt.get("address", "") or "",
+        tenant_name=tenant_name,
+        company_name=company_name,
+        kiosk_url=kiosk_url,
+        primary_hex=primary_hex,
+    )
+    return _pdf_response(pdf, f"kiosk-sticker-{apt.get('number', apt_id)}.pdf")
+
+
 # =====================================================================
 # Tenants
 # =====================================================================

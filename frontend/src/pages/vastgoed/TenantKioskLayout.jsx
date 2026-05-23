@@ -3,7 +3,7 @@ import {
   Lock, Loader2, LogOut, CreditCard, Wrench, User, Phone,
   CheckCircle2, X, ChevronRight, Calendar, ArrowLeft,
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api, formatError, fmtMoney, MONTHS_NL } from '../../lib/api';
 
 const TENANT_TOKEN_KEY = 'tenant_token';
@@ -91,18 +91,24 @@ function PinPad({ onComplete, busy, error }) {
 }
 
 /** PIN Login screen */
-function LoginView({ onLoggedIn }) {
+function LoginView({ onLoggedIn, prefill }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
   // We hebben e-mail + pincode nodig. Voor de kiosk vereenvoudigen we naar
   // alléén pincode-flow: backend verwacht email + pin, dus we vragen eerst
-  // mailadres in een kleine input, daarna verschijnt de pin-pad. In een
-  // echte kiosk-context kan de admin een tablet per appartement plaatsen
-  // en zou e-mail vooringevuld kunnen worden, maar daar gaan we nu niet
-  // op anticiperen.
-  const [email, setEmail] = useState('');
-  const [step, setStep] = useState('email'); // 'email' | 'pin'
+  // mailadres in een kleine input, daarna verschijnt de pin-pad. Wanneer de
+  // QR-sticker `?apt=<id>` meegeeft, slaan we de email-stap over.
+  const [email, setEmail] = useState(prefill?.email || '');
+  const [step, setStep] = useState(prefill?.email ? 'pin' : 'email'); // 'email' | 'pin'
+
+  // Wanneer prefill later binnenkomt (na lookup), spring direct naar PIN.
+  useEffect(() => {
+    if (prefill?.email && !email) {
+      setEmail(prefill.email);
+      setStep('pin');
+    }
+  }, [prefill?.email, email]);
 
   const submit = async (pin) => {
     setBusy(true); setError('');
@@ -115,12 +121,19 @@ function LoginView({ onLoggedIn }) {
     } finally { setBusy(false); }
   };
 
+  const titleTop = prefill?.firstName ? `Welkom ${prefill.firstName}` : 'Welkom huurder';
+  const titleSub = prefill?.apartmentNumber ? `Appartement ${prefill.apartmentNumber}` : null;
+
   return (
     <div className="flex-1 flex flex-col items-center justify-center px-6 py-10" data-testid="tk-login">
       <div className="w-16 h-16 rounded-full bg-orange-50 flex items-center justify-center mb-4">
         <Lock className="w-7 h-7 text-[#FF5C00]" strokeWidth={2.4} />
       </div>
-      <p className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">Welkom huurder</p>
+      <p className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">{titleTop}</p>
+      {titleSub && (
+        <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#FF5C00] mt-1"
+          data-testid="tk-prefill-apt">{titleSub}</p>
+      )}
       <p className="text-sm text-slate-500 mt-1 mb-6 text-center max-w-xs">
         {step === 'email' ? 'Voer uw e-mailadres in om door te gaan.' : 'Voer uw 4-cijferige pincode in.'}
       </p>
@@ -145,10 +158,13 @@ function LoginView({ onLoggedIn }) {
       ) : (
         <>
           <PinPad onComplete={submit} busy={busy} error={error} />
-          <button onClick={() => setStep('email')} disabled={busy}
-            className="mt-5 text-xs text-slate-400 hover:text-slate-600 font-bold">
-            ← Andere e-mail
-          </button>
+          {!prefill?.locked && (
+            <button onClick={() => setStep('email')} disabled={busy}
+              data-testid="tk-change-email"
+              className="mt-5 text-xs text-slate-400 hover:text-slate-600 font-bold">
+              ← Andere e-mail
+            </button>
+          )}
         </>
       )}
     </div>
@@ -479,11 +495,36 @@ function ContactView({ overview, onBack }) {
 /** Container — beheert auth + view-state */
 export default function TenantKioskLayout() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const aptId = searchParams.get('apt');
   const [authed, setAuthed] = useState(() => !!localStorage.getItem(TENANT_TOKEN_KEY));
   const [view, setView] = useState('dashboard');
   const [overview, setOverview] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [prefill, setPrefill] = useState(null);
   const idleTimer = useRef(null);
+
+  // QR-sticker bij voordeur: `?apt=<id>` → lookup → voorvullen + skip email step.
+  useEffect(() => {
+    if (!aptId || authed) return;
+    let alive = true;
+    (async () => {
+      try {
+        const { data } = await api.get(`/tenant-portal/lookup-apartment/${aptId}`);
+        if (!alive) return;
+        setPrefill({
+          email: data.tenant?.email || '',
+          firstName: data.tenant?.first_name || '',
+          apartmentNumber: data.apartment?.number || '',
+          locked: true, // verberg "andere e-mail" knop in QR-modus
+        });
+      } catch {
+        // Onbekende of niet-toegewezen appartement → val terug op standaard login.
+        if (alive) setPrefill(null);
+      }
+    })();
+    return () => { alive = false; };
+  }, [aptId, authed]);
 
   // Edge-to-edge cream achtergrond + body class.
   useEffect(() => {
@@ -559,7 +600,7 @@ export default function TenantKioskLayout() {
     return (
       <div style={wrapper} className="flex flex-col">
         <KioskHeader tenantName={null} onLogout={null} onBack={() => navigate('/')} />
-        <LoginView onLoggedIn={() => setAuthed(true)} />
+        <LoginView onLoggedIn={() => setAuthed(true)} prefill={prefill} />
       </div>
     );
   }

@@ -439,3 +439,68 @@ def onboarding_pdf(*, company_name: str, contact_name: str, email: str,
     ))
 
     return _build(elements)
+
+
+
+# ============== Kiosk sticker PDF ==============
+def kiosk_sticker_pdf(*, apartment_number: str, address: str,
+                     tenant_name: str | None, company_name: str,
+                     kiosk_url: str, primary_hex: str = "#FF5C00") -> bytes:
+    """A4 printable poster met grote QR-code voor naast de voordeur.
+    Scant naar de Huurder Kiosk met apartment_id voorgevuld."""
+    from reportlab.platypus import Image as RLImage
+    s = _styles()
+    accent = colors.HexColor(primary_hex) if str(primary_hex).startswith("#") else ORANGE
+
+    elements = []
+    elements.append(Spacer(1, 8 * mm))
+    elements.append(Paragraph(
+        f'<font color="{accent.hexval()}"><b>HUURDER KIOSK</b></font>',
+        ParagraphStyle("StickerEyebrow", parent=s["Body"], fontSize=12,
+                       alignment=1, spaceAfter=4, fontName="Helvetica-Bold"),
+    ))
+    elements.append(Paragraph(
+        f"<b>Appartement {apartment_number}</b>",
+        ParagraphStyle("StickerTitle", parent=s["H1Orange"], fontSize=36,
+                       alignment=1, leading=42, spaceAfter=4),
+    ))
+    if address:
+        elements.append(Paragraph(
+            address,
+            ParagraphStyle("StickerAddr", parent=s["Sub"], fontSize=11,
+                           alignment=1, spaceAfter=14),
+        ))
+
+    # Grote QR (centered)
+    qr_png = _make_qr_png(kiosk_url, size_px=600)
+    qr_img = RLImage(io.BytesIO(qr_png), width=110 * mm, height=110 * mm)
+    qr_table = Table([[qr_img]], colWidths=[170 * mm])
+    qr_table.setStyle(TableStyle([("ALIGN", (0, 0), (-1, -1), "CENTER")]))
+    elements.append(qr_table)
+    elements.append(Spacer(1, 10 * mm))
+
+    elements.append(Paragraph(
+        "Scan deze code met uw telefoon en log in met uw PIN-code.",
+        ParagraphStyle("StickerInstr", parent=s["Body"], fontSize=14,
+                       alignment=1, leading=20, spaceAfter=6),
+    ))
+    elements.append(Paragraph(
+        "Betalen · Onderhoud melden · Mijn gegevens · Contact",
+        ParagraphStyle("StickerSubInstr", parent=s["Sub"], fontSize=11,
+                       alignment=1, spaceAfter=18),
+    ))
+
+    if tenant_name:
+        elements.append(Paragraph(
+            f'<font color="{MUTED.hexval()}">Toegewezen aan</font> <b>{tenant_name}</b>',
+            ParagraphStyle("StickerTenant", parent=s["Body"], fontSize=10,
+                           alignment=1, spaceAfter=4),
+        ))
+    elements.append(Spacer(1, 8 * mm))
+    elements.append(Paragraph(
+        f"<font color='{MUTED.hexval()}'>{company_name}</font>",
+        ParagraphStyle("StickerFooter", parent=s["Small"], fontSize=9,
+                       alignment=1),
+    ))
+
+    return _build(elements)

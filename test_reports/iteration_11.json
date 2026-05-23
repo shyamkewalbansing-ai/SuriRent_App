@@ -1,0 +1,46 @@
+{
+  "summary": "Iteration 11 — QR-sticker per appartement for Tenant Kiosk. Backend: 9 NEW pytest cases in test_kiosk_qr_sticker.py — all PASS. Covers (a) GET /api/tenant-portal/lookup-apartment/{id} public happy-path with PII-leak guard (no pin_hash, no phone), 404 for unknown apt, 404 for apt without tenant/PIN, works without Authorization header; (b) GET /api/apartments/{id}/kiosk-sticker.pdf returns application/pdf + %PDF magic, public (no auth), 404 unknown apt, no crash for apartments without tenant; (c) end-to-end lookup→login chain. Regression: existing test_tenant_kiosk.py 15/16 PASS + 1 SKIP (no open invoice — environmental, not a regression). Frontend smoke tests: /kiosk/huurder?apt=<valid> shows 'Welkom Bharat' + 'Appartement HUIS 7K' (tk-prefill-apt), zero tk-email-input, PIN pad visible, entering 5678 → tk-dashboard appears. /kiosk/huurder?apt=<invalid> gracefully falls back to email step (no crash). /kiosk/huurder (no query) shows email step as before. Admin UI Appartementen tab: 4 apt-qr-<id> anchors found, each href correctly points to /api/apartments/<id>/kiosk-sticker.pdf with target=_blank.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Tenant kiosk dashboard", "issues": ["Pre-existing from iter 10: negative balance (SRD -271.836,60) still rendered with GREEN 'U bent volledig bij. Bedankt!' styling — confusing. Consider clamping to 0 or showing 'Tegoed'."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_kiosk_qr_sticker.py",
+    "/app/backend/tests/test_tenant_kiosk.py",
+    "/app/test_reports/pytest/iteration11_qr.xml"
+  ],
+  "action_items": [
+    "(Optional, low priority) Suppress two 401 console errors on /kiosk/huurder mount — overview fetch fires before tenant_token exists. Not a functional bug.",
+    "(Pre-existing, optional) Clamp negative balance to 0 or render 'Tegoed: ...' label in DashboardView."
+  ],
+  "critical_code_review_comments": [
+    "lookup-apartment correctly projects out pin_hash via Mongo projection but also includes phone in the projection (still excluded from the response dict) — defence-in-depth OK. Response strictly returns name/email/first_name, no leakage verified by test.",
+    "lookup-apartment returns 404 with Dutch detail 'Geen huurder met PIN op dit appartement' when tenant missing OR pin missing — same code path. Acceptable for kiosk UX (frontend falls back to email step).",
+    "kiosk-sticker.pdf endpoint correctly degrades when apartment has no tenant (tenant_name=None) — verified PDF generated successfully (PASS test_pdf_does_not_crash_for_apartment_without_tenant).",
+    "Both new endpoints are PUBLIC by design (no get_current_user dependency). apartment_id acts as the access token. PDF returns only physically-visible info (apt number, tenant name, address) which is already on the front door — privacy model is sound.",
+    "AdminDashboard.jsx QR anchor uses process.env.REACT_APP_BACKEND_URL directly — correct usage of env var, no hardcoded URL.",
+    "TenantKioskLayout.jsx prefill flow uses useEffect to sync step→'pin' when prefill arrives async after lookup. data-testid='tk-prefill-apt' present only when titleSub truthy — good (regression test passes).",
+    "server.py still 5299 lines — pre-existing concern noted in iter 10. New endpoints add ~70 lines around 2914-2982. Recommend extracting tenant-portal routes when convenient.",
+    "pdf_gen.kiosk_sticker_pdf invoked via dynamic `from pdf_gen import kiosk_sticker_pdf` inside endpoint — works but a module-level import would be cleaner / slightly faster."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_kiosk_qr_sticker.py (NEW — 9 tests)"
+  ],
+  "success_rate": {
+    "backend": "9/9 new tests PASS (100%). Regression test_tenant_kiosk.py 15/16 PASS, 1 SKIP (env — no open invoice).",
+    "frontend": "Happy-path (prefill + PIN → dashboard) PASS. Invalid apt fallback PASS. No-query email-step regression PASS. Admin QR anchor (4 apartments) PASS."
+  },
+  "test_credentials": "admin@vastgoed.sr / admin123. Happy-path tenant: Bharat Kewalbansing, apartment_id=ad90db5f-d0e1-4029-8c20-9f2d9d6e4f66, email=shyam@kewalbansing.net, PIN=5678 (auto-reset by autouse fixture in test_kiosk_qr_sticker.py).",
+  "seed_data_creation": "None for this iteration. The autouse fixture ensures Bharat's PIN stays at 5678. Pre-existing TEST_KIOSK payments/maintenance from iter 10 still in DB (cleanup not required for these public endpoints).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Canonical re-run: `pytest backend/tests/test_kiosk_qr_sticker.py backend/tests/test_tenant_kiosk.py -v`. New endpoints both PUBLIC: GET /api/tenant-portal/lookup-apartment/{apt_id} (returns {apartment:{id,number,address}, tenant:{name,email,first_name}, company:{name}}; 404 if apt unknown or no tenant with PIN) and GET /api/apartments/{apt_id}/kiosk-sticker.pdf (A4 PDF with QR pointing to /kiosk/huurder?apt=<id>). Frontend testids: tk-prefill-apt (only when ?apt= prefill succeeds), apt-qr-<id> (admin Appartementen card anchor). Confirmed no PII leak (pin_hash/phone never returned). Apartment lookup is GET-only, no rate limit yet — fine for kiosk usage. Frontend route: /kiosk/huurder?apt=<id>.",
+  "rca of the issue": "No bugs to RCA in this iteration. All review-request requirements met. Two 401 console errors on initial /kiosk/huurder mount are pre-existing (overview fetch before tenant_token exists) — already in iter 10 action items."
+}

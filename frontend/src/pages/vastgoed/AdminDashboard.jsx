@@ -7,7 +7,7 @@ import {
   X, Check, Loader2, Search, Home, Banknote, KeySquare, ChevronRight, Wallet,
   FileText, ShieldCheck, Wrench, FileSignature, Bell, Briefcase, Mail,
   Zap, Power, Menu, MoreHorizontal, MapPin, Crown, Paintbrush, Palette,
-  Gauge, Activity, Clock as ClockIcon, Monitor,
+  Gauge, Activity, Clock as ClockIcon, Monitor, QrCode,
 } from 'lucide-react';
 import { api, formatError, fmtMoney, MONTHS_NL } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
@@ -960,6 +960,13 @@ function Apartments() {
                 className="flex-1 h-10 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm flex items-center justify-center gap-1.5">
                 <Pencil className="w-3.5 h-3.5" /> Bewerk
               </button>
+              <a href={`${process.env.REACT_APP_BACKEND_URL}/api/apartments/${a.id}/kiosk-sticker.pdf`}
+                target="_blank" rel="noreferrer"
+                data-testid={`apt-qr-${a.id}`}
+                title="QR-sticker voor naast de voordeur"
+                className="w-10 h-10 rounded-xl bg-[#FFE6D3] hover:bg-[#FFD0AA] text-[#C74600] flex items-center justify-center">
+                <QrCode className="w-4 h-4" />
+              </a>
               <button onClick={() => setShellyFor(a)} data-testid={`apt-shelly-${a.id}`}
                 title={a.shelly?.device_id ? `Stroom: ${a.shelly.label || a.shelly.device_id}` : 'Stroom koppelen'}
                 className={`w-10 h-10 rounded-xl flex items-center justify-center ${
