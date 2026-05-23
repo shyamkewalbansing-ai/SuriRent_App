@@ -1,0 +1,54 @@
+{
+  "summary": "Iteration 10 — Huurder Kiosk (Tenant Kiosk) end-to-end. Backend: 16 NEW pytest cases in test_tenant_kiosk.py PASS (login email/wrong-pin/unknown/422; overview; GET /tenant-portal/invoices own-only + isolation between two tenants in same company; POST /tenant-portal/payments free-form + invoice paid + body tenant_id/company_id override REJECTED; cross-tenant invoice_id returns 404; maintenance regression). Frontend: /kiosk/huurder loads TenantKioskLayout. Verified full flow on desktop 1366x900 — email step → PIN pad → dashboard with 4 tiles (Betalen/Onderhoud/Mijn gegevens/Contact) + balance strip → Pay view loads invoices → Maintenance form posts and returns to dashboard → wrong PIN shows 'Onjuiste PIN'. Two pre-existing regression failures unrelated to this iteration: test_multi_company TestTenantPortal.test_tenant_login (Jan de Vries seed lacks email jan@example.sr) and TestAIChatContext.test_ai_context_scoped (404 on AI endpoint).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/tenant-portal/payments", "issue": "TenantPaymentIn Pydantic model silently ignores stray tenant_id/company_id keys in body (not 'extra=forbid'). Test confirms server still uses session tenant — safe — but a stricter 422 would catch malicious clients earlier."},
+      {"endpoint": "/api/tenant-portal/login", "issue": "Seed Jan de Vries has no email 'jan@example.sr' in DB so test_multi_company.test_tenant_login (pre-existing) fails. Not introduced by this iteration but blocks that regression test."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "TenantKioskLayout/DashboardView", "issue": "Tenant with negative balance (overpayment / credit) is shown as 'SRD -271.811,92' under a GREEN 'Saldo' / 'U bent volledig bij. Bedankt!' card. Logic treats balance<=0 as 'no debt' which is correct, but rendering a large negative number is confusing. Consider clamping to 0 or labelling as 'Credit / Tegoed'.", "selector": "[data-testid='tk-balance']", "priority": "LOW"},
+      {"component": "TenantKioskLayout (page mount)", "issue": "Two 401 'Failed to load resource' console errors when /kiosk/huurder is opened without an existing tenant_token (overview is fetched before login). Harmless but should be suppressed (only call overview after token set).", "selector": "console", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Tenant kiosk dashboard", "issues": ["Negative balance shown with green 'all clear' styling reads as inconsistent. No back-button on dashboard root (only logout) — intentional but worth confirming."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_tenant_kiosk.py",
+    "/app/test_reports/pytest/iteration10_kiosk.xml",
+    "/app/test_reports/pytest/iteration10_regression.xml"
+  ],
+  "action_items": [
+    "Decide on negative-balance UI: clamp to 0 or render 'Tegoed' label in TenantKioskLayout.DashboardView when balance < 0.",
+    "Suppress 401 console errors on first /kiosk/huurder load — guard the overview fetch behind a tenant_token check.",
+    "(Pre-existing, optional) Re-seed Jan de Vries with email jan@example.sr OR update test_multi_company TestTenantPortal.test_tenant_login to use the actual seeded identifier.",
+    "Optional hardening: add `model_config = ConfigDict(extra='forbid')` to TenantPaymentIn so malicious tenant_id/company_id body keys return 422 instead of being silently ignored."
+  ],
+  "critical_code_review_comments": [
+    "POST /api/tenant-portal/payments correctly auto-injects tenant_id/apartment_id/company_id from session — body cannot override (verified by test_body_tenant_id_cannot_override_session).",
+    "Invoice cross-tenant access correctly returns 404 via the `{id, tenant_id: session}` find_one filter (verified test_cannot_pay_other_tenants_invoice).",
+    "GET /api/tenant-portal/invoices is hard-scoped to tenant_id from session — no company_id filter needed because tenant_id is globally unique. Confirmed no cross-tenant leak.",
+    "Pin throttle (_pin_throttle_check) is per IP+identifier — fine for kiosk. After 5 fails locks out. Verified by manual wrong-pin test still showing 'Onjuiste PIN' (not yet throttled).",
+    "Server.py now 5228 lines — well past the 700-line guideline. Strongly recommend extracting tenant-portal routes (lines 2608-2810+) into routers/tenant_portal.py.",
+    "TenantKioskLayout.jsx is 594 lines — close to threshold, contains 7 sub-views inline. Splitting into /pages/vastgoed/huurder/{LoginView,DashboardView,PayView,...}.jsx would help.",
+    "TenantPaymentIn does not declare ConfigDict(extra='forbid') — Pydantic v2 default ignores extra fields. Tests prove the server doesn't trust them, but `extra='forbid'` would be defence-in-depth.",
+    "_create_payment_doc receives company_id from tenant session (line 2771) — good. Same helper used by admin route so receipt counter / status update logic stays consistent."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_tenant_kiosk.py (NEW — 16 tests)"
+  ],
+  "success_rate": {
+    "backend": "16/16 new tests PASS (100%). Regression test_multi_company 41/43 PASS (2 pre-existing failures unrelated to this iteration). test_phase3_tenant_portal 20/20 PASS.",
+    "frontend": "Login → dashboard → pay → maintenance → wrong-PIN error all verified PASS. 4/4 action tiles render. Only minor UX issues (negative balance, 401 console)."
+  },
+  "test_credentials": "admin@vastgoed.sr / admin123 (set tenant PIN to 5678 via POST /api/auth/tenant-set-pin). Frontend e2e used tenant 'Bharat Kewalbansing' (email shyam@kewalbansing.net) because Jan de Vries seed lacks the jan@example.sr email.",
+  "seed_data_creation": "Created during tests: TEST_KIOSK free-form payment, TEST_KIOSK maintenance ticket, possibly 1 TEST_KIOSK invoice via admin POST /invoices (only if no open invoice existed for secondary tenant). All flagged with TEST_KIOSK prefix.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Canonical re-run: `pytest backend/tests/test_tenant_kiosk.py backend/tests/test_phase3_tenant_portal.py -v`. New testids in TenantKioskLayout: tk-login, tk-email-input, tk-email-next, tk-pinpad, tk-key-{0-9}, tk-key-back, tk-pin-error, tk-dashboard, tk-balance, tk-tile-{pay|maintenance|me|contact}, tk-pay, tk-pay-{invoice_id}, tk-maintenance, tk-mt-title, tk-mt-desc, tk-mt-prio-{low|medium|high}, tk-mt-submit, tk-me, tk-contact, tk-paid, tk-paid-continue, tk-back, tk-logout. Route: /kiosk/huurder. Login expects body {identifier, pin} where identifier is email OR phone (case-insensitive email, digits-extracted phone match). The two regression failures in test_multi_company are pre-existing (Jan de Vries email mismatch + AI context 404) — NOT caused by tenant-kiosk work.",
+  "rca of the issue": "Pre-existing test_multi_company.TestTenantPortal.test_tenant_login failure RCA: lifespan() seed creates Jan de Vries but his email is NOT 'jan@example.sr' (verified by GET /api/tenants — no tenant with that email exists). The test hard-codes that identifier. Fix: either update the seed to set email='jan@example.sr' for Jan, or update the test to look up Jan by name first. Negative-balance UX RCA: _calc_balance returns (sum(invoices) - sum(payments)) — when the tenant has overpaid, this is negative. DashboardView checks `balance > 0` for hasBalance, so the green 'no debt' state is correct, but it still prints the literal negative number via fmtMoney. Fix: in DashboardView, render `fmtMoney(Math.max(0, balance), currency)` OR add a separate branch that shows 'Tegoed: SRD 271.811,92' for credit."
+}

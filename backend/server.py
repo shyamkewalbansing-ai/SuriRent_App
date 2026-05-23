@@ -2720,6 +2720,70 @@ class TenantMaintenanceIn(BaseModel):
     priority: Literal["low", "medium", "high"] = "medium"
 
 
+class TenantPaymentIn(BaseModel):
+    amount: float
+    currency: Literal["SRD", "USD", "EUR"] = "SRD"
+    method: Literal["contant", "bank", "mope", "sumup", "uni5pay"] = "contant"
+    category: Literal["huur", "servicekosten", "borg", "boete", "internet", "overig"] = "huur"
+    period_month: Optional[int] = None
+    period_year: Optional[int] = None
+    note: Optional[str] = ""
+    invoice_id: Optional[str] = None
+
+
+@api.get("/tenant-portal/invoices")
+async def tenant_portal_invoices(tenant=Depends(get_tenant_session)):
+    """Open + recent paid invoices voor de ingelogde huurder."""
+    docs = await db.invoices.find(
+        {"tenant_id": tenant["id"]}, {"_id": 0}
+    ).sort([("period_year", -1), ("period_month", -1)]).to_list(200)
+    return [await _enrich_invoice(d) for d in docs]
+
+
+@api.post("/tenant-portal/payments", response_model=PaymentOut)
+async def tenant_portal_create_payment(body: TenantPaymentIn, tenant=Depends(get_tenant_session)):
+    """Huurder registreert zelf een betaling via de Kiosk."""
+    # Map naar PaymentIn vorm zodat we de bestaande helper kunnen hergebruiken.
+    if body.invoice_id:
+        inv = await db.invoices.find_one(
+            {"id": body.invoice_id, "tenant_id": tenant["id"]}, {"_id": 0}
+        )
+        if not inv:
+            raise HTTPException(status_code=404, detail="Factuur niet gevonden")
+        period_month = body.period_month or inv.get("period_month")
+        period_year = body.period_year or inv.get("period_year")
+    else:
+        period_month = body.period_month
+        period_year = body.period_year
+    pin = PaymentIn(
+        tenant_id=tenant["id"],
+        apartment_id=tenant.get("apartment_id"),
+        amount=body.amount,
+        currency=body.currency,
+        method=body.method,
+        category=body.category,
+        period_month=period_month,
+        period_year=period_year,
+        note=body.note or "",
+        received_by=tenant.get("name") or "Huurder Kiosk",
+    )
+    doc = await _create_payment_doc(
+        pin, company_id=tenant.get("company_id"), approved_by=tenant.get("name") or "Huurder Kiosk"
+    )
+    enriched = await _enrich_payment(doc)
+    # Notify admins of the company about the self-service payment.
+    try:
+        await _notify_company_admins(
+            tenant.get("company_id"),
+            f"Huurder-betaling {enriched.get('currency', '')} {float(enriched.get('amount', 0)):,.2f}",
+            f"{enriched.get('tenant_name') or tenant.get('name')} via Huurder Kiosk",
+            {"kind": "payment", "url": "/admin/payments", "payment_id": enriched.get("id"), "badge_inc": 1},
+        )
+    except Exception as e:
+        print(f"[push] tenant-portal payment notify failed: {e}")
+    return enriched
+
+
 @api.post("/tenant-portal/maintenance")
 async def tenant_portal_maintenance_create(body: TenantMaintenanceIn, tenant=Depends(get_tenant_session)):
     if not tenant.get("apartment_id"):

@@ -107,7 +107,7 @@ function LoginView({ onLoggedIn }) {
   const submit = async (pin) => {
     setBusy(true); setError('');
     try {
-      const { data } = await api.post('/tenant-portal/login', { email, pin });
+      const { data } = await api.post('/tenant-portal/login', { identifier: email, pin });
       localStorage.setItem(TENANT_TOKEN_KEY, data.token);
       onLoggedIn();
     } catch (e) {
@@ -339,49 +339,47 @@ function Card({ label, value, accent }) {
 /** Betaal flow — kies openstaande factuur, ga naar receipt */
 function PayView({ overview, onBack, onPaid }) {
   const [invoices, setInvoices] = useState([]);
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState(true);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(null);
 
   useEffect(() => {
-    const load = async () => {
+    let alive = true;
+    (async () => {
       try {
-        const { data } = await api.get('/tenant-portal/payments');
-        // Voor de tenant-kiosk gebruiken we de invoices via overview — payments zijn afgeronde betalingen.
-        // We laten de gebruiker de KOMENDE/openstaande facturen kiezen via overview.
-        void data; // niet gebruikt — vervangen door overview-data hieronder
-      } catch (e) { setError(formatError(e)); }
-      finally { setBusy(false); }
-    };
-    // We hebben open facturen via overview.balance?.invoices, fallback op leeg.
-    if (overview?.balance?.invoices) {
-      setInvoices(overview.balance.invoices.filter((i) => i.status !== 'paid'));
-    } else {
-      load();
-    }
-  }, [overview]);
+        const { data } = await api.get('/tenant-portal/invoices');
+        if (!alive) return;
+        setInvoices((data || []).filter((i) => i.status !== 'paid'));
+      } catch (e) {
+        if (alive) setError(formatError(e));
+      } finally {
+        if (alive) setBusy(false);
+      }
+    })();
+    return () => { alive = false; };
+  }, []);
 
   const pay = async (inv) => {
     setSubmitting(inv.id); setError('');
     try {
-      // Hergebruikt de kiosk-payment endpoint (admin kiosk). Eventueel later
-      // een dedicated `/tenant-portal/pay` endpoint maken.
-      await api.post('/payments', {
-        tenant_id: overview.tenant.id,
-        apartment_id: overview.apartment?.id,
+      await api.post('/tenant-portal/payments', {
         amount: inv.amount,
         currency: inv.currency,
-        method: 'kiosk',
+        method: 'contant',
         category: 'huur',
         period_month: inv.period_month,
         period_year: inv.period_year,
-        note: `Huurder Kiosk — factuur ${inv.invoice_number || ''}`,
+        invoice_id: inv.id,
+        note: `Huurder Kiosk — factuur ${inv.invoice_number || ''}`.trim(),
       });
       onPaid();
     } catch (e) {
       setError(formatError(e));
     } finally { setSubmitting(null); }
   };
+
+  // overview is used elsewhere; keep ref to silence lint without behaviour change.
+  void overview;
 
   return (
     <div className="flex-1 px-5 py-6 max-w-2xl mx-auto w-full" data-testid="tk-pay">

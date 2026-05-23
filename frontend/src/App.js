@@ -7,6 +7,7 @@ import MarketingLanding from './pages/vastgoed/MarketingLanding';
 import LoginPage from './pages/vastgoed/LoginPage';
 import AdminDashboard from './pages/vastgoed/AdminDashboard';
 import KioskLayout from './pages/vastgoed/KioskLayout';
+import TenantKioskLayout from './pages/vastgoed/TenantKioskLayout';
 import ContractSignPage from './pages/vastgoed/ContractSignPage';
 import TenantLoginPage from './pages/vastgoed/TenantLoginPage';
 import TenantDashboard from './pages/vastgoed/TenantDashboard';
@@ -43,6 +44,7 @@ function AppRoutes() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/admin/*" element={<Protected><AdminDashboard /></Protected>} />
       <Route path="/kiosk" element={<KioskLayout />} />
+      <Route path="/kiosk/huurder" element={<TenantKioskLayout />} />
       <Route path="/onderteken/:token" element={<ContractSignPage />} />
       <Route path="/huurder" element={<TenantLoginPage />} />
       <Route path="/huurder/portaal" element={<TenantDashboard />} />
@@ -52,6 +54,7 @@ function AppRoutes() {
       <Route path="/vastgoed/login" element={<Navigate to="/login" replace />} />
       <Route path="/vastgoed/admin/*" element={<Navigate to="/admin" replace />} />
       <Route path="/vastgoed/kiosk" element={<Navigate to="/kiosk" replace />} />
+      <Route path="/vastgoed/kiosk/huurder" element={<Navigate to="/kiosk/huurder" replace />} />
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
@@ -68,6 +71,7 @@ function HybridRoutes() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/admin/*" element={<Protected><AdminDashboard /></Protected>} />
       <Route path="/kiosk" element={<KioskLayout />} />
+      <Route path="/kiosk/huurder" element={<TenantKioskLayout />} />
       <Route path="/onderteken/:token" element={<ContractSignPage />} />
       <Route path="/huurder" element={<TenantLoginPage />} />
       <Route path="/huurder/portaal" element={<TenantDashboard />} />
@@ -77,6 +81,7 @@ function HybridRoutes() {
       <Route path="/vastgoed/login" element={<Navigate to="/login" replace />} />
       <Route path="/vastgoed/admin/*" element={<Navigate to="/admin" replace />} />
       <Route path="/vastgoed/kiosk" element={<Navigate to="/kiosk" replace />} />
+      <Route path="/vastgoed/kiosk/huurder" element={<Navigate to="/kiosk/huurder" replace />} />
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
