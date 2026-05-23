@@ -321,6 +321,15 @@ User koos voor **Optie C — minimale herbouw** (kern eerst), dan vroeg om **Fas
 - ✅ **PWA stille auto-update** — `controllerchange` reload wacht nu tot `document.visibilityState === 'hidden'` (gebruiker schakelt naar andere app). Geen UpdateToast meer, geen flikker meer mid-page. Bij volgende open van de PWA draait automatisch de nieuwe versie. Cache-versie bumped naar `surirent-v22`.
 - ✅ Smoke tested via Playwright: login + admin + Bulk WhatsApp modal werkend; html/body bg = rgb(255,92,0) op `/login`.
 
+### Session 2026-05-23 — Huurder Kiosk (Tenant Kiosk) ✅
+- ✅ **Nieuwe route `/kiosk/huurder`** (+ legacy redirect `/vastgoed/kiosk/huurder`) → `TenantKioskLayout` — een fysiek-stijl kiosk voor huurders zelf (los van de bestaande reception/admin kiosk).
+- ✅ **Flow**: e-mailadres invoeren → 4-cijferige PIN-pad → dashboard met 4 grote actie-tegels (Betalen, Onderhoud, Mijn gegevens, Contact) + saldo-strook. Idle auto-logout na 90s.
+- ✅ **2 nieuwe backend endpoints** (huurder-scoped, body kan NIET tenant_id/company_id overrulen):
+  - `GET /api/tenant-portal/invoices` — alle facturen van de ingelogde huurder
+  - `POST /api/tenant-portal/payments` — registreert een betaling (auto-link aan factuur, marks paid bij ≥95%, push naar admins). Cross-tenant invoice_id → 404.
+- ✅ **Login body** verschoven naar `{identifier, pin}` (komt overeen met backend `TenantLoginIn`).
+- ✅ Geverifieerd: 16/16 nieuwe pytest tests (`test_tenant_kiosk.py`) + frontend e2e via Playwright (email → PIN → dashboard → Pay/Onderhoud flows). Iteration 10 report.
+
 ## Prioritized Backlog (Fases E-F)
 - 📧 **Email notificaties** — wacht op SendGrid / Resend credentials van user
 - 📱 **WhatsApp/SMS herinneringen** — wacht op Twilio credentials
