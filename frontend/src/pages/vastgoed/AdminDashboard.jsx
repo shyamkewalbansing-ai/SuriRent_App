@@ -213,31 +213,65 @@ function MobileDrawer({ open, onClose, active, onChange, onLogout, user, tabs })
   );
 }
 
-function MobileTabBar({ active, onChange, tabs, onOpenMenu, user }) {
+function MobileTabBar({ active, onChange, tabs, onOpenMenu, user, badgeCount }) {
   const primaryIds = user?.role === 'superadmin' ? MOBILE_SUPER_PRIMARY_IDS : MOBILE_PRIMARY_IDS;
   const primary = primaryIds
     .map((id) => tabs.find((t) => t.id === id))
     .filter(Boolean);
   return (
-    <nav className="xl:hidden fixed bottom-0 inset-x-0 z-40 bg-white border-t border-orange-100">
-      <div className="grid grid-cols-5"
-        style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
-        {primary.map((t) => {
-          const Icon = t.icon;
-          const isActive = active === t.id;
-          return (
-            <button key={t.id} onClick={() => onChange(t.id)} data-testid={`tab-mobile-${t.id}`}
-              className={`flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-bold uppercase tracking-wider ${
-                isActive ? 'text-[#FF5C00]' : 'text-slate-400'
-              }`}>
-              <Icon className="w-5 h-5" /> <span className="truncate max-w-[64px]">{t.label}</span>
-            </button>
-          );
-        })}
-        <button onClick={onOpenMenu} data-testid="tab-mobile-more"
-          className="flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-400 hover:text-[#FF5C00]">
-          <MoreHorizontal className="w-5 h-5" /> Meer
-        </button>
+    <nav
+      className="xl:hidden fixed bottom-0 inset-x-0 z-40 pointer-events-none"
+      data-testid="mobile-tab-bar"
+    >
+      {/* Floating card met afgeronde bovenhoeken + subtiele schaduw,
+          past bij de Sidebar styling (oranje pills, witte kaart). */}
+      <div
+        className="pointer-events-auto mx-2 mb-2 rounded-3xl bg-white/95 backdrop-blur-md border border-orange-100 shadow-[0_-8px_24px_-12px_rgba(255,92,0,0.35)]"
+        style={{ marginBottom: 'max(env(safe-area-inset-bottom, 0px), 8px)' }}
+      >
+        <div className="grid grid-cols-5 gap-1 p-1.5">
+          {primary.map((t) => {
+            const Icon = t.icon;
+            const isActive = active === t.id;
+            const showBadge = t.id === 'notifications' && badgeCount > 0;
+            return (
+              <button
+                key={t.id}
+                onClick={() => onChange(t.id)}
+                data-testid={`tab-mobile-${t.id}`}
+                className={`relative flex flex-col items-center justify-center gap-0.5 py-2 rounded-2xl transition-all active:scale-95 ${
+                  isActive
+                    ? 'bg-gradient-to-b from-orange-50 to-orange-100/80 text-[#FF5C00] shadow-[inset_0_0_0_1px_rgba(255,92,0,0.2)]'
+                    : 'text-slate-500 hover:bg-orange-50/60'
+                }`}
+              >
+                <span className="relative">
+                  <Icon className={`${isActive ? 'w-[22px] h-[22px]' : 'w-5 h-5'} transition-all`} strokeWidth={isActive ? 2.4 : 2} />
+                  {showBadge && (
+                    <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[10px] font-black flex items-center justify-center shadow-[0_2px_6px_-1px_rgba(239,68,68,0.55)]"
+                      data-testid={`tab-mobile-badge-${t.id}`}>
+                      {badgeCount > 9 ? '9+' : badgeCount}
+                    </span>
+                  )}
+                </span>
+                <span className={`text-[10px] font-bold leading-tight tracking-wide truncate max-w-[68px] ${isActive ? '' : 'opacity-80'}`}>
+                  {t.label}
+                </span>
+                {isActive && (
+                  <span className="absolute -top-1 left-1/2 -translate-x-1/2 w-8 h-1 rounded-full bg-[#FF5C00]" />
+                )}
+              </button>
+            );
+          })}
+          <button
+            onClick={onOpenMenu}
+            data-testid="tab-mobile-more"
+            className="flex flex-col items-center justify-center gap-0.5 py-2 rounded-2xl text-slate-500 hover:bg-orange-50/60 active:scale-95 transition-all"
+          >
+            <MoreHorizontal className="w-5 h-5" />
+            <span className="text-[10px] font-bold leading-tight tracking-wide opacity-80">Meer</span>
+          </button>
+        </div>
       </div>
     </nav>
   );
@@ -1341,7 +1375,7 @@ export default function AdminDashboard() {
         </main>
       </div>
       <MobileTabBar active={tab} onChange={handleSetTab} tabs={tabs} user={user}
-        onOpenMenu={() => setDrawerOpen(true)} />
+        onOpenMenu={() => setDrawerOpen(true)} badgeCount={badgeCount} />
       <MobileDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)}
         active={tab} onChange={handleSetTab} onLogout={doLogout}
         user={user} tabs={tabs} />
