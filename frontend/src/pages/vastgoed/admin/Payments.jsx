@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Plus, X, Check, Loader2, Search, FileText, Mail, ShieldCheck, ChevronRight,
   ChevronDown, SlidersHorizontal, CalendarDays, Banknote, CheckCircle2,
-  TrendingUp, Receipt, Wallet,
+  TrendingUp, Receipt, Wallet, MessageCircle,
 } from 'lucide-react';
 import { api, formatError, fmtMoney, MONTHS_NL } from '../../../lib/api';
 import { SendDialog } from '../../../components/EmailDialog';
@@ -87,7 +87,7 @@ function MethodPill({ method }) {
 // =====================================================================
 // Payment row
 // =====================================================================
-function PaymentRow({ p, expanded, onToggle, onEmail, apiBase }) {
+function PaymentRow({ p, expanded, onToggle, onEmail, onWhatsAppPhoto, apiBase }) {
   const avatar = avatarColor(p.tenant_name);
   const tenantSub = (() => {
     if (p.location_name && p.apartment_number) return `${p.location_name} · ${p.apartment_number}`;
@@ -176,7 +176,7 @@ function PaymentRow({ p, expanded, onToggle, onEmail, apiBase }) {
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-2 mt-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-4">
               <a href={`${apiBase}/payments/${p.id}/pdf`} target="_blank" rel="noreferrer"
                 data-testid={`payment-pdf-${p.id}`}
                 onClick={(e) => e.stopPropagation()}
@@ -188,11 +188,16 @@ function PaymentRow({ p, expanded, onToggle, onEmail, apiBase }) {
                 className="inline-flex items-center justify-center gap-2 px-2 py-2.5 bg-white border-2 border-blue-300 hover:bg-blue-50 text-blue-700 font-bold rounded-xl text-xs sm:text-sm">
                 <Mail className="w-4 h-4" /> Verstuur
               </button>
+              <button onClick={(e) => { e.stopPropagation(); onWhatsAppPhoto(p); }}
+                data-testid={`payment-whatsapp-photo-${p.id}`}
+                className="col-span-2 md:col-span-1 inline-flex items-center justify-center gap-2 px-2 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl text-xs sm:text-sm">
+                <MessageCircle className="w-4 h-4" /> WA foto
+              </button>
               <a href={`${apiBase}/payments/${p.id}/secure-pdf`} target="_blank" rel="noreferrer"
                 data-testid={`payment-secure-pdf-${p.id}`}
                 onClick={(e) => e.stopPropagation()}
-                className="inline-flex items-center justify-center gap-2 px-2 py-2.5 bg-white border-2 border-orange-300 hover:bg-orange-50 text-[#FF5C00] font-bold rounded-xl text-xs sm:text-sm">
-                <ShieldCheck className="w-4 h-4" /> <span className="hidden sm:inline">Beveiligd</span><span className="sm:hidden">QR</span>
+                className="col-span-2 md:col-span-1 inline-flex items-center justify-center gap-2 px-2 py-2.5 bg-white border-2 border-orange-300 hover:bg-orange-50 text-[#FF5C00] font-bold rounded-xl text-xs sm:text-sm">
+                <ShieldCheck className="w-4 h-4" /> Beveiligd
               </a>
             </div>
           </div>
@@ -454,6 +459,56 @@ export default function Payments() {
 
   const toggleExpand = (id) => setExpanded((cur) => (cur === id ? null : id));
 
+  // WhatsApp foto flow:
+  // 1) Haal JPG render van de kwitantie op
+  // 2) Download foto naar device (gaat naar Photos/Bestanden op iOS)
+  // 3) Open WhatsApp direct met de juiste huurder + groet-bericht
+  // De gebruiker hoeft alleen nog op de paperclip → Foto's → recent te tikken.
+  const sendWhatsAppPhoto = async (p) => {
+    const tenant = tenants.find((t) => t.id === p.tenant_id);
+    const phone = (tenant?.phone || '').replace(/\D/g, '');
+    if (!phone) {
+      alert(`Huurder ${p.tenant_name} heeft geen telefoonnummer. Voeg eerst toe via Huurders.`);
+      return;
+    }
+    try {
+      const resp = await fetch(`${apiBase}/payments/${p.id}/image`);
+      if (!resp.ok) throw new Error('Foto render fout');
+      const blob = await resp.blob();
+      const fname = `kwitantie-${p.receipt_number}.jpg`;
+
+      // Probeer eerst Web Share API met file — opent share-sheet met foto;
+      // gebruiker kiest WhatsApp + contact in één flow (PDF/JPG als
+      // bijlage, geen handmatige paperclip nodig).
+      const file = new File([blob], fname, { type: 'image/jpeg' });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+          await navigator.share({
+            files: [file],
+            title: 'Kwitantie',
+            text: `Beste ${p.tenant_name},\n\nHierbij uw kwitantie ${p.receipt_number}.\n\n— SuriRent`,
+          });
+          return;
+        } catch (e) {
+          if (e.name === 'AbortError') return;
+          // Doorvallen naar fallback
+        }
+      }
+
+      // Fallback: download de foto + open wa.me met juiste huurder
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fname;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1500);
+      const text = `Beste ${p.tenant_name},\n\nHierbij uw kwitantie ${p.receipt_number} voor ${p.currency} ${Number(p.amount).toFixed(2)}.\n\n— SuriRent`;
+      window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
+    } catch (e) {
+      alert(`WhatsApp foto delen mislukt: ${e.message}`);
+    }
+  };
+
   return (
     <div className="space-y-4 sm:space-y-5" data-testid="payments-page">
       {/* HEADER + Mobile KPI */}
@@ -557,6 +612,7 @@ export default function Payments() {
               expanded={expanded === p.id}
               onToggle={() => toggleExpand(p.id)}
               onEmail={(item) => setEmailing(item)}
+              onWhatsAppPhoto={sendWhatsAppPhoto}
               apiBase={apiBase} />
           ))}
         </div>

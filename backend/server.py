@@ -3477,6 +3477,36 @@ async def payment_pdf(payment_id: str):
     return _pdf_response(pdf, f"kwitantie-{p['receipt_number']}.pdf")
 
 
+@api.get("/payments/{payment_id}/image")
+async def payment_image(payment_id: str):
+    """Render kwitantie als JPG foto — bedoeld om eenvoudig via WhatsApp
+    als foto te delen (in plaats van als PDF-bijlage). Geen auth zodat de
+    huurder de afbeelding ook direct kan ontvangen via een gedeelde link.
+    """
+    p = await db.payments.find_one({"id": payment_id}, {"_id": 0})
+    if not p:
+        raise HTTPException(status_code=404, detail="Kwitantie niet gevonden")
+    p = await _enrich_payment(p)
+    pdf_bytes = receipt_pdf(p)
+    # PDF eerste pagina → JPG via pymupdf (zoom 2.5× voor scherpe weergave
+    # op iPhone retina-schermen)
+    try:
+        import pymupdf
+        doc = pymupdf.open(stream=pdf_bytes, filetype="pdf")
+        page = doc[0]
+        pix = page.get_pixmap(matrix=pymupdf.Matrix(2.5, 2.5))
+        jpg = pix.tobytes("jpeg", jpg_quality=85)
+        doc.close()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Image render fout: {e}")
+    from fastapi.responses import Response as _Resp
+    return _Resp(
+        content=jpg,
+        media_type="image/jpeg",
+        headers={"Content-Disposition": f'inline; filename="kwitantie-{p["receipt_number"]}.jpg"'},
+    )
+
+
 # =====================================================================
 # Contracts
 # =====================================================================
