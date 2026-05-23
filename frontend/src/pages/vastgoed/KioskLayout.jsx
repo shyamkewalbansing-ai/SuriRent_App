@@ -897,9 +897,17 @@ function ReceiptScreen({ payment, overview, onDone }) {
         {/* Papier-uitvoer — overflow geclipt, papier schuift van bovenaf "uit" */}
         <div className="overflow-hidden mb-4 mt-2">
           <motion.div
-            initial={{ y: '-100%' }}
-            animate={{ y: 0 }}
-            transition={{ duration: 2.6, ease: [0.25, 0.46, 0.45, 0.94] }}
+            initial={{ y: '-100%', rotate: 0 }}
+            animate={{
+              y: ['-100%', '0%', '0%', '0%'],
+              rotate: [0, 0, 0, 1.4],
+            }}
+            transition={{
+              duration: 2.95,
+              times: [0, 0.88, 0.93, 1],
+              ease: 'easeOut',
+            }}
+            style={{ transformOrigin: 'top center' }}
             data-testid="receipt-paper">
             <div className="bg-slate-50 rounded-b-2xl rounded-t-md p-5 text-left border-2 border-dashed border-slate-200 border-t-0">
               <div className="flex items-center justify-between pb-3 border-b border-slate-200 mb-3">
@@ -938,10 +946,20 @@ function ReceiptScreen({ payment, overview, onDone }) {
           </motion.div>
         </div>
 
-        <button onClick={onDone} data-testid="receipt-done"
+        <motion.button onClick={onDone} data-testid="receipt-done"
+          initial={{ scale: 1, boxShadow: '0 0 0 0 rgba(255,92,0,0)' }}
+          animate={{
+            scale: [1, 1.035, 1],
+            boxShadow: [
+              '0 0 0 0 rgba(255,92,0,0.55)',
+              '0 0 0 14px rgba(255,92,0,0)',
+              '0 0 0 0 rgba(255,92,0,0)',
+            ],
+          }}
+          transition={{ delay: 3.1, duration: 1.7, repeat: Infinity, ease: 'easeInOut' }}
           className="w-full h-12 bg-orange-500 hover:bg-orange-600 text-white text-base font-extrabold rounded-xl">
           Klaar
-        </button>
+        </motion.button>
         <p className="text-center text-xs text-slate-400 mt-2" data-testid="receipt-autoreturn">
           Automatisch terug naar startscherm in 10 seconden
         </p>
