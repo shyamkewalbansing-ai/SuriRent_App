@@ -330,6 +330,15 @@ User koos voor **Optie C — minimale herbouw** (kern eerst), dan vroeg om **Fas
 - ✅ **Login body** verschoven naar `{identifier, pin}` (komt overeen met backend `TenantLoginIn`).
 - ✅ Geverifieerd: 16/16 nieuwe pytest tests (`test_tenant_kiosk.py`) + frontend e2e via Playwright (email → PIN → dashboard → Pay/Onderhoud flows). Iteration 10 report.
 
+### Session 2026-05-23 — QR-sticker per appartement (deur-tot-kiosk) ✅
+- ✅ **Publieke lookup**: `GET /api/tenant-portal/lookup-apartment/{apt_id}` → `{apartment, tenant: {name, email, first_name}, company}`. Zonder auth. 404 voor onbekende of nog-niet-PIN-toegewezen appartementen. **PII-guard**: geen `pin_hash`, geen telefoon, geen saldo in respons.
+- ✅ **Print-poster**: `GET /api/apartments/{apt_id}/kiosk-sticker.pdf` (publiek) — A4 PDF met grote QR-code → `/kiosk/huurder?apt=<id>`, appartement-nummer + adres + bedrijfsnaam, gekleurd met de bedrijfsbranding (`primary_color`).
+- ✅ **PDF helper** `kiosk_sticker_pdf()` in `pdf_gen.py` (gebruikt `_make_qr_png` op 600px) — 43 KB per poster.
+- ✅ **Frontend `TenantKioskLayout`**: leest `?apt=...` query-param → roept lookup aan → slaat de e-mail-stap over → toont direct PIN-pad met "Welkom &lt;Voornaam&gt;" + "Appartement &lt;nummer&gt;". In QR-mode is de "Andere e-mail"-link verborgen (locked-flag).
+- ✅ **Fallback**: onbekend/ongeldig `?apt=...` → valt netjes terug op de normale e-mail+PIN-flow zonder crash.
+- ✅ **Admin UI**: nieuwe `QrCode`-icon-knop op elke appartement-kaart in Appartementen-tab — opent de sticker-PDF direct in een nieuw tabblad. Branded oranje (`bg-[#FFE6D3] text-[#C74600]`).
+- ✅ Geverifieerd: 9 nieuwe pytest cases (`test_kiosk_qr_sticker.py`) + frontend Playwright e2e (Welkom-prefill, geen email-input, fallback bij ongeldige apt-id, admin-knoppen aanwezig). Iteration 11 report.
+
 ## Prioritized Backlog (Fases E-F)
 - 📧 **Email notificaties** — wacht op SendGrid / Resend credentials van user
 - 📱 **WhatsApp/SMS herinneringen** — wacht op Twilio credentials
