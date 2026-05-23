@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { MapPin, Plus, Pencil, Trash2, X, Check, Loader2, Building2, Image as ImageIcon } from 'lucide-react';
 import { api, formatError } from '../../../lib/api';
+import { useAutoRefresh } from '../../../lib/auto-refresh';
 
 function LocationForm({ initial, onCancel, onSaved }) {
   const [data, setData] = useState(initial || { name: '', address: '', photo_url: '' });
@@ -90,14 +91,16 @@ export default function Locations() {
   const [creating, setCreating] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) setLoading(true);
     try {
       const { data } = await api.get('/locations');
       setItems(data);
-    } finally { setLoading(false); }
+    } finally { if (!silent) setLoading(false); }
   }, []);
   useEffect(() => { load(); }, [load]);
+  // Stille polling — geen spinner / scroll-reset tijdens auto-refresh.
+  useAutoRefresh(() => load({ silent: true }), { interval: 15000, enabled: !creating && !editing });
 
   const del = async (loc) => {
     if (!window.confirm(`Locatie "${loc.name}" verwijderen? Appartementen worden ontkoppeld.`)) return;

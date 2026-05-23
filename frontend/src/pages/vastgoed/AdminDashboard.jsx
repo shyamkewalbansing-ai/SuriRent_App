@@ -698,6 +698,8 @@ function Apartments() {
     setItems(a.data); setTenants(t.data);
   }, []);
   useEffect(() => { load(); }, [load]);
+  // Stille polling — lijst wordt in place vervangen, geen scroll-reset.
+  useAutoRefresh(load, { interval: 15000, enabled: !creating && !editing && !assignFor && !shellyFor });
 
   const del = async (id) => {
     if (!window.confirm('Appartement verwijderen?')) return;
@@ -1193,6 +1195,8 @@ function Tenants() {
     setItems(t.data); setApts(a.data);
   }, []);
   useEffect(() => { load(); }, [load]);
+  // Stille polling — lijst wordt in place vervangen, geen scroll-reset.
+  useAutoRefresh(load, { interval: 15000, enabled: !creating && !editing && !pinFor });
   const del = async (id) => {
     if (!window.confirm('Huurder verwijderen?')) return;
     await api.delete(`/tenants/${id}`);

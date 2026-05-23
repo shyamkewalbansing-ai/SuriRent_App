@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Plus, Trash2, X, Check, Loader2, FileText, ExternalLink, Copy, Pencil, Mail } from 'lucide-react';
 import { api, formatError, fmtMoney } from '../../../lib/api';
 import { EmailDialog, SendDialog } from '../../../components/EmailDialog';
+import { useAutoRefresh } from '../../../lib/auto-refresh';
 
 function PageHeader({ title, subtitle, action }) {
   return (
@@ -129,6 +130,8 @@ export default function Contracts() {
     setItems(c.data); setTenants(t.data); setApartments(a.data);
   }, []);
   useEffect(() => { load(); }, [load]);
+  // Stille polling (geen aparte loading-state nodig — items worden in place vervangen).
+  useAutoRefresh(load, { interval: 15000, enabled: !creating && !emailing });
 
   const del = async (id) => {
     if (!window.confirm('Contract verwijderen?')) return;
