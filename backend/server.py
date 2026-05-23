@@ -1817,6 +1817,22 @@ async def public_company_branding(slug: str):
     return _company_branding_response(c)
 
 
+@api.get("/public/branding-default")
+async def public_branding_default():
+    """Wanneer er exact één actief bedrijf is, geef de branding terug.
+    Gebruikt door de Huurder Kiosk om zonder slug/subdomain toch een
+    bedrijfscontext te kunnen bepalen op single-tenant installaties."""
+    # Tel actieve bedrijven (of valt terug op alle bedrijven indien `active` ontbreekt).
+    q = {"$or": [{"active": True}, {"active": {"$exists": False}}]}
+    total = await db.companies.count_documents(q)
+    if total != 1:
+        raise HTTPException(status_code=404, detail="Meerdere of geen bedrijven")
+    c = await db.companies.find_one(q, {"_id": 0})
+    if not c:
+        raise HTTPException(status_code=404, detail="Geen bedrijf")
+    return _company_branding_response(c)
+
+
 @api.get("/public/branding-by-host")
 async def public_branding_by_host(request: Request):
     """Resolve company branding using the HTTP Host header.

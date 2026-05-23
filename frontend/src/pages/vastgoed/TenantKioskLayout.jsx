@@ -4,7 +4,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import {
   Lock, Loader2, LogOut, CreditCard, Wrench, User, Phone,
   CheckCircle2, ChevronRight, Calendar, ArrowLeft, Building2, Delete,
-  Home as HomeIcon, Mail,
+  Home as HomeIcon, Mail, Wallet, FileText, Wifi,
 } from 'lucide-react';
 import { api, formatError, fmtMoney, MONTHS_NL } from '../../lib/api';
 import {
@@ -66,13 +66,15 @@ function PinDots({ value, error }) {
           <motion.span
             key={i}
             animate={{
-              scale: filled ? 1.0 : 0.85,
+              scale: filled ? 1.0 : 0.9,
               backgroundColor: error
-                ? '#ef4444'
-                : filled ? '#ffffff' : 'rgba(255,255,255,0.25)',
+                ? '#dc2626'
+                : filled ? '#0f172a' : '#ffffff',
+              borderColor: error ? '#fecaca' : '#ffffff',
             }}
             transition={{ duration: 0.15 }}
-            className="w-4 h-4 sm:w-5 sm:h-5 rounded-full ring-2 ring-white/40"
+            className="w-5 h-5 sm:w-6 sm:h-6 rounded-full border-[3px] shadow-[0_4px_10px_rgba(0,0,0,0.18)]"
+            style={{ borderColor: '#ffffff' }}
           />
         );
       })}
@@ -190,96 +192,138 @@ function LoginView({ branding, onLoggedIn, prefill }) {
 }
 
 // =====================================================================
-// DASHBOARD — saldo + 4 grote actie-kaarten
+// DASHBOARD — split-screen overzicht (admin-kiosk stijl)
 // =====================================================================
-function ActionTile({ icon: Icon, title, subtitle, onClick, testId, accent }) {
-  return (
-    <motion.button
-      whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }}
-      onClick={onClick} data-testid={testId}
-      className="group relative bg-white rounded-3xl p-5 sm:p-6 shadow-xl active:shadow-lg text-left overflow-hidden flex flex-col gap-3">
-      <div aria-hidden className={`absolute -top-12 -right-10 w-40 h-40 rounded-full ${accent.bg} opacity-30 group-hover:opacity-50 transition`} />
-      <div className={`relative w-14 h-14 rounded-2xl ${accent.solid} text-white flex items-center justify-center shadow-md`}>
-        <Icon className="w-7 h-7" strokeWidth={2.4} />
-      </div>
-      <div className="relative">
-        <p className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">{title}</p>
-        {subtitle && <p className="text-sm text-slate-500 mt-1">{subtitle}</p>}
-      </div>
-      <span className={`relative mt-auto inline-flex items-center gap-1 ${accent.text} font-bold text-sm`}>
-        Open <ChevronRight className="w-4 h-4 transition group-hover:translate-x-1" />
-      </span>
-    </motion.button>
-  );
-}
-
 function DashboardView({ overview, onAction }) {
-  const balance = overview?.balance?.balance || 0;
-  const currency = overview?.balance?.currency || 'SRD';
-  const hasBalance = balance > 0;
-  const apt = overview?.apartment;
+  const tenant = overview?.tenant;
+  const apartment = overview?.apartment;
+  const balance = overview?.balance || {};
+  const internet = Number(tenant?.internet_amount || 0);
+  const openRent = (balance.balance || 0) > 0 ? balance.balance : 0;
+  const totalDue = openRent + internet;
+  const cur = balance.currency || apartment?.currency || 'SRD';
+  const hasBalance = totalDue > 0;
+  const items = [
+    { key: 'rent', label: 'Maandhuur', value: apartment?.rent_amount || 0, icon: HomeIcon, muted: false },
+    ...(openRent > 0 ? [{
+      key: 'open', label: 'Openstaande huur', value: openRent, icon: Wallet, highlight: true,
+      sub: balance.next_period ? `${MONTHS_NL[balance.next_period.month - 1]} ${balance.next_period.year}` : '',
+    }] : []),
+    { key: 'svc', label: 'Servicekosten', value: 0, icon: FileText, muted: true },
+    { key: 'fines', label: 'Boetes', value: 0, icon: FileText, muted: true },
+    { key: 'internet', label: 'Internet', value: internet, icon: Wifi, muted: internet === 0 },
+  ];
+
   return (
-    <div className="min-h-full w-full px-4 sm:px-6 py-5 sm:py-8" data-testid="tk-dashboard">
-      <motion.div
-        initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3 }}
-        className="max-w-5xl mx-auto">
-        {/* Saldo banner */}
-        <div className={`rounded-3xl p-5 sm:p-6 mb-5 shadow-xl ${
-          hasBalance ? 'bg-gradient-to-br from-red-500 to-rose-600 text-white'
-                     : 'bg-gradient-to-br from-emerald-500 to-emerald-600 text-white'
-        }`}>
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.25em] text-white/80">
-                {hasBalance ? 'Te betalen' : 'Saldo'}
-              </p>
-              <p className="text-4xl sm:text-5xl font-black tracking-tight mt-1" data-testid="tk-balance">
-                {fmtMoney(balance, currency)}
-              </p>
-              <p className="text-sm text-white/90 mt-1">
-                {hasBalance ? 'U heeft een openstaand bedrag.' : 'U bent volledig bij. Bedankt!'}
-              </p>
-            </div>
-            {apt && (
-              <div className="text-right shrink-0">
-                <p className="text-[10px] font-black uppercase tracking-widest text-white/70">Appartement</p>
-                <p className="text-xl font-black text-white tracking-tight">{apt.number}</p>
-                {apt.address && <p className="text-[11px] text-white/85 mt-0.5 max-w-[140px] truncate">{apt.address}</p>}
-              </div>
-            )}
+    <div className="min-h-full w-full flex flex-col" data-testid="tk-dashboard"
+      style={{ padding: '1.5vh 1.5vw 0' }}>
+      <div className="flex items-center justify-between flex-wrap gap-2 px-1 sm:px-2 py-2">
+        <div className="text-white">
+          <p className="text-xs sm:text-sm font-bold">{tenant?.name}</p>
+          {apartment && <p className="text-[10px] sm:text-xs opacity-75">Appt. {apartment.number}{apartment.address ? ' · ' + apartment.address : ''}</p>}
+        </div>
+        <p className="text-xs sm:text-sm font-semibold text-white/90 hidden sm:block">Welkom — kies een actie</p>
+      </div>
+
+      <div className="flex-1 min-h-0 flex flex-col md:flex-row gap-2 sm:gap-3 pb-3">
+        {/* LEFT — financial overview */}
+        <div className="bg-white rounded-2xl flex-1 md:flex-[3] flex flex-col p-4 sm:p-5 min-w-0 shadow-xl">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-base sm:text-lg font-black text-slate-900">Financieel overzicht</h3>
+          </div>
+          <div className="flex-1 divide-y divide-slate-100">
+            {items.map((it) => {
+              const Icon = it.icon;
+              const cls = it.highlight ? 'text-[#FF5C00]' : it.muted ? 'text-slate-400' : 'text-slate-900';
+              return (
+                <div key={it.key} className={`flex items-center justify-between py-2.5 px-1 ${cls}`}
+                  data-testid={`tk-fin-${it.key}`}>
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                      it.highlight ? 'bg-orange-100 text-[#FF5C00]'
+                        : it.muted ? 'bg-slate-50 text-slate-300'
+                        : 'bg-slate-100 text-slate-500'
+                    }`}>
+                      <Icon className="w-4 h-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className={`text-sm ${it.highlight ? 'font-black' : 'font-bold'}`}>{it.label}</p>
+                      {it.sub && <p className="text-[10px] mt-0.5 text-slate-500">{it.sub}</p>}
+                    </div>
+                  </div>
+                  <p className={`text-sm sm:text-base ${it.highlight ? 'font-black' : 'font-bold'}`}>{fmtMoney(it.value, cur)}</p>
+                </div>
+              );
+            })}
+          </div>
+          <div className="border-t-2 border-slate-200 mt-2 pt-3 flex items-center justify-between">
+            <p className="font-black text-slate-900 text-sm sm:text-base">Totaal openstaand</p>
+            <p className={`text-xl sm:text-2xl font-black tracking-tight ${hasBalance ? 'text-[#FF5C00]' : 'text-emerald-600'}`}
+              data-testid="tk-total-due">
+              {fmtMoney(totalDue, cur)}
+            </p>
           </div>
         </div>
 
-        {/* Action tiles */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-          <ActionTile
-            icon={CreditCard} title="Betalen"
-            subtitle={hasBalance ? `Betaal ${fmtMoney(balance, currency)}` : 'Geen openstaande facturen'}
-            onClick={() => onAction('pay')} testId="tk-tile-pay"
-            accent={{ solid: 'bg-gradient-to-br from-orange-400 to-[#FF5C00]', bg: 'bg-orange-100', text: 'text-[#FF5C00]' }}
-          />
-          <ActionTile
-            icon={Wrench} title="Onderhoud"
-            subtitle="Meld een probleem in uw woning"
-            onClick={() => onAction('maintenance')} testId="tk-tile-maintenance"
-            accent={{ solid: 'bg-gradient-to-br from-sky-400 to-sky-600', bg: 'bg-sky-100', text: 'text-sky-600' }}
-          />
-          <ActionTile
-            icon={User} title="Mijn gegevens"
-            subtitle="Bekijk uw contract & info"
-            onClick={() => onAction('me')} testId="tk-tile-me"
-            accent={{ solid: 'bg-gradient-to-br from-emerald-400 to-emerald-600', bg: 'bg-emerald-100', text: 'text-emerald-600' }}
-          />
-          <ActionTile
-            icon={Phone} title="Contact"
-            subtitle="Bel of WhatsApp ons"
-            onClick={() => onAction('contact')} testId="tk-tile-contact"
-            accent={{ solid: 'bg-gradient-to-br from-violet-400 to-violet-600', bg: 'bg-violet-100', text: 'text-violet-600' }}
-          />
+        {/* RIGHT — primary CTA + secondary actions */}
+        <div className="md:flex-[2] flex flex-col gap-2 sm:gap-3 min-w-0">
+          <div className={`rounded-2xl flex-1 flex flex-col items-center justify-center text-center p-5 sm:p-7 shadow-xl ${
+            hasBalance ? 'bg-white' : 'bg-gradient-to-br from-emerald-500 to-emerald-600 text-white'
+          }`}>
+            <div className={`w-14 h-14 sm:w-16 sm:h-16 rounded-2xl flex items-center justify-center mb-3 ${
+              hasBalance ? 'bg-orange-100 text-[#FF5C00]' : 'bg-white/20 text-white'
+            }`}>
+              {hasBalance ? <Wallet className="w-7 h-7 sm:w-9 sm:h-9" /> : <CheckCircle2 className="w-9 h-9" />}
+            </div>
+            <p className={`text-[10px] sm:text-xs font-black uppercase tracking-[0.25em] ${
+              hasBalance ? 'text-slate-400' : 'text-white/90'
+            }`}>
+              {hasBalance ? 'Te betalen' : 'Saldo'}
+            </p>
+            <p className={`text-3xl sm:text-4xl font-black tracking-tight mt-1 mb-1 ${
+              hasBalance ? 'text-slate-900' : 'text-white'
+            }`} data-testid="tk-balance">
+              {fmtMoney(totalDue, cur)}
+            </p>
+            <p className={`text-xs sm:text-sm mb-5 ${hasBalance ? 'text-slate-500' : 'text-white/90'}`}>
+              {hasBalance ? 'U heeft een openstaand bedrag.' : 'U bent volledig bij. Bedankt!'}
+            </p>
+            <button onClick={() => onAction('pay')} data-testid="tk-tile-pay"
+              className={`w-full max-w-xs h-12 sm:h-14 rounded-xl font-black text-base sm:text-lg flex items-center justify-center gap-2 transition active:scale-[0.98] ${
+                hasBalance
+                  ? 'bg-gradient-to-r from-[#FF8A3D] to-[#FF5C00] text-white shadow-lg'
+                  : 'bg-white text-emerald-600 shadow-md'
+              }`}>
+              {hasBalance ? 'Betalen' : 'Bekijk facturen'} <ChevronRight className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* Secondary action tiles — compact row */}
+          <div className="grid grid-cols-3 gap-2 sm:gap-3">
+            <SecondaryTile icon={Wrench} label="Onderhoud" testId="tk-tile-maintenance"
+              accent="bg-sky-50 text-sky-600" onClick={() => onAction('maintenance')} />
+            <SecondaryTile icon={User} label="Gegevens" testId="tk-tile-me"
+              accent="bg-emerald-50 text-emerald-600" onClick={() => onAction('me')} />
+            <SecondaryTile icon={Phone} label="Contact" testId="tk-tile-contact"
+              accent="bg-violet-50 text-violet-600" onClick={() => onAction('contact')} />
+          </div>
         </div>
-      </motion.div>
+      </div>
     </div>
+  );
+}
+
+function SecondaryTile({ icon: Icon, label, accent, onClick, testId }) {
+  return (
+    <motion.button
+      whileTap={{ scale: 0.97 }} whileHover={{ y: -2 }}
+      onClick={onClick} data-testid={testId}
+      className="bg-white rounded-2xl p-3 sm:p-4 shadow-md flex flex-col items-center gap-2 active:shadow-sm transition">
+      <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl ${accent} flex items-center justify-center`}>
+        <Icon className="w-5 h-5 sm:w-6 sm:h-6" strokeWidth={2.4} />
+      </div>
+      <span className="text-xs sm:text-sm font-black text-slate-900 text-center leading-tight">{label}</span>
+    </motion.button>
   );
 }
 
@@ -566,6 +610,55 @@ function ContactView({ overview, branding, onBack }) {
 }
 
 // =====================================================================
+// COMPANY PICKER — fallback wanneer geen branding gedetecteerd is
+// =====================================================================
+function CompanyPicker({ onPicked }) {
+  const [slug, setSlug] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const submit = async (e) => {
+    e?.preventDefault?.();
+    const s = slug.trim().toLowerCase();
+    if (!s) { setError('Vul een bedrijfscode in.'); return; }
+    setBusy(true); setError('');
+    try {
+      const data = await fetchBranding(s);
+      if (!data) {
+        setError('Onbekende bedrijfscode — controleer de spelling.');
+        return;
+      }
+      applyBranding(data);
+      onPicked(data);
+    } finally { setBusy(false); }
+  };
+  return (
+    <div className="min-h-full w-full flex flex-col items-center justify-center px-5 py-10"
+      data-testid="tk-company-picker">
+      <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl p-6 sm:p-8 text-center">
+        <div className="w-16 h-16 rounded-2xl bg-orange-50 mx-auto flex items-center justify-center mb-4">
+          <Building2 className="w-8 h-8 text-[#FF5C00]" />
+        </div>
+        <h2 className="text-2xl font-black text-slate-900">Welk bedrijf?</h2>
+        <p className="text-sm text-slate-500 mt-2 mb-5">
+          Voer de bedrijfscode in (bv. <code className="bg-slate-100 px-1 rounded">surirent</code>) of
+          scan de QR-sticker bij uw voordeur.
+        </p>
+        <form onSubmit={submit} className="space-y-3">
+          <input value={slug} onChange={(e) => setSlug(e.target.value)} autoFocus
+            placeholder="bedrijfscode" data-testid="tk-slug-input"
+            className="w-full h-14 px-4 rounded-2xl border-2 border-slate-200 focus:border-[#FF5C00] outline-none text-center text-lg font-bold tracking-wider" />
+          {error && <p className="text-sm font-bold text-red-600">{error}</p>}
+          <button type="submit" disabled={busy} data-testid="tk-slug-submit"
+            className="w-full h-14 rounded-2xl bg-gradient-to-r from-[#FF8A3D] to-[#FF5C00] text-white font-black text-base shadow-lg active:scale-95 transition disabled:opacity-50">
+            {busy ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : 'Doorgaan'}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// =====================================================================
 // CONTAINER
 // =====================================================================
 export default function TenantKioskLayout() {
@@ -581,17 +674,32 @@ export default function TenantKioskLayout() {
   const idleTimer = useRef(null);
 
   // 1) Branding laden — primary color toepassen voor de hele kiosk-achtergrond
+  const [needsCompanyPick, setNeedsCompanyPick] = useState(false);
   useEffect(() => {
     let alive = true;
     (async () => {
       const slug = detectCompanySlug();
       let data = slug ? await fetchBranding(slug) : null;
       if (!data) data = await fetchBrandingByHost();
+      // Single-tenant fallback: als er maar één bedrijf is, gebruik dat automatisch.
+      if (!data) {
+        try {
+          const { data: def } = await api.get('/public/branding-default');
+          if (def) data = def;
+        } catch { /* geen single-tenant — ga door naar picker */ }
+      }
       if (!alive) return;
-      if (data) { applyBranding(data); setBranding(data); }
+      if (data) {
+        applyBranding(data);
+        setBranding(data);
+        setNeedsCompanyPick(false);
+      } else if (!aptId) {
+        // Geen context én geen QR — toon picker.
+        setNeedsCompanyPick(true);
+      }
     })();
     return () => { alive = false; };
-  }, []);
+  }, [aptId]);
 
   // 2) QR-mode prefill via ?apt=
   useEffect(() => {
@@ -710,18 +818,22 @@ export default function TenantKioskLayout() {
     </div>
   );
 
-  // --- Not authed: show PIN-only login ---
+  // --- Not authed: show PIN-only login (or company picker if no context) ---
   if (!authed) {
     return (
       <div style={wrapper} className="flex flex-col">
         <div className="flex-1" style={{ paddingBottom: FOOTER_H + 16 }}>
           <AnimatePresence mode="wait">
-            <motion.div key="login" variants={slideVariants}
+            <motion.div key={needsCompanyPick ? 'picker' : 'login'} variants={slideVariants}
               initial="enter" animate="center" exit="exit"
               transition={{ duration: 0.25 }}
               className="min-h-full w-full">
-              <LoginView branding={branding} prefill={prefill}
-                onLoggedIn={() => setAuthed(true)} />
+              {needsCompanyPick && !prefill?.email ? (
+                <CompanyPicker onPicked={(data) => { setBranding(data); setNeedsCompanyPick(false); }} />
+              ) : (
+                <LoginView branding={branding} prefill={prefill}
+                  onLoggedIn={() => setAuthed(true)} />
+              )}
             </motion.div>
           </AnimatePresence>
         </div>

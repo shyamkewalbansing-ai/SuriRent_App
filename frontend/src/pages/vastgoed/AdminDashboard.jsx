@@ -1320,6 +1320,14 @@ function TenantPinModal({ tenant, onCancel, onSaved }) {
   const [confirm, setConfirm] = useState('');
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState('');
+  const [savedPin, setSavedPin] = useState(null);
+  const kioskUrl = (() => {
+    try {
+      const slug = localStorage.getItem('pwa_company_slug') || '';
+      const origin = window.location.origin;
+      return slug ? `${origin}/kiosk/huurder?c=${slug}` : `${origin}/kiosk/huurder`;
+    } catch { return '/kiosk/huurder'; }
+  })();
   const save = async () => {
     setErr('');
     if (!/^\d{4}$/.test(pin)) { setErr('PIN moet 4 cijfers zijn'); return; }
@@ -1327,7 +1335,7 @@ function TenantPinModal({ tenant, onCancel, onSaved }) {
     setLoading(true);
     try {
       await api.post('/auth/tenant-set-pin', { tenant_id: tenant.id, pin });
-      onSaved();
+      setSavedPin(pin);
     } catch (e) { setErr(formatError(e)); }
     finally { setLoading(false); }
   };
@@ -1335,34 +1343,66 @@ function TenantPinModal({ tenant, onCancel, onSaved }) {
     <div className="fixed inset-0 z-50 bg-white/30 backdrop-blur-md flex items-center justify-center p-4" data-testid="tenant-pin-modal">
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-6 sm:p-8 animate-slide-up">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-xl font-black text-slate-900">Portal PIN voor {tenant.name}</h3>
+          <h3 className="text-xl font-black text-slate-900">
+            {savedPin ? 'PIN ingesteld' : `Portal PIN voor ${tenant.name}`}
+          </h3>
           <button onClick={onCancel} className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center"><X className="w-4 h-4" /></button>
         </div>
-        <p className="text-sm text-slate-500 mb-4">
-          Stel een 4-cijferige PIN in zodat deze huurder kan inloggen op <code className="bg-slate-100 px-1 rounded text-xs">/huurder</code>
-        </p>
-        {err && <div className="mb-3 p-2.5 bg-red-50 border border-red-200 text-red-600 rounded-xl text-sm">{err}</div>}
-        <div className="space-y-3">
-          <div>
-            <label className="text-xs font-bold uppercase tracking-widest text-slate-500">Nieuwe PIN</label>
-            <input type="password" inputMode="numeric" maxLength={4} value={pin}
-              onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
-              data-testid="tenant-pin-new"
-              className="w-full mt-1 h-14 px-4 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] outline-none text-2xl tracking-[0.5em] text-center font-bold" />
-          </div>
-          <div>
-            <label className="text-xs font-bold uppercase tracking-widest text-slate-500">Bevestig</label>
-            <input type="password" inputMode="numeric" maxLength={4} value={confirm}
-              onChange={(e) => setConfirm(e.target.value.replace(/\D/g, '').slice(0, 4))}
-              data-testid="tenant-pin-confirm"
-              className="w-full mt-1 h-14 px-4 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] outline-none text-2xl tracking-[0.5em] text-center font-bold" />
-          </div>
-        </div>
-        <button onClick={save} disabled={loading || !pin || !confirm} data-testid="tenant-pin-save"
-          className="w-full mt-5 h-12 rounded-xl bg-[#FF5C00] hover:bg-[#E05200] text-white font-bold flex items-center justify-center gap-2 disabled:opacity-50">
-          {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-          PIN opslaan
-        </button>
+        {!savedPin ? (
+          <>
+            <p className="text-sm text-slate-500 mb-4">
+              Stel een 4-cijferige PIN in. <b>{tenant.name}</b> kan hiermee inloggen op de Huurder Kiosk
+              (<code className="bg-slate-100 px-1 rounded text-xs">/kiosk/huurder</code>) of het huurderportaal
+              (<code className="bg-slate-100 px-1 rounded text-xs">/huurder</code>).
+            </p>
+            {err && <div className="mb-3 p-2.5 bg-red-50 border border-red-200 text-red-600 rounded-xl text-sm">{err}</div>}
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-bold uppercase tracking-widest text-slate-500">Nieuwe PIN</label>
+                <input type="password" inputMode="numeric" maxLength={4} value={pin}
+                  onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                  data-testid="tenant-pin-new"
+                  className="w-full mt-1 h-14 px-4 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] outline-none text-2xl tracking-[0.5em] text-center font-bold" />
+              </div>
+              <div>
+                <label className="text-xs font-bold uppercase tracking-widest text-slate-500">Bevestig</label>
+                <input type="password" inputMode="numeric" maxLength={4} value={confirm}
+                  onChange={(e) => setConfirm(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                  data-testid="tenant-pin-confirm"
+                  className="w-full mt-1 h-14 px-4 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] outline-none text-2xl tracking-[0.5em] text-center font-bold" />
+              </div>
+            </div>
+            <button onClick={save} disabled={loading || !pin || !confirm} data-testid="tenant-pin-save"
+              className="w-full mt-5 h-12 rounded-xl bg-[#FF5C00] hover:bg-[#E05200] text-white font-bold flex items-center justify-center gap-2 disabled:opacity-50">
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+              PIN opslaan
+            </button>
+          </>
+        ) : (
+          <>
+            <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 mb-4 text-center">
+              <Check className="w-8 h-8 text-emerald-500 mx-auto mb-2" />
+              <p className="text-sm font-bold text-slate-900">PIN <span className="font-black text-[#FF5C00]">{savedPin}</span> is ingesteld voor {tenant.name}.</p>
+            </div>
+            <p className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-1">Huurder kan nu inloggen via</p>
+            <div className="bg-slate-50 rounded-xl p-3 mb-3 flex items-center gap-2 break-all">
+              <code className="text-xs text-slate-700 flex-1">{kioskUrl}</code>
+              <button onClick={() => { try { navigator.clipboard.writeText(kioskUrl); } catch { /* ignore */ } }}
+                data-testid="tenant-pin-copy-link"
+                className="text-xs font-bold text-[#FF5C00] hover:underline shrink-0">Kopieer</button>
+            </div>
+            <div className="flex gap-2">
+              <a href={kioskUrl} target="_blank" rel="noreferrer"
+                data-testid="tenant-pin-open-kiosk"
+                className="flex-1 h-11 rounded-xl bg-[#FF5C00] hover:bg-[#E05200] text-white font-bold inline-flex items-center justify-center gap-2 text-sm">
+                Open Huurder Kiosk
+              </a>
+              <button onClick={onSaved} className="flex-1 h-11 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm">
+                Sluiten
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

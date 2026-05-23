@@ -1,0 +1,43 @@
+{
+  "summary": "Iteration 13 — Verified the 5 review items end-to-end. Backend: NEW pytest file test_branding_default.py (4 tests, all PASS) for GET /api/public/branding-default — public, no auth, returns 200 with id/slug/name when exactly 1 active company exists, else 404 with detail 'Meerdere of geen bedrijven'. Current preview DB has multiple companies so the endpoint returns 404 (verified). Regression: full run of test_branding_default + test_tenant_kiosk + test_kiosk_qr_sticker + test_tenant_pin_unique_and_pinlogin → 43 PASS, 1 SKIP (pre-existing env skip — no open invoice for tenant). Frontend Playwright: (a) /kiosk/huurder?c=surirent — PIN dots redesigned correctly: w/h = 24px (w-6), 3px solid white border, filled = rgb(15,23,42) (slate-900), unfilled = white — clearly visible on orange. (b) Dashboard split-screen renders perfectly: LEFT 'Financieel overzicht' card with tk-fin-rent + tk-fin-svc + tk-fin-fines + tk-fin-internet line items, totalDue badge in emerald rgb(5,150,105) when zero, RIGHT primary CTA card (green saldo + 'Bekijk facturen') + 3 SecondaryTiles (tk-tile-maintenance, tk-tile-me, tk-tile-contact). All 4 tile navigations + back buttons + logout work. (c) /kiosk/huurder (no ?c=) — CompanyPicker (tk-company-picker) shown after localStorage.clear(): unknown slug 'nonexistent-xyz' → inline error 'Onbekende bedrijfscode — controleer de spelling.', valid 'surirent' → navigates to PIN-login screen with branding applied. (d) Admin Tenants tab → tenant-pin-{id} button → TenantPinModal opens → entering 5678/5678 → save → success state shows 'PIN 5678 is ingesteld voor Bharat Kewalbansing', Kopieer button (tenant-pin-copy-link), 'Open Huurder Kiosk' anchor (tenant-pin-open-kiosk, target=_blank), Sluiten button — ALL testids present.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "TenantPinModal (AdminDashboard.jsx:1324-1330)", "issue": "Kiosk URL omits the ?c=<slug> query param when localStorage 'pwa_company_slug' is empty. Admin login via /login form does NOT set this localStorage key (only ?c= visits and subdomain visits do). Observed: anchor href was 'https://vastgoed-app.preview.emergentagent.com/kiosk/huurder' instead of '.../kiosk/huurder?c=surirent'. The admin-supplied link therefore won't auto-resolve branding on a fresh device — tenant will land on CompanyPicker. Fix: derive slug from auth context (e.g. company.slug returned by /api/auth/me) as primary source, fall back to localStorage. The AdminDashboard already has `company` from useAuth — just pass it down.", "selector": "[data-testid='tenant-pin-open-kiosk']", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Tenant kiosk login", "issues": ["PIN dots redesign verified: visibility is now excellent (slate-900 filled w/24px h/24px + 3px white border)."]},
+      {"screen": "Tenant kiosk dashboard", "issues": ["Split-screen redesign verified — clear contrast, white cards on orange, financial line items legible. Empty 'Servicekosten' + 'Boetes' rows use muted slate-300 + slate-400 which is OK but considers showing 'Geen' / dash to make 'zero' explicit at a glance.", "Pre-existing (carry-over from iter 11/12): branding 'KEWALBANSING' shown as the welcome heading on a surirent-slug URL — looks confusing. branding.name 'SuriRent N.V.' would be more correct."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_branding_default.py",
+    "/app/backend/tests/test_tenant_kiosk.py",
+    "/app/backend/tests/test_kiosk_qr_sticker.py",
+    "/app/backend/tests/test_tenant_pin_unique_and_pinlogin.py",
+    "/app/test_reports/pytest/iteration13_backend.xml"
+  ],
+  "action_items": [
+    "(MEDIUM) Fix TenantPinModal: derive kiosk URL slug from auth context (company.slug from /api/auth/me / useAuth) instead of relying solely on localStorage('pwa_company_slug'). The localStorage key is only populated when the admin visits via ?c= or via subdomain — a normal admin@vastgoed.sr login on the bare preview URL leaves it empty, so the modal's 'Open Huurder Kiosk' anchor + copy URL omits ?c=surirent.",
+    "(Optional) Once fixed, also call setStoredSlug(company.slug) right after admin login to make every subsequent helper that reads localStorage work too."
+  ],
+  "critical_code_review_comments": [
+    "AdminDashboard.jsx:1324-1330 — kiosk URL construction is brittle. Should accept a `companySlug` prop from the parent <Tenants/> component (which can read it from auth context) instead of reading localStorage directly.",
+    "server.py:1820-1833 (/api/public/branding-default) — uses count_documents + find_one with the same OR query; could be a single find().limit(2). Functionally correct; trivial perf nit.",
+    "TenantKioskLayout.jsx CompanyPicker (lines 600-659) — solid UX: white card on orange, autoFocus on input, error state in red. fetchBranding result null-check correctly triggers 'Onbekende bedrijfscode' error.",
+    "TenantKioskLayout.jsx DashboardView (lines 197-313) — split-screen well structured. items array compactly drives the LEFT card. SecondaryTile component cleanly reused. Good separation of concerns.",
+    "TenantKioskLayout.jsx PinDots (location not viewed in depth, inferred via runtime style: w/h 24px = w-6, 3px white border, slate-900 fill) — matches requirement."
+  ],
+  "updated_files": ["/app/backend/tests/test_branding_default.py (NEW — 4 tests)"],
+  "success_rate": {
+    "backend": "4/4 new tests + 39/40 regression tests PASS (1 pre-existing env-skip) = 43/44 effectively 100% pass rate.",
+    "frontend": "All targeted review items PASS except the kiosk-URL-slug bug in TenantPinModal. PIN dots ✓, dashboard split-screen ✓, all 9 dashboard testids ✓, all 4 tile navigations + back + logout ✓, CompanyPicker fallback ✓, bad-slug error ✓, good-slug redirect ✓, admin TenantPinModal post-save state ✓ (5/6 expectations met — slug missing from URL is the 1 miss)."
+  },
+  "test_credentials": "admin@vastgoed.sr/admin123 (Surirent), Bharat tenant PIN 5678. No new credentials needed.",
+  "seed_data_creation": "None new — re-set Bharat's PIN to 5678 via the admin modal (idempotent).",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Canonical re-run: `pytest backend/tests/test_branding_default.py backend/tests/test_tenant_kiosk.py backend/tests/test_kiosk_qr_sticker.py backend/tests/test_tenant_pin_unique_and_pinlogin.py -v`. To reproduce the modal URL bug: clear localStorage in DevTools → login admin@vastgoed.sr → Huurders tab → click PIN icon for Bharat → save 5678/5678 → inspect [data-testid=tenant-pin-open-kiosk] .href — will be '/kiosk/huurder' (no ?c=). Expected: '/kiosk/huurder?c=surirent'. Fix in /app/frontend/src/pages/vastgoed/AdminDashboard.jsx around line 1326 — switch from localStorage to useAuth().company?.slug. New backend testids: none. Existing kiosk testids unchanged: tk-login, tk-pinpad, tk-pin-dots, tk-pin-error, tk-key-{0-9,back}, tk-welcome, tk-prefill-apt, tk-footer-company, tk-logout, tk-dashboard, tk-balance, tk-fin-rent, tk-fin-svc, tk-fin-fines, tk-fin-internet, tk-total-due, tk-tile-{pay,maintenance,me,contact}, tk-pay+back, tk-maintenance + tk-mt-*, tk-me+back, tk-contact+back, tk-company-picker, tk-slug-input, tk-slug-submit.",
+  "rca of the issue": "TenantPinModal builds the kiosk URL with `localStorage.getItem('pwa_company_slug')`. Per /app/frontend/src/lib/branding.js this key is only persisted by setStoredSlug() which is called when the kiosk PWA detects a slug from ?c= or subdomain. Admin who logs in via /login form on the bare preview URL never triggers this path → localStorage stays empty → modal URL falls back to '/kiosk/huurder' (no slug). Mitigation: pass the admin's own company slug (already available from /api/auth/me as `company.slug`) into TenantPinModal as a prop."
+}
