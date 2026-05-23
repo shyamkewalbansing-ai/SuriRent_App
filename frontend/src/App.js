@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './lib/auth';
 import { useRegisterServiceWorker, InstallPrompt } from './lib/pwa';
+import RotateNotice from './components/RotateNotice';
 import { isMarketingHost, appUrl } from './lib/env';
 import MarketingLanding from './pages/vastgoed/MarketingLanding';
 import LoginPage from './pages/vastgoed/LoginPage';
@@ -91,6 +92,7 @@ export default function App() {
       {mode === 'app' && <AppRoutes />}
       {mode === 'hybrid' && <HybridRoutes />}
       <InstallPrompt />
+      <RotateNotice />
     </AuthProvider>
   );
 }
