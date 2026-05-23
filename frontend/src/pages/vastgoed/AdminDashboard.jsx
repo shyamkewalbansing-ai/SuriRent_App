@@ -31,6 +31,7 @@ import MyUrlCard from '../../components/MyUrlCard';
 import MijnAbonnement from './admin/MijnAbonnement';
 import TrialBanner from '../../components/TrialBanner';
 import ImpersonationBanner from '../../components/ImpersonationBanner';
+import LiveIndicator from '../../components/LiveIndicator';
 
 const BASE_TABS = [
   { id: 'overview', label: 'Overzicht', icon: LayoutDashboard },
@@ -101,7 +102,10 @@ function Sidebar({ active, onChange, onLogout, user, tabs, badgeCount }) {
       </nav>
 
       <div className="border-t border-orange-100 pt-3 mt-3 space-y-1">
-        <p className="text-xs text-slate-500 px-3 truncate">{user?.email}</p>
+        <div className="flex items-center justify-between gap-2 px-3">
+          <p className="text-xs text-slate-500 truncate">{user?.email}</p>
+          <LiveIndicator compact />
+        </div>
         <button onClick={onLogout} data-testid="logout-btn"
           className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-semibold text-slate-600 hover:bg-red-50 hover:text-red-600 transition-all">
           <LogOut className="w-4 h-4" /> Uitloggen
@@ -131,9 +135,12 @@ function MobileHeader({ activeCompany, user, onOpenMenu }) {
           <img src="/kiosk-icons/kiosk-512.png" alt="SuriRent" className="w-full h-full object-contain" />
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-black text-slate-900 leading-tight truncate">
-            {activeCompany?.name || (user?.role === 'superadmin' ? 'Alle bedrijven' : 'SuriRent')}
-          </p>
+          <div className="flex items-center gap-2 min-w-0">
+            <p className="text-sm font-black text-slate-900 leading-tight truncate">
+              {activeCompany?.name || (user?.role === 'superadmin' ? 'Alle bedrijven' : 'SuriRent')}
+            </p>
+            <LiveIndicator compact />
+          </div>
           <p className="text-[10px] text-[#FF5C00] font-bold tracking-wider uppercase truncate">
             {user?.role === 'superadmin' ? 'Superadmin' : 'Beheer'}{activeCompany?.plan ? ` · ${activeCompany.plan}` : ''}
           </p>

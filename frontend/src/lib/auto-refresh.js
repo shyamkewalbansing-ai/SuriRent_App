@@ -35,6 +35,11 @@ export function useAutoRefresh(loadFn, opts = {}) {
       inflight = true;
       try {
         await Promise.resolve(loadRef.current && loadRef.current());
+        // Stille "Live" puls naar de UI — alleen wanneer de refresh
+        // succesvol was. De LiveIndicator-component vangt dit event op.
+        try {
+          window.dispatchEvent(new CustomEvent('surirent:refresh'));
+        } catch { /* noop */ }
       } catch { /* zwijgend falen — UI handler heeft zijn eigen error state */ }
       finally { inflight = false; }
     };
