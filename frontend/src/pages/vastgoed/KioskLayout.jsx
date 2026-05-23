@@ -1028,17 +1028,25 @@ export default function KioskLayout() {
   // Tijdens kiosk-modus moet body/root in PWA standalone ORANJE zijn (zodat
   // het iPhone-home-indicator gebied en eventuele 1px doorlek aan de notch
   // de huisstijl-kleur tonen, niet wit). De Admin gebruikt wit. We schakelen
-  // door middel van een body-class die alleen in standalone PWA effect heeft.
-  // Tegelijk updaten we <meta theme-color> zodat de Android-statusbalk ook
-  // brand-oranje wordt en het overal hetzelfde voelt.
+  // door middel van een body-class die alleen in standalone PWA effect heeft,
+  // EN we zetten body/html bg direct in style (forceer ook in non-standalone
+  // én tijdens SPA-route transitions zodat /admin → /kiosk geen witte flits
+  // of witte band onderaan toont).
   useEffect(() => {
+    const BRAND = '#FF5C00';
     document.body.classList.add('kiosk-mode');
+    const prevHtmlBg = document.documentElement.style.backgroundColor;
+    const prevBodyBg = document.body.style.backgroundColor;
+    document.documentElement.style.backgroundColor = BRAND;
+    document.body.style.backgroundColor = BRAND;
     const meta = document.querySelector('meta[name="theme-color"]:not([media])')
       || document.querySelector('meta[name="theme-color"]');
     const prevColor = meta?.getAttribute('content');
-    if (meta) meta.setAttribute('content', '#FF5C00');
+    if (meta) meta.setAttribute('content', BRAND);
     return () => {
       document.body.classList.remove('kiosk-mode');
+      document.documentElement.style.backgroundColor = prevHtmlBg;
+      document.body.style.backgroundColor = prevBodyBg;
       if (meta && prevColor) meta.setAttribute('content', prevColor);
     };
   }, []);

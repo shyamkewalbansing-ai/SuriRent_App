@@ -40,7 +40,13 @@ export function useAutoRefresh(loadFn, opts = {}) {
         try {
           window.dispatchEvent(new CustomEvent('surirent:refresh'));
         } catch { /* noop */ }
-      } catch { /* zwijgend falen — UI handler heeft zijn eigen error state */ }
+      } catch {
+        // Mislukt — meld dat de backend onbereikbaar lijkt zodat
+        // LiveIndicator van groen → amber/rood kan schakelen.
+        try {
+          window.dispatchEvent(new CustomEvent('surirent:refresh-failed'));
+        } catch { /* noop */ }
+      }
       finally { inflight = false; }
     };
 
