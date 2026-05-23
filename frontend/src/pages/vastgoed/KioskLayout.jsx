@@ -1061,6 +1061,9 @@ export default function KioskLayout() {
 
   // Push huidige state naar het klantenscherm. Idempotent — we sturen
   // alleen waarden die de klant ook mag zien (geen pin_hash, geen company_id).
+  // Combinatie van 2 transports:
+  //  1) BroadcastChannel — instant same-browser sync (2e tab / 2e monitor)
+  //  2) Backend PUT — robuust voor cross-device (klant tablet in andere ruimte)
   useEffect(() => {
     if (step === 'check') return undefined;
     const apt = apartment ? {
@@ -1086,6 +1089,15 @@ export default function KioskLayout() {
       paid_at: paymentResult.paid_at,
     } : null;
     const body = { step, apartment: apt, tenant, overview: ovw, payload, payment };
+    // 1) BroadcastChannel — instant
+    try {
+      if (typeof BroadcastChannel !== 'undefined') {
+        const bc = new BroadcastChannel('surirent-customer-display');
+        bc.postMessage({ state: { ...body, updated_at: new Date().toISOString() } });
+        bc.close();
+      }
+    } catch { /* ignore */ }
+    // 2) Backend — voor cross-device
     api.put('/kiosk/customer-display', body).catch(() => {});
   }, [step, apartment, overview, paymentPayload, paymentResult]);
 

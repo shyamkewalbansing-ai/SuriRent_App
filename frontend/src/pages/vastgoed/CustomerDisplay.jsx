@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
@@ -10,40 +10,45 @@ import {
   detectCompanySlug, fetchBrandingByHost, applyBranding, resolveLogoUrl,
 } from '../../lib/branding';
 
-const POLL_MS = 1500;
+const POLL_MS = 1200;
+const BROADCAST_CHANNEL = 'surirent-customer-display';
+
+// Tailwind-vrije fluid-clamp utility (px), responsive zonder breakpoint-explosies.
+const clamp = (min, vw, max) => `clamp(${min}px, ${vw}vw, ${max}px)`;
 
 // =====================================================================
-// Idle / welkom-scherm
+// Idle / welkom-scherm — werkt op mobile portrait t/m 4K TV
 // =====================================================================
 function IdleScreen({ branding }) {
   return (
     <motion.div key="idle"
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       transition={{ duration: 0.4 }}
-      className="absolute inset-0 flex flex-col items-center justify-center text-white"
+      className="absolute inset-0 flex flex-col items-center justify-center text-white text-center px-4"
       data-testid="cd-idle">
       <motion.div
         animate={{ scale: [1, 1.06, 1] }}
         transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
-        className="w-36 h-36 sm:w-44 sm:h-44 rounded-3xl bg-white/95 shadow-2xl flex items-center justify-center p-4 mb-8">
+        className="rounded-3xl bg-white/95 shadow-2xl flex items-center justify-center p-4 mb-6"
+        style={{ width: clamp(96, 18, 200), height: clamp(96, 18, 200) }}>
         {branding?.logo_url ? (
           <img src={resolveLogoUrl(branding.logo_url)} alt="logo" className="w-full h-full object-contain" />
         ) : (
-          <HomeIcon className="w-20 h-20" style={{ color: branding?.primary_color || '#FF5C00' }} strokeWidth={2.4} />
+          <HomeIcon style={{ width: '60%', height: '60%', color: branding?.primary_color || '#FF5C00' }} strokeWidth={2.4} />
         )}
       </motion.div>
-      <p className="text-[11px] sm:text-sm font-black uppercase tracking-[0.32em] text-white/85">
-        WELKOM BIJ
-      </p>
-      <h1 className="text-5xl sm:text-7xl font-black tracking-tight mt-2 text-center px-4">
+      <p className="font-black uppercase tracking-[0.32em] text-white/85"
+        style={{ fontSize: clamp(10, 1.2, 18) }}>WELKOM BIJ</p>
+      <h1 className="font-black tracking-tight mt-2 px-2 leading-[1.05]"
+        style={{ fontSize: clamp(34, 6.5, 110) }}>
         {branding?.app_name || branding?.name || 'Vastgoed Kiosk'}
       </h1>
       {branding?.tagline && (
-        <p className="text-base sm:text-lg text-white/85 mt-4 text-center max-w-2xl px-4">
-          {branding.tagline}
-        </p>
+        <p className="text-white/85 mt-3 max-w-3xl"
+          style={{ fontSize: clamp(13, 1.6, 22) }}>{branding.tagline}</p>
       )}
-      <p className="text-xs sm:text-sm text-white/70 mt-10 font-bold uppercase tracking-widest">
+      <p className="text-white/70 mt-8 font-bold uppercase tracking-widest"
+        style={{ fontSize: clamp(10, 1.1, 16) }}>
         Een medewerker helpt u zo
       </p>
     </motion.div>
@@ -60,33 +65,37 @@ function GreetScreen({ state, branding }) {
     <motion.div key="greet"
       initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}
       transition={{ duration: 0.4 }}
-      className="absolute inset-0 flex flex-col items-center justify-center text-white p-8"
+      className="absolute inset-0 flex flex-col items-center justify-center text-white px-4 text-center"
       data-testid="cd-greet">
-      <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl bg-white/95 shadow-2xl flex items-center justify-center p-3 mb-6">
+      <div className="rounded-2xl bg-white/95 shadow-2xl flex items-center justify-center p-3 mb-5"
+        style={{ width: clamp(72, 12, 140), height: clamp(72, 12, 140) }}>
         {branding?.logo_url ? (
           <img src={resolveLogoUrl(branding.logo_url)} alt="logo" className="w-full h-full object-contain" />
         ) : (
-          <HomeIcon className="w-14 h-14" style={{ color: branding?.primary_color || '#FF5C00' }} strokeWidth={2.4} />
+          <HomeIcon style={{ width: '60%', height: '60%', color: branding?.primary_color || '#FF5C00' }} strokeWidth={2.4} />
         )}
       </div>
-      <p className="text-[10px] sm:text-sm font-black uppercase tracking-[0.32em] text-white/85">WELKOM</p>
-      <h1 className="text-5xl sm:text-7xl font-black tracking-tight mt-2 text-center">
+      <p className="font-black uppercase tracking-[0.32em] text-white/85"
+        style={{ fontSize: clamp(10, 1.2, 18) }}>WELKOM</p>
+      <h1 className="font-black tracking-tight mt-2 leading-[1.05] max-w-[95vw]"
+        style={{ fontSize: clamp(30, 5.8, 100) }}>
         {tenant?.name || 'Gewaardeerde huurder'}
       </h1>
       {apt?.number && (
-        <p className="mt-5 text-2xl sm:text-3xl font-bold text-white/95 px-5 py-2 rounded-2xl bg-white/15">
+        <p className="mt-4 font-bold text-white/95 px-4 py-1.5 rounded-2xl bg-white/15"
+          style={{ fontSize: clamp(16, 2.2, 38) }}>
           Appartement {apt.number}
         </p>
       )}
       {apt?.address && (
-        <p className="mt-3 text-sm sm:text-base text-white/80">{apt.address}</p>
+        <p className="mt-2 text-white/80" style={{ fontSize: clamp(12, 1.4, 20) }}>{apt.address}</p>
       )}
     </motion.div>
   );
 }
 
 // =====================================================================
-// Financieel overzicht — exact zoals admin kiosk
+// Overview screen — split-screen + responsive
 // =====================================================================
 function OverviewScreen({ state }) {
   const overview = state.overview || {};
@@ -97,6 +106,7 @@ function OverviewScreen({ state }) {
   const openRent = (balance.balance || 0) > 0 ? balance.balance : 0;
   const totalDue = Number(overview.total_due || (openRent + internet) || 0);
   const cur = balance.currency || apt.currency || 'SRD';
+  const hasBalance = totalDue > 0;
 
   const items = [
     { key: 'rent', label: 'Maandhuur', value: apt.rent_amount || 0, icon: HomeIcon },
@@ -111,40 +121,50 @@ function OverviewScreen({ state }) {
 
   return (
     <motion.div key="overview"
-      initial={{ opacity: 0, x: 40 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -40 }}
-      transition={{ duration: 0.35 }}
-      className="absolute inset-0 flex flex-col p-6 sm:p-10"
+      initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }}
+      transition={{ duration: 0.3 }}
+      className="absolute inset-0 flex flex-col p-3 sm:p-6 lg:p-10"
       data-testid="cd-overview">
-      <div className="text-white mb-4 sm:mb-6">
-        <p className="text-[10px] sm:text-xs font-black uppercase tracking-[0.3em] text-white/85">
+      <div className="text-white mb-3 sm:mb-5 px-1">
+        <p className="font-black uppercase tracking-[0.3em] text-white/85"
+          style={{ fontSize: clamp(9, 0.9, 14) }}>
           Financieel overzicht voor
         </p>
-        <h2 className="text-3xl sm:text-5xl font-black tracking-tight">{tenant.name || apt.tenant_name}</h2>
-        {apt.number && <p className="text-base sm:text-lg text-white/85 mt-1">Appartement {apt.number}</p>}
+        <h2 className="font-black tracking-tight leading-tight"
+          style={{ fontSize: clamp(22, 3.6, 56) }}>
+          {tenant.name || apt.tenant_name}
+        </h2>
+        {apt.number && <p className="text-white/85 mt-0.5"
+          style={{ fontSize: clamp(12, 1.3, 20) }}>Appartement {apt.number}</p>}
       </div>
-      <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-5 gap-4 sm:gap-5">
-        <div className="lg:col-span-3 bg-white rounded-3xl shadow-2xl p-5 sm:p-7 flex flex-col">
-          <h3 className="text-lg sm:text-xl font-black text-slate-900 mb-3">Specificatie</h3>
-          <div className="flex-1 divide-y divide-slate-100">
+      <div className="flex-1 min-h-0 flex flex-col lg:grid lg:grid-cols-5 gap-3 sm:gap-4 overflow-hidden">
+        {/* LEFT — line items */}
+        <div className="lg:col-span-3 bg-white rounded-2xl sm:rounded-3xl shadow-2xl p-3 sm:p-5 lg:p-7 flex flex-col min-h-0 overflow-hidden">
+          <h3 className="font-black text-slate-900 mb-2 sm:mb-3"
+            style={{ fontSize: clamp(14, 1.4, 22) }}>Specificatie</h3>
+          <div className="flex-1 divide-y divide-slate-100 overflow-auto">
             {items.map((it) => {
               const Icon = it.icon;
               const cls = it.highlight ? 'text-[#FF5C00]' : it.muted ? 'text-slate-400' : 'text-slate-900';
               return (
-                <div key={it.key} className={`flex items-center justify-between py-3 sm:py-4 ${cls}`}>
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                <div key={it.key} className={`flex items-center justify-between py-2 sm:py-3 ${cls}`}>
+                  <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                    <div className={`rounded-xl flex items-center justify-center shrink-0 ${
                       it.highlight ? 'bg-orange-100 text-[#FF5C00]'
                         : it.muted ? 'bg-slate-50 text-slate-300'
                         : 'bg-slate-100 text-slate-500'
-                    }`}>
-                      <Icon className="w-5 h-5" />
+                    }`} style={{ width: clamp(28, 3, 44), height: clamp(28, 3, 44) }}>
+                      <Icon style={{ width: '55%', height: '55%' }} />
                     </div>
                     <div className="min-w-0">
-                      <p className={`text-base sm:text-lg ${it.highlight ? 'font-black' : 'font-bold'}`}>{it.label}</p>
-                      {it.sub && <p className="text-xs sm:text-sm mt-0.5 text-slate-500">{it.sub}</p>}
+                      <p className={`${it.highlight ? 'font-black' : 'font-bold'} truncate`}
+                        style={{ fontSize: clamp(13, 1.3, 22) }}>{it.label}</p>
+                      {it.sub && <p className="text-slate-500 truncate"
+                        style={{ fontSize: clamp(10, 0.85, 14) }}>{it.sub}</p>}
                     </div>
                   </div>
-                  <p className={`text-base sm:text-xl ${it.highlight ? 'font-black' : 'font-bold'}`}>
+                  <p className={`shrink-0 ${it.highlight ? 'font-black' : 'font-bold'} whitespace-nowrap`}
+                    style={{ fontSize: clamp(13, 1.4, 24) }}>
                     {fmtMoney(it.value, cur)}
                   </p>
                 </div>
@@ -152,26 +172,30 @@ function OverviewScreen({ state }) {
             })}
           </div>
         </div>
-        <div className={`lg:col-span-2 rounded-3xl shadow-2xl p-6 sm:p-8 flex flex-col items-center justify-center text-center ${
-          totalDue > 0 ? 'bg-white' : 'bg-gradient-to-br from-emerald-500 to-emerald-600 text-white'
+
+        {/* RIGHT — Total */}
+        <div className={`lg:col-span-2 rounded-2xl sm:rounded-3xl shadow-2xl flex flex-col items-center justify-center text-center p-4 sm:p-6 lg:p-8 ${
+          hasBalance ? 'bg-white' : 'bg-gradient-to-br from-emerald-500 to-emerald-600 text-white'
         }`}>
-          <div className={`w-16 h-16 sm:w-20 sm:h-20 rounded-2xl flex items-center justify-center mb-4 ${
-            totalDue > 0 ? 'bg-orange-100 text-[#FF5C00]' : 'bg-white/20 text-white'
-          }`}>
-            {totalDue > 0 ? <Wallet className="w-10 h-10" /> : <CheckCircle2 className="w-12 h-12" />}
+          <div className={`rounded-2xl flex items-center justify-center mb-3 sm:mb-4 ${
+            hasBalance ? 'bg-orange-100 text-[#FF5C00]' : 'bg-white/20 text-white'
+          }`} style={{ width: clamp(48, 5.5, 96), height: clamp(48, 5.5, 96) }}>
+            {hasBalance ? <Wallet style={{ width: '55%', height: '55%' }} />
+              : <CheckCircle2 style={{ width: '60%', height: '60%' }} strokeWidth={2.4} />}
           </div>
-          <p className={`text-xs sm:text-sm font-black uppercase tracking-[0.25em] ${
-            totalDue > 0 ? 'text-slate-400' : 'text-white/90'
-          }`}>
-            {totalDue > 0 ? 'Te betalen' : 'Volledig bij'}
+          <p className={`font-black uppercase tracking-[0.25em] ${
+            hasBalance ? 'text-slate-400' : 'text-white/90'
+          }`} style={{ fontSize: clamp(9, 0.95, 16) }}>
+            {hasBalance ? 'Te betalen' : 'Volledig bij'}
           </p>
-          <p className={`text-5xl sm:text-7xl font-black tracking-tight mt-2 mb-2 ${
-            totalDue > 0 ? 'text-slate-900' : 'text-white'
-          }`} data-testid="cd-total-due">
+          <p className={`font-black tracking-tight mt-1 mb-1 whitespace-nowrap ${
+            hasBalance ? 'text-slate-900' : 'text-white'
+          }`} style={{ fontSize: clamp(28, 5.4, 90) }} data-testid="cd-total-due">
             {fmtMoney(totalDue, cur)}
           </p>
-          <p className={`text-sm sm:text-base ${totalDue > 0 ? 'text-slate-500' : 'text-white/90'}`}>
-            {totalDue > 0 ? 'De medewerker bereidt uw betaling voor…' : 'U heeft geen openstaand bedrag.'}
+          <p className={`mt-1 px-2 ${hasBalance ? 'text-slate-500' : 'text-white/90'}`}
+            style={{ fontSize: clamp(11, 1.2, 16) }}>
+            {hasBalance ? 'De medewerker bereidt uw betaling voor…' : 'U heeft geen openstaand bedrag.'}
           </p>
         </div>
       </div>
@@ -187,7 +211,6 @@ function PayScreen({ state }) {
   const cats = payload.categories || [];
   const cur = payload.currency || 'SRD';
   const amt = Number(payload.amount || 0);
-
   const labels = {
     huur: 'Huur', servicekosten: 'Servicekosten',
     boete: 'Boetes', internet: 'Internet', overig: 'Overig',
@@ -195,25 +218,34 @@ function PayScreen({ state }) {
 
   return (
     <motion.div key="pay"
-      initial={{ opacity: 0, x: 40 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -40 }}
-      transition={{ duration: 0.35 }}
-      className="absolute inset-0 flex flex-col items-center justify-center p-6 sm:p-10 text-white"
+      initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }}
+      transition={{ duration: 0.3 }}
+      className="absolute inset-0 flex flex-col items-center justify-center px-4 sm:px-8 text-white"
       data-testid="cd-pay">
-      <p className="text-[10px] sm:text-xs font-black uppercase tracking-[0.3em] text-white/85 mb-2">U betaalt zo</p>
-      <div className="w-full max-w-3xl bg-white rounded-3xl shadow-2xl p-6 sm:p-10">
-        <p className="text-sm font-black uppercase tracking-widest text-slate-400">Onderdelen</p>
-        <ul className="mt-3 space-y-2">
-          {cats.length === 0 && <li className="text-slate-400 text-base">Nog geen onderdeel geselecteerd…</li>}
+      <p className="font-black uppercase tracking-[0.3em] text-white/85 mb-2 text-center"
+        style={{ fontSize: clamp(10, 1.0, 16) }}>U betaalt zo</p>
+      <div className="w-full max-w-3xl bg-white rounded-2xl sm:rounded-3xl shadow-2xl p-4 sm:p-8 lg:p-10">
+        <p className="font-black uppercase tracking-widest text-slate-400"
+          style={{ fontSize: clamp(10, 1.0, 16) }}>Onderdelen</p>
+        <ul className="mt-2 sm:mt-3 space-y-2">
+          {cats.length === 0 && (
+            <li className="text-slate-400"
+              style={{ fontSize: clamp(13, 1.3, 18) }}>Nog geen onderdeel geselecteerd…</li>
+          )}
           {cats.map((c) => (
-            <li key={c.key || c.label} className="flex items-center justify-between bg-slate-50 rounded-2xl px-4 py-3">
-              <span className="text-lg sm:text-xl font-bold text-slate-800">{labels[c.key] || c.label || c.key}</span>
-              <span className="text-lg sm:text-xl font-black text-slate-900">{fmtMoney(c.value || c.amount || 0, cur)}</span>
+            <li key={c.key || c.label}
+              className="flex items-center justify-between bg-slate-50 rounded-2xl px-3 sm:px-4 py-2 sm:py-3 gap-3">
+              <span className="font-bold text-slate-800 truncate"
+                style={{ fontSize: clamp(14, 1.5, 22) }}>{labels[c.key] || c.label || c.key}</span>
+              <span className="font-black text-slate-900 whitespace-nowrap"
+                style={{ fontSize: clamp(14, 1.5, 22) }}>{fmtMoney(c.value || c.amount || 0, cur)}</span>
             </li>
           ))}
         </ul>
-        <div className="mt-6 border-t-2 border-slate-200 pt-4 flex items-center justify-between">
-          <p className="text-xl sm:text-2xl font-black text-slate-700">Totaal</p>
-          <p className="text-4xl sm:text-6xl font-black text-[#FF5C00] tracking-tight" data-testid="cd-pay-total">
+        <div className="mt-4 sm:mt-6 border-t-2 border-slate-200 pt-3 sm:pt-4 flex items-center justify-between gap-3">
+          <p className="font-black text-slate-700" style={{ fontSize: clamp(16, 1.8, 30) }}>Totaal</p>
+          <p className="font-black text-[#FF5C00] tracking-tight whitespace-nowrap"
+            style={{ fontSize: clamp(28, 4.5, 80) }} data-testid="cd-pay-total">
             {fmtMoney(amt, cur)}
           </p>
         </div>
@@ -236,22 +268,26 @@ function MethodScreen({ state }) {
 
   return (
     <motion.div key="method"
-      initial={{ opacity: 0, x: 40 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -40 }}
-      transition={{ duration: 0.35 }}
-      className="absolute inset-0 flex flex-col items-center justify-center p-6 sm:p-10 text-white"
+      initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }}
+      transition={{ duration: 0.3 }}
+      className="absolute inset-0 flex flex-col items-center justify-center px-4 sm:px-8 text-white"
       data-testid="cd-method">
-      <p className="text-[10px] sm:text-xs font-black uppercase tracking-[0.3em] text-white/85 mb-3">
-        Bevestig uw betaling
-      </p>
-      <div className="w-full max-w-2xl bg-white rounded-3xl shadow-2xl p-8 sm:p-12 text-center">
-        <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-orange-100 text-[#FF5C00] flex items-center justify-center mx-auto mb-5">
-          <Icon className="w-12 h-12 sm:w-14 sm:h-14" strokeWidth={2.2} />
+      <p className="font-black uppercase tracking-[0.3em] text-white/85 mb-3"
+        style={{ fontSize: clamp(10, 1.0, 16) }}>Bevestig uw betaling</p>
+      <div className="w-full max-w-2xl bg-white rounded-2xl sm:rounded-3xl shadow-2xl p-6 sm:p-10 lg:p-12 text-center">
+        <div className="rounded-2xl bg-orange-100 text-[#FF5C00] flex items-center justify-center mx-auto mb-3 sm:mb-5"
+          style={{ width: clamp(56, 7, 120), height: clamp(56, 7, 120) }}>
+          <Icon style={{ width: '55%', height: '55%' }} strokeWidth={2.2} />
         </div>
-        <p className="text-base sm:text-xl font-bold text-slate-500 uppercase tracking-widest">Betaalmethode</p>
-        <p className="text-3xl sm:text-5xl font-black text-slate-900 tracking-tight mt-1">{LABELS[method] || method || '—'}</p>
-        <div className="my-7 h-px bg-slate-100" />
-        <p className="text-xs sm:text-sm font-black uppercase tracking-widest text-slate-400">Bedrag</p>
-        <p className="text-5xl sm:text-7xl font-black text-[#FF5C00] tracking-tight mt-1" data-testid="cd-method-total">
+        <p className="font-bold text-slate-500 uppercase tracking-widest"
+          style={{ fontSize: clamp(11, 1.2, 18) }}>Betaalmethode</p>
+        <p className="font-black text-slate-900 tracking-tight mt-1"
+          style={{ fontSize: clamp(26, 3.6, 62) }}>{LABELS[method] || method || '—'}</p>
+        <div className="my-4 sm:my-6 h-px bg-slate-100" />
+        <p className="font-black uppercase tracking-widest text-slate-400"
+          style={{ fontSize: clamp(10, 1.0, 16) }}>Bedrag</p>
+        <p className="font-black text-[#FF5C00] tracking-tight mt-1 whitespace-nowrap"
+          style={{ fontSize: clamp(34, 6, 100) }} data-testid="cd-method-total">
           {fmtMoney(amt, cur)}
         </p>
       </div>
@@ -270,23 +306,29 @@ function ReceiptScreen({ state }) {
     <motion.div key="receipt"
       initial={{ opacity: 0, scale: 0.92 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.92 }}
       transition={{ type: 'spring', stiffness: 180, damping: 20 }}
-      className="absolute inset-0 flex flex-col items-center justify-center p-6 sm:p-10"
+      className="absolute inset-0 flex flex-col items-center justify-center px-4 sm:px-8"
       data-testid="cd-receipt">
-      <div className="w-full max-w-2xl bg-white rounded-3xl shadow-2xl p-8 sm:p-12 text-center">
+      <div className="w-full max-w-2xl bg-white rounded-2xl sm:rounded-3xl shadow-2xl p-6 sm:p-10 lg:p-12 text-center">
         <motion.div
           initial={{ scale: 0 }} animate={{ scale: 1 }}
           transition={{ delay: 0.1, type: 'spring', stiffness: 200, damping: 15 }}
-          className="w-28 h-28 sm:w-32 sm:h-32 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-5">
-          <CheckCircle2 className="w-16 h-16 sm:w-20 sm:h-20 text-emerald-500" strokeWidth={2.5} />
+          className="rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-3 sm:mb-5"
+          style={{ width: clamp(72, 9, 140), height: clamp(72, 9, 140) }}>
+          <CheckCircle2 className="text-emerald-500" strokeWidth={2.5}
+            style={{ width: '60%', height: '60%' }} />
         </motion.div>
-        <p className="text-base sm:text-xl font-bold text-emerald-600 uppercase tracking-widest">Betaling gelukt</p>
-        <p className="text-5xl sm:text-7xl font-black text-slate-900 tracking-tight mt-3">{fmtMoney(amt, cur)}</p>
+        <p className="font-bold text-emerald-600 uppercase tracking-widest"
+          style={{ fontSize: clamp(11, 1.2, 18) }}>Betaling gelukt</p>
+        <p className="font-black text-slate-900 tracking-tight mt-2 sm:mt-3 whitespace-nowrap"
+          style={{ fontSize: clamp(34, 6, 100) }}>{fmtMoney(amt, cur)}</p>
         {p.receipt_number && (
-          <p className="text-sm sm:text-base text-slate-500 mt-4">
+          <p className="text-slate-500 mt-3 sm:mt-4"
+            style={{ fontSize: clamp(12, 1.3, 18) }}>
             Kwitantienummer <span className="font-black text-slate-700">{p.receipt_number}</span>
           </p>
         )}
-        <p className="mt-7 text-sm sm:text-base text-slate-500">Bedankt voor uw betaling!</p>
+        <p className="mt-5 text-slate-500"
+          style={{ fontSize: clamp(12, 1.3, 18) }}>Bedankt voor uw betaling!</p>
       </div>
     </motion.div>
   );
@@ -299,9 +341,11 @@ export default function CustomerDisplay() {
   const [searchParams] = useSearchParams();
   const slugParam = (searchParams.get('c') || '').trim().toLowerCase();
   const [slug, setSlug] = useState(slugParam || detectCompanySlug() || '');
-  const [data, setData] = useState(null);  // {branding, state}
+  const [branding, setBranding] = useState(null);
+  const [state, setState] = useState({ step: 'idle' });
   const [error, setError] = useState('');
   const [pickerSlug, setPickerSlug] = useState('');
+  const lastUpdate = useRef(0);
 
   // Resolve slug via host if not known.
   useEffect(() => {
@@ -314,7 +358,28 @@ export default function CustomerDisplay() {
     return () => { alive = false; };
   }, [slug]);
 
-  // Poll every POLL_MS.
+  const applyState = useCallback((newState, source) => {
+    // Negeer als de nieuwe update OUDER is dan de huidige.
+    try {
+      const t = newState?.updated_at ? new Date(newState.updated_at).getTime() : Date.now();
+      if (t < lastUpdate.current) return;
+      lastUpdate.current = t;
+    } catch { /* ignore */ }
+    setState(newState || { step: 'idle' });
+    // eslint-disable-next-line no-console
+    if (source) console.debug('[customer-display] update via', source);
+  }, []);
+
+  // 1) BroadcastChannel — instant lokale sync zelfde browser
+  useEffect(() => {
+    if (typeof BroadcastChannel === 'undefined') return undefined;
+    const bc = new BroadcastChannel(BROADCAST_CHANNEL);
+    const handler = (e) => { if (e.data?.state) applyState(e.data.state, 'broadcast'); };
+    bc.addEventListener('message', handler);
+    return () => { bc.removeEventListener('message', handler); bc.close(); };
+  }, [applyState]);
+
+  // 2) Backend polling — fallback voor cross-device + branding load
   const stopped = useRef(false);
   useEffect(() => {
     stopped.current = false;
@@ -324,8 +389,11 @@ export default function CustomerDisplay() {
       try {
         const { data: d } = await api.get(`/public/customer-display/${slug}`);
         if (stopped.current) return;
-        setData(d);
-        if (d?.branding) applyBranding(d.branding);
+        if (d?.branding) {
+          applyBranding(d.branding);
+          setBranding(d.branding);
+        }
+        if (d?.state) applyState(d.state, 'poll');
         setError('');
       } catch (e) {
         if (!stopped.current) {
@@ -336,10 +404,10 @@ export default function CustomerDisplay() {
     };
     tick();
     return () => { stopped.current = true; if (timer) clearTimeout(timer); };
-  }, [slug]);
+  }, [slug, applyState]);
 
   // Full-screen background bound to brand primary.
-  const primary = data?.branding?.primary_color || '#FF5C00';
+  const primary = branding?.primary_color || '#FF5C00';
   useEffect(() => {
     document.title = 'Klantenscherm';
     document.documentElement.style.backgroundColor = primary;
@@ -351,15 +419,14 @@ export default function CustomerDisplay() {
   }, [primary]);
 
   if (!slug) {
-    // Slug picker — alleen bij eerste opstart op een nieuw klantenscherm.
     return (
-      <div className="fixed inset-0 flex items-center justify-center bg-orange-500 p-6">
+      <div className="fixed inset-0 flex items-center justify-center bg-orange-500 p-4">
         <form
           onSubmit={(e) => { e.preventDefault(); const s = pickerSlug.trim().toLowerCase(); if (s) setSlug(s); }}
-          className="w-full max-w-md bg-white rounded-3xl shadow-2xl p-8 text-center"
+          className="w-full max-w-md bg-white rounded-3xl shadow-2xl p-6 sm:p-8 text-center"
           data-testid="cd-picker">
           <p className="text-xs font-black uppercase tracking-[0.3em] text-slate-400">Klantenscherm</p>
-          <h2 className="text-2xl font-black text-slate-900 mt-2 mb-4">Welk bedrijf?</h2>
+          <h2 className="text-2xl sm:text-3xl font-black text-slate-900 mt-2 mb-4">Welk bedrijf?</h2>
           <p className="text-sm text-slate-500 mb-4">
             Voer de bedrijfscode in (bv. <code className="bg-slate-100 px-1 rounded">surirent</code>).
           </p>
@@ -376,7 +443,7 @@ export default function CustomerDisplay() {
     );
   }
 
-  if (!data) {
+  if (!branding && !state.step) {
     return (
       <div className="fixed inset-0 flex items-center justify-center"
         style={{ background: primary }}>
@@ -386,8 +453,7 @@ export default function CustomerDisplay() {
     );
   }
 
-  const step = data?.state?.step || 'idle';
-  const stateForRender = data?.state || {};
+  const step = state?.step || 'idle';
 
   return (
     <div className="fixed inset-0 overflow-hidden"
@@ -400,18 +466,19 @@ export default function CustomerDisplay() {
       }}
       data-testid="cd-root">
       <AnimatePresence mode="wait">
-        {(step === 'idle' || step === 'check') && <IdleScreen branding={data.branding} />}
-        {step === 'select' && <GreetScreen state={stateForRender} branding={data.branding} />}
-        {step === 'overview' && <OverviewScreen state={stateForRender} />}
-        {step === 'pay' && <PayScreen state={stateForRender} />}
-        {(step === 'method' || step === 'confirm') && <MethodScreen state={stateForRender} />}
-        {step === 'receipt' && <ReceiptScreen state={stateForRender} />}
+        {(step === 'idle' || step === 'check') && <IdleScreen branding={branding} />}
+        {step === 'select' && <GreetScreen state={state} branding={branding} />}
+        {step === 'overview' && <OverviewScreen state={state} />}
+        {step === 'pay' && <PayScreen state={state} />}
+        {(step === 'method' || step === 'confirm') && <MethodScreen state={state} />}
+        {step === 'receipt' && <ReceiptScreen state={state} />}
       </AnimatePresence>
 
       {/* Tiny footer met bedrijfsnaam */}
-      <div className="absolute bottom-3 left-4 right-4 flex items-center justify-between text-white/70 text-xs font-bold pointer-events-none">
-        <span data-testid="cd-footer-company">{data.branding?.name}</span>
-        <span className="uppercase tracking-widest">Klantenscherm</span>
+      <div className="absolute bottom-2 left-3 right-3 flex items-center justify-between text-white/70 font-bold pointer-events-none"
+        style={{ fontSize: clamp(9, 0.7, 12) }}>
+        <span data-testid="cd-footer-company" className="truncate">{branding?.name}</span>
+        <span className="uppercase tracking-widest shrink-0">Klantenscherm</span>
       </div>
     </div>
   );
