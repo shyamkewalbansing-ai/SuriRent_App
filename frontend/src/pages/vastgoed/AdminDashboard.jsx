@@ -84,7 +84,7 @@ function groupTabs(tabs) {
 function Sidebar({ active, onChange, onLogout, user, tabs, badgeCount }) {
   const groups = groupTabs(tabs);
   return (
-    <aside className="hidden xl:flex flex-col w-64 sticky top-0 h-screen bg-gradient-to-b from-white via-white to-[#FFF7F0] border-r border-orange-100/60 shadow-[8px_0_24px_-12px_rgba(255,92,0,0.12)]"
+    <aside className="hidden md:flex flex-col w-56 lg:w-64 sticky top-0 h-screen bg-gradient-to-b from-white via-white to-[#FFF7F0] border-r border-orange-100/60 shadow-[8px_0_24px_-12px_rgba(255,92,0,0.12)]"
       data-testid="sidebar">
       {/* HEADER — logo + naam, vaste hoogte */}
       <div className="px-5 pt-6 pb-5 flex items-center gap-3 border-b border-orange-50">
@@ -197,7 +197,7 @@ function MobileTopLogo({ user, activeCompany }) {
   const fullName = activeCompany?.name || (user?.role === 'superadmin' ? 'Alle bedrijven' : 'SuriRent');
   const [namePart1, namePart2] = splitNameHalf(fullName);
   return (
-    <header className="xl:hidden sticky top-0 z-30 bg-[#FFF7F0]/85 backdrop-blur-md"
+    <header className="md:hidden sticky top-0 z-30 bg-[#FFF7F0]/85 backdrop-blur-md"
       style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
       data-testid="mobile-top-logo">
       <div className="px-4 md:px-8 py-3 md:py-4 landscape:py-1.5 flex items-center gap-3 md:gap-4 landscape:gap-2 max-w-4xl md:mx-auto md:w-full">
@@ -234,7 +234,7 @@ function MobileSheet({ open, onClose, active, onChange, onLogout, user, tabs, ac
   const navigate = useNavigate();
   if (!open) return null;
   return (
-    <div className="xl:hidden fixed inset-0 z-50" data-testid="mobile-sheet">
+    <div className="md:hidden fixed inset-0 z-50" data-testid="mobile-sheet">
       <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm animate-fade-in" onClick={onClose} />
       <aside
         className="absolute left-0 right-0 bottom-0 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 sm:w-[520px] md:w-[640px] bg-white rounded-t-3xl shadow-[0_-24px_60px_-12px_rgba(15,23,42,0.35)] flex flex-col animate-slide-up overflow-hidden"
@@ -383,7 +383,7 @@ function MobileTabBar({ active, onChange, tabs, onOpenMenu, user, badgeCount }) 
 
   return (
     <nav
-      className="xl:hidden fixed bottom-0 inset-x-0 z-40"
+      className="md:hidden fixed bottom-0 inset-x-0 z-40"
       data-testid="mobile-tab-bar"
     >
       {/* Op iPad (md+) zwevende rounded bar i.p.v. fullwidth strip — geeft
@@ -1473,7 +1473,7 @@ function DesktopTopBar({ user, activeCompany, tab, tabs }) {
   if (user?.role === 'superadmin') return null;
   const current = tabs.find((t) => t.id === tab);
   return (
-    <div className="hidden xl:flex items-center justify-between gap-4 px-8 pt-6 pb-2 sticky top-0 z-20 bg-[#FFF7F0]/85 backdrop-blur-md"
+    <div className="hidden md:flex items-center justify-between gap-4 px-6 lg:px-8 pt-5 lg:pt-6 pb-2 sticky top-0 z-20 bg-[#FFF7F0]/85 backdrop-blur-md"
       data-testid="desktop-top-bar">
       <div className="min-w-0 flex items-center gap-3">
         {current?.icon && (
@@ -1563,7 +1563,7 @@ export default function AdminDashboard() {
         <DesktopTopBar user={user} activeCompany={activeCompany} tab={tab} tabs={tabs} />
         <ImpersonationBanner />
         <TrialBanner />
-        <main className="flex-1 p-5 md:px-8 md:py-7 xl:p-8 xl:pt-3 pb-32 xl:pb-8 w-full max-w-4xl xl:max-w-none md:mx-auto">
+        <main className="flex-1 p-5 md:px-6 md:py-5 lg:px-8 lg:pt-3 pb-32 md:pb-8 w-full">
           {tab === 'companies' && <Companies />}
           {tab === 'subscriptions' && <Subscriptions />}
           {tab === 'saas_settings' && <SaasSettings />}
