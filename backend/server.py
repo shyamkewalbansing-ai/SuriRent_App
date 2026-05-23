@@ -450,18 +450,26 @@ async def lifespan(app: FastAPI):
             )
 
     # --- Start trial-reminder background task ---
-    global _reminder_task_handle
+    global _reminder_task_handle, _overdue_task_handle
     if os.environ.get("DISABLE_TRIAL_REMINDERS") != "1":
         import asyncio as _aio
         _reminder_task_handle = _aio.create_task(_reminder_loop())
 
+    # --- Start daily overdue-push task ---
+    if os.environ.get("DISABLE_OVERDUE_PUSH") != "1":
+        import asyncio as _aio
+        _overdue_task_handle = _aio.create_task(_overdue_push_loop())
+
     yield
     if _reminder_task_handle:
         _reminder_task_handle.cancel()
+    if _overdue_task_handle:
+        _overdue_task_handle.cancel()
     client.close()
 
 
 _reminder_task_handle = None
+_overdue_task_handle = None
 
 
 async def _send_trial_reminders():
@@ -550,6 +558,59 @@ async def _reminder_loop():
         except Exception:
             pass
         await _aio.sleep(6 * 3600)
+
+
+async def _send_overdue_pushes():
+    """Eén pass over alle companies: voor elke company telt hoeveel huurders
+    een openstaande balance hebben en stuurt een push naar de admins van
+    die company (max 1× per dag dankzij de `_overdue_last_sent` cache)."""
+    today_key = now_utc().strftime("%Y-%m-%d")
+    async for c in db.companies.find({"active": {"$ne": False}}, {"_id": 0, "id": 1, "name": 1, "overdue_push_last": 1}):
+        if c.get("overdue_push_last") == today_key:
+            continue  # al verstuurd vandaag
+        cid = c["id"]
+        overdue = []
+        async for t in db.tenants.find({"company_id": cid, "apartment_id": {"$ne": None}}, {"_id": 0}):
+            try:
+                bal = await _calc_balance(t)
+                if bal.get("balance", 0) > 0:
+                    overdue.append((t["name"], bal["balance"], bal["currency"]))
+            except Exception:
+                continue
+        if not overdue:
+            await db.companies.update_one({"id": cid}, {"$set": {"overdue_push_last": today_key}})
+            continue
+        top = overdue[:3]
+        names = ", ".join(n for n, _, _ in top)
+        extra = f" +{len(overdue) - 3} anderen" if len(overdue) > 3 else ""
+        cur = top[0][2]
+        total = sum(b for _, b, _ in overdue)
+        body = f"{len(overdue)} huurders openstaand ({cur} {total:,.2f}) — {names}{extra}"
+        try:
+            await _notify_company_admins(
+                cid, "Achterstallige huur",
+                body,
+                {"kind": "overdue", "url": "/admin/invoices", "count": len(overdue)},
+            )
+            await db.companies.update_one({"id": cid}, {"$set": {"overdue_push_last": today_key}})
+        except Exception as e:
+            print(f"[push] overdue notify failed for company={cid}: {e}")
+
+
+async def _overdue_push_loop():
+    """Background-loop: elke 15 minuten controleren of het tussen 9:00 en
+    10:00 lokale tijd is, en zo ja: stuur de dagelijkse achterstand-push
+    (max 1× per dag per company)."""
+    import asyncio as _aio
+    while True:
+        try:
+            # Lokale tijd; Suriname = UTC-3
+            hour_local = (now_utc().hour - 3) % 24
+            if 9 <= hour_local < 11:
+                await _send_overdue_pushes()
+        except Exception:
+            pass
+        await _aio.sleep(15 * 60)
 
 
 app = FastAPI(title="Vastgoed Kiosk API", lifespan=lifespan)
@@ -2885,8 +2946,19 @@ async def list_payments(
 
 @api.post("/payments", response_model=PaymentOut)
 async def create_payment(body: PaymentIn, user=Depends(get_current_user)):
-    doc = await _create_payment_doc(body, company_id_of(user), approved_by=user.get("name") or user.get("email"))
-    return await _enrich_payment(doc)
+    cid = company_id_of(user)
+    doc = await _create_payment_doc(body, cid, approved_by=user.get("name") or user.get("email"))
+    enriched = await _enrich_payment(doc)
+    # Push notificatie naar andere admins van dezelfde company
+    try:
+        await _notify_company_admins(
+            cid, "Betaling geregistreerd",
+            f"{enriched.get('tenant_name', 'Onbekend')} — {enriched.get('currency', '')} {float(enriched.get('amount', 0)):,.2f} ({enriched.get('method', '')})",
+            {"kind": "payment", "url": "/admin/payments", "payment_id": enriched.get("id")},
+        )
+    except Exception as e:
+        print(f"[push] admin payment notify failed: {e}")
+    return enriched
 
 
 @api.get("/tenants/{tenant_id}/balance")
@@ -3116,8 +3188,35 @@ async def kiosk_tenant_overview(tenant_id: str, _session=Depends(get_kiosk_sessi
 
 @api.post("/kiosk/payments", response_model=PaymentOut)
 async def kiosk_create_payment(body: PaymentIn, _session=Depends(get_kiosk_session)):
-    doc = await _create_payment_doc(body, _session.get("company_id"))
-    return await _enrich_payment(doc)
+    cid = _session.get("company_id")
+    doc = await _create_payment_doc(body, cid)
+    enriched = await _enrich_payment(doc)
+
+    # Push notify alle admins van deze company (fire-and-forget — niet
+    # blocking voor de kiosk UX als pywebpush traag is, maar de kiosk wacht
+    # toch al op de receipt response).
+    try:
+        currency = enriched.get("currency", "")
+        amount = float(enriched.get("amount", 0))
+        tenant = enriched.get("tenant_name", "Onbekend")
+        apt = enriched.get("apartment_number")
+        method = enriched.get("method", "")
+        apt_str = f" · Appt. {apt}" if apt else ""
+        await _notify_company_admins(
+            cid,
+            "Nieuwe betaling ontvangen",
+            f"{tenant}{apt_str} betaalde {currency} {amount:,.2f} via {method}",
+            {
+                "kind": "payment",
+                "url": "/admin/payments",
+                "payment_id": enriched.get("id"),
+                "amount": amount,
+                "tenant": tenant,
+            },
+        )
+    except Exception as e:
+        print(f"[push] kiosk payment notify failed: {e}")
+    return enriched
 
 
 @api.get("/kiosk/tenants/{tenant_id}/payments")
@@ -4115,6 +4214,39 @@ async def verify_pdf_token(token: str):
 from push_service import send_push  # noqa: E402
 
 VAPID_PUBLIC_KEY = os.environ.get("VAPID_PUBLIC_KEY", "")
+
+
+async def _notify_company_admins(company_id: str, title: str, body: str, data: dict | None = None) -> int:
+    """Stuur een push naar ALLE admins van een bepaalde company.
+
+    Wordt gebruikt voor automatische meldingen zoals:
+      • nieuwe kiosk-betaling
+      • achterstand-alert
+      • nieuwe factuur
+
+    Verlopen subs worden direct opgeschoond. Faalt nooit hard — return
+    aantal succesvol verzonden.
+    """
+    if not company_id:
+        return 0
+    # Vind alle admin/owner users van deze company
+    admin_ids = []
+    async for u in db.users.find(
+        {"company_id": company_id, "role": {"$in": ["admin", "owner"]}},
+        {"_id": 0, "id": 1},
+    ):
+        admin_ids.append(u["id"])
+    if not admin_ids:
+        return 0
+    sent = 0
+    async for sub in db.push_subs.find({"user_id": {"$in": admin_ids}}, {"_id": 0}):
+        info = {"endpoint": sub["endpoint"], "keys": sub["keys"]}
+        ok = send_push(info, title, body, data or {})
+        if ok:
+            sent += 1
+        else:
+            await db.push_subs.delete_one({"endpoint": sub["endpoint"]})
+    return sent
 
 
 class PushSubscriptionIn(BaseModel):
