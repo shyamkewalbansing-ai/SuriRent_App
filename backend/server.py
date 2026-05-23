@@ -247,6 +247,7 @@ class ApartmentIn(BaseModel):
     currency: Literal["SRD", "USD", "EUR"] = "SRD"
     description: Optional[str] = ""
     location_id: Optional[str] = None
+    photo_url: Optional[str] = ""
 
 
 class ApartmentOut(ApartmentIn):

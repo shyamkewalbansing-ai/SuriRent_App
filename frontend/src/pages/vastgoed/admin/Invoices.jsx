@@ -54,12 +54,29 @@ function groupByTenant(invoices) {
     if (inv.apartment_number) g.apartment_number = inv.apartment_number;
     if (inv.location_name) g.location_name = inv.location_name;
   }
+  // Bepaal de huidige (1-based) periode-cursor zodat we openstaande maanden
+  // kunnen splitsen in "achterstand" (vóór deze maand) en "toekomstig"
+  // (vanaf deze maand). Een factuur voor sep 2026 terwijl we in mei 2026
+  // zijn is dus géén achterstand maar een vooruitbetaalde / komende
+  // factuur.
+  const now = new Date();
+  const curY = now.getFullYear();
+  const curM = now.getMonth() + 1;
+  const isOverdueInv = (inv) => (
+    inv.period_year < curY || (inv.period_year === curY && inv.period_month < curM)
+  );
   for (const g of map.values()) {
     g.open.sort((a, b) => (a.period_year - b.period_year) || (a.period_month - b.period_month));
     g.all.sort((a, b) => (a.period_year - b.period_year) || (a.period_month - b.period_month));
+    g.overdue = g.open.filter(isOverdueInv);
+    g.upcoming = g.open.filter((i) => !isOverdueInv(i));
     g.openCount = g.open.length;
+    g.overdueCount = g.overdue.length;
+    g.upcomingCount = g.upcoming.length;
     g.totalOpen = g.open.reduce((s, i) => s + Number(i.amount || 0), 0);
-    g.severity = g.openCount >= 2 ? 'critical' : g.openCount === 1 ? 'late' : 'ok';
+    g.totalOverdue = g.overdue.reduce((s, i) => s + Number(i.amount || 0), 0);
+    // Severity baseert nu op échte achterstand (niet toekomstige facturen).
+    g.severity = g.overdueCount >= 2 ? 'critical' : g.overdueCount === 1 ? 'late' : 'ok';
     g.lastOpen = g.open[g.open.length - 1];
     g.periodLabel = g.open
       .map((i) => `${MONTHS_NL[i.period_month - 1]}`)
@@ -152,14 +169,24 @@ function ReminderModal({ group, initialChannel = 'whatsapp', onClose, onSent }) 
 // =====================================================================
 // Tenant row
 // =====================================================================
-function StatusPill({ severity, openCount }) {
-  if (severity === 'ok') return (
-    <span className="inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-md bg-emerald-50 text-emerald-700">
-      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Op tijd
-    </span>
-  );
+function StatusPill({ severity, overdueCount, upcomingCount }) {
+  if (severity === 'ok') {
+    if (upcomingCount > 0) {
+      return (
+        <span className="inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-md bg-blue-50 text-blue-700">
+          <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+          {upcomingCount === 1 ? '1 komende factuur' : `${upcomingCount} komende facturen`}
+        </span>
+      );
+    }
+    return (
+      <span className="inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-md bg-emerald-50 text-emerald-700">
+        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Op tijd
+      </span>
+    );
+  }
   const t = severity === 'critical'
-    ? { bg: 'bg-red-50', fg: 'text-red-700', dot: 'bg-red-500', label: `${openCount} maanden achter` }
+    ? { bg: 'bg-red-50', fg: 'text-red-700', dot: 'bg-red-500', label: `${overdueCount} maanden achter` }
     : { bg: 'bg-orange-50', fg: 'text-orange-700', dot: 'bg-orange-500', label: '1 maand achter' };
   return (
     <span className={`inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-md ${t.bg} ${t.fg}`}>
@@ -179,11 +206,16 @@ function MonthChip({ month, severity }) {
 
 function TenantRow({ group, expanded, onToggle, onReminder, tenants }) {
   const sev = group.severity;
+  const _now = new Date();
+  const curY = _now.getFullYear();
+  const curM = _now.getMonth() + 1;
   const left = sev === 'critical' ? 'border-l-red-500'
     : sev === 'late' ? 'border-l-orange-500'
+    : group.upcomingCount > 0 ? 'border-l-blue-400'
     : 'border-l-emerald-500';
   const amtCls = sev === 'critical' ? 'text-red-600'
     : sev === 'late' ? 'text-orange-600'
+    : group.upcomingCount > 0 ? 'text-blue-600'
     : 'text-slate-900';
   const avatar = avatarColor(group.tenant_name);
   const last = group.lastOpen;
@@ -212,13 +244,13 @@ function TenantRow({ group, expanded, onToggle, onReminder, tenants }) {
             </p>
             {/* Mobiel: status pill onder de naam (geen aparte Open maanden kolom op mobiel) */}
             <div className="mt-1 md:hidden">
-              <StatusPill severity={sev} openCount={group.openCount} />
+              <StatusPill severity={sev} overdueCount={group.overdueCount} upcomingCount={group.upcomingCount} />
             </div>
           </div>
 
           {/* Open maanden kolom — alleen status pill, details verschijnen bij uitklappen */}
           <div className="hidden md:flex items-center">
-            <StatusPill severity={sev} openCount={group.openCount} />
+            <StatusPill severity={sev} overdueCount={group.overdueCount} upcomingCount={group.upcomingCount} />
           </div>
 
           {/* Laatste periode — desktop only, compact */}
@@ -226,7 +258,13 @@ function TenantRow({ group, expanded, onToggle, onReminder, tenants }) {
             {last ? (
               <>
                 <p className="text-slate-700 font-semibold capitalize truncate">{MONTHS_NL[last.period_month - 1].slice(0, 3)} {last.period_year}</p>
-                <p className={`font-bold ${sev === 'critical' ? 'text-red-500' : 'text-orange-500'}`}>Niet betaald</p>
+                <p className={`font-bold ${
+                  sev === 'critical' ? 'text-red-500'
+                    : sev === 'late' ? 'text-orange-500'
+                    : 'text-blue-500'
+                }`}>
+                  {sev === 'ok' ? 'Komt nog' : 'Niet betaald'}
+                </p>
               </>
             ) : (
               <p className="text-emerald-600 font-semibold">Geen</p>
@@ -256,20 +294,37 @@ function TenantRow({ group, expanded, onToggle, onReminder, tenants }) {
       {/* Uitgeklapte details */}
       {expanded && group.openCount > 0 && (
         <div className="px-3 sm:px-4 pb-4 -mt-1" data-testid={`tenant-detail-${group.tenant_id}`}>
-          <div className={`rounded-2xl p-4 ${sev === 'critical' ? 'bg-red-50' : 'bg-orange-50'}`}>
+          <div className={`rounded-2xl p-4 ${
+            sev === 'critical' ? 'bg-red-50'
+              : sev === 'late' ? 'bg-orange-50'
+              : 'bg-blue-50'
+          }`}>
             <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-4">
               {/* LEFT — list of open months */}
               <div>
-                <p className={`text-sm font-bold mb-3 ${sev === 'critical' ? 'text-red-700' : 'text-orange-700'}`}>
-                  Openstaande maanden ({group.openCount})
+                <p className={`text-sm font-bold mb-3 ${
+                  sev === 'critical' ? 'text-red-700'
+                    : sev === 'late' ? 'text-orange-700'
+                    : 'text-blue-700'
+                }`}>
+                  {sev === 'ok' ? `Komende facturen (${group.upcomingCount})` : `Openstaande maanden (${group.openCount})`}
                 </p>
                 <div className="space-y-1.5">
-                  {group.open.map((inv) => (
+                  {group.open.map((inv) => {
+                    const isOverdue = (inv.period_year < curY) || (inv.period_year === curY && inv.period_month < curM);
+                    return (
                     <div key={inv.id} className="flex items-center justify-between gap-2 text-sm"
                       data-testid={`invoice-row-${inv.id}`}>
                       <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${sev === 'critical' ? 'bg-red-500' : 'bg-orange-500'}`} />
+                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                          !isOverdue ? 'bg-blue-500'
+                            : sev === 'critical' ? 'bg-red-500'
+                            : 'bg-orange-500'
+                        }`} />
                         <span className="text-slate-700 capitalize truncate">{MONTHS_NL[inv.period_month - 1]} {inv.period_year}</span>
+                        {!isOverdue && (
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 uppercase tracking-wider">Komt nog</span>
+                        )}
                         <span className="text-[10px] text-slate-400 hidden sm:inline">· {inv.invoice_number}</span>
                       </div>
                       <span className="text-slate-700 font-semibold whitespace-nowrap">{fmtMoney(inv.amount, inv.currency)}</span>
@@ -289,14 +344,23 @@ function TenantRow({ group, expanded, onToggle, onReminder, tenants }) {
                         <Check className="w-3.5 h-3.5" strokeWidth={3} />
                       </button>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
 
               {/* RIGHT — totaal (apart blok met dunne separator op desktop) */}
-              <div className="md:border-l md:border-orange-200 md:pl-4 md:min-w-[160px] flex md:flex-col justify-between md:justify-center items-end md:items-end">
+              <div className={`md:pl-4 md:min-w-[160px] flex md:flex-col justify-between md:justify-center items-end md:items-end md:border-l ${
+                sev === 'critical' ? 'md:border-red-200'
+                  : sev === 'late' ? 'md:border-orange-200'
+                  : 'md:border-blue-200'
+              }`}>
                 <p className="text-xs font-bold text-slate-500">Totaal openstaand</p>
-                <p className={`text-xl sm:text-2xl font-black tracking-tight ${sev === 'critical' ? 'text-red-600' : 'text-orange-600'}`}>
+                <p className={`text-xl sm:text-2xl font-black tracking-tight ${
+                  sev === 'critical' ? 'text-red-600'
+                    : sev === 'late' ? 'text-orange-600'
+                    : 'text-blue-600'
+                }`}>
                   {fmtMoney(group.totalOpen, group.currency)}
                 </p>
               </div>

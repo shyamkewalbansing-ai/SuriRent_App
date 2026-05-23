@@ -35,6 +35,7 @@ import LiveIndicator from '../../components/LiveIndicator';
 import OverdueBell from '../../components/OverdueBell';
 import ApartmentsBell from '../../components/ApartmentsBell';
 import QuickPayButton from '../../components/QuickPayButton';
+import PhotoUpload from '../../components/PhotoUpload';
 
 const BASE_TABS = [
   { id: 'overview', label: 'Overzicht', icon: LayoutDashboard },
@@ -734,7 +735,7 @@ function Overview() {
 
 // ============== Apartments ==============
 function ApartmentForm({ initial, onCancel, onSaved }) {
-  const [data, setData] = useState(initial || { number: '', address: '', rent_amount: 0, currency: 'SRD', description: '', location_id: '' });
+  const [data, setData] = useState(initial || { number: '', address: '', rent_amount: 0, currency: 'SRD', description: '', location_id: '', photo_url: '' });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [locations, setLocations] = useState([]);
@@ -820,6 +821,12 @@ function ApartmentForm({ initial, onCancel, onSaved }) {
               data-testid="apt-description" rows={2}
               className="w-full mt-1 px-4 py-3 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] outline-none resize-none" />
           </div>
+          <PhotoUpload
+            value={data.photo_url}
+            onChange={(url) => setData({ ...data, photo_url: url })}
+            label="Foto van het appartement"
+            testId="apt-photo"
+          />
         </div>
         <div className="flex gap-3 mt-6">
           <button onClick={onCancel} className="flex-1 h-12 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold">Annuleren</button>
@@ -898,17 +905,31 @@ function Apartments() {
         )}
         {filtered.map((a) => (
           <div key={a.id} data-testid={`apt-card-${a.id}`}
-            className="bg-white rounded-2xl border border-orange-100 p-5 hover:border-[#FF5C00]/30 transition-colors">
+            className="bg-white rounded-2xl border border-orange-100 overflow-hidden hover:border-[#FF5C00]/30 transition-colors flex flex-col">
+            {a.photo_url && (
+              <div className="relative w-full h-32 bg-slate-100 shrink-0">
+                <img src={a.photo_url} alt={a.number} className="w-full h-full object-cover"
+                  onError={(e) => { e.currentTarget.parentElement.style.display = 'none'; }} />
+                <span className={`absolute top-2 right-2 text-[10px] font-black uppercase tracking-wider px-2 py-1 rounded-full ring-2 ring-white ${
+                  a.status === 'occupied' ? 'bg-emerald-500 text-white' : 'bg-slate-700 text-white'
+                }`}>
+                  {a.status === 'occupied' ? 'Bezet' : 'Vacant'}
+                </span>
+              </div>
+            )}
+            <div className="p-5 flex-1 flex flex-col">
             <div className="flex items-start justify-between mb-3">
               <div>
                 <p className="text-xs font-black uppercase tracking-widest text-[#FF5C00]">Appt. {a.number}</p>
                 <p className="text-sm text-slate-500 mt-0.5 truncate">{a.address || '—'}</p>
               </div>
-              <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-1 rounded-full ${
-                a.status === 'occupied' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'
-              }`}>
-                {a.status === 'occupied' ? 'Bezet' : 'Vacant'}
-              </span>
+              {!a.photo_url && (
+                <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-1 rounded-full ${
+                  a.status === 'occupied' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'
+                }`}>
+                  {a.status === 'occupied' ? 'Bezet' : 'Vacant'}
+                </span>
+              )}
             </div>
             <div className="bg-gradient-to-r from-[#FFF4EC] to-[#FFE6D3] border border-[#FF5C00]/20 rounded-xl p-3 mb-3">
               <p className="text-xs font-bold text-[#C74600]">Maandhuur</p>
@@ -947,6 +968,7 @@ function Apartments() {
                 className="w-10 h-10 rounded-xl bg-red-50 hover:bg-red-100 text-red-500 flex items-center justify-center">
                 <Trash2 className="w-4 h-4" />
               </button>
+            </div>
             </div>
           </div>
         ))}
