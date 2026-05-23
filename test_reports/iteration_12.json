@@ -1,0 +1,44 @@
+{
+  "summary": "Iteration 12 — Per-company PIN uniqueness on /api/auth/tenant-set-pin + new PIN-only login endpoint /api/tenant-portal/pin-login + redesigned PIN-only Huurder Kiosk UI. Backend: 15 NEW pytest cases in test_tenant_pin_unique_and_pinlogin.py — all PASS (1 was originally skipped, restructured to use superadmin x-active-company → now PASS). Covers (a) set-pin uniqueness within a company → 409 with the conflicting tenant name in the Dutch detail; (b) same-tenant + same-PIN idempotent → 200; (c) cross-company isolation: a tenant in a DIFFERENT company can re-use PIN 5678 (verified via superadmin x-active-company header against gopi-appartement-s); (d) pin-login via company_slug AND company_id both return 200 + token; (e) wrong PIN → 401, missing context → 400, unknown slug → 400; (f) cross-company no-leak: PIN 5678 against company B does NOT return Bharat (company A); (g) throttle: 8 wrong PINs → 429 lockout; (h) legacy POST /api/tenant-portal/login (identifier+pin) still works. Regression: full run of test_tenant_kiosk.py + test_kiosk_qr_sticker.py — 24 PASS, 1 SKIP (env: no open invoice, pre-existing). Frontend Playwright: /kiosk/huurder?c=surirent shows PIN-only UI (zero tk-email-input, zero 'Doorgaan' button), pinpad visible, footer with 'KEWALBANSING' (app_name) + 'Uit' button, brand-primary CSS var = #ff5c00, wrong PIN triggers red shake + 'Onjuiste PIN' error + auto-clear, correct PIN 5678 → tk-dashboard with balance + 4 tiles, each tile navigates to its view and back. QR mode (?apt=...) shows 'Welkom Bharat' + 'Appartement HUIS 7K' badge, no email input. No-context /kiosk/huurder shows inline error 'Geen bedrijfscontext gevonden — open de Huurder Kiosk via de QR-code.' when PIN submitted.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Tenant kiosk login", "issues": ["Welcome title uses branding.app_name first ('KEWALBANSING') which is the original admin's app_name for the SuriRent company — feels mismatched with the slug. Consider preferring company.name (e.g. 'SuriRent N.V.') over app_name on the kiosk login screen, or letting the admin set a kiosk-specific brand name."]},
+      {"screen": "Tenant kiosk dashboard", "issues": ["Pre-existing (iter 11): negative balance (SRD -271.848,94) still rendered with positive 'U bent volledig bij. Bedankt!' messaging. Consider clamping or showing 'Tegoed'.", "All-orange palette: tile titles + subtitles are white/orange-tinted on orange background — secondary text ('Geen openstaande facturen', 'Meld een probleem in uw woning', 'Bekijk uw contract & info', 'Bel of WhatsApp ons') has low contrast (visually faint). Consider darker text or a white tile background."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_tenant_pin_unique_and_pinlogin.py",
+    "/app/test_reports/pytest/iteration12_pinlogin.xml",
+    "/app/test_reports/pytest/iteration12_regression.xml"
+  ],
+  "action_items": [
+    "(Optional, design) Improve contrast of secondary text on dashboard tiles — currently white-on-orange is barely visible.",
+    "(Optional, branding) Reconsider showing branding.app_name ('KEWALBANSING') as the welcome heading on the SuriRent kiosk — branding.name ('SuriRent N.V.') would feel more correct.",
+    "(Pre-existing, iter 10/11) Clamp negative balance to 0 or label as 'Tegoed' in DashboardView.",
+    "(Optional, minor) Two 401/404 console errors on initial /kiosk/huurder mount — overview fetch fires before tenant_token exists; also lookup-apartment returns 404 when ?apt= absent — already swallowed by UI, only console noise."
+  ],
+  "critical_code_review_comments": [
+    "admin_set_tenant_pin uniqueness loop in server.py (lines 2657-2668): O(N) per-set call iterating ALL tenants of the company with pin_hash to verify_password. For companies with thousands of tenants this could become slow (bcrypt is intentionally slow). Acceptable today (small N), but worth noting for scale.",
+    "tenant_portal_pin_login (lines 2691-2729) likewise does an async iteration over all tenants with pin_hash and bcrypt-verifies each. Same scale concern. Mitigations: store an HMAC-of-pin index for fast lookup (then bcrypt-verify only the candidate), or migrate to per-tenant deterministic salt.",
+    "company_slug is lowercased before lookup (good). company_id path skips lookup entirely — make sure callers cannot pass an arbitrary company_id to fish for tenants of companies they shouldn't access. Currently the endpoint is PUBLIC, so a leaked company_id allows brute-forcing PINs of that company — mitigated by per-IP+company throttle (8 attempts → 5 min lockout). OK as designed but worth documenting.",
+    "TenantPinLoginIn: pin field is min_length=4, max_length=4 — good. Server also re-checks isdigit. Validation layered correctly.",
+    "TenantKioskLayout.jsx LoginView prefers prefill.email path even when branding is loaded — correct (QR-mode short-circuits PIN-only). The fallback order (id → slug → throw) is fine; throw message is in Dutch and surfaced via tk-pin-error.",
+    "server.py is now ~5360 lines (iter 11 was 5299). Continues to grow. Recommend extracting tenant-portal routes when convenient.",
+    "Hard-coded TENANT_TOKEN_KEY in TenantKioskLayout.jsx is consistent with iter 11 — OK.",
+    "branding.app_name appears as the prominent welcome heading on kiosk login. For Surirent the seeded app_name is 'KEWALBANSING' (was set by an earlier iteration) — looks confusing on a SuriRent-slug URL. Functional correctness is fine; UX/branding ordering is questionable."
+  ],
+  "updated_files": ["/app/backend/tests/test_tenant_pin_unique_and_pinlogin.py (NEW — 15 tests)"],
+  "success_rate": {
+    "backend": "15/15 new tests PASS (100%). Regression test_tenant_kiosk.py + test_kiosk_qr_sticker.py: 24 PASS, 1 SKIP (env — no open invoice).",
+    "frontend": "All targeted flows PASS: PIN-only login + wrong-PIN shake + correct-PIN → dashboard + 4 tile navigations + logout. QR-mode prefill PASS. No-context inline error PASS."
+  },
+  "test_credentials": "admin@vastgoed.sr / admin123 (SuriRent). Bharat id=603a112e-aced-4fd2-bd52-6744fb7756ee PIN=5678. Rayshree id=c44bf27c-c95b-4963-a301-3f0bee5f10e1 PIN=9999. Superadmin super@surirent.sr/super123 used for cross-company PIN reuse test against gopi-appartement-s (cid=5846d260-b4c0-43df-b64a-2f55873961b8). Test autouse fixture _reset_pins re-sets both PINs at module start, then test ends with explicit curl re-set to keep frontend tests happy.",
+  "seed_data_creation": "Iter 12 cross-company test set PIN 5678 on the first tenant of gopi-appartement-s. This is intentional and idempotent (re-running the test will simply re-set the same PIN). No new tenants/companies created.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Canonical re-run: `pytest backend/tests/test_tenant_pin_unique_and_pinlogin.py backend/tests/test_tenant_kiosk.py backend/tests/test_kiosk_qr_sticker.py -v`. Throttle is per-IP+company in-memory dict (PIN_MAX_ATTEMPTS=8, PIN_LOCKOUT_SECONDS=300). The TestThrottle class will lock the surirent bucket for 5 min from the test runner's IP — `sudo supervisorctl restart backend` clears it instantly (we did this between the new suite and the regression run). New endpoint: POST /api/tenant-portal/pin-login {pin, company_id|company_slug} → 200 {token,tenant} | 401 wrong PIN | 400 missing context | 429 lockout. set-pin uniqueness uses bcrypt verify_password loop — O(N) per call. Frontend testids: tk-login, tk-pinpad, tk-pin-dots, tk-pin-error, tk-key-{0-9}, tk-key-back, tk-welcome, tk-prefill-apt, tk-footer-company, tk-logout, tk-dashboard, tk-balance, tk-tile-{pay,maintenance,me,contact}, tk-pay, tk-pay-back, tk-maintenance, tk-mt-{title,desc,submit,back,prio-low/medium/high}, tk-me, tk-me-back, tk-contact, tk-contact-back, tk-call, tk-whatsapp, tk-mail.",
+  "rca of the issue": "No bugs to RCA in this iteration. All review-request requirements verified end-to-end. The cross-company set-pin test was initially skipped because admin B (test-vastgoed-b) has no tenants — replaced with a superadmin + x-active-company variant against gopi-appartement-s (the next company with tenants in the seed) which passed."
+}

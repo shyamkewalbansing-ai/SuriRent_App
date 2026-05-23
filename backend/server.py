@@ -2652,6 +2652,20 @@ async def admin_set_tenant_pin(body: TenantSetPinIn, user=Depends(get_current_us
     t = await db.tenants.find_one({"id": body.tenant_id, **scope(user)}, {"_id": 0})
     if not t:
         raise HTTPException(status_code=404, detail="Huurder niet gevonden")
+    # PIN moet uniek zijn binnen het bedrijf — zo kan de huurder later
+    # alléén met PIN inloggen (zonder e-mail) op de Huurder Kiosk.
+    cid = t.get("company_id")
+    if cid:
+        others = await db.tenants.find(
+            {"company_id": cid, "id": {"$ne": body.tenant_id}, "pin_hash": {"$exists": True, "$ne": None}},
+            {"_id": 0, "id": 1, "name": 1, "pin_hash": 1},
+        ).to_list(2000)
+        for o in others:
+            if verify_password(body.pin, o.get("pin_hash") or ""):
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"Deze PIN is al in gebruik door {o.get('name', 'een andere huurder')} — kies een andere code.",
+                )
     await db.tenants.update_one(
         {"id": body.tenant_id, **scope(user)},
         {"$set": {
@@ -2666,6 +2680,53 @@ async def admin_set_tenant_pin(body: TenantSetPinIn, user=Depends(get_current_us
 async def tenant_portal_logout(response: Response):
     response.delete_cookie("tenant_token", path="/")
     return {"ok": True}
+
+
+class TenantPinLoginIn(BaseModel):
+    pin: str = Field(min_length=4, max_length=4)
+    company_id: Optional[str] = None
+    company_slug: Optional[str] = None
+
+
+@api.post("/tenant-portal/pin-login")
+async def tenant_portal_pin_login(body: TenantPinLoginIn, request: Request, response: Response):
+    """PIN-only login voor de Huurder Kiosk.
+    De PIN is uniek per bedrijf (afgedwongen bij `tenant-set-pin`), dus
+    we hebben naast de PIN een bedrijfscontext nodig (slug of id) om de
+    juiste huurder te vinden. Zonder context: 400.
+    """
+    if not body.pin.isdigit():
+        raise HTTPException(status_code=400, detail="PIN moet 4 cijfers zijn")
+    cid = body.company_id
+    if not cid and body.company_slug:
+        c = await db.companies.find_one({"slug": body.company_slug.lower()}, {"_id": 0, "id": 1})
+        cid = c["id"] if c else None
+    if not cid:
+        raise HTTPException(status_code=400, detail="Bedrijfscontext ontbreekt")
+    throttle_key = f"tenant-pin:{_client_ip(request)}:{cid}"
+    _pin_throttle_check(throttle_key)
+    cursor = db.tenants.find(
+        {"company_id": cid, "pin_hash": {"$exists": True, "$ne": None}},
+        {"_id": 0, "id": 1, "name": 1, "email": 1, "phone": 1, "pin_hash": 1, "company_id": 1, "apartment_id": 1},
+    )
+    match = None
+    async for t in cursor:
+        if verify_password(body.pin, t.get("pin_hash") or ""):
+            match = t
+            break
+    if not match:
+        _pin_throttle_fail(throttle_key)
+        raise HTTPException(status_code=401, detail="Onjuiste PIN")
+    _pin_throttle_clear(throttle_key)
+    token = create_token({"sub": match["id"], "type": "tenant"}, TENANT_TOKEN_MIN)
+    _set_access_cookie(response, token, name="tenant_token", minutes=TENANT_TOKEN_MIN)
+    return {
+        "token": token,
+        "tenant": {
+            "id": match["id"], "name": match.get("name"),
+            "email": match.get("email"), "phone": match.get("phone"),
+        },
+    }
 
 
 @api.get("/tenant-portal/me")
