@@ -27,20 +27,38 @@ export default function RotateNotice() {
     };
     tryLock();
 
-    // Detectie via CSS-class op de body zodat we exact dezelfde breakpoint
-    // gebruiken voor de overlay-zichtbaarheid (zie index.css).
-    const mq = window.matchMedia('(orientation: landscape) and (max-device-width: 926px), (orientation: landscape) and (max-height: 500px) and (max-width: 926px)');
-    const update = () => setShow(mq.matches);
+    // Robuuste phone-detectie: pak de KORTSTE schermzijde. Dit getal
+    // verandert niet bij rotatie en is dus betrouwbaar om "telefoon vs
+    // tablet" te onderscheiden. Drempel = 540 CSS-px.
+    //   • iPhone 15 Pro Max: short = 430 → telefoon
+    //   • Samsung S24 Ultra: short = 412 → telefoon
+    //   • iPad mini 6:      short = 744 → tablet (geen overlay)
+    //   • iPad Pro 11":     short = 834 → tablet (geen overlay)
+    //   • iPad Pro 12.9":   short = 1024 → tablet (geen overlay)
+    const isPhoneDevice = () => {
+      const w = window.screen?.width || window.innerWidth;
+      const h = window.screen?.height || window.innerHeight;
+      return Math.min(w, h) < 540;
+    };
+
+    const update = () => {
+      if (!isPhoneDevice()) { setShow(false); return; }
+      // Bij telefoon: alleen in landscape oriëntatie tonen.
+      const landscape = window.matchMedia('(orientation: landscape)').matches;
+      setShow(landscape);
+    };
+
     update();
-    if (mq.addEventListener) mq.addEventListener('change', update);
-    else mq.addListener(update);
     window.addEventListener('orientationchange', update);
     window.addEventListener('resize', update);
+    const mq = window.matchMedia('(orientation: landscape)');
+    if (mq.addEventListener) mq.addEventListener('change', update);
+    else mq.addListener(update);
     return () => {
-      if (mq.removeEventListener) mq.removeEventListener('change', update);
-      else mq.removeListener(update);
       window.removeEventListener('orientationchange', update);
       window.removeEventListener('resize', update);
+      if (mq.removeEventListener) mq.removeEventListener('change', update);
+      else mq.removeListener(update);
     };
   }, []);
 
