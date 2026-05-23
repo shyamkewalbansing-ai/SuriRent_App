@@ -200,7 +200,7 @@ function MobileTopLogo({ user, activeCompany }) {
     <header className="xl:hidden sticky top-0 z-30 bg-[#FFF7F0]/85 backdrop-blur-md"
       style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
       data-testid="mobile-top-logo">
-      <div className="px-4 md:px-6 py-3 md:py-4 landscape:py-1.5 flex items-center gap-3 md:gap-4 landscape:gap-2 max-w-3xl md:mx-auto md:w-full">
+      <div className="px-4 md:px-8 py-3 md:py-4 landscape:py-1.5 flex items-center gap-3 md:gap-4 landscape:gap-2 max-w-4xl md:mx-auto md:w-full">
         <div className="w-12 h-12 md:w-14 md:h-14 landscape:w-9 landscape:h-9 rounded-2xl landscape:rounded-xl bg-gradient-to-br from-[#FF8A3D] to-[#C74600] p-1.5 md:p-2 landscape:p-1 shadow-[0_10px_22px_-6px_rgba(255,92,0,0.55)] shrink-0">
           <img src="/kiosk-icons/kiosk-512.png" alt="SuriRent" className="w-full h-full object-contain" />
         </div>
@@ -383,16 +383,19 @@ function MobileTabBar({ active, onChange, tabs, onOpenMenu, user, badgeCount }) 
 
   return (
     <nav
-      className="xl:hidden fixed bottom-0 inset-x-0 z-40 bg-white/90 backdrop-blur-xl border-t border-orange-100/70 shadow-[0_-12px_36px_-12px_rgba(15,23,42,0.18)]"
+      className="xl:hidden fixed bottom-0 inset-x-0 z-40"
       data-testid="mobile-tab-bar"
     >
-      {/* Brand accent line top-center */}
-      <div aria-hidden className="absolute top-0 left-1/2 -translate-x-1/2 w-12 h-[3px] rounded-full bg-gradient-to-r from-[#FF8A3D] to-[#FF5C00] opacity-90" />
+      {/* Op iPad (md+) zwevende rounded bar i.p.v. fullwidth strip — geeft
+          duidelijker visueel ruststation tussen content en navigatie. */}
+      <div className="bg-white/90 backdrop-blur-xl border-t md:border md:border-orange-100 md:rounded-3xl border-orange-100/70 shadow-[0_-12px_36px_-12px_rgba(15,23,42,0.18)] md:shadow-[0_18px_36px_-12px_rgba(15,23,42,0.18)] md:mx-auto md:max-w-2xl md:mb-3 relative">
+        {/* Brand accent line top-center */}
+        <div aria-hidden className="absolute top-0 left-1/2 -translate-x-1/2 w-12 h-[3px] rounded-full bg-gradient-to-r from-[#FF8A3D] to-[#FF5C00] opacity-90 md:hidden" />
 
-      <div
-        className="grid grid-cols-5 gap-0.5 px-1.5 md:px-4 pt-3 md:pt-4 landscape:pt-1 max-w-3xl mx-auto"
-        style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 12px)' }}
-      >
+        <div
+          className="grid grid-cols-5 gap-0.5 px-1.5 md:px-3 pt-3 md:pt-2 landscape:pt-1"
+          style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 12px)' }}
+        >
         {left.map(renderTab)}
 
         {/* Center FAB — opent het volledige menu. Compact (44×44), oranje
@@ -416,6 +419,7 @@ function MobileTabBar({ active, onChange, tabs, onOpenMenu, user, badgeCount }) 
         </div>
 
         {right.map(renderTab)}
+        </div>
       </div>
     </nav>
   );
@@ -1559,7 +1563,7 @@ export default function AdminDashboard() {
         <DesktopTopBar user={user} activeCompany={activeCompany} tab={tab} tabs={tabs} />
         <ImpersonationBanner />
         <TrialBanner />
-        <main className="flex-1 p-5 xl:p-8 xl:pt-3 pb-32 xl:pb-8 w-full">
+        <main className="flex-1 p-5 md:px-8 md:py-7 xl:p-8 xl:pt-3 pb-32 xl:pb-8 w-full max-w-4xl xl:max-w-none md:mx-auto">
           {tab === 'companies' && <Companies />}
           {tab === 'subscriptions' && <Subscriptions />}
           {tab === 'saas_settings' && <SaasSettings />}
