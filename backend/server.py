@@ -3572,6 +3572,30 @@ async def update_customer_display(body: CustomerDisplayIn, request: Request):
     return {"ok": True, "updated_at": new_state["updated_at"]}
 
 
+@api.get("/kiosk/customer-display")
+async def kiosk_get_customer_display(request: Request):
+    """Authenticated readback voor admin Kiosk — geen slug nodig, gebruikt
+    de company van de huidige sessie. Zo werkt de polling ook wanneer de
+    pwa_company_slug niet in localStorage staat."""
+    cid = None
+    try:
+        ks = await get_kiosk_session(request)
+        cid = ks.get("company_id")
+    except HTTPException:
+        pass
+    if not cid:
+        try:
+            user = await get_current_user(request)
+            cid = company_id_of(user)
+        except HTTPException:
+            cid = None
+    if not cid:
+        raise HTTPException(status_code=401, detail="Niet ingelogd op kiosk")
+    doc = await db.customer_display.find_one({"company_id": cid}, {"_id": 0})
+    return {"state": (doc or {}).get("state") or {"step": "idle"}}
+
+
+
 @api.delete("/kiosk/customer-display")
 async def clear_customer_display(request: Request):
     cid = None
