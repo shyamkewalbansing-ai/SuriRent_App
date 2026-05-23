@@ -127,17 +127,23 @@ function MobileHeader_REMOVED({ activeCompany, user, onOpenMenu }) {
 }
 
 function MobileTopLogo({ user, activeCompany }) {
-  // Minimalistische topbar: alleen het brand-logo links, geen menu-knop,
-  // geen bedrijfsnaam (die staat in de "+"-sheet). Houdt het scherm rustig
-  // en geeft maximale ruimte aan de content.
-  void user; void activeCompany; // niet meer gebruikt — bewaard voor eventuele toekomstige badge
+  // Minimalistische topbar: brand-logo links + bedrijfsnaam (geen menu-knop,
+  // geen Kiosk-knop, geen Live indicator — die zitten in de "+"-sheet).
   return (
     <header className="xl:hidden sticky top-0 z-30 bg-[#FFF7F0]/85 backdrop-blur-md"
       style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
       data-testid="mobile-top-logo">
-      <div className="px-4 py-2.5 flex items-center">
-        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#FF8A3D] to-[#C74600] p-1 shadow-[0_8px_18px_-6px_rgba(255,92,0,0.55)]">
+      <div className="px-4 py-2.5 flex items-center gap-3">
+        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#FF8A3D] to-[#C74600] p-1 shadow-[0_8px_18px_-6px_rgba(255,92,0,0.55)] shrink-0">
           <img src="/kiosk-icons/kiosk-512.png" alt="SuriRent" className="w-full h-full object-contain" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-black text-slate-900 leading-tight truncate" data-testid="mobile-top-name">
+            {activeCompany?.name || (user?.role === 'superadmin' ? 'Alle bedrijven' : 'SuriRent')}
+          </p>
+          <p className="text-[10px] text-[#FF5C00] font-bold tracking-[0.18em] uppercase truncate">
+            {user?.role === 'superadmin' ? 'Superadmin' : 'Beheer'}{activeCompany?.plan ? ` · ${activeCompany.plan}` : ''}
+          </p>
         </div>
       </div>
     </header>
@@ -309,19 +315,18 @@ function MobileTabBar({ active, onChange, tabs, onOpenMenu, user, badgeCount }) 
       >
         {left.map(renderTab)}
 
-        {/* Center FAB — opent het volledige menu (alles wat voorheen in de
-            bovenste menubar zat). Verhoogd, oranje gradient, met witte ring
-            zodat hij visueel "drijft" boven de bar. */}
+        {/* Center FAB — opent het volledige menu. Compact (44×44), oranje
+            gradient, met witte ring zodat hij visueel "drijft" boven de bar. */}
         <div className="flex items-end justify-center pb-0.5">
           <button
             onClick={onOpenMenu}
             data-testid="mobile-fab-menu"
             aria-label="Open menu"
-            className="relative -mt-7 w-14 h-14 rounded-2xl bg-gradient-to-br from-[#FF8A3D] to-[#FF5C00] text-white flex items-center justify-center shadow-[0_12px_28px_-8px_rgba(255,92,0,0.7)] ring-4 ring-white active:scale-95 transition-all"
+            className="relative -mt-4 w-11 h-11 rounded-full bg-gradient-to-br from-[#FF8A3D] to-[#FF5C00] text-white flex items-center justify-center shadow-[0_8px_20px_-6px_rgba(255,92,0,0.65)] ring-[3px] ring-white active:scale-95 transition-all"
           >
-            <Plus className="w-7 h-7" strokeWidth={2.6} />
+            <Plus className="w-5 h-5" strokeWidth={2.8} />
             {badgeCount > 0 && (
-              <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-black flex items-center justify-center ring-2 ring-white"
+              <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-black flex items-center justify-center ring-2 ring-white"
                 data-testid="mobile-fab-badge">
                 {badgeCount > 9 ? '9+' : badgeCount}
               </span>
