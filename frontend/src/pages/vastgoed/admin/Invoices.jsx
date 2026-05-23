@@ -204,16 +204,9 @@ function TenantRow({ group, expanded, onToggle, onReminder }) {
             </div>
           </div>
 
-          {/* Open maanden + status pill — desktop only */}
-          <div className="hidden md:flex flex-col items-start gap-1">
+          {/* Open maanden kolom — alleen status pill, details verschijnen bij uitklappen */}
+          <div className="hidden md:flex items-center">
             <StatusPill severity={sev} openCount={group.openCount} />
-            {group.openCount > 0 && (
-              <div className="flex flex-wrap gap-1">
-                {group.open.slice(-4).map((inv) => (
-                  <MonthChip key={inv.id} month={MONTHS_NL[inv.period_month - 1].slice(0, 3).toLowerCase()} severity={sev} />
-                ))}
-              </div>
-            )}
           </div>
 
           {/* Laatste periode — desktop only, compact */}
@@ -246,11 +239,6 @@ function TenantRow({ group, expanded, onToggle, onReminder }) {
             ? <ChevronDown className="w-4 h-4 text-slate-400" />
             : <ChevronRight className="w-4 h-4 text-slate-400" />}
         </div>
-
-        {/* MOBILE row 2 — periode (comma list) */}
-        {group.openCount > 0 && (
-          <p className="md:hidden text-xs text-slate-500 mt-2.5 pl-14">{group.periodLabel}</p>
-        )}
       </button>
 
       {/* Uitgeklapte details */}
