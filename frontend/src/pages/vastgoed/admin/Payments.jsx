@@ -5,6 +5,7 @@ import {
   TrendingUp, Receipt, Wallet,
 } from 'lucide-react';
 import { api, formatError, fmtMoney, MONTHS_NL } from '../../../lib/api';
+import { useAutoRefresh } from '../../../lib/auto-refresh';
 import { SendDialog } from '../../../components/EmailDialog';
 
 // =====================================================================
@@ -412,6 +413,7 @@ export default function Payments() {
     } finally { setLoading(false); }
   }, []);
   useEffect(() => { load(); }, [load]);
+  useAutoRefresh(load, { interval: 8000, enabled: !creating && !emailing });
 
   const apiBase = `${process.env.REACT_APP_BACKEND_URL}/api`;
 

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useBadge } from '../../lib/pwa';
+import { useAutoRefresh } from '../../lib/auto-refresh';
 import {
   Building2, Users, Receipt, LayoutDashboard, LogOut, Plus, Trash2, Pencil,
   X, Check, Loader2, Search, Home, Banknote, KeySquare, ChevronRight, Wallet,
@@ -345,9 +346,11 @@ function ActivityRow({ item }) {
 function Overview() {
   const [stats, setStats] = useState(null);
   const navigate = useNavigate();
-  useEffect(() => {
-    api.get('/admin/stats').then((r) => setStats(r.data)).catch(() => setStats(null));
+  const reload = useCallback(() => {
+    api.get('/admin/stats').then((r) => setStats(r.data)).catch(() => { /* keep last */ });
   }, []);
+  useEffect(() => { reload(); }, [reload]);
+  useAutoRefresh(reload, 10000);
   if (!stats) return <div className="text-slate-400 text-sm">Laden...</div>;
 
   const cards = [

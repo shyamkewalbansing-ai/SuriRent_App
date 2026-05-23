@@ -5,6 +5,7 @@ import {
   ChevronDown, MessageCircle, Send, SkipForward, Users,
 } from 'lucide-react';
 import { api, formatError, fmtMoney, MONTHS_NL } from '../../../lib/api';
+import { useAutoRefresh } from '../../../lib/auto-refresh';
 
 // =====================================================================
 // Helpers
@@ -579,6 +580,7 @@ export default function Invoices() {
     } finally { setLoading(false); }
   }, []);
   useEffect(() => { load(); }, [load]);
+  useAutoRefresh(load, { interval: 10000, enabled: !creating && !reminding && !bulkOpen });
 
   const generateMonth = async () => {
     if (!window.confirm(`Maandfacturen voor ${MONTHS_NL[today.getMonth()]} ${today.getFullYear()} aanmaken voor alle bezette appartementen?`)) return;
