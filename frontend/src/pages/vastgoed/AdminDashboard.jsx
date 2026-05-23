@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Building2, Users, Receipt, LayoutDashboard, LogOut, Plus, Trash2, Pencil,
   X, Check, Loader2, Search, Home, Banknote, KeySquare, ChevronRight, Wallet,
@@ -1453,12 +1453,43 @@ export default function AdminDashboard() {
   const [tab, setTab] = useState(() => (user?.role === 'superadmin' ? 'subscriptions' : 'overview'));
   const [drawerOpen, setDrawerOpen] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // URL → tab sync. Bij paden zoals /admin/invoices, /admin/payments etc.
+  // wordt de tab automatisch ingesteld. Belangrijk voor:
+  //  • Notification click handlers in de service worker (sw.js navigeert
+  //    naar /admin/invoices of /admin/notifications)
+  //  • Bookmarks / shared links
+  useEffect(() => {
+    const path = location.pathname.replace(/\/+$/, '');
+    const seg = path.split('/').filter(Boolean);
+    if (seg[0] === 'admin' && seg[1]) {
+      const wanted = seg[1];
+      if (tabs.find((t) => t.id === wanted) && wanted !== tab) {
+        setTab(wanted);
+      }
+    }
+  }, [location.pathname, tabs, tab]);
+
+  // tab → URL sync (zonder rerender storm). Update browser URL bij tab wissel.
+  const handleSetTab = (id) => {
+    setTab(id);
+    const target = `/admin/${id}`;
+    if (location.pathname !== target) {
+      navigate(target, { replace: false });
+    }
+  };
   useEffect(() => { document.title = 'SuriRent - Beheer'; }, []);
   useEffect(() => {
-    const handler = (e) => setTab(e.detail);
+    const handler = (e) => {
+      const id = e.detail;
+      setTab(id);
+      const target = `/admin/${id}`;
+      if (window.location.pathname !== target) navigate(target);
+    };
     window.addEventListener('go-tab', handler);
     return () => window.removeEventListener('go-tab', handler);
-  }, []);
+  }, [navigate]);
   // Android PWA: zorg dat de status-bar wit is (matcht de witte admin
   // mobile-header). Op iOS doet status-bar-style `black-translucent` zijn
   // werk en lift hier mee. Bij unmount zet niets terug — KioskLayout
@@ -1472,7 +1503,7 @@ export default function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-[#FFF7F0] flex">
-      <Sidebar active={tab} onChange={setTab} onLogout={doLogout}
+      <Sidebar active={tab} onChange={handleSetTab} onLogout={doLogout}
         user={user} tabs={tabs} />
       <div className="flex-1 flex flex-col min-w-0">
         <MobileHeader activeCompany={activeCompany} user={user} onOpenMenu={() => setDrawerOpen(true)} />
@@ -1500,10 +1531,10 @@ export default function AdminDashboard() {
           {tab === 'settings' && <SettingsPage />}
         </main>
       </div>
-      <MobileTabBar active={tab} onChange={setTab} tabs={tabs} user={user}
+      <MobileTabBar active={tab} onChange={handleSetTab} tabs={tabs} user={user}
         onOpenMenu={() => setDrawerOpen(true)} />
       <MobileDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)}
-        active={tab} onChange={setTab} onLogout={doLogout}
+        active={tab} onChange={handleSetTab} onLogout={doLogout}
         user={user} tabs={tabs} />
     </div>
   );

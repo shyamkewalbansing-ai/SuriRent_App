@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Bell, BellOff, Loader2, Check, AlertTriangle, Send, Shield, FileText } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { Bell, BellOff, Loader2, Check, AlertTriangle, Send, Shield, FileText, RotateCw, Smartphone } from 'lucide-react';
 import { api, formatError } from '../../../lib/api';
 
 function urlBase64ToUint8Array(base64String) {
@@ -15,10 +15,18 @@ export default function Notifications() {
   const [supported, setSupported] = useState(true);
   const [permission, setPermission] = useState('default');
   const [subscribed, setSubscribed] = useState(false);
+  const [deviceCount, setDeviceCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [msg, setMsg] = useState('');
   const [vapidKey, setVapidKey] = useState('');
+
+  const refreshStatus = useCallback(async () => {
+    try {
+      const { data } = await api.get('/push/status');
+      setDeviceCount(data.devices || 0);
+    } catch { /* noop */ }
+  }, []);
 
   useEffect(() => {
     if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
@@ -31,39 +39,72 @@ export default function Notifications() {
       const sub = await reg.pushManager.getSubscription();
       setSubscribed(!!sub);
     }).catch(() => {});
-  }, []);
+    refreshStatus();
+  }, [refreshStatus]);
+
+  // Doe de echte subscribe + opslaan naar backend. Wordt zowel gebruikt
+  // voor "Activeer" als voor "Opnieuw registreren".
+  const doSubscribe = async (force = false) => {
+    let reg = await navigator.serviceWorker.getRegistration();
+    if (!reg) reg = await navigator.serviceWorker.register('/sw.js');
+    // Wacht tot SW echt active is (ready) — anders mislukt subscribe op iOS soms
+    await navigator.serviceWorker.ready;
+
+    const perm = await Notification.requestPermission();
+    setPermission(perm);
+    if (perm !== 'granted') {
+      throw new Error('Toestemming geweigerd. Sta meldingen toe in browserinstellingen.');
+    }
+
+    let sub = await reg.pushManager.getSubscription();
+    if (sub && force) {
+      // Forceer een nieuwe subscription (handig bij "Opnieuw registreren")
+      try { await sub.unsubscribe(); } catch { /* noop */ }
+      sub = null;
+    }
+    if (!sub) {
+      if (!vapidKey) throw new Error('VAPID public key ontbreekt — kan niet abonneren');
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(vapidKey),
+      });
+    }
+    const subJson = sub.toJSON();
+    await api.post('/push/subscribe', {
+      endpoint: subJson.endpoint,
+      keys: subJson.keys,
+    });
+    return sub;
+  };
 
   const enable = async () => {
     setLoading(true); setError(''); setMsg('');
     try {
-      let reg = await navigator.serviceWorker.getRegistration('/sw.js');
-      if (!reg) reg = await navigator.serviceWorker.register('/sw.js');
-      const perm = await Notification.requestPermission();
-      setPermission(perm);
-      if (perm !== 'granted') {
-        setError('Toestemming geweigerd. Sta meldingen toe in browserinstellingen.');
-        return;
-      }
-      const sub = await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(vapidKey),
-      });
-      const subJson = sub.toJSON();
-      await api.post('/push/subscribe', {
-        endpoint: subJson.endpoint,
-        keys: subJson.keys,
-      });
+      await doSubscribe(false);
       setSubscribed(true);
-      setMsg('Push notificaties ingeschakeld!');
+      setMsg('Push notificaties ingeschakeld op dit apparaat');
+      await refreshStatus();
     } catch (e) {
-      setError(formatError(e, 'Push activeren mislukt'));
+      setError(e.message || formatError(e, 'Push activeren mislukt'));
+    } finally { setLoading(false); }
+  };
+
+  const reRegister = async () => {
+    setLoading(true); setError(''); setMsg('');
+    try {
+      await doSubscribe(true);
+      setSubscribed(true);
+      setMsg('Apparaat opnieuw geregistreerd!');
+      await refreshStatus();
+    } catch (e) {
+      setError(e.message || formatError(e));
     } finally { setLoading(false); }
   };
 
   const disable = async () => {
     setLoading(true); setError(''); setMsg('');
     try {
-      const reg = await navigator.serviceWorker.getRegistration('/sw.js');
+      const reg = await navigator.serviceWorker.getRegistration();
       if (reg) {
         const sub = await reg.pushManager.getSubscription();
         if (sub) {
@@ -73,6 +114,7 @@ export default function Notifications() {
       }
       setSubscribed(false);
       setMsg('Push notificaties uitgeschakeld');
+      await refreshStatus();
     } catch (e) { setError(formatError(e)); }
     finally { setLoading(false); }
   };
@@ -80,8 +122,13 @@ export default function Notifications() {
   const test = async () => {
     setLoading(true); setError(''); setMsg('');
     try {
-      const { data } = await api.post('/push/test', { title: 'SuriRent test 🔔', body: 'Werkt het? Mooi zo!' });
-      setMsg(`Test verzonden naar ${data.sent} apparaten`);
+      const { data } = await api.post('/push/test', { title: 'SuriRent test', body: 'Werkt het? Mooi zo!' });
+      if (data.sent === 0) {
+        setError(`Verzonden naar 0 apparaten. ${data.failed > 0 ? `${data.failed} verlopen subscription(s) opgeschoond. ` : ''}Klik op "Opnieuw registreren" hieronder om dit apparaat opnieuw te koppelen.`);
+        await refreshStatus();
+      } else {
+        setMsg(`Test verzonden naar ${data.sent} apparaat${data.sent !== 1 ? 'en' : ''}!`);
+      }
     } catch (e) { setError(formatError(e)); }
     finally { setLoading(false); }
   };
@@ -90,30 +137,43 @@ export default function Notifications() {
     setLoading(true); setError(''); setMsg('');
     try {
       const { data } = await api.post('/push/notify-overdue');
-      setMsg(data.message);
+      setMsg(`${data.message} (verstuurd naar ${data.sent} apparaten)`);
     } catch (e) { setError(formatError(e)); }
     finally { setLoading(false); }
   };
 
   return (
-    <div className="max-w-3xl">
+    <div data-testid="notifications-page">
       <div className="mb-6">
         <h1 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">Notificaties & Beveiliging</h1>
-        <p className="text-sm text-slate-500 mt-1">PWA push notificaties + beveiligde PDFs</p>
+        <p className="text-sm text-slate-500 mt-1">PWA push notificaties met geluid + beveiligde PDFs</p>
       </div>
 
-      <div className="grid sm:grid-cols-2 gap-4 mb-6">
+      <div className="grid sm:grid-cols-3 gap-4 mb-6">
         <div className="bg-white border border-orange-100 rounded-2xl p-5">
           <div className="flex items-center gap-3 mb-3">
             <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${subscribed ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-500'}`}>
               {subscribed ? <Bell className="w-5 h-5" /> : <BellOff className="w-5 h-5" />}
             </div>
             <div>
-              <p className="text-xs font-bold uppercase tracking-widest text-slate-500">Push notificaties</p>
+              <p className="text-xs font-bold uppercase tracking-widest text-slate-500">Dit apparaat</p>
               <p className="font-black text-slate-900">{subscribed ? 'Ingeschakeld' : 'Uitgeschakeld'}</p>
             </div>
           </div>
-          <p className="text-xs text-slate-500">Browser/mobiele meldingen voor overdue huur en updates.</p>
+          <p className="text-xs text-slate-500">Status van de browser/PWA op dit toestel.</p>
+        </div>
+
+        <div className="bg-white border border-orange-100 rounded-2xl p-5">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-10 h-10 rounded-xl bg-orange-100 text-[#FF5C00] flex items-center justify-center">
+              <Smartphone className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="text-xs font-bold uppercase tracking-widest text-slate-500">Apparaten</p>
+              <p className="font-black text-slate-900" data-testid="device-count">{deviceCount}</p>
+            </div>
+          </div>
+          <p className="text-xs text-slate-500">Totaal aantal apparaten geregistreerd op dit account.</p>
         </div>
 
         <div className="bg-white border border-orange-100 rounded-2xl p-5">
@@ -126,7 +186,7 @@ export default function Notifications() {
               <p className="font-black text-slate-900">AES-256 + QR</p>
             </div>
           </div>
-          <p className="text-xs text-slate-500">Kwitanties met digitale QR-handtekening voor verificatie.</p>
+          <p className="text-xs text-slate-500">Kwitanties met digitale handtekening.</p>
         </div>
       </div>
 
@@ -134,18 +194,20 @@ export default function Notifications() {
         <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-start gap-3 mb-4">
           <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
           <div className="text-sm text-amber-800">
-            Push notificaties worden niet ondersteund in deze browser. Probeer Chrome, Edge of Firefox op desktop, of Chrome op Android.
+            Push notificaties worden niet ondersteund in deze browser. Probeer Chrome, Edge of Firefox op desktop,
+            of installeer de PWA via &quot;Voeg toe aan beginscherm&quot; op iOS Safari (Push werkt vanaf iOS 16.4+).
           </div>
         </div>
       ) : (
         <>
-          {error && <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-600 rounded-xl text-sm">{error}</div>}
-          {msg && <div className="mb-4 p-3 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-xl text-sm flex items-center gap-2"><Check className="w-4 h-4" />{msg}</div>}
+          {error && <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-600 rounded-xl text-sm" data-testid="notify-error">{error}</div>}
+          {msg && <div className="mb-4 p-3 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-xl text-sm flex items-center gap-2" data-testid="notify-success"><Check className="w-4 h-4 shrink-0" />{msg}</div>}
 
           <div className="bg-white border border-orange-100 rounded-2xl p-6">
             <h3 className="font-black text-slate-900 mb-1">Push notificaties</h3>
             <p className="text-sm text-slate-500 mb-4">
               Schakel meldingen in om herinneringen te ontvangen voor openstaande huur en belangrijke updates.
+              Klik op een melding om direct naar de juiste pagina te springen.
             </p>
             <div className="flex flex-wrap gap-2">
               {!subscribed ? (
@@ -166,6 +228,11 @@ export default function Notifications() {
                     <AlertTriangle className="w-4 h-4" />
                     Overdue overzicht
                   </button>
+                  <button onClick={reRegister} disabled={loading} data-testid="push-reregister"
+                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-50 hover:bg-blue-100 border-2 border-blue-200 text-blue-700 font-bold rounded-xl disabled:opacity-50">
+                    <RotateCw className="w-4 h-4" />
+                    Opnieuw registreren
+                  </button>
                   <button onClick={disable} disabled={loading} data-testid="push-disable"
                     className="inline-flex items-center gap-2 px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl disabled:opacity-50">
                     <BellOff className="w-4 h-4" />
@@ -176,7 +243,13 @@ export default function Notifications() {
             </div>
             {permission === 'denied' && (
               <p className="mt-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2">
-                Browser meldingen zijn geblokkeerd. Klik op het 🔒 slot-icoon links in de adresbalk en sta meldingen toe.
+                Browser meldingen zijn geblokkeerd. Klik op het slot-icoon links in de adresbalk en sta meldingen toe.
+              </p>
+            )}
+            {subscribed && deviceCount === 0 && (
+              <p className="mt-3 text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded-lg p-2">
+                Browser zegt dat dit apparaat geabonneerd is, maar de server heeft de registratie niet.
+                Klik op <b>Opnieuw registreren</b> om het te herstellen.
               </p>
             )}
           </div>

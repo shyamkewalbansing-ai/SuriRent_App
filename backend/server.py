@@ -4147,6 +4147,13 @@ async def push_subscribe(body: PushSubscriptionIn, user=Depends(get_current_user
     return {"ok": True}
 
 
+@api.get("/push/status")
+async def push_status(user=Depends(get_current_user)):
+    """Hoeveel apparaten heeft deze user geregistreerd?"""
+    n = await db.push_subs.count_documents({"user_id": user["id"]})
+    return {"devices": n}
+
+
 @api.post("/push/unsubscribe")
 async def push_unsubscribe(body: dict, user=Depends(get_current_user)):
     endpoint = body.get("endpoint")
@@ -4169,13 +4176,14 @@ async def push_test(body: PushTestIn, user=Depends(get_current_user)):
     cursor = db.push_subs.find({"user_id": user["id"]}, {"_id": 0})
     async for sub in cursor:
         sub_info = {"endpoint": sub["endpoint"], "keys": sub["keys"]}
-        ok = send_push(sub_info, body.title, body.body, {"kind": "test"})
+        ok = send_push(sub_info, body.title, body.body, {"kind": "test", "url": "/admin/notifications"})
         if ok:
             sent += 1
         else:
             failed += 1
             await db.push_subs.delete_one({"endpoint": sub["endpoint"]})
-    return {"sent": sent, "failed": failed}
+    total = await db.push_subs.count_documents({"user_id": user["id"]})
+    return {"sent": sent, "failed": failed, "remaining_devices": total}
 
 
 @api.post("/push/notify-overdue")
@@ -4187,7 +4195,7 @@ async def push_notify_overdue(user=Depends(get_current_user)):
         if bal["balance"] > 0:
             overdue.append((t["name"], bal["balance"], bal["currency"]))
     if not overdue:
-        msg = "Geen openstaande betalingen — alles is voldaan! 🎉"
+        msg = "Geen openstaande betalingen — alles is voldaan!"
     else:
         top = overdue[:3]
         names = ", ".join(n for n, _, _ in top)
@@ -4199,7 +4207,7 @@ async def push_notify_overdue(user=Depends(get_current_user)):
             {"endpoint": sub["endpoint"], "keys": sub["keys"]},
             "Openstaande huur",
             msg,
-            {"kind": "overdue", "count": len(overdue)},
+            {"kind": "overdue", "count": len(overdue), "url": "/admin/invoices"},
         ):
             sent += 1
     return {"sent": sent, "overdue_count": len(overdue), "message": msg}

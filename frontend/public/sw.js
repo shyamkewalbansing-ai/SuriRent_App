@@ -6,7 +6,7 @@
  * - Bypass /api/* (always go to network)
  * - Push notifications + click handler
  */
-const CACHE_VERSION = 'surirent-v18';
+const CACHE_VERSION = 'surirent-v19';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 
@@ -128,23 +128,54 @@ self.addEventListener('push', (event) => {
   if (event.data) {
     try { data = event.data.json(); } catch { data.body = event.data.text(); }
   }
+  const kind = (data.data && data.data.kind) || 'info';
   const options = {
     body: data.body || '',
     icon: '/kiosk-icons/kiosk-192.png',
     badge: '/kiosk-icons/kiosk-72.png',
     data: data.data || {},
-    vibrate: [120, 60, 120],
+    // Pittig vibratiepatroon — geeft "ping" gevoel
+    vibrate: [200, 100, 200, 100, 300],
+    // Actiebar onder de notificatie
+    actions: [
+      { action: 'open', title: 'Bekijk' },
+      { action: 'dismiss', title: 'Sluiten' },
+    ],
+    // tag groepeert oudere notifs zodat we maar 1 zichtbaar hebben per type
+    tag: `surirent-${kind}`,
+    renotify: true,            // ook bij hetzelfde tag opnieuw piepen
+    requireInteraction: kind === 'overdue',  // belangrijke alerts blijven staan
+    silent: false,             // expliciet niet stil
+    timestamp: Date.now(),
   };
   event.waitUntil(self.registration.showNotification(data.title, options));
 });
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const target = (event.notification.data && event.notification.data.url) || '/admin';
+  if (event.action === 'dismiss') return;
+  // Bepaal navigatie-target:
+  // 1) expliciete data.url
+  // 2) heuristisch op basis van kind (overdue → /admin/invoices, test → /admin/notifications)
+  const data = event.notification.data || {};
+  let target = data.url;
+  if (!target) {
+    switch (data.kind) {
+      case 'overdue': target = '/admin/invoices'; break;
+      case 'payment': target = '/admin/payments'; break;
+      case 'test':    target = '/admin/notifications'; break;
+      default:        target = '/admin'; break;
+    }
+  }
   event.waitUntil(
-    self.clients.matchAll({ type: 'window' }).then((clients) => {
-      const existing = clients.find((c) => c.url.includes(target));
-      if (existing) return existing.focus();
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+      // Focus bestaande tab als deze open is, en navigeer ernaartoe.
+      for (const c of clients) {
+        if ('focus' in c) {
+          c.navigate(target).catch(() => {});
+          return c.focus();
+        }
+      }
       if (self.clients.openWindow) return self.clients.openWindow(target);
     })
   );
