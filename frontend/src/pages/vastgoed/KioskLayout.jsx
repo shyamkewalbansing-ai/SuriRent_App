@@ -746,59 +746,121 @@ function Row({ label, value }) {
 }
 
 function ReceiptScreen({ payment, overview, onDone }) {
-  // Bereken openstaand saldo NA deze betaling (vorig totaal - betaald bedrag).
+  // Bereken openstaand saldo NA deze betaling — refetch van backend voor
+  // de echte stand (rekening houdend met openstaande maanden + nieuwe
+  // huurperiode). Fallback: vorige overview min betaald bedrag.
   const cur = payment.currency || overview?.balance?.currency || 'SRD';
-  const prevDue = Number(overview?.total_due || 0);
-  const remaining = Math.max(0, prevDue - Number(payment.amount || 0));
+  const [remaining, setRemaining] = useState(() => {
+    const prevDue = Number(overview?.total_due || 0);
+    return Math.max(0, prevDue - Number(payment.amount || 0));
+  });
+  const [remainingLoading, setRemainingLoading] = useState(true);
 
-  // Print-geluid synthese (Web Audio API) — een korte mechanische "ratel"
-  // gevolgd door een chime. Geen externe audio-assets nodig.
+  useEffect(() => {
+    const tid = payment.tenant_id || overview?.tenant?.id;
+    if (!tid) { setRemainingLoading(false); return; }
+    api.get(`/kiosk/tenants/${tid}/overview`)
+      .then((r) => {
+        const data = r.data || {};
+        const bal = Number(data?.balance?.balance || 0);
+        const open = bal > 0 ? bal : 0;
+        const internet = Number(data?.tenant?.internet_amount || 0);
+        setRemaining(open + internet);
+      })
+      .catch(() => { /* val terug op lokale schatting */ })
+      .finally(() => setRemainingLoading(false));
+  }, [payment.tenant_id, overview]);
+
+  // Bon-printer geluid — gesynthetiseerd via Web Audio API.
+  // Imiteert een thermische kassa-printer: continue mechanische "zip" met
+  // ritmische clicks (paper feed), gevolgd door een tear-cut en chime.
   useEffect(() => {
     let ctx;
     try {
       const AC = window.AudioContext || window.webkitAudioContext;
       if (!AC) return;
       ctx = new AC();
-      const now = ctx.currentTime;
+      const t0 = ctx.currentTime;
+      const PRINT_DUR = 2.6;    // hoofd "zip" 2.6s
+      const TEAR_AT = t0 + 2.65; // korte tear-snap
+      const CHIME_AT = t0 + 2.9; // chime na tear
 
-      // 1) "Ratel" (printer head) — gefilterde witte ruis pulserend voor 0.9s
-      const bufferSize = Math.floor(ctx.sampleRate * 0.9);
-      const noiseBuf = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-      const data = noiseBuf.getChannelData(0);
-      for (let i = 0; i < bufferSize; i++) {
-        // Pulserende ruis (snelle aan/uit modulatie = printer-klik)
-        const pulse = Math.sin((i / ctx.sampleRate) * 2 * Math.PI * 28) > 0 ? 1 : 0.15;
-        data[i] = (Math.random() * 2 - 1) * pulse * 0.6;
+      // --- 1) Hoofdgeluid: gefilterde ruis met snelle aan/uit modulatie
+      //     (= karakteristiek zoemend papier-voer geluid van een bonprinter)
+      const sr = ctx.sampleRate;
+      const buf = ctx.createBuffer(1, Math.floor(sr * PRINT_DUR), sr);
+      const d = buf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) {
+        const tt = i / sr;
+        // 95Hz buzz (= papier door rollers) gecombineerd met 14Hz pulse
+        // (= dot-matrix head per regel) en wat ruis voor textuur.
+        const buzz = (Math.sin(tt * 2 * Math.PI * 95) > 0 ? 1 : -1) * 0.55;
+        const headPulse = Math.sin(tt * 2 * Math.PI * 14) * 0.5 + 0.5; // 0..1
+        const noise = (Math.random() * 2 - 1) * 0.45;
+        d[i] = (buzz * 0.55 + noise * 0.7) * (0.35 + headPulse * 0.65);
       }
-      const noise = ctx.createBufferSource();
-      noise.buffer = noiseBuf;
-      const noiseFilter = ctx.createBiquadFilter();
-      noiseFilter.type = 'bandpass';
-      noiseFilter.frequency.value = 1400;
-      noiseFilter.Q.value = 1.2;
-      const noiseGain = ctx.createGain();
-      noiseGain.gain.setValueAtTime(0.0001, now);
-      noiseGain.gain.exponentialRampToValueAtTime(0.25, now + 0.05);
-      noiseGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.9);
-      noise.connect(noiseFilter).connect(noiseGain).connect(ctx.destination);
-      noise.start(now);
-      noise.stop(now + 0.9);
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      const lp = ctx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.value = 2200;
+      const hp = ctx.createBiquadFilter();
+      hp.type = 'highpass';
+      hp.frequency.value = 220;
+      const mainGain = ctx.createGain();
+      mainGain.gain.setValueAtTime(0.0001, t0);
+      mainGain.gain.exponentialRampToValueAtTime(0.32, t0 + 0.08);
+      mainGain.gain.setValueAtTime(0.32, t0 + PRINT_DUR - 0.15);
+      mainGain.gain.exponentialRampToValueAtTime(0.0001, t0 + PRINT_DUR);
+      src.connect(hp).connect(lp).connect(mainGain).connect(ctx.destination);
+      src.start(t0);
+      src.stop(t0 + PRINT_DUR);
 
-      // 2) Chime — twee korte tonen aan het einde (success ding-ding)
-      const tone = (freq, start, dur, vol = 0.25) => {
-        const osc = ctx.createOscillator();
+      // --- 2) Mechanische clicks bovenop (papier-tand / step motor)
+      const click = (when, vol = 0.18) => {
+        const o = ctx.createOscillator();
         const g = ctx.createGain();
-        osc.type = 'sine';
-        osc.frequency.value = freq;
+        o.type = 'square';
+        o.frequency.value = 1800;
+        g.gain.setValueAtTime(0.0001, when);
+        g.gain.exponentialRampToValueAtTime(vol, when + 0.002);
+        g.gain.exponentialRampToValueAtTime(0.0001, when + 0.025);
+        o.connect(g).connect(ctx.destination);
+        o.start(when); o.stop(when + 0.03);
+      };
+      for (let i = 0; i < 18; i++) click(t0 + 0.1 + i * 0.14);
+
+      // --- 3) Tear-snap (paper cut)
+      const tearLen = Math.floor(sr * 0.18);
+      const tearBuf = ctx.createBuffer(1, tearLen, sr);
+      const td = tearBuf.getChannelData(0);
+      for (let i = 0; i < tearLen; i++) {
+        const env = 1 - i / tearLen;
+        td[i] = (Math.random() * 2 - 1) * env * env;
+      }
+      const tear = ctx.createBufferSource();
+      tear.buffer = tearBuf;
+      const tearHp = ctx.createBiquadFilter();
+      tearHp.type = 'highpass';
+      tearHp.frequency.value = 2500;
+      const tearGain = ctx.createGain();
+      tearGain.gain.value = 0.5;
+      tear.connect(tearHp).connect(tearGain).connect(ctx.destination);
+      tear.start(TEAR_AT);
+
+      // --- 4) Chime (success ding-ding)
+      const tone = (freq, start, dur, vol = 0.22) => {
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.type = 'sine'; o.frequency.value = freq;
         g.gain.setValueAtTime(0.0001, start);
         g.gain.exponentialRampToValueAtTime(vol, start + 0.02);
         g.gain.exponentialRampToValueAtTime(0.0001, start + dur);
-        osc.connect(g).connect(ctx.destination);
-        osc.start(start);
-        osc.stop(start + dur);
+        o.connect(g).connect(ctx.destination);
+        o.start(start); o.stop(start + dur);
       };
-      tone(880, now + 0.95, 0.22);
-      tone(1318, now + 1.18, 0.32);
+      tone(880, CHIME_AT, 0.22);
+      tone(1318, CHIME_AT + 0.22, 0.32);
     } catch { /* audio kan geweigerd zijn — niet kritiek */ }
 
     return () => { try { ctx && ctx.close(); } catch { /* noop */ } };
@@ -821,9 +883,9 @@ function ReceiptScreen({ payment, overview, onDone }) {
       </div>
 
       <motion.div
-        initial={{ y: '-110%', opacity: 0 }}
+        initial={{ y: '-115%', opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        transition={{ type: 'spring', stiffness: 60, damping: 14, delay: 0.15, duration: 1.1 }}
+        transition={{ duration: 2.6, ease: [0.25, 0.46, 0.45, 0.94] }}
         className="bg-white rounded-3xl w-full max-w-md p-6 sm:p-8 shadow-2xl"
         data-testid="receipt-card">
         <div className="bg-slate-50 rounded-2xl p-5 mb-4 text-left border-2 border-dashed border-slate-200">
@@ -855,7 +917,7 @@ function ReceiptScreen({ payment, overview, onDone }) {
                 Openstaand saldo
               </span>
               <span className={`font-extrabold text-base ${remaining > 0 ? 'text-orange-700' : 'text-emerald-700'}`} data-testid="receipt-remaining">
-                {fmtMoney(remaining, cur)}
+                {remainingLoading ? '…' : fmtMoney(remaining, cur)}
               </span>
             </div>
           </div>
