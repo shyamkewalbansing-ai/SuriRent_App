@@ -353,6 +353,17 @@ User koos voor **Optie C — minimale herbouw** (kern eerst), dan vroeg om **Fas
   - Idle auto-logout na 90s blijft behouden.
 - ✅ Geverifieerd: **15 nieuwe pytest cases + 24 regressie + frontend Playwright e2e (iteration 12)**. Wrong PIN → shake + auto-clear, juiste PIN → dashboard, alle 4 tegels navigeerbaar, QR-mode prefill, no-context graceful error. Zero issues.
 
+### Session 2026-05-23 — Huurder Kiosk polish v2 ✅
+- ✅ **PIN dots zichtbaarheid**: dots vergroot naar 24px (w-6/h-6), 3px massieve witte rand. Gevulde staat = donker slate-900 (was wit op oranje, nu donker op wit-met-rand → enorme contrast). Error-state in rood. Resultaat: huurders zien meteen hoeveel cijfers ze al getypt hebben.
+- ✅ **Dashboard volledig herbouwd in admin-kiosk split-screen stijl** (i.p.v. eerdere "balance banner + tile grid"):
+  - **LEFT card (3/5 breed)** — "Financieel overzicht" met line-items voor Maandhuur / (Openstaande huur, hoogtepunt) / Servicekosten / Boetes / Internet + grote "Totaal openstaand" footer-regel.
+  - **RIGHT card (2/5 breed)** — grote "Te betalen" amount + primary CTA-knop. Wisselt naar emerald-groen "Saldo SRD 0,00 · U bent volledig bij. Bedankt!" + "Bekijk facturen" wanneer er geen achterstand is.
+  - **3 secondary tiles** onder de CTA: Onderhoud / Gegevens / Contact (compacte iconenrij i.p.v. de eerdere 4 grote tegels).
+- ✅ **CompanyPicker fallback** — `/kiosk/huurder` zonder `?c=` en zonder QR-link → toont "Welk bedrijf?" kaart met text-input (`tk-slug-input`) en doorgaan-knop. Onbekende slug → inline foutmelding. Probeert eerst `/api/public/branding-default` (single-tenant systemen): geeft 200 als er exact 1 bedrijf is, anders 404 → picker.
+- ✅ **Nieuw publiek endpoint** `GET /api/public/branding-default` voor single-tenant deployments. 4 nieuwe pytest tests.
+- ✅ **Admin TenantPinModal verbeterd**: na opslaan toont de modal een groen succesblok met "PIN &lt;X&gt; is ingesteld voor &lt;Naam&gt;", de complete Huurder-Kiosk URL (`window.location.origin/kiosk/huurder?c=&lt;slug&gt;`) met "Kopieer"-knop, een "Open Huurder Kiosk" anchor (opens new tab) én een "Sluiten" knop. Admin weet nu direct waar de huurder kan inloggen.
+- ✅ Geverifieerd: **4 nieuwe pytest + 43 regressie + frontend Playwright e2e (iteration 13)** — alle groen. PIN dots visueel duidelijk, dashboard 1-op-1 admin-kiosk stijl, picker werkt, modal-flow met copy/open knoppen volledig functioneel.
+
 ## Prioritized Backlog (Fases E-F)
 - 📧 **Email notificaties** — wacht op SendGrid / Resend credentials van user
 - 📱 **WhatsApp/SMS herinneringen** — wacht op Twilio credentials
