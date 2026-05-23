@@ -720,6 +720,10 @@ function PaymentConfirm({ payload, overview, onBack, onSuccess }) {
   const { tenant, apartment: apt } = overview;
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState('');
+  const isMope = (payload.method || '').toLowerCase() === 'mope';
+  const [mope, setMope] = useState(null);  // { qr, ref, mode }
+  const [waitingPaid, setWaitingPaid] = useState(false);
+
   const submit = async () => {
     setLoading(true); setErr('');
     try {
@@ -728,6 +732,120 @@ function PaymentConfirm({ payload, overview, onBack, onSuccess }) {
     } catch (e) { setErr(formatError(e)); }
     finally { setLoading(false); }
   };
+
+  // Mope: bij open van dit scherm meteen een QR-code laten genereren
+  // (in mock-modus = lokale QR; in live-modus = echte Mope API call).
+  useEffect(() => {
+    if (!isMope || mope) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await api.post('/kiosk/mope/create-qr');
+        if (!cancelled) {
+          setMope({ qr: data.qr, ref: data.ref, mode: data.mode });
+          setWaitingPaid(true);
+        }
+      } catch (e) {
+        if (!cancelled) setErr(formatError(e));
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [isMope, mope]);
+
+  // Poll mope_paid_at — zodra de klant op "Ik heb betaald" tikt op het
+  // klantenscherm (of de echte Mope webhook arriveert), maken we hier de
+  // betaling automatisch aan in de DB en gaan naar het receipt-scherm.
+  useEffect(() => {
+    if (!waitingPaid) return undefined;
+    let stopped = false;
+    let timer;
+    const tick = async () => {
+      try {
+        const { data } = await api.get(`/kiosk/customer-display?t=${Date.now()}`);
+        const paidAt = data?.state?.payload?.mope_paid_at;
+        const ref = data?.state?.payload?.mope_ref;
+        if (paidAt && ref && !stopped) {
+          setWaitingPaid(false);
+          // Voeg de Mope-referentie als note toe en submit.
+          const finalPayload = { ...payload, note: `${payload.note || 'Mope'} · Ref ${ref}`.trim() };
+          setLoading(true);
+          try {
+            const { data: pay } = await api.post('/kiosk/payments', finalPayload);
+            onSuccess(pay);
+          } catch (e) { setErr(formatError(e)); setLoading(false); }
+          return;
+        }
+      } catch { /* ignore */ }
+      if (!stopped) timer = setTimeout(tick, 700);
+    };
+    tick();
+    return () => { stopped = true; if (timer) clearTimeout(timer); };
+  }, [waitingPaid, payload, onSuccess]);
+
+  // Mope-scherm: toon QR + "Wacht op klant"-banner (admin Kiosk variant).
+  if (isMope) {
+    return (
+      <div className="h-full bg-orange-500 flex flex-col" style={{ padding: '1.5vh 1.5vw 0' }}>
+        <div className="flex items-center justify-between flex-wrap gap-2 px-1 sm:px-2 py-2">
+          <button onClick={onBack} data-testid="confirm-back"
+            className="flex items-center gap-1.5 text-white font-bold bg-white/20 backdrop-blur-sm rounded-lg px-3 py-1.5 sm:px-4 sm:py-2">
+            <ArrowLeft className="w-4 h-4" /> <span className="text-xs sm:text-sm">Terug</span>
+          </button>
+          <span className="text-sm sm:text-base font-semibold text-white">Mope-betaling actief</span>
+          <div className="text-right text-white">
+            <p className="text-xs sm:text-sm font-semibold">{tenant.name}</p>
+            <p className="text-[10px] sm:text-xs opacity-70">Appt. {apt.number}</p>
+          </div>
+        </div>
+        <div className="flex-1 min-h-0 overflow-auto flex items-center justify-center pb-6">
+          <div className="bg-white rounded-3xl w-full max-w-xl p-6 sm:p-8 shadow-2xl text-center">
+            <p className="text-xs font-black uppercase tracking-widest text-slate-400">Mope-betaling</p>
+            <p className="text-4xl sm:text-5xl font-black text-[#FF5C00] tracking-tight mt-1 mb-4">
+              {fmtMoney(payload.amount, payload.currency)}
+            </p>
+            {!mope ? (
+              <div className="py-8 flex flex-col items-center gap-3 text-slate-500">
+                <Loader2 className="w-8 h-8 animate-spin text-[#FF5C00]" />
+                <p className="text-sm font-bold">QR-code wordt aangemaakt…</p>
+              </div>
+            ) : (
+              <>
+                <div className="mx-auto bg-white p-2 rounded-2xl ring-4 ring-orange-100"
+                  style={{ width: 220, height: 220 }}>
+                  <img src={mope.qr} alt="Mope QR" className="w-full h-full object-contain" />
+                </div>
+                <p className="mt-4 text-sm font-bold text-slate-700">
+                  Klant scant de QR-code op het klantenscherm
+                </p>
+                <p className="text-xs text-slate-500 mt-1">
+                  Referentie: <span className="font-mono">{mope.ref}</span>
+                  {mope.mode === 'mock' && (
+                    <span className="ml-2 px-2 py-0.5 rounded bg-amber-100 text-amber-700 font-bold uppercase tracking-wider text-[10px]">
+                      Test-modus
+                    </span>
+                  )}
+                </p>
+                <div className="my-4 flex items-center gap-2 text-emerald-600 font-bold text-sm justify-center">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Wacht op bevestiging…
+                </div>
+                <p className="text-xs text-slate-400">
+                  Zodra de betaling binnen is, wordt de kwitantie automatisch gemaakt.
+                </p>
+                {err && <div className="mt-3 p-2.5 bg-red-50 border border-red-200 text-red-600 rounded-xl text-xs">{err}</div>}
+              </>
+            )}
+            {loading && (
+              <div className="mt-3 text-sm font-bold text-emerald-600 flex items-center justify-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin" /> Betaling registreren…
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="h-full bg-orange-500 flex flex-col" style={{ padding: '1.5vh 1.5vw 0' }}>
       <div className="flex items-center justify-between flex-wrap gap-2 px-1 sm:px-2 py-2">

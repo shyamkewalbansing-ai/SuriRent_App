@@ -284,6 +284,99 @@ function PayScreen({ state }) {
 }
 
 // =====================================================================
+// MopeQRScreen — toont QR-code zodat klant kan scannen + simulator-knop
+// =====================================================================
+function MopeQRScreen({ state, slug }) {
+  const payload = state.payload || {};
+  const cur = payload.mope_currency || payload.currency || 'SRD';
+  const amt = Number(payload.mope_amount || payload.amount || 0);
+  const paid = !!payload.mope_paid_at;
+  const isMock = payload.mope_mode !== 'live';
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  const confirmPaid = async () => {
+    if (busy || paid) return;
+    setBusy(true); setError('');
+    try {
+      await api.post(`/public/customer-display/${slug}/mope-confirm`);
+    } catch (e) {
+      setError(e?.response?.data?.detail || 'Kon bevestiging niet versturen');
+      setBusy(false);
+    }
+  };
+
+  // Als al betaald: toon "Bezig met afronden..." (admin Kiosk maakt het receipt).
+  return (
+    <motion.div key="mope-qr"
+      initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}
+      transition={{ duration: 0.3 }}
+      className="absolute inset-0 flex flex-col items-center justify-center px-3 sm:px-6 lg:px-10 py-4 text-white"
+      data-testid="cd-mope-qr">
+      <div className="w-full max-w-xl bg-white rounded-2xl sm:rounded-3xl shadow-2xl p-4 sm:p-8 lg:p-10 text-center">
+        <p className="font-black uppercase tracking-[0.25em] text-slate-400"
+          style={{ fontSize: clamp(10, 1.0, 16) }}>Mope-betaling</p>
+        <p className="font-black text-[#FF5C00] tracking-tight mt-1 mb-3 whitespace-nowrap"
+          style={{ fontSize: clamp(28, 4.5, 80) }}>
+          {fmtMoney(amt, cur)}
+        </p>
+        {!paid ? (
+          <>
+            <div className="mx-auto bg-white p-2 rounded-2xl ring-4 ring-orange-100"
+              style={{ width: clamp(200, 32, 460), height: clamp(200, 32, 460) }}>
+              <img src={payload.mope_qr} alt="Mope QR" className="w-full h-full object-contain" />
+            </div>
+            <p className="font-bold text-slate-700 mt-4"
+              style={{ fontSize: clamp(13, 1.5, 22) }}>
+              Scan met uw <span className="text-[#FF5C00]">Mope-app</span>
+            </p>
+            <p className="text-slate-500 mt-1"
+              style={{ fontSize: clamp(11, 1.1, 16) }}>
+              Open de Mope-app, scan deze QR en bevestig de betaling.
+            </p>
+            {isMock && (
+              <>
+                <div className="h-px bg-slate-200 my-4" />
+                <p className="text-slate-400 font-bold uppercase tracking-widest mb-2"
+                  style={{ fontSize: clamp(9, 0.85, 12) }}>Test-modus</p>
+                <motion.button
+                  whileTap={{ scale: 0.97 }}
+                  onClick={confirmPaid} disabled={busy}
+                  data-testid="cd-mope-mock-confirm"
+                  className="rounded-2xl bg-emerald-500 hover:bg-emerald-600 text-white font-black shadow-lg disabled:opacity-60 flex items-center justify-center gap-2 px-6 transition"
+                  style={{ height: clamp(40, 5, 60), fontSize: clamp(12, 1.3, 18) }}>
+                  {busy ? <Loader2 className="animate-spin w-5 h-5" /> : '✓ Ik heb betaald (test)'}
+                </motion.button>
+              </>
+            )}
+            {error && <p className="text-red-500 font-bold mt-2"
+              style={{ fontSize: clamp(11, 1.0, 14) }}>{error}</p>}
+          </>
+        ) : (
+          <>
+            <motion.div initial={{ scale: 0.5 }} animate={{ scale: 1 }}
+              transition={{ type: 'spring', stiffness: 200, damping: 15 }}
+              className="rounded-full bg-emerald-100 flex items-center justify-center mx-auto my-4"
+              style={{ width: clamp(80, 10, 160), height: clamp(80, 10, 160) }}>
+              <CheckCircle2 className="text-emerald-500" strokeWidth={2.5}
+                style={{ width: '60%', height: '60%' }} />
+            </motion.div>
+            <p className="font-black text-emerald-600 uppercase tracking-widest"
+              style={{ fontSize: clamp(13, 1.4, 22) }}>Betaling ontvangen</p>
+            <p className="text-slate-500 mt-2"
+              style={{ fontSize: clamp(12, 1.2, 18) }}>
+              <Loader2 className="inline-block mr-2 animate-spin text-[#FF5C00]"
+                style={{ width: clamp(14, 1.4, 20), height: clamp(14, 1.4, 20) }} />
+              Kwitantie wordt gemaakt…
+            </p>
+          </>
+        )}
+      </div>
+    </motion.div>
+  );
+}
+
+// =====================================================================
 // MethodSelect — klant kiest zelf betaalmethode op het klantenscherm.
 // Toont 5 grote tap-tegels; na tap wordt de keuze naar de backend
 // gestuurd zodat de admin Kiosk automatisch verder kan.
@@ -327,6 +420,10 @@ function MethodScreen({ state, slug }) {
   // Wanneer de klant al een methode heeft gekozen → toon bevestig-scherm.
   if (customerChose) {
     const Icon = ICONS[chosen] || CreditCard;
+    // Speciaal voor Mope: QR-code tonen om te scannen.
+    if (chosen === 'mope' && payload.mope_qr) {
+      return <MopeQRScreen state={state} slug={slug} />;
+    }
     return (
       <motion.div key="method-confirm"
         initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}

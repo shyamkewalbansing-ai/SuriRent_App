@@ -3560,6 +3560,10 @@ async def update_customer_display(body: CustomerDisplayIn, request: Request):
             new_payload["amount"] = existing_payload["amount"]
             new_payload["currency"] = existing_payload.get("currency") or new_payload.get("currency")
             new_payload["categories"] = existing_payload.get("categories") or new_payload.get("categories") or []
+    # Behoud Mope QR/ref/mode/paid_at over admin heartbeats heen.
+    for k in ("mope_qr", "mope_ref", "mope_mode", "mope_amount", "mope_currency", "mope_created_at", "mope_paid_at"):
+        if existing_payload.get(k) and not new_payload.get(k):
+            new_payload[k] = existing_payload[k]
     if new_payload:
         new_state["payload"] = new_payload
 
@@ -3622,6 +3626,99 @@ async def clear_customer_display(request: Request):
 
 class CustomerMethodIn(BaseModel):
     method: Literal["contant", "bank", "mope", "sumup", "uni5pay"]
+
+
+def _generate_qr_data_url(payload: str, size_px: int = 480) -> str:
+    """Returns a data:image/png;base64,... URL for the given QR payload."""
+    from pdf_gen import _make_qr_png
+    png = _make_qr_png(payload, size_px=size_px)
+    return "data:image/png;base64," + base64.b64encode(png).decode("ascii")
+
+
+@api.post("/kiosk/mope/create-qr")
+async def kiosk_mope_create_qr(request: Request):
+    """Maakt een (mock) Mope-QR-code voor de huidige customer-display sessie.
+    In LIVE-modus zou hier de echte Mope-API (https://api.mope.sr/integration/doc)
+    worden aangeroepen met de API-key uit company.integrations.mope.api_key.
+    Voor nu genereren we een mock QR met een unieke ref."""
+    cid = None
+    try:
+        ks = await get_kiosk_session(request)
+        cid = ks.get("company_id")
+    except HTTPException:
+        pass
+    if not cid:
+        try:
+            user = await get_current_user(request)
+            cid = company_id_of(user)
+        except HTTPException:
+            cid = None
+    if not cid:
+        raise HTTPException(status_code=401, detail="Niet ingelogd op kiosk")
+
+    doc = await db.customer_display.find_one({"company_id": cid}, {"_id": 0})
+    state = (doc or {}).get("state") or {}
+    payload = state.get("payload") or {}
+    if (payload.get("method") or "").lower() != "mope":
+        raise HTTPException(status_code=400, detail="Klant heeft Mope niet gekozen")
+    amount = float(payload.get("amount") or 0)
+    if amount <= 0:
+        raise HTTPException(status_code=400, detail="Geen bedrag")
+    currency = payload.get("currency") or "SRD"
+
+    company = await db.companies.find_one({"id": cid}, {"_id": 0, "integrations": 1, "name": 1})
+    integrations = (company or {}).get("integrations") or {}
+    mope_cfg = integrations.get("mope") or {}
+    live = bool(mope_cfg.get("live") and mope_cfg.get("api_key"))
+
+    ref = f"MOPE-{secrets.token_hex(4).upper()}"
+    qr_text = (
+        f"mope://pay?merchant={cid[:8]}&amount={amount:.2f}&currency={currency}&ref={ref}"
+    )
+    qr_data_url = _generate_qr_data_url(qr_text, size_px=480)
+    mode = "live" if live else "mock"
+
+    payload["mope_qr"] = qr_data_url
+    payload["mope_ref"] = ref
+    payload["mope_mode"] = mode
+    payload["mope_amount"] = amount
+    payload["mope_currency"] = currency
+    payload["mope_created_at"] = iso(now_utc())
+    payload.pop("mope_paid_at", None)
+    state["payload"] = payload
+    state["updated_at"] = iso(now_utc())
+    await db.customer_display.update_one(
+        {"company_id": cid},
+        {"$set": {"state": state, "updated_at": state["updated_at"]}},
+        upsert=True,
+    )
+    return {"ok": True, "mode": mode, "ref": ref, "qr": qr_data_url, "amount": amount, "currency": currency}
+
+
+@api.post("/public/customer-display/{slug}/mope-confirm")
+async def public_mope_confirm(slug: str):
+    """Publiek — mock 'webhook' die de klant zelf triggert door op
+    'Ik heb betaald' te tikken op het klantenscherm. In LIVE-modus is dit
+    de echte Mope-webhook handler. Markeert de betaling als bevestigd zodat
+    de admin Kiosk er op verder kan."""
+    c = await db.companies.find_one({"slug": slug.lower()}, {"_id": 0, "id": 1})
+    if not c:
+        raise HTTPException(status_code=404, detail="Bedrijf niet gevonden")
+    doc = await db.customer_display.find_one({"company_id": c["id"]}, {"_id": 0})
+    state = (doc or {}).get("state") or {}
+    payload = state.get("payload") or {}
+    if not payload.get("mope_ref"):
+        raise HTTPException(status_code=409, detail="Geen actieve Mope-betaling")
+    if payload.get("mope_paid_at"):
+        return {"ok": True, "already": True}
+    payload["mope_paid_at"] = iso(now_utc())
+    state["payload"] = payload
+    state["updated_at"] = iso(now_utc())
+    await db.customer_display.update_one(
+        {"company_id": c["id"]},
+        {"$set": {"state": state, "updated_at": state["updated_at"]}},
+    )
+    return {"ok": True, "ref": payload.get("mope_ref")}
 
 
 @api.post("/public/customer-display/{slug}/select-method")
