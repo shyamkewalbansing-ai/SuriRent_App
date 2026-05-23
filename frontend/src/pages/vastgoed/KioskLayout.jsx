@@ -882,46 +882,62 @@ function ReceiptScreen({ payment, overview, onDone }) {
         <p className="text-sm text-white/90">Uw betaling is succesvol verwerkt</p>
       </div>
 
-      <motion.div
-        initial={{ y: '-115%', opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        transition={{ duration: 2.6, ease: [0.25, 0.46, 0.45, 0.94] }}
-        className="bg-white rounded-3xl w-full max-w-md p-6 sm:p-8 shadow-2xl"
-        data-testid="receipt-card">
-        <div className="bg-slate-50 rounded-2xl p-5 mb-4 text-left border-2 border-dashed border-slate-200">
-          <div className="flex items-center justify-between pb-3 border-b border-slate-200 mb-3">
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Kwitantie</p>
-              <p className="font-mono text-base font-extrabold text-slate-900" data-testid="receipt-number">{payment.receipt_number}</p>
-            </div>
-            <div className="w-9 h-9 rounded-lg bg-orange-500 flex items-center justify-center">
-              <Building2 className="w-5 h-5 text-white" />
-            </div>
-          </div>
-          <div className="space-y-1.5 text-sm">
-            <RowSlim label="Huurder" value={payment.tenant_name} />
-            <RowSlim label="Appartement" value={payment.apartment_number || '—'} />
-            <RowSlim label="Categorie" value={payment.category} />
-            {payment.period_month && <RowSlim label="Periode" value={`${MONTHS_NL[payment.period_month - 1]} ${payment.period_year}`} />}
-            <RowSlim label="Methode" value={payment.method} />
-            <RowSlim label="Datum" value={new Date(payment.paid_at).toLocaleString('nl-NL')} />
-            {payment.approved_by && <RowSlim label="Goedgekeurd door" value={payment.approved_by} />}
-            <div className="flex justify-between pt-2 border-t border-dashed border-slate-200 mt-2">
-              <span className="text-slate-500 font-bold">Betaald</span>
-              <span className="font-extrabold text-slate-900 text-lg" data-testid="receipt-paid">{fmtMoney(payment.amount, payment.currency)}</span>
-            </div>
-            <div className={`flex justify-between items-center pt-2 mt-1 rounded-lg px-2 py-1.5 ${
-              remaining > 0 ? 'bg-orange-50' : 'bg-emerald-50'
-            }`} data-testid="receipt-remaining-row">
-              <span className={`text-sm font-bold ${remaining > 0 ? 'text-orange-700' : 'text-emerald-700'}`}>
-                Openstaand saldo
-              </span>
-              <span className={`font-extrabold text-base ${remaining > 0 ? 'text-orange-700' : 'text-emerald-700'}`} data-testid="receipt-remaining">
-                {remainingLoading ? '…' : fmtMoney(remaining, cur)}
-              </span>
-            </div>
-          </div>
+      <div className="bg-white rounded-3xl w-full max-w-md p-6 sm:p-8 shadow-2xl" data-testid="receipt-card">
+        {/* Printer-koplabel — blijft vast staan */}
+        <div className="flex items-center justify-center gap-2 mb-2 text-slate-400">
+          <Printer className="w-4 h-4" />
+          <span className="text-[10px] font-bold uppercase tracking-widest">Bon Printer</span>
         </div>
+        {/* Statische printer-gleuf waar het papier "uit komt" */}
+        <div className="relative h-2 mb-0">
+          <div className="absolute inset-x-2 top-1/2 -translate-y-1/2 h-[3px] bg-slate-900 rounded-full" />
+          <div className="absolute left-1/2 -translate-x-1/2 -top-1 w-12 h-1 bg-slate-700 rounded-full" />
+        </div>
+
+        {/* Papier-uitvoer — overflow geclipt, papier schuift van bovenaf "uit" */}
+        <div className="overflow-hidden mb-4 mt-2">
+          <motion.div
+            initial={{ y: '-100%' }}
+            animate={{ y: 0 }}
+            transition={{ duration: 2.6, ease: [0.25, 0.46, 0.45, 0.94] }}
+            data-testid="receipt-paper">
+            <div className="bg-slate-50 rounded-b-2xl rounded-t-md p-5 text-left border-2 border-dashed border-slate-200 border-t-0">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-200 mb-3">
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Kwitantie</p>
+                  <p className="font-mono text-base font-extrabold text-slate-900" data-testid="receipt-number">{payment.receipt_number}</p>
+                </div>
+                <div className="w-9 h-9 rounded-lg bg-orange-500 flex items-center justify-center">
+                  <Building2 className="w-5 h-5 text-white" />
+                </div>
+              </div>
+              <div className="space-y-1.5 text-sm">
+                <RowSlim label="Huurder" value={payment.tenant_name} />
+                <RowSlim label="Appartement" value={payment.apartment_number || '—'} />
+                <RowSlim label="Categorie" value={payment.category} />
+                {payment.period_month && <RowSlim label="Periode" value={`${MONTHS_NL[payment.period_month - 1]} ${payment.period_year}`} />}
+                <RowSlim label="Methode" value={payment.method} />
+                <RowSlim label="Datum" value={new Date(payment.paid_at).toLocaleString('nl-NL')} />
+                {payment.approved_by && <RowSlim label="Goedgekeurd door" value={payment.approved_by} />}
+                <div className="flex justify-between pt-2 border-t border-dashed border-slate-200 mt-2">
+                  <span className="text-slate-500 font-bold">Betaald</span>
+                  <span className="font-extrabold text-slate-900 text-lg" data-testid="receipt-paid">{fmtMoney(payment.amount, payment.currency)}</span>
+                </div>
+                <div className={`flex justify-between items-center pt-2 mt-1 rounded-lg px-2 py-1.5 ${
+                  remaining > 0 ? 'bg-orange-50' : 'bg-emerald-50'
+                }`} data-testid="receipt-remaining-row">
+                  <span className={`text-sm font-bold ${remaining > 0 ? 'text-orange-700' : 'text-emerald-700'}`}>
+                    Openstaand saldo
+                  </span>
+                  <span className={`font-extrabold text-base ${remaining > 0 ? 'text-orange-700' : 'text-emerald-700'}`} data-testid="receipt-remaining">
+                    {remainingLoading ? '…' : fmtMoney(remaining, cur)}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+
         <button onClick={onDone} data-testid="receipt-done"
           className="w-full h-12 bg-orange-500 hover:bg-orange-600 text-white text-base font-extrabold rounded-xl">
           Klaar
@@ -929,7 +945,7 @@ function ReceiptScreen({ payment, overview, onDone }) {
         <p className="text-center text-xs text-slate-400 mt-2" data-testid="receipt-autoreturn">
           Automatisch terug naar startscherm in 10 seconden
         </p>
-      </motion.div>
+      </div>
     </div>
   );
 }
