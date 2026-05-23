@@ -159,6 +159,33 @@ export function SendDialog({
               {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />} Verzenden
             </button>
           </div>
+
+          {/* Manual WhatsApp — opent native WhatsApp app / web met huurder-nummer
+              vooringevuld. Heeft géén Twilio nodig en is gratis. */}
+          {(tenantPhone || to) && (
+            <button
+              onClick={() => {
+                const phone = (cur?.contact === 'phone' ? to : tenantPhone).replace(/\D/g, '');
+                if (!phone) return;
+                // PDF link in het bericht (publieke endpoint — huurder kan
+                // er direct op klikken om de PDF te downloaden).
+                const apiBase = `${process.env.REACT_APP_BACKEND_URL}/api`;
+                const pdfLink = `${apiBase}/${documentType}s/${documentId}/pdf`;
+                const greeting = `Beste ${tenantName || 'huurder'},`;
+                const intro = msg.trim() || `Hierbij uw ${documentLabel}.`;
+                const fullMsg = `${greeting}\n\n${intro}\n\nPDF: ${pdfLink}\n\nMet vriendelijke groet,\nSuriRent`;
+                const waUrl = `https://wa.me/${phone}?text=${encodeURIComponent(fullMsg)}`;
+                window.open(waUrl, '_blank', 'noopener');
+              }}
+              data-testid="send-whatsapp-manual"
+              className="w-full h-11 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-bold flex items-center justify-center gap-2 transition shadow-[0_8px_20px_-5px_rgba(16,185,129,0.5)]">
+              <MessageCircle className="w-4 h-4" />
+              WhatsApp handmatig openen
+            </button>
+          )}
+          <p className="text-[10px] text-slate-400 text-center -mt-2">
+            Opent WhatsApp op je telefoon met huurder vooringevuld
+          </p>
         </div>
       </div>
     </div>

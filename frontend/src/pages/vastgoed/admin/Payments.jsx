@@ -99,7 +99,7 @@ function PaymentRow({ p, expanded, onToggle, onEmail, apiBase }) {
     <div className="bg-white rounded-2xl border border-orange-100 border-l-4 border-l-emerald-400 overflow-hidden"
       data-testid={`payment-row-${p.id}`}>
       <button onClick={onToggle} className="w-full text-left p-3 sm:p-3 hover:bg-orange-50/30 transition">
-        <div className="grid grid-cols-[auto_1fr_auto] md:grid-cols-[auto_minmax(0,1.8fr)_minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1.1fr)_16px] items-center gap-3">
+        <div className="grid grid-cols-[auto_1fr_auto] md:grid-cols-[auto_minmax(0,1.6fr)_minmax(0,1.1fr)_minmax(0,0.9fr)_minmax(0,0.9fr)_minmax(0,1.1fr)_16px] items-center gap-3">
           {/* Avatar */}
           <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-full flex items-center justify-center font-black text-sm shrink-0"
             style={{ background: avatar.bg, color: avatar.fg }}>
@@ -528,11 +528,12 @@ export default function Payments() {
       </div>
 
       {/* COLUMN HEADERS — desktop only */}
-      <div className="hidden md:grid grid-cols-[auto_minmax(0,1.8fr)_minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1.1fr)_16px] gap-3 px-3 text-[10px] font-black uppercase tracking-widest text-slate-400 items-center">
+      <div className="hidden md:grid grid-cols-[auto_minmax(0,1.6fr)_minmax(0,1.1fr)_minmax(0,0.9fr)_minmax(0,0.9fr)_minmax(0,1.1fr)_16px] gap-3 px-3 text-[10px] font-black uppercase tracking-widest text-slate-400 items-center">
         <span style={{ width: '40px' }} />
         <span>Huurder</span>
         <span>Kwitantie</span>
         <span>Categorie</span>
+        <span>Methode</span>
         <span className="text-right">Bedrag</span>
         <span />
       </div>
