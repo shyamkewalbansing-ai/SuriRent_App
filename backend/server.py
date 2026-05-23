@@ -3533,14 +3533,43 @@ async def update_customer_display(body: CustomerDisplayIn, request: Request):
             cid = None
     if not cid:
         raise HTTPException(status_code=401, detail="Niet ingelogd op kiosk")
-    state = body.model_dump()
-    state["updated_at"] = iso(now_utc())
+    new_state = body.model_dump()
+    # Smart merge: bewaar de keuze van de klant over heartbeats heen.
+    # Wanneer de klant zelf een methode heeft getikt (method_chosen_at), of de
+    # klant zelf een betaling heeft gestart (customer_initiated), mag de
+    # heartbeat van de admin die niet overschrijven.
+    existing_doc = await db.customer_display.find_one({"company_id": cid}, {"_id": 0})
+    existing_state = (existing_doc or {}).get("state") or {}
+    existing_payload = existing_state.get("payload") or {}
+    new_payload = new_state.get("payload") or {}
+
+    customer_locked = bool(existing_payload.get("method_chosen_at") or existing_payload.get("customer_initiated"))
+    # 1) Step-bescherming: terwijl klant betaalt mag admin niet "terug" springen.
+    if customer_locked and existing_state.get("step") in ("method", "confirm", "receipt") \
+            and new_state.get("step") in ("idle", "check", "select", "overview", "pay"):
+        new_state["step"] = existing_state.get("step")
+    # 2) Payload-bescherming: bewaar method + method_chosen_at + customer_initiated.
+    if existing_payload.get("method_chosen_at") and not new_payload.get("method_chosen_at"):
+        new_payload["method"] = existing_payload.get("method")
+        new_payload["method_chosen_at"] = existing_payload.get("method_chosen_at")
+    if existing_payload.get("customer_initiated") and not new_payload.get("customer_initiated"):
+        new_payload["customer_initiated"] = True
+        new_payload["customer_initiated_at"] = existing_payload.get("customer_initiated_at")
+        # Behoud ook bedrag + categorieën die door start-payment zijn gezet.
+        if not new_payload.get("amount") and existing_payload.get("amount"):
+            new_payload["amount"] = existing_payload["amount"]
+            new_payload["currency"] = existing_payload.get("currency") or new_payload.get("currency")
+            new_payload["categories"] = existing_payload.get("categories") or new_payload.get("categories") or []
+    if new_payload:
+        new_state["payload"] = new_payload
+
+    new_state["updated_at"] = iso(now_utc())
     await db.customer_display.update_one(
         {"company_id": cid},
-        {"$set": {"company_id": cid, "state": state, "updated_at": state["updated_at"]}},
+        {"$set": {"company_id": cid, "state": new_state, "updated_at": new_state["updated_at"]}},
         upsert=True,
     )
-    return {"ok": True, "updated_at": state["updated_at"]}
+    return {"ok": True, "updated_at": new_state["updated_at"]}
 
 
 @api.delete("/kiosk/customer-display")
