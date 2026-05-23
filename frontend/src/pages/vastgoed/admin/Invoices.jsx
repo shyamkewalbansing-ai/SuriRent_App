@@ -48,6 +48,8 @@ function groupByTenant(invoices) {
     const g = map.get(key);
     g.all.push(inv);
     if (isUnpaid(inv)) g.open.push(inv);
+    // Houd het meest recente bekende appartement-nummer aan (in geval van verhuizing).
+    if (inv.apartment_number) g.apartment_number = inv.apartment_number;
   }
   for (const g of map.values()) {
     g.open.sort((a, b) => (a.period_year - b.period_year) || (a.period_month - b.period_month));
@@ -195,11 +197,14 @@ function TenantRow({ group, expanded, onToggle, onReminder }) {
             {initials(group.tenant_name)}
           </div>
 
-          {/* Huurder name */}
+          {/* Huurder name + appartement */}
           <div className="min-w-0">
             <p className="font-bold text-slate-900 text-sm sm:text-[15px] truncate">{group.tenant_name}</p>
+            <p className="text-[11px] sm:text-xs text-slate-500 font-medium truncate" data-testid={`tenant-apt-${group.tenant_id}`}>
+              {group.apartment_number ? `Appt. ${group.apartment_number}` : 'Geen appartement'}
+            </p>
             {/* Mobiel: status pill onder de naam (geen aparte Open maanden kolom op mobiel) */}
-            <div className="mt-0.5 md:hidden">
+            <div className="mt-1 md:hidden">
               <StatusPill severity={sev} openCount={group.openCount} />
             </div>
           </div>
