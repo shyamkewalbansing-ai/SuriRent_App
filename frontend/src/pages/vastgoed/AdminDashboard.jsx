@@ -147,7 +147,7 @@ function MobileHeader({ activeCompany, user, onOpenMenu }) {
             }}
             data-testid="mobile-kiosk-shortcut"
             aria-label="Open Kiosk"
-            className="ml-1 inline-flex items-center justify-center h-10 px-3 rounded-xl bg-[#FF5C00] text-white font-bold text-xs shadow-[0_6px_16px_-4px_rgba(255,92,0,0.55)] active:scale-95 transition gap-1.5">
+            className="ml-1 inline-flex items-center justify-center h-10 px-3 rounded-xl bg-white border border-slate-200 text-slate-900 font-bold text-xs shadow-sm active:scale-95 transition gap-1.5 hover:border-[#FF5C00]">
             <Monitor className="w-4 h-4" />
             <span>Kiosk</span>
           </button>
