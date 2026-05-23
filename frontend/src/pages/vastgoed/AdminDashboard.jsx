@@ -1479,6 +1479,7 @@ export default function AdminDashboard() {
         <ImpersonationBanner />
         <TrialBanner />
         <main className="flex-1 p-5 md:p-8 pb-24 md:pb-8 w-full">
+          <div className="mx-auto w-full max-w-[1280px]">
           {tab === 'companies' && <Companies />}
           {tab === 'subscriptions' && <Subscriptions />}
           {tab === 'saas_settings' && <SaasSettings />}
@@ -1498,6 +1499,7 @@ export default function AdminDashboard() {
           {tab === 'notifications' && <Notifications />}
           {tab === 'mijn_abonnement' && <MijnAbonnement />}
           {tab === 'settings' && <SettingsPage />}
+          </div>
         </main>
       </div>
       <MobileTabBar active={tab} onChange={setTab} tabs={tabs} user={user}
