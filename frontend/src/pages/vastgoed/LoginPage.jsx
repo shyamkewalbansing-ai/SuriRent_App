@@ -102,7 +102,14 @@ function PinLanding({ onSuccess, onPassword, onRegister, branding, pwaTarget }) 
   };
 
   return (
-    <div className="h-[100dvh] w-full flex flex-col" style={{ backgroundColor: primary, paddingTop: 'env(safe-area-inset-top, 0px)', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+    <div className="flex flex-col" style={{
+      position: 'fixed', inset: 0,
+      backgroundColor: primary,
+      paddingTop: 'env(safe-area-inset-top, 0px)',
+      paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+      paddingLeft: 'env(safe-area-inset-left, 0px)',
+      paddingRight: 'env(safe-area-inset-right, 0px)',
+    }}>
       <Header branding={branding} />
       <div className="flex-1 min-h-0 flex items-center justify-center px-2 py-2 sm:p-6 overflow-hidden">
         <div className="bg-white rounded-2xl sm:rounded-3xl shadow-[0_20px_60px_rgba(0,0,0,0.15)] w-full max-w-md flex flex-col"
@@ -284,9 +291,17 @@ function PasswordView({ initialMode = 'login', onBack, onRegistered, branding })
   }
 
   return (
-    <div className="min-h-screen flex flex-col" style={{ backgroundColor: branding?.primary_color || '#FF5C00', paddingTop: 'env(safe-area-inset-top, 0px)', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+    <div className="flex flex-col" style={{
+      position: 'fixed', inset: 0,
+      backgroundColor: branding?.primary_color || '#FF5C00',
+      overflowY: 'auto', WebkitOverflowScrolling: 'touch',
+      paddingTop: 'env(safe-area-inset-top, 0px)',
+      paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+      paddingLeft: 'env(safe-area-inset-left, 0px)',
+      paddingRight: 'env(safe-area-inset-right, 0px)',
+    }}>
       <Header branding={branding} />
-      <div className="flex-1 flex items-center justify-center p-4 sm:p-6">
+      <div className="flex-1 flex items-start sm:items-center justify-center p-4 sm:p-6">
         <div className="bg-white rounded-3xl shadow-[0_20px_60px_rgba(0,0,0,0.15)] w-full max-w-xl p-8 md:p-12" data-testid="auth-form">
           <button onClick={onBack} data-testid="auth-back" className="flex items-center gap-2 text-sm font-medium text-slate-400 hover:text-slate-600 mb-6 transition active:scale-95">
             <ArrowLeft className="w-4 h-4" /> Terug naar PIN
@@ -454,9 +469,16 @@ function PasswordView({ initialMode = 'login', onBack, onRegistered, branding })
 function RegisterSuccess({ plan, company, bankDetails, onContinue }) {
   const ref = `ABONNEMENT — ${company || ''} — ${new Date().toLocaleDateString('nl-NL', { month: 'long', year: 'numeric' })}`;
   return (
-    <div className="min-h-screen bg-orange-500 flex flex-col" style={{ paddingTop: 'env(safe-area-inset-top, 0px)', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+    <div className="flex flex-col" style={{
+      position: 'fixed', inset: 0, backgroundColor: '#F97316',
+      overflowY: 'auto', WebkitOverflowScrolling: 'touch',
+      paddingTop: 'env(safe-area-inset-top, 0px)',
+      paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+      paddingLeft: 'env(safe-area-inset-left, 0px)',
+      paddingRight: 'env(safe-area-inset-right, 0px)',
+    }}>
       <Header />
-      <div className="flex-1 flex items-center justify-center p-4 sm:p-6">
+      <div className="flex-1 flex items-start sm:items-center justify-center p-4 sm:p-6">
         <div className="bg-white rounded-3xl shadow-[0_20px_60px_rgba(0,0,0,0.15)] w-full max-w-2xl p-6 sm:p-10" data-testid="register-success">
           <div className="text-center mb-6">
             <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-3">

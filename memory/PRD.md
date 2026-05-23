@@ -314,6 +314,13 @@ User koos voor **Optie C — minimale herbouw** (kern eerst), dan vroeg om **Fas
 - ✅ Sidebar bevat nu: logo + tab-lijst (direct in beeld) + admin e-mail + Uitloggen. Beheerder kan direct alle tabs zien zonder afleiding.
 - ✅ "Open Kiosk" blijft beschikbaar als grote CTA-kaart op het Overzicht-scherm.
 
+### Session 2026-05-23 — Bulk WhatsApp + iOS PWA + Auto-update ✅
+- ✅ **Bulk WhatsApp Wizard** in Facturen (Invoices.jsx): één klop per huurder, opent `wa.me` met vooringevulde achterstandstekst, progress-balk, skip-knop, waarschuwt voor huurders zonder telefoonnummer. Browser-veilig (geen popup-block).
+- ✅ **iOS PWA edge-to-edge oranje achtergrond** — PinLanding + PasswordView + RegisterSuccess wrappers herschreven naar `position: fixed; inset: 0` met safe-area-padding INSIDE. Geen `h-[100dvh]` of `min-h-screen` meer → witte strook onder home-indicator en notch-overlap zijn weg.
+- ✅ **First-paint bg fix** — inline `<script>` in `index.html` zet `documentElement.style.backgroundColor = '#FF5C00'` voor `/login`, `/kiosk`, `/` routes vóór React mount → geen witte flits meer op iOS PWA standalone.
+- ✅ **PWA auto-update toast** — `UpdateToast` component (rechtsboven) toont "Nieuwe versie · App wordt bijgewerkt…" met spinner zodra een nieuwe service worker activeert. Page reload volgt automatisch (600ms delay). Cache-versie bumped naar `surirent-v21`.
+- ✅ Smoke tested via Playwright: login + admin + Bulk WhatsApp modal allen werkend.
+
 ## Prioritized Backlog (Fases E-F)
 - 📧 **Email notificaties** — wacht op SendGrid / Resend credentials van user
 - 📱 **WhatsApp/SMS herinneringen** — wacht op Twilio credentials

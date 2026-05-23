@@ -7,6 +7,7 @@ import { X, Share, Plus } from 'lucide-react';
  * SW may not be available (silently no-ops).
  */
 export function useRegisterServiceWorker() {
+  const [updating, setUpdating] = useState(false);
   useEffect(() => {
     if (typeof window === 'undefined') return;
     if (!('serviceWorker' in navigator)) return;
@@ -25,7 +26,8 @@ export function useRegisterServiceWorker() {
         const handleUpdate = (newWorker) => {
           newWorker.addEventListener('statechange', () => {
             if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-              // New version ready → activate immediately + reload page once.
+              // New version ready → tonen aan gebruiker en activeren.
+              setUpdating(true);
               newWorker.postMessage({ type: 'SKIP_WAITING' });
             }
           });
@@ -41,7 +43,10 @@ export function useRegisterServiceWorker() {
         navigator.serviceWorker.addEventListener('controllerchange', () => {
           if (refreshing) return;
           refreshing = true;
-          window.location.reload();
+          // Korte zichtbare toast (via state) en dan reload — ~600ms is
+          // genoeg om de gebruiker te informeren zonder ergernis.
+          setUpdating(true);
+          setTimeout(() => window.location.reload(), 600);
         });
 
         // 3) Poll for updates: every 60s (active tab) ask the SW to check
@@ -64,6 +69,26 @@ export function useRegisterServiceWorker() {
     if (document.readyState === 'complete') onReady();
     else window.addEventListener('load', onReady, { once: true });
   }, []);
+  return { updating };
+}
+
+/**
+ * UpdateToast — kleine, niet-blokkerende melding rechtsonder die kort
+ * verschijnt zodra een nieuwe versie geactiveerd wordt. Wordt automatisch
+ * gevolgd door een page reload (zie useRegisterServiceWorker).
+ */
+export function UpdateToast({ visible }) {
+  if (!visible) return null;
+  return (
+    <div className="fixed left-1/2 -translate-x-1/2 bottom-6 z-[80] bg-slate-900 text-white rounded-2xl shadow-2xl px-5 py-3 flex items-center gap-3 animate-slide-up"
+      data-testid="pwa-update-toast">
+      <div className="w-5 h-5 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+      <div>
+        <p className="text-sm font-bold leading-tight">Nieuwe versie</p>
+        <p className="text-[11px] text-white/70 leading-tight">App wordt bijgewerkt…</p>
+      </div>
+    </div>
+  );
 }
 
 const DISMISS_KEY = 'surirent_pwa_install_dismissed_at';

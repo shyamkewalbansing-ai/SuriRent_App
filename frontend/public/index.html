@@ -60,8 +60,21 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
     <title>SuriRent - Vastgoed Kiosk</title>
+    <script>
+      // First-paint background: voorkomt witte flash op iOS PWA standalone bij
+      // start van /login (Kiosk PIN, Beheerder login/register) of /kiosk. React
+      // overschrijft dit nadien via body.login-mode / body.kiosk-mode klassen.
+      (function () {
+        try {
+          var p = (window.location.pathname || '').toLowerCase();
+          if (p === '/login' || p.indexOf('/login') === 0 || p === '/kiosk' || p.indexOf('/kiosk') === 0 || p === '/') {
+            document.documentElement.style.backgroundColor = '#FF5C00';
+          }
+        } catch (e) { /* no-op */ }
+      })();
+    </script>
   </head>
-  <body>
+  <body style="background-color: #FFF7F0;">
     <noscript>JavaScript is vereist om deze app te gebruiken.</noscript>
     <div id="root"></div>
   </body>
