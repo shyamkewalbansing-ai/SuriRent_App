@@ -461,49 +461,44 @@ export default function Payments() {
 
   // WhatsApp foto flow:
   // 1) Haal JPG render van de kwitantie op
-  // 2) Download foto naar device (gaat naar Photos/Bestanden op iOS)
-  // 3) Open WhatsApp direct met de juiste huurder + groet-bericht
-  // De gebruiker hoeft alleen nog op de paperclip → Foto's → recent te tikken.
+  // 2) Probeer Web Share API met file → iOS share-sheet met foto bijgevoegd
+  // 3) Fallback (oude browsers): download + open wa.me met juiste huurder
   const sendWhatsAppPhoto = async (p) => {
-    const tenant = tenants.find((t) => t.id === p.tenant_id);
-    const phone = (tenant?.phone || '').replace(/\D/g, '');
-    if (!phone) {
-      alert(`Huurder ${p.tenant_name} heeft geen telefoonnummer. Voeg eerst toe via Huurders.`);
-      return;
-    }
     try {
       const resp = await fetch(`${apiBase}/payments/${p.id}/image`);
       if (!resp.ok) throw new Error('Foto render fout');
       const blob = await resp.blob();
       const fname = `kwitantie-${p.receipt_number}.jpg`;
+      const text = `Beste ${p.tenant_name},\n\nHierbij uw kwitantie ${p.receipt_number}.\n\n— SuriRent`;
 
-      // Probeer eerst Web Share API met file — opent share-sheet met foto;
-      // gebruiker kiest WhatsApp + contact in één flow (PDF/JPG als
-      // bijlage, geen handmatige paperclip nodig).
+      // Eerste keuze: native share-sheet met file. Dit werkt op iOS Safari/PWA,
+      // Android Chrome, Edge en Safari macOS. Gebruiker kiest WhatsApp + contact
+      // (vaak 1 tik dankzij "Recent Chats" of "Pinned" chats in WhatsApp).
       const file = new File([blob], fname, { type: 'image/jpeg' });
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
         try {
-          await navigator.share({
-            files: [file],
-            title: 'Kwitantie',
-            text: `Beste ${p.tenant_name},\n\nHierbij uw kwitantie ${p.receipt_number}.\n\n— SuriRent`,
-          });
+          await navigator.share({ files: [file], title: 'Kwitantie', text });
           return;
         } catch (e) {
           if (e.name === 'AbortError') return;
-          // Doorvallen naar fallback
+          // Bij andere fouten: doorvallen naar fallback
         }
       }
 
-      // Fallback: download de foto + open wa.me met juiste huurder
+      // Fallback voor browsers zonder Web Share API (oude desktop Chrome):
+      // download foto + open wa.me met juiste huurder
+      const tenant = tenants.find((t) => t.id === p.tenant_id);
+      const phone = (tenant?.phone || '').replace(/\D/g, '');
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      a.href = url;
-      a.download = fname;
+      a.href = url; a.download = fname;
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
       setTimeout(() => URL.revokeObjectURL(url), 1500);
-      const text = `Beste ${p.tenant_name},\n\nHierbij uw kwitantie ${p.receipt_number} voor ${p.currency} ${Number(p.amount).toFixed(2)}.\n\n— SuriRent`;
-      window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
+      if (phone) {
+        window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
+      } else {
+        alert('Foto gedownload naar je toestel. Huurder heeft geen telefoonnummer in profiel — voeg dit toe via Huurders om WhatsApp automatisch te openen.');
+      }
     } catch (e) {
       alert(`WhatsApp foto delen mislukt: ${e.message}`);
     }
