@@ -742,7 +742,7 @@ function PaymentConfirm({ payload, overview, onBack, onSuccess }) {
       try {
         const { data } = await api.post('/kiosk/mope/create-qr');
         if (!cancelled) {
-          setMope({ qr: data.qr, ref: data.ref, mode: data.mode });
+          setMope({ qr: data.qr, ref: data.ref, mode: data.mode, api_error: data.api_error });
           setWaitingPaid(true);
         }
       } catch (e) {
@@ -821,10 +821,27 @@ function PaymentConfirm({ payload, overview, onBack, onSuccess }) {
                   Referentie: <span className="font-mono">{mope.ref}</span>
                   {mope.mode === 'mock' && (
                     <span className="ml-2 px-2 py-0.5 rounded bg-amber-100 text-amber-700 font-bold uppercase tracking-wider text-[10px]">
-                      Test-modus
+                      Lokale mock
+                    </span>
+                  )}
+                  {mope.mode === 'test' && (
+                    <span className="ml-2 px-2 py-0.5 rounded bg-sky-100 text-sky-700 font-bold uppercase tracking-wider text-[10px]">
+                      Mope test
+                    </span>
+                  )}
+                  {mope.mode === 'live' && (
+                    <span className="ml-2 px-2 py-0.5 rounded bg-emerald-100 text-emerald-700 font-bold uppercase tracking-wider text-[10px]">
+                      Live
                     </span>
                   )}
                 </p>
+                {mope.api_error && (
+                  <div className="mt-3 p-2.5 bg-amber-50 border border-amber-200 text-amber-800 rounded-xl text-xs">
+                    <p className="font-bold">Mope-API niet bereikbaar — terug naar mock-modus.</p>
+                    <p className="opacity-80 mt-1 break-all">{mope.api_error.slice(0, 180)}</p>
+                    <p className="mt-1">Vraag een geldig token aan via <a href="mailto:info@mope.sr" className="underline font-bold">info@mope.sr</a> en plak het in Instellingen → Mope.</p>
+                  </div>
+                )}
                 <div className="my-4 flex items-center gap-2 text-emerald-600 font-bold text-sm justify-center">
                   <Loader2 className="w-4 h-4 animate-spin" />
                   Wacht op bevestiging…

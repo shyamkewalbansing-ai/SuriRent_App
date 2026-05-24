@@ -291,7 +291,8 @@ function MopeQRScreen({ state, slug }) {
   const cur = payload.mope_currency || payload.currency || 'SRD';
   const amt = Number(payload.mope_amount || payload.amount || 0);
   const paid = !!payload.mope_paid_at;
-  const isMock = payload.mope_mode !== 'live';
+  const isMock = payload.mope_mode === 'mock';
+  const isTest = payload.mope_mode === 'test';
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
@@ -334,11 +335,26 @@ function MopeQRScreen({ state, slug }) {
               style={{ fontSize: clamp(11, 1.1, 16) }}>
               Open de Mope-app, scan deze QR en bevestig de betaling.
             </p>
-            {isMock && (
+            {payload.mope_qr_url && payload.mope_qr_url.startsWith('https://') && (
+              <a href={payload.mope_qr_url} target="_blank" rel="noopener noreferrer"
+                data-testid="cd-mope-open-link"
+                className="mt-3 inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#FF5C00] text-white font-bold shadow-md hover:bg-[#E05200] transition"
+                style={{ fontSize: clamp(11, 1.1, 16) }}>
+                Open Mope-app op dit apparaat →
+              </a>
+            )}
+            {(isMock || isTest) && (
               <>
                 <div className="h-px bg-slate-200 my-4" />
                 <p className="text-slate-400 font-bold uppercase tracking-widest mb-2"
-                  style={{ fontSize: clamp(9, 0.85, 12) }}>Test-modus</p>
+                  style={{ fontSize: clamp(9, 0.85, 12) }}>
+                  {isMock ? 'Test-modus (lokaal)' : 'Test-modus (Mope-API)'}
+                </p>
+                {isTest && (
+                  <p className="text-slate-500 mb-3" style={{ fontSize: clamp(10, 0.95, 14) }}>
+                    Tip: bedrag <b>1,00</b> = open · <b>2,00</b> = gescand · <b>3,00</b> = niet bevestigd · ander = direct betaald.
+                  </p>
+                )}
                 <motion.button
                   whileTap={{ scale: 0.97 }}
                   onClick={confirmPaid} disabled={busy}

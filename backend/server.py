@@ -3596,7 +3596,30 @@ async def kiosk_get_customer_display(request: Request):
     if not cid:
         raise HTTPException(status_code=401, detail="Niet ingelogd op kiosk")
     doc = await db.customer_display.find_one({"company_id": cid}, {"_id": 0})
-    return {"state": (doc or {}).get("state") or {"step": "idle"}}
+    state = (doc or {}).get("state") or {"step": "idle"}
+    # Auto-refresh Mope status wanneer er een actief request_id is en geen paid_at.
+    payload = state.get("payload") or {}
+    req_id = payload.get("mope_request_id")
+    if req_id and not payload.get("mope_paid_at") and payload.get("mope_mode") in ("test", "live"):
+        company = await db.companies.find_one({"id": cid}, {"_id": 0, "id": 1, "integrations": 1})
+        api_key = await _mope_api_key_for_company(company)
+        if api_key:
+            try:
+                status_data = await _mope_get_payment_status(api_key, req_id)
+                new_status = status_data.get("status")
+                if new_status and new_status != payload.get("mope_status"):
+                    payload["mope_status"] = new_status
+                    if new_status == "paid":
+                        payload["mope_paid_at"] = iso(now_utc())
+                    state["payload"] = payload
+                    state["updated_at"] = iso(now_utc())
+                    await db.customer_display.update_one(
+                        {"company_id": cid},
+                        {"$set": {"state": state, "updated_at": state["updated_at"]}},
+                    )
+            except Exception as e:
+                print(f"[mope] poll status failed: {e}")
+    return {"state": state}
 
 
 
@@ -3635,12 +3658,66 @@ def _generate_qr_data_url(payload: str, size_px: int = 480) -> str:
     return "data:image/png;base64," + base64.b64encode(png).decode("ascii")
 
 
+MOPE_API_BASE = "https://api.mope.sr/api"
+
+
+async def _mope_create_payment_request(api_key: str, amount: float, currency: str,
+                                       description: str, order_id: str, redirect_url: str):
+    """Create a payment request via Mope API. Returns (request_id, payment_url)."""
+    import httpx as _httpx
+    amount_cents = int(round(amount * 100))
+    async with _httpx.AsyncClient(timeout=15) as client:
+        r = await client.post(
+            f"{MOPE_API_BASE}/shop/payment_request",
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            json={
+                "description": description[:120],
+                "amount": amount_cents,
+                "order_id": order_id[:120],
+                "currency": currency,
+                "redirect_url": redirect_url[:255],
+            },
+        )
+        r.raise_for_status()
+        data = r.json()
+        return data["id"], data["url"]
+
+
+async def _mope_get_payment_status(api_key: str, request_id: str) -> dict:
+    import httpx as _httpx
+    async with _httpx.AsyncClient(timeout=10) as client:
+        r = await client.get(
+            f"{MOPE_API_BASE}/shop/payment_request/{request_id}",
+            headers={"Authorization": f"Bearer {api_key}"},
+        )
+        r.raise_for_status()
+        return r.json()
+
+
+async def _mope_api_key_for_company(company: dict) -> str:
+    """Resolve Mope API key. Priority:
+    1. company_settings.mope.api_key (gezet via Instellingen UI)
+    2. company.integrations.mope.api_key (legacy)
+    3. env MOPE_API_KEY (globale fallback voor test)"""
+    cid = (company or {}).get("id")
+    if cid:
+        settings = await db.company_settings.find_one(
+            {"company_id": cid}, {"_id": 0, "mope": 1}
+        )
+        key = ((settings or {}).get("mope") or {}).get("api_key") or ""
+        if key:
+            return key
+    integrations = (company or {}).get("integrations") or {}
+    cfg = integrations.get("mope") or {}
+    return cfg.get("api_key") or os.environ.get("MOPE_API_KEY") or ""
+
+
 @api.post("/kiosk/mope/create-qr")
 async def kiosk_mope_create_qr(request: Request):
-    """Maakt een (mock) Mope-QR-code voor de huidige customer-display sessie.
-    In LIVE-modus zou hier de echte Mope-API (https://api.mope.sr/integration/doc)
-    worden aangeroepen met de API-key uit company.integrations.mope.api_key.
-    Voor nu genereren we een mock QR met een unieke ref."""
+    """Maakt een Mope payment_request via de echte Mope-API wanneer een
+    API-key beschikbaar is (env MOPE_API_KEY of company.integrations.mope.api_key).
+    De QR bevat `https://mope.sr/p/<id>` zodat de Mope-app hem herkent en
+    direct de betaal-flow opent. Zonder API-key: lokale mock-QR."""
     cid = None
     try:
         ks = await get_kiosk_session(request)
@@ -3666,24 +3743,48 @@ async def kiosk_mope_create_qr(request: Request):
         raise HTTPException(status_code=400, detail="Geen bedrag")
     currency = payload.get("currency") or "SRD"
 
-    company = await db.companies.find_one({"id": cid}, {"_id": 0, "integrations": 1, "name": 1})
-    integrations = (company or {}).get("integrations") or {}
-    mope_cfg = integrations.get("mope") or {}
-    live = bool(mope_cfg.get("live") and mope_cfg.get("api_key"))
+    company = await db.companies.find_one({"id": cid}, {"_id": 0, "id": 1, "integrations": 1, "name": 1, "slug": 1})
+    api_key = await _mope_api_key_for_company(company)
+    order_id = f"KIOSK-{secrets.token_hex(4).upper()}"
+    redirect_url = _public_url(f"/kiosk/klant?c={(company or {}).get('slug', '')}")
 
-    ref = f"MOPE-{secrets.token_hex(4).upper()}"
-    qr_text = (
-        f"mope://pay?merchant={cid[:8]}&amount={amount:.2f}&currency={currency}&ref={ref}"
-    )
+    mode = "mock"
+    request_id = None
+    qr_text = None
+    api_error = None
+    if api_key:
+        try:
+            request_id, qr_text = await _mope_create_payment_request(
+                api_key=api_key,
+                amount=amount,
+                currency=currency,
+                description=f"{(company or {}).get('name', 'Vastgoed')} kiosk",
+                order_id=order_id,
+                redirect_url=redirect_url,
+            )
+            mode = "test" if api_key.startswith("test_") else "live"
+        except Exception as e:
+            api_error = str(e)
+            print(f"[mope] create-qr API call failed, falling back to mock: {e}")
+
+    if not qr_text:
+        # Mock fallback — QR die de echte app NIET kan scannen, maar onze
+        # test-knop wel kan bevestigen.
+        request_id = f"MOCK-{secrets.token_hex(8)}"
+        qr_text = f"mope://pay?merchant={cid[:8]}&amount={amount:.2f}&currency={currency}&ref={request_id}"
+
     qr_data_url = _generate_qr_data_url(qr_text, size_px=480)
-    mode = "live" if live else "mock"
 
     payload["mope_qr"] = qr_data_url
-    payload["mope_ref"] = ref
+    payload["mope_qr_url"] = qr_text  # de URL zelf, zodat we 'em ook plain kunnen tonen
+    payload["mope_ref"] = order_id
+    payload["mope_request_id"] = request_id
     payload["mope_mode"] = mode
     payload["mope_amount"] = amount
     payload["mope_currency"] = currency
     payload["mope_created_at"] = iso(now_utc())
+    if api_error:
+        payload["mope_api_error"] = api_error[:200]
     payload.pop("mope_paid_at", None)
     state["payload"] = payload
     state["updated_at"] = iso(now_utc())
@@ -3692,7 +3793,92 @@ async def kiosk_mope_create_qr(request: Request):
         {"$set": {"state": state, "updated_at": state["updated_at"]}},
         upsert=True,
     )
-    return {"ok": True, "mode": mode, "ref": ref, "qr": qr_data_url, "amount": amount, "currency": currency}
+    return {
+        "ok": True, "mode": mode, "ref": order_id, "request_id": request_id,
+        "qr": qr_data_url, "qr_url": qr_text,
+        "amount": amount, "currency": currency,
+        **({"api_error": api_error} if api_error else {}),
+    }
+
+
+@api.post("/integrations/mope/webhook")
+async def mope_webhook(request: Request):
+    """Mope's webhook stuurt enkel het payment_request_id. Wij zoeken
+    in alle bedrijven naar een actieve customer_display met dit id en
+    refreshen de status via de Mope GET endpoint."""
+    body = {}
+    try:
+        body = await request.json()
+    except Exception:
+        pass
+    req_id = (body or {}).get("id")
+    if not req_id:
+        raise HTTPException(status_code=400, detail="Missing id")
+    docs = await db.customer_display.find(
+        {"state.payload.mope_request_id": req_id}, {"_id": 0}
+    ).to_list(10)
+    for doc in docs:
+        cid = doc.get("company_id")
+        company = await db.companies.find_one({"id": cid}, {"_id": 0, "id": 1, "integrations": 1})
+        api_key = await _mope_api_key_for_company(company)
+        if not api_key:
+            continue
+        try:
+            status_data = await _mope_get_payment_status(api_key, req_id)
+        except Exception:
+            continue
+        state = doc.get("state") or {}
+        payload = state.get("payload") or {}
+        payload["mope_status"] = status_data.get("status")
+        if status_data.get("status") == "paid" and not payload.get("mope_paid_at"):
+            payload["mope_paid_at"] = iso(now_utc())
+        state["payload"] = payload
+        state["updated_at"] = iso(now_utc())
+        await db.customer_display.update_one(
+            {"company_id": cid},
+            {"$set": {"state": state, "updated_at": state["updated_at"]}},
+        )
+    return Response(status_code=204)
+
+
+@api.post("/admin/integrations/mope")
+async def admin_set_mope_integration(request: Request, user=Depends(get_current_user)):
+    """Beheerder slaat Mope API-key op voor zijn bedrijf. Body:
+    `{api_key: str, merchant_id?: str}`. Token kan `test_` of `live_` prefix
+    hebben — wij detecteren het type automatisch."""
+    body = await request.json()
+    api_key = (body or {}).get("api_key", "").strip()
+    cid = company_id_of(user)
+    if not cid:
+        raise HTTPException(status_code=400, detail="Geen bedrijfscontext")
+    company = await db.companies.find_one({"id": cid}, {"_id": 0})
+    integrations = company.get("integrations") or {}
+    integrations["mope"] = {
+        "api_key": api_key,
+        "merchant_id": (body or {}).get("merchant_id", ""),
+        "live": bool(api_key and not api_key.startswith("test_")),
+        "updated_at": iso(now_utc()),
+    }
+    await db.companies.update_one({"id": cid}, {"$set": {"integrations": integrations}})
+    return {"ok": True, "mode": "live" if integrations["mope"]["live"] else ("test" if api_key.startswith("test_") else "mock")}
+
+
+@api.get("/admin/integrations/mope")
+async def admin_get_mope_integration(user=Depends(get_current_user)):
+    cid = company_id_of(user)
+    if not cid:
+        raise HTTPException(status_code=400, detail="Geen bedrijfscontext")
+    company = await db.companies.find_one({"id": cid}, {"_id": 0})
+    cfg = ((company or {}).get("integrations") or {}).get("mope") or {}
+    key = cfg.get("api_key") or ""
+    return {
+        "configured": bool(key),
+        "mode": "live" if cfg.get("live") else ("test" if key.startswith("test_") else ("mock" if not key else "unknown")),
+        # Mask key — show only last 4 chars
+        "api_key_preview": ("•" * max(0, len(key) - 4) + key[-4:]) if key else "",
+        "merchant_id": cfg.get("merchant_id", ""),
+        "updated_at": cfg.get("updated_at"),
+    }
 
 
 @api.post("/public/customer-display/{slug}/mope-confirm")

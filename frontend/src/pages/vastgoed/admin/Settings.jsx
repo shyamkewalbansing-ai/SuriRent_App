@@ -153,6 +153,24 @@ function PaymentGatewayForm({ section, initial }) {
       <SwitchField label="Ingeschakeld" testid={`${section}-enabled`}
         value={d.enabled} onChange={(v) => s.onField('enabled', v)}
         desc="Wanneer aan kunnen huurders facturen online betalen." />
+      {section === 'mope' && (
+        <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 text-sm text-slate-700">
+          <p className="font-black text-[#FF5C00] mb-1">Mope test/live-token aanvragen</p>
+          <p className="mb-2">
+            Voor een werkende QR-code (die de echte Mope-app herkent) heeft u een
+            API-token nodig van Mopé. Stuur een mail naar{' '}
+            <a href="mailto:info@mope.sr" className="text-[#FF5C00] font-bold underline">info@mope.sr</a>{' '}
+            of bezoek <a href="https://mope.sr/contact" target="_blank" rel="noreferrer"
+              className="text-[#FF5C00] font-bold underline">mope.sr/contact</a> en vraag een
+            webshop-token aan voor uw bedrijf (vereist business-account en bankbezoek).
+          </p>
+          <p className="text-xs text-slate-500">
+            Tokens met prefix <code className="bg-white px-1 rounded">test_</code> zijn voor testen
+            (bedrag 1,00 = open · 2,00 = gescand · 3,00 = niet bevestigd · ander = direct betaald).
+            Zonder token werkt het systeem in lokale mock-modus.
+          </p>
+        </div>
+      )}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <TextField label="Merchant ID" testid={`${section}-merchant`} value={d.merchant_id} onChange={(v) => s.onField('merchant_id', v)} placeholder="MERCH-xxxx" />
         <div>
@@ -163,7 +181,9 @@ function PaymentGatewayForm({ section, initial }) {
             <option value="production">Productie (live)</option>
           </select>
         </div>
-        <TextField label="API key" testid={`${section}-apikey`} type="password" value={d.api_key ?? ''} onChange={(v) => s.onField('api_key', v)} placeholder="••••• (laat leeg om huidige te behouden)" />
+        <TextField label="API key" testid={`${section}-apikey`} type="password" value={d.api_key ?? ''} onChange={(v) => s.onField('api_key', v)}
+          placeholder={section === 'mope' ? 'test_xxx... of live token van Mopé' : '••••• (laat leeg om huidige te behouden)'}
+          helper={section === 'mope' ? 'Plak hier het token dat u van Mopé heeft ontvangen.' : ''} />
         <TextField label="Webhook secret" testid={`${section}-webhook`} type="password" value={d.webhook_secret ?? ''} onChange={(v) => s.onField('webhook_secret', v)} placeholder="••••• (laat leeg om huidige te behouden)" />
         <TextField label="Callback URL" testid={`${section}-callback`} value={d.callback_url} onChange={(v) => s.onField('callback_url', v)} placeholder="https://jouw-bedrijf.com/payment-return" helper="Waar de gebruiker terugkeert na betalen" />
       </div>
