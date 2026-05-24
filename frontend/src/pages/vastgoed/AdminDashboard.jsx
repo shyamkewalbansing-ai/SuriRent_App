@@ -232,7 +232,7 @@ function MobileTopLogo({ user, activeCompany }) {
 }
 
 function MobileSheet({ open, onClose, active, onChange, onLogout, user, tabs, activeCompany, badgeCount }) {
-  const navigate = useNavigate();
+  const navigate = useBrandedNavigate();
   if (!open) return null;
   return (
     <div className="md:hidden fixed inset-0 z-50" data-testid="mobile-sheet">
@@ -533,7 +533,7 @@ function ActivityRow({ item }) {
 
 function Overview() {
   const [stats, setStats] = useState(null);
-  const navigate = useNavigate();
+  const navigate = useBrandedNavigate();
   const reload = useCallback(() => {
     api.get('/admin/stats').then((r) => setStats(r.data)).catch(() => { /* keep last */ });
   }, []);
@@ -1552,7 +1552,7 @@ export default function AdminDashboard() {
   const tabs = getTabsFor(user);
   const [tab, setTab] = useState(() => (user?.role === 'superadmin' ? 'subscriptions' : 'overview'));
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const navigate = useNavigate();
+  const navigate = useBrandedNavigate();
   const location = useLocation();
   const { count: badgeCount } = useBadge();
 

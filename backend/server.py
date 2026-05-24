@@ -1981,6 +1981,71 @@ async def get_my_url_info(request: Request, user=Depends(get_current_user)):
     }
 
 
+# Welke entry-points een admin als QR kan delen. We bouwen de URL server-side
+# zodat een gebruiker niet zomaar een willekeurige (phishing-)URL door onze
+# QR-generator kan jagen.
+_QR_KIND_PATHS = {
+    "login":           "/c/{slug}",
+    "kiosk":           "/c/{slug}/kiosk",
+    "tenant_kiosk":    "/c/{slug}/kiosk/huurder",
+    "customer_display":"/c/{slug}/kiosk/klant",
+    "tenant_portal":   "/c/{slug}/huurder",
+    "query":           "/login?c={slug}",
+}
+
+
+def _company_base_url(request: Request) -> str:
+    host = (request.headers.get("x-forwarded-host") or request.headers.get("host") or "").lower().split(":")[0].strip()
+    proto = (request.headers.get("x-forwarded-proto") or "").split(",")[0].strip().lower() or "https"
+    app_domain = (os.environ.get("SAAS_APP_DOMAIN") or "").strip().lower() or host
+    parts = app_domain.split(".") if app_domain else []
+    if len(parts) >= 4:
+        app_domain = ".".join(parts[1:])
+    return f"{proto}://{app_domain}" if app_domain else ""
+
+
+@api.get("/companies/me/qr.png")
+async def get_my_qr_png(kind: str = "kiosk", size: int = 320, request: Request = None,
+                       user=Depends(get_current_user)):
+    """Genereer een PNG QR-code voor één van de gepubliceerde entry-points
+    van het huidige bedrijf. `kind` mag een van: login, kiosk, tenant_kiosk,
+    customer_display, tenant_portal, query. De QR bevat de absolute branded
+    URL (bv. https://app.surirent.sr/c/<slug>/kiosk) en wordt server-side
+    gebouwd zodat de generator niet voor andere doeleinden misbruikt kan
+    worden."""
+    import io as _io
+    import qrcode as _qrcode
+    from fastapi.responses import StreamingResponse
+    cid = company_id_of(user)
+    if not cid:
+        raise HTTPException(status_code=400, detail="Geen actief bedrijf")
+    c = await db.companies.find_one({"id": cid}, {"_id": 0, "slug": 1})
+    if not c or not c.get("slug"):
+        raise HTTPException(status_code=404, detail="Bedrijf niet gevonden")
+    template = _QR_KIND_PATHS.get(kind)
+    if not template:
+        raise HTTPException(status_code=400, detail="Onbekend QR-type")
+    size = max(160, min(int(size or 320), 800))
+    base = _company_base_url(request)
+    if not base:
+        raise HTTPException(status_code=400, detail="Kan host niet bepalen")
+    url = f"{base}{template.format(slug=c['slug'])}"
+    qr = _qrcode.QRCode(version=None, error_correction=_qrcode.constants.ERROR_CORRECT_M,
+                        box_size=10, border=2)
+    qr.add_data(url)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="black", back_color="white").convert("RGB")
+    img = img.resize((size, size))
+    buf = _io.BytesIO()
+    img.save(buf, format="PNG", optimize=True)
+    buf.seek(0)
+    headers = {
+        "Cache-Control": "private, max-age=300",
+        "Content-Disposition": f'inline; filename="qr-{c["slug"]}-{kind}.png"',
+    }
+    return StreamingResponse(buf, media_type="image/png", headers=headers)
+
+
 
 
 # =====================================================================
