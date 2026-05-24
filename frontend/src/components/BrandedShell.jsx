@@ -1,6 +1,16 @@
 import { useEffect, useState } from 'react';
-import { useParams, Routes, Route, Navigate } from 'react-router-dom';
+import { useParams, Navigate } from 'react-router-dom';
 import { fetchBranding, applyBranding, setStoredSlug } from '../lib/branding';
+
+/**
+ * Top-level pad-segmenten die NIET als bedrijfscode mogen worden behandeld.
+ * Voorbeelden: /login, /admin, /kiosk, /huurder — die hebben hun eigen route.
+ */
+export const RESERVED_TOP_PATHS = new Set([
+  'login', 'admin', 'kiosk', 'huurder', 'onderteken', 'c', 'vastgoed',
+  'api', 'static', 'assets', 'public', 'manifest.json', 'sw.js',
+  'favicon.ico', 'robots.txt', 'sitemap.xml', 'index.html',
+]);
 
 /**
  * BrandedShell — wikkelt alle `/c/:slug/*` routes.
@@ -8,13 +18,14 @@ import { fetchBranding, applyBranding, setStoredSlug } from '../lib/branding';
  * op en past de primary-color CSS-var toe vóórdat de children renderen.
  * Zo werkt elk bedrijf met zijn eigen visuele identiteit op zijn eigen pad.
  */
-export default function BrandedShell({ children }) {
+export default function BrandedShell({ children, requireKnownSlug = true }) {
   const { slug } = useParams();
   const [ready, setReady] = useState(false);
   const [valid, setValid] = useState(true);
+  const reserved = slug && RESERVED_TOP_PATHS.has(String(slug).toLowerCase());
 
   useEffect(() => {
-    if (!slug) { setReady(true); return; }
+    if (!slug || reserved) { setReady(true); return; }
     let alive = true;
     (async () => {
       const data = await fetchBranding(slug);
@@ -29,8 +40,12 @@ export default function BrandedShell({ children }) {
       setReady(true);
     })();
     return () => { alive = false; };
-  }, [slug]);
+  }, [slug, reserved]);
 
+  if (reserved) {
+    // /login of /admin etc. — laat React Router doorlopen naar de echte route.
+    return <Navigate to={`/${slug}`} replace />;
+  }
   if (!ready) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-kiosk-cream">
