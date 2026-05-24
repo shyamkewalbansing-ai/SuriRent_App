@@ -390,6 +390,12 @@ User koos voor **Optie C — minimale herbouw** (kern eerst), dan vroeg om **Fas
 - ✅ **Subdomain branding** blijft werken via bestaande `detectCompanySlug()` + `/api/public/branding-by-host` (klant.app.surirent.sr → slug=klant).
 
 
+### QR-codes voor branded URLs (uitgebreid — 2026-05-24)
+- ✅ **Backend endpoint** `GET /api/companies/me/qr.png?kind=<login|kiosk|tenant_kiosk|customer_display|tenant_portal|query>&size=160-800` — auth-required; bouwt URL server-side via `_QR_KIND_PATHS` (phishing-safe); levert PNG via `qrcode[pil]`.
+- ✅ **`QrCodeModal` component** (`/app/frontend/src/components/QrCodeModal.jsx`) — fetcht PNG als blob via axios met Bearer-auth, toont in modal met kopieer-URL + Download PNG + Open knoppen. Clipboard fallback via `document.execCommand('copy')` voor browsers zonder Clipboard API.
+- ✅ **`MyUrlCard` integratie** — QR-iconen op alle 5 URL-rijen (subdomein, branded pad, admin kiosk, huurder kiosk, klantenscherm) in de Branding tab van de Admin Dashboard.
+- ✅ Geverifieerd: **20 nieuwe pytest cases (`test_qr_endpoint.py`) — alle kinds, auth, size-clamp, pyzbar-decode** + frontend e2e modal-open / download / kopieer (iteration_16 100% pass). Bonus: refactor-miss in AdminDashboard.jsx (3 vergeten `useNavigate` → `useBrandedNavigate`) opgelost.
+
 ## Prioritized Backlog (Fases E-F)
 - 📧 **Email notificaties** — wacht op SendGrid / Resend credentials van user
 - 📱 **WhatsApp/SMS herinneringen** — wacht op Twilio credentials

@@ -46,8 +46,19 @@ export default function QrCodeModal({ open, onClose, kind, label, url, brandColo
 
   const copyUrl = async () => {
     if (!url) return;
-    try { await navigator.clipboard.writeText(url); setCopied(true); setTimeout(() => setCopied(false), 1400); }
-    catch { /* ignore */ }
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(url);
+      } else {
+        // Fallback voor browsers/contexten zonder Clipboard API permissions.
+        const ta = document.createElement('textarea');
+        ta.value = url; ta.style.position = 'fixed'; ta.style.opacity = '0';
+        document.body.appendChild(ta); ta.select();
+        try { document.execCommand('copy'); } catch { /* ignore */ }
+        document.body.removeChild(ta);
+      }
+      setCopied(true); setTimeout(() => setCopied(false), 1400);
+    } catch { /* ignore — geen visuele feedback maar geen crash */ }
   };
 
   const accent = brandColor || '#FF5C00';
