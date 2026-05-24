@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useBrandedNavigate } from '../../lib/branded-nav';
 import { Loader2, Delete, ArrowLeft, Mail, Phone, Home } from 'lucide-react';
 import { api, formatError } from '../../lib/api';
 import { setPreferredRole } from '../../lib/pwaRole';
 
 export default function TenantLoginPage() {
-  const navigate = useNavigate();
+  const navigate = useBrandedNavigate();
   const [identifier, setIdentifier] = useState('');
   const [step, setStep] = useState('identifier'); // identifier | pin
   const [pin, setPin] = useState(['', '', '', '']);

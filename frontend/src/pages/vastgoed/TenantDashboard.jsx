@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useBrandedNavigate } from '../../lib/branded-nav';
 import {
   Home, Wallet, Receipt, Wrench, FileSignature, LogOut, Loader2,
   ArrowLeft, Plus, X, Check, AlertCircle, Calendar, FileText, ShieldCheck,
@@ -129,7 +129,7 @@ function MaintenanceForm({ onCancel, onSaved }) {
 }
 
 export default function TenantDashboard() {
-  const navigate = useNavigate();
+  const navigate = useBrandedNavigate();
   const [overview, setOverview] = useState(null);
   const [payments, setPayments] = useState([]);
   const [contracts, setContracts] = useState([]);

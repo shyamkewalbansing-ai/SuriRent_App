@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
+import { useBrandedNavigate } from '../../lib/branded-nav';
 import { useBadge } from '../../lib/pwa';
 import { useAutoRefresh } from '../../lib/auto-refresh';
 import {

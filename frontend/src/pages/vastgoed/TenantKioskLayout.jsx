@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
+import { useBrandedNavigate } from '../../lib/branded-nav';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   Lock, Loader2, LogOut, CreditCard, Wrench, User, Phone,
@@ -662,7 +663,7 @@ function CompanyPicker({ onPicked }) {
 // CONTAINER
 // =====================================================================
 export default function TenantKioskLayout() {
-  const navigate = useNavigate();
+  const navigate = useBrandedNavigate();
   const [searchParams] = useSearchParams();
   const aptId = searchParams.get('apt');
   const [authed, setAuthed] = useState(() => !!localStorage.getItem(TENANT_TOKEN_KEY));

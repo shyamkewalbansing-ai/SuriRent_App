@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
+import { useBrandedNavigate } from '../../lib/branded-nav';
 import { Loader2, Delete, KeyRound, ArrowLeft, Eye, EyeOff, UserPlus, LogIn, Check } from 'lucide-react';
 import { api, formatError } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
@@ -207,7 +208,7 @@ function PinLanding({ onSuccess, onPassword, onRegister, branding, pwaTarget }) 
 }
 
 function PasswordView({ initialMode = 'login', onBack, onRegistered, branding }) {
-  const navigate = useNavigate();
+  const navigate = useBrandedNavigate();
   const { login, register } = useAuth();
   const [mode, setMode] = useState(initialMode); // 'login' | 'register'
   const [email, setEmail] = useState('');
@@ -539,7 +540,7 @@ function Bank({ label, value, mono }) {
 }
 
 export default function LoginPage() {
-  const navigate = useNavigate();
+  const navigate = useBrandedNavigate();
   const [searchParams] = useSearchParams();
   const { user, loading } = useAuth();
   // Initial view from ?view=admin or ?view=register query string (e.g. when arriving

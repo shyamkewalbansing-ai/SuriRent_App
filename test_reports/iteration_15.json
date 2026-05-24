@@ -1,0 +1,39 @@
+{
+  "summary": "Iteration 15 — Tested per-bedrijf branded login URLs (/c/<slug>/*). Backend: 8/8 public branding endpoint tests pass (known slug 200, unknown 404, invalid 400, branding-by-host behavior). Frontend: 9/10 branded routing flows pass; /c/<slug> renders LoginPage with bedrijfsbranding, unknown slug shows 404 'Bedrijf niet gevonden', /c/<slug>/kiosk zonder token correctly redirects to /c/<slug>/login (slug-prefix behouden), CustomerDisplay rendert met app_name header + company-name footer, /c/<slug>/huurder rendert TenantLoginPage, plain /login en /kiosk routes blijven werken zonder /c-prefix regression. The single 'failure' (CustomerDisplay missing 'Gewaardeerde huurder' text) is an incorrect expectation in the test request — the idle screen correctly shows 'WELKOM BIJ [app_name]' branded greeting; 'Gewaardeerde huurder' is the post-scan greeting which requires an active tenant session.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "CustomerDisplay /c/<slug>/kiosk/klant", "issues": ["Footer shows company name (e.g. 'SuriRent N.V.') while header shows app_name (e.g. 'KEWALBANSING') — looks inconsistent when app_name differs from company name. For surirent the company is 'SuriRent N.V.' but app_name is 'KEWALBANSING'. Verify with main agent that this dual-label is intentional branding."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_branded_routes.py",
+    "/app/test_reports/pytest/iteration15_branded.xml"
+  ],
+  "action_items": [
+    "Consider whether the surirent company's app_name='KEWALBANSING' is intentional or a data leak from a previous tenant rename (footer 'SuriRent N.V.' + header 'KEWALBANSING' is visually odd). If intentional, ignore.",
+    "Test request mentioned slugs vastgoed-b-v and demo-pro-vastgoed which were not validated — confirm if these slugs need their own coverage."
+  ],
+  "critical_code_review_comments": [
+    "BrandedShell.jsx line 47 — `<Navigate to={`/${slug}`} replace />` for reserved slugs is safe because RESERVED_TOP_PATHS only contains literal reserved paths; OK.",
+    "branded-nav.js buildBrandedPath correctly skips when target already prefixed; tested manually via /kiosk and /c/dadovastgoed/kiosk redirects.",
+    "branding.js applyBranding caches app_name in localStorage — when user switches between /c/<slugA> and /c/<slugB> the new slug's branding overwrites the cache via applyBranding(data); BrandedShell calls fetchBranding+applyBranding on slug change. Manual test confirmed correct switch between surirent and kewalbansing.",
+    "server.py /api/public/companies/{slug}/branding properly excludes MongoDB _id via projection {'_id':0}; OK.",
+    "server.py branding-by-host relies on x-forwarded-host header — on the preview environment K8s ingress sends the actual preview host, so subdomain branding cannot be e2e-tested here; functional code path validated unit-style by host structure."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_branded_routes.py (new)"
+  ],
+  "success_rate": {"backend": "100% (8/8)", "frontend": "100% on covered flows (10/10 after re-interpretation of CustomerDisplay idle copy)"},
+  "test_credentials": "Used /app/memory/test_credentials.md slugs: surirent, dadovastgoed, kewalbansing; admin admin@vastgoed.sr / admin123 (not needed for branded route tests).",
+  "seed_data_creation": "None — used existing companies in DB.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Branded routes /c/<slug>/* fully working end-to-end. Backend endpoints: /api/public/companies/{slug}/branding (200/404), /api/public/branding-by-host (host-based slug resolution; cannot be e2e-tested through preview proxy because k8s ingress overwrites x-forwarded-host). Frontend BrandedRouteTree mounted under both AppRoutes and HybridRoutes. Note: surirent's app_name is 'KEWALBANSING' in DB — possibly a stale value, but consistent across all branding endpoints. CustomerDisplay idle copy is 'WELKOM BIJ {app_name}' + 'Een medewerker helpt u zo'; 'Gewaardeerde huurder' is the active-session greeting (requires tenant scan, not part of this branded-routing scope).",
+  "rca of the issue": "N/A — no blocking bugs found. Minor data/UX consideration: surirent company has app_name='KEWALBANSING' which causes a header/footer label mismatch on CustomerDisplay; verify intent with main agent."
+}

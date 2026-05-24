@@ -382,6 +382,14 @@ User koos voor **Optie C — minimale herbouw** (kern eerst), dan vroeg om **Fas
 - ✅ **Branded oranje gradient** achtergrond volgt `branding.primary_color`. Footer rechtsonder toont "KLANTENSCHERM" + bedrijfsnaam.
 - ✅ Geverifieerd: **10 nieuwe pytest cases (`test_customer_display.py`) + 43 regressie + frontend Playwright e2e live-sync (iteration 14)** — admin tab selecteert appartement → klant tab toont GreetScreen binnen 2s. Polling cadence 1.5s werkend.
 
+### Per-bedrijf Branded Routes (uitgebreid — 2026-05-24)
+- ✅ **`/c/:slug/*` URL-prefix** met `BrandedShell` die per bedrijf branding (kleur, logo, naam) ophaalt en de CSS-vars zet vóór de child rendert.
+- ✅ **Branded sub-routes**: `/c/<slug>/`, `/c/<slug>/login`, `/c/<slug>/kiosk`, `/c/<slug>/kiosk/huurder`, `/c/<slug>/kiosk/klant`, `/c/<slug>/admin`, `/c/<slug>/huurder`, `/c/<slug>/huurder/portaal`.
+- ✅ **404 voor onbekende slug** — toont nette "Bedrijf niet gevonden" kaart i.p.v. door te lopen op default branding.
+- ✅ **`useBrandedNavigate()` hook** (`/app/frontend/src/lib/branded-nav.js`) — drop-in replacement voor `useNavigate()` die alle absolute navigations (`/login`, `/admin`, `/kiosk`, `/huurder`) automatisch prefixt met `/c/<slug>` wanneer de gebruiker binnen branded context zit. Toegepast in: LoginPage, KioskLayout, TenantKioskLayout, AdminDashboard, TenantLoginPage, TenantDashboard.
+- ✅ **Subdomain branding** blijft werken via bestaande `detectCompanySlug()` + `/api/public/branding-by-host` (klant.app.surirent.sr → slug=klant).
+
+
 ## Prioritized Backlog (Fases E-F)
 - 📧 **Email notificaties** — wacht op SendGrid / Resend credentials van user
 - 📱 **WhatsApp/SMS herinneringen** — wacht op Twilio credentials

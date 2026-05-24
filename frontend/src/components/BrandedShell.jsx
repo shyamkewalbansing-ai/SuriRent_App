@@ -70,42 +70,5 @@ export default function BrandedShell({ children, requireKnownSlug = true }) {
   return children;
 }
 
-/**
- * BrandedRoutes — exposes per-company kiosk + login URLs.
- * Each company gets:
- *   /c/<slug>            → company-branded login
- *   /c/<slug>/login      → idem
- *   /c/<slug>/kiosk      → admin/reception kiosk
- *   /c/<slug>/kiosk/huurder → tenant kiosk
- *   /c/<slug>/kiosk/klant   → customer display
- *   /c/<slug>/huurder    → tenant portal login
- */
-export function makeBrandedRoutes({ LoginPage, KioskLayout, TenantKioskLayout,
-                                    CustomerDisplay, TenantLoginPage, TenantDashboard,
-                                    AdminDashboard, Protected }) {
-  return (
-    <Route path="/c/:slug" element={<BrandedShell><BrandedInner
-      LoginPage={LoginPage} KioskLayout={KioskLayout}
-      TenantKioskLayout={TenantKioskLayout} CustomerDisplay={CustomerDisplay}
-      TenantLoginPage={TenantLoginPage} TenantDashboard={TenantDashboard}
-      AdminDashboard={AdminDashboard} Protected={Protected}
-    /></BrandedShell>} />
-  );
-}
-
-function BrandedInner({ LoginPage, KioskLayout, TenantKioskLayout, CustomerDisplay,
-                        TenantLoginPage, TenantDashboard, AdminDashboard, Protected }) {
-  return (
-    <Routes>
-      <Route path="" element={<LoginPage />} />
-      <Route path="login" element={<LoginPage />} />
-      <Route path="admin/*" element={<Protected><AdminDashboard /></Protected>} />
-      <Route path="kiosk" element={<KioskLayout />} />
-      <Route path="kiosk/huurder" element={<TenantKioskLayout />} />
-      <Route path="kiosk/klant" element={<CustomerDisplay />} />
-      <Route path="huurder" element={<TenantLoginPage />} />
-      <Route path="huurder/portaal" element={<TenantDashboard />} />
-      <Route path="*" element={<Navigate to="" replace />} />
-    </Routes>
-  );
-}
+// (BrandedRoutes wordt geconfigureerd in App.js; deze module exporteert
+// alleen de Shell die slug → branding resolved + de RESERVED_TOP_PATHS set.)

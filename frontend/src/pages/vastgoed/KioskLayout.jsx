@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useBrandedNavigate } from '../../lib/branded-nav';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   Building2, ArrowRight, ArrowLeft, Banknote, Receipt, LogOut, MapPin,
@@ -1175,7 +1175,7 @@ function RowSlim({ label, value }) {
 // Main
 // =====================================================================
 export default function KioskLayout() {
-  const navigate = useNavigate();
+  const navigate = useBrandedNavigate();
   const [step, setStep] = useState('check');
   const [apartment, setApartment] = useState(null);
   const [overview, setOverview] = useState(null);
