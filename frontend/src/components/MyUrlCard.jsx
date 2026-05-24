@@ -49,6 +49,35 @@ function CopyButton({ value, testid }) {
 
 /** Reusable card showing the company's login URLs + live DNS status.
  *  `compact` = smaller version for dashboard overview. */
+
+function KioskUrlPill({ label, url, testid }) {
+  const [copied, setCopied] = useState(false);
+  if (!url) return null;
+  const copy = () => {
+    try {
+      navigator.clipboard.writeText(url);
+      setCopied(true); setTimeout(() => setCopied(false), 1400);
+    } catch { /* ignore */ }
+  };
+  return (
+    <div className="bg-white/5 backdrop-blur border border-white/10 rounded-xl p-2.5 flex items-center gap-2"
+      data-testid={testid}>
+      <div className="flex-1 min-w-0">
+        <p className="text-[9px] uppercase tracking-widest font-black text-white/60">{label}</p>
+        <p className="font-mono text-[10px] text-white truncate">{url.replace(/^https?:\/\//, '')}</p>
+      </div>
+      <button type="button" onClick={copy}
+        className="shrink-0 w-7 h-7 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center transition">
+        {copied ? <Check className="w-3.5 h-3.5 text-emerald-300" /> : <Copy className="w-3.5 h-3.5" />}
+      </button>
+      <a href={url} target="_blank" rel="noreferrer"
+        className="shrink-0 w-7 h-7 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center transition">
+        <ExternalLink className="w-3.5 h-3.5" />
+      </a>
+    </div>
+  );
+}
+
 export default function MyUrlCard({ compact = false }) {
   const [info, setInfo] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -127,6 +156,34 @@ export default function MyUrlCard({ compact = false }) {
           </div>
         )}
 
+        {/* Path-based branded URL — werkt altijd, geen DNS nodig */}
+        {info.path_url && (
+          <div className="bg-white/8 backdrop-blur border border-white/10 rounded-xl p-3 flex items-center gap-2">
+            <div className="shrink-0 w-9 h-9 rounded-lg bg-sky-500/20 flex items-center justify-center">
+              <Globe className="w-4 h-4 text-sky-300" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[10px] uppercase tracking-widest font-black text-white/60">Branded pad · werkt altijd</p>
+              <p className="font-mono text-xs sm:text-sm text-white truncate" data-testid="my-url-path">{info.path_url}</p>
+            </div>
+            <a href={info.path_url} target="_blank" rel="noreferrer"
+              data-testid="my-url-path-open"
+              className="shrink-0 h-9 px-3 rounded-lg bg-white/10 hover:bg-white/20 text-xs font-bold inline-flex items-center gap-1.5">
+              <ExternalLink className="w-3.5 h-3.5" /> Open
+            </a>
+            <CopyButton value={info.path_url} testid="my-url-path-copy" />
+          </div>
+        )}
+
+        {/* Kiosk URLs — compacte rij */}
+        {!compact && info.kiosk_url && (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <KioskUrlPill label="Admin kiosk" url={info.kiosk_url} testid="my-url-kiosk-admin" />
+            <KioskUrlPill label="Huurder kiosk" url={info.tenant_kiosk_url} testid="my-url-kiosk-huurder" />
+            <KioskUrlPill label="Klantenscherm" url={info.customer_display_url} testid="my-url-kiosk-klant" />
+          </div>
+        )}
+
         {/* Always-works query URL */}
         {!compact && info.query_url && (
           <div className="bg-white/5 backdrop-blur border border-white/10 rounded-xl p-3 flex items-center gap-2">
@@ -134,7 +191,7 @@ export default function MyUrlCard({ compact = false }) {
               <Check className="w-4 h-4 text-emerald-300" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-[10px] uppercase tracking-widest font-black text-white/60">Universele link · werkt altijd</p>
+              <p className="text-[10px] uppercase tracking-widest font-black text-white/60">Universele link · query-parameter</p>
               <p className="font-mono text-xs sm:text-sm text-white truncate" data-testid="my-url-query">{info.query_url}</p>
             </div>
             <CopyButton value={info.query_url} testid="my-url-query-copy" />

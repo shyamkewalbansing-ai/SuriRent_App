@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './lib/auth';
 import { useRegisterServiceWorker, InstallPrompt } from './lib/pwa';
 import RotateNotice from './components/RotateNotice';
+import BrandedShell from './components/BrandedShell';
 import { isMarketingHost, appUrl } from './lib/env';
 import MarketingLanding from './pages/vastgoed/MarketingLanding';
 import LoginPage from './pages/vastgoed/LoginPage';
@@ -12,6 +13,28 @@ import CustomerDisplay from './pages/vastgoed/CustomerDisplay';
 import ContractSignPage from './pages/vastgoed/ContractSignPage';
 import TenantLoginPage from './pages/vastgoed/TenantLoginPage';
 import TenantDashboard from './pages/vastgoed/TenantDashboard';
+
+/* Per-company branded routes (path-based). Mounted under both AppRoutes and
+   HybridRoutes so each bedrijf krijgt: `/c/<slug>/{login,kiosk,kiosk/huurder,kiosk/klant,admin,huurder,...}`
+   met de eigen kleur + logo. Subdomain-based branding (klantnaam.surirent.sr) blijft
+   ook werken via de bestaande `detectCompanySlug` + `fetchBrandingByHost`. */
+function BrandedRouteTree() {
+  return (
+    <BrandedShell>
+      <Routes>
+        <Route path="" element={<LoginPage />} />
+        <Route path="login" element={<LoginPage />} />
+        <Route path="admin/*" element={<Protected><AdminDashboard /></Protected>} />
+        <Route path="kiosk" element={<KioskLayout />} />
+        <Route path="kiosk/huurder" element={<TenantKioskLayout />} />
+        <Route path="kiosk/klant" element={<CustomerDisplay />} />
+        <Route path="huurder" element={<TenantLoginPage />} />
+        <Route path="huurder/portaal" element={<TenantDashboard />} />
+        <Route path="*" element={<Navigate to="" replace />} />
+      </Routes>
+    </BrandedShell>
+  );
+}
 
 function Protected({ children }) {
   const { user, loading } = useAuth();
@@ -47,6 +70,7 @@ function AppRoutes() {
       <Route path="/kiosk" element={<KioskLayout />} />
       <Route path="/kiosk/huurder" element={<TenantKioskLayout />} />
       <Route path="/kiosk/klant" element={<CustomerDisplay />} />
+      <Route path="/c/:slug/*" element={<BrandedRouteTree />} />
       <Route path="/onderteken/:token" element={<ContractSignPage />} />
       <Route path="/huurder" element={<TenantLoginPage />} />
       <Route path="/huurder/portaal" element={<TenantDashboard />} />
@@ -76,6 +100,7 @@ function HybridRoutes() {
       <Route path="/kiosk" element={<KioskLayout />} />
       <Route path="/kiosk/huurder" element={<TenantKioskLayout />} />
       <Route path="/kiosk/klant" element={<CustomerDisplay />} />
+      <Route path="/c/:slug/*" element={<BrandedRouteTree />} />
       <Route path="/onderteken/:token" element={<ContractSignPage />} />
       <Route path="/huurder" element={<TenantLoginPage />} />
       <Route path="/huurder/portaal" element={<TenantDashboard />} />

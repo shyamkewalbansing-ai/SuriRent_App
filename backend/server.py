@@ -1945,6 +1945,10 @@ async def get_my_url_info(request: Request, user=Depends(get_current_user)):
         app_domain = ".".join(parts[1:])
     base_url = f"{scheme}://{app_domain}" if app_domain else ""
     query_url = f"{base_url}/login?c={slug}" if base_url else ""
+    path_url = f"{base_url}/c/{slug}" if base_url else ""
+    kiosk_url = f"{base_url}/c/{slug}/kiosk" if base_url else ""
+    tenant_kiosk_url = f"{base_url}/c/{slug}/kiosk/huurder" if base_url else ""
+    customer_display_url = f"{base_url}/c/{slug}/kiosk/klant" if base_url else ""
     subdomain_url = f"{scheme}://{slug}.{app_domain}" if slug and app_domain else None
 
     dns_status = "unknown"
@@ -1964,8 +1968,12 @@ async def get_my_url_info(request: Request, user=Depends(get_current_user)):
     return {
         "slug": slug,
         "company_name": c.get("name"),
-        "primary_url": subdomain_url if dns_status == "active" else query_url,
+        "primary_url": subdomain_url if dns_status == "active" else (path_url or query_url),
         "query_url": query_url,
+        "path_url": path_url,
+        "kiosk_url": kiosk_url,
+        "tenant_kiosk_url": tenant_kiosk_url,
+        "customer_display_url": customer_display_url,
         "subdomain_url": subdomain_url,
         "app_domain": app_domain,
         "dns_status": dns_status,
