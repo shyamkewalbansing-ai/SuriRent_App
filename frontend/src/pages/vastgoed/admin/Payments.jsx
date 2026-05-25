@@ -98,7 +98,7 @@ function MobilePaymentCard({ p, onClick }) {
   return (
     <button onClick={onClick} type="button"
       data-testid={`mp-card-${p.id}`}
-      className="w-full text-left bg-gradient-to-br from-[#FFE9CB] via-[#FFE0B5] to-[#FFD49A] rounded-3xl px-4 py-3.5 shadow-[0_4px_14px_-6px_rgba(255,140,40,0.25)] active:scale-[0.99] transition-transform">
+      className="w-full text-left bg-gradient-to-br from-[#FFDDA8] via-[#FFCF8A] to-[#FFC57A] rounded-3xl px-4 py-3.5 shadow-[0_6px_18px_-8px_rgba(220,120,30,0.35)] active:scale-[0.99] transition-transform">
       <div className="flex items-center gap-3 min-w-0">
         <div className="w-12 h-12 rounded-full flex items-center justify-center font-black text-[15px] shrink-0 shadow-[0_2px_6px_-2px_rgba(0,0,0,0.15)]"
           style={{ background: avatar.bg, color: avatar.fg }}>
@@ -582,13 +582,13 @@ export default function Payments() {
       <div className="md:hidden space-y-4" data-testid="payments-mobile">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 pt-1">
-            <h1 className="text-5xl font-black text-slate-900 tracking-tight leading-[0.95]">Betalingen</h1>
-            <p className="text-[13px] text-slate-500 mt-2 font-semibold">{items.length} kwitanties</p>
+            <h1 className="text-[58px] font-black text-slate-900 tracking-tight leading-[0.9]">Betalingen</h1>
+            <p className="text-[13px] text-slate-700 mt-2 font-bold">{items.length} kwitanties</p>
           </div>
-          <div className="bg-white rounded-2xl px-3.5 py-2.5 shadow-[0_8px_24px_-10px_rgba(0,0,0,0.18)] shrink-0"
+          <div className="bg-white rounded-2xl px-3.5 py-2.5 shadow-[0_10px_28px_-12px_rgba(0,0,0,0.25)] shrink-0"
             data-testid="mp-today-stat">
             <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Vandaag</p>
-            <p className="text-[18px] font-black text-emerald-600 tracking-tight whitespace-nowrap leading-tight mt-0.5">
+            <p className="text-[19px] font-black text-emerald-600 tracking-tight whitespace-nowrap leading-tight mt-0.5">
               {currency} {fmtAmount(todaySum, currency)}
             </p>
             <p className="text-[10px] text-slate-400 font-bold mt-0.5 text-center">
@@ -598,7 +598,7 @@ export default function Payments() {
         </div>
 
         <button onClick={() => setCreating(true)} data-testid="mp-new-btn" type="button"
-          className="w-full h-[68px] rounded-3xl bg-gradient-to-br from-[#FF9447] via-[#FF6F1F] to-[#F05000] text-white font-black text-[18px] inline-flex items-center justify-center gap-2.5 shadow-[0_18px_36px_-12px_rgba(255,92,0,0.65)] active:scale-[0.985] transition-transform tracking-tight">
+          className="w-full h-[72px] rounded-[28px] bg-[#FF6A1A] hover:bg-[#F05C0E] text-white font-black text-[19px] inline-flex items-center justify-center gap-3 shadow-[0_18px_36px_-12px_rgba(255,92,0,0.7)] active:scale-[0.985] transition-transform tracking-tight">
           <Plus className="w-6 h-6 stroke-[2.5]" /> Nieuwe betaling
         </button>
 

@@ -1601,7 +1601,7 @@ export default function AdminDashboard() {
   const doLogout = async () => { await logout(); navigate('/login'); };
 
   return (
-    <div className={`min-h-screen flex ${tab === 'payments' ? 'bg-gradient-to-b from-[#FFE2B8] via-[#FFEFD4] to-[#FFF7F0] md:bg-[#FFF7F0] md:bg-none' : 'bg-[#FFF7F0]'}`}>
+    <div className={`min-h-screen flex ${tab === 'payments' ? 'bg-gradient-to-b from-[#FFCB85] via-[#FFD9A0] via-30% to-[#FFE7C0] md:bg-[#FFF7F0] md:bg-none' : 'bg-[#FFF7F0]'}`}>
       <Sidebar active={tab} onChange={handleSetTab} onLogout={doLogout}
         user={user} tabs={tabs} badgeCount={badgeCount} />
       <div className="flex-1 flex flex-col min-w-0">
