@@ -198,7 +198,7 @@ function MobileTopLogo({ user, activeCompany }) {
   const fullName = activeCompany?.name || (user?.role === 'superadmin' ? 'Alle bedrijven' : 'SuriRent');
   const [namePart1, namePart2] = splitNameHalf(fullName);
   return (
-    <header className="md:hidden sticky top-0 z-30 bg-[#FFF7F0]/85 backdrop-blur-md"
+    <header className="md:hidden sticky top-0 z-30 bg-transparent backdrop-blur-md"
       style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
       data-testid="mobile-top-logo">
       <div className="px-4 md:px-8 py-3 md:py-4 landscape:py-1.5 flex items-center gap-3 md:gap-4 landscape:gap-2 max-w-4xl md:mx-auto md:w-full">
@@ -221,8 +221,6 @@ function MobileTopLogo({ user, activeCompany }) {
         </div>
         {user?.role !== 'superadmin' && (
           <div className="flex items-center gap-2 md:gap-3 landscape:gap-1.5 shrink-0">
-            <QuickPayButton />
-            <ApartmentsBell />
             <OverdueBell />
           </div>
         )}
@@ -1603,7 +1601,7 @@ export default function AdminDashboard() {
   const doLogout = async () => { await logout(); navigate('/login'); };
 
   return (
-    <div className="min-h-screen bg-[#FFF7F0] flex">
+    <div className={`min-h-screen flex ${tab === 'payments' ? 'bg-gradient-to-b from-[#FFE2B8] via-[#FFEFD4] to-[#FFF7F0] md:bg-[#FFF7F0] md:bg-none' : 'bg-[#FFF7F0]'}`}>
       <Sidebar active={tab} onChange={handleSetTab} onLogout={doLogout}
         user={user} tabs={tabs} badgeCount={badgeCount} />
       <div className="flex-1 flex flex-col min-w-0">
