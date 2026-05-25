@@ -580,26 +580,26 @@ export default function Payments() {
           MOBILE (phone) — POS-terminal stijl. Verborgen vanaf md (>=768px).
           ================================================================= */}
       <div className="md:hidden space-y-4" data-testid="payments-mobile">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0 pt-1">
-            <h1 className="text-[58px] font-black text-slate-900 tracking-tight leading-[0.9]">Betalingen</h1>
-            <p className="text-[13px] text-slate-700 mt-2 font-bold">{items.length} kwitanties</p>
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <h1 className="text-[32px] font-black text-slate-900 tracking-tight leading-[1.05]">Betalingen</h1>
+            <p className="text-[12px] text-slate-500 mt-0.5 font-bold">{items.length} kwitanties</p>
           </div>
-          <div className="bg-white rounded-2xl px-3.5 py-2.5 shadow-[0_10px_28px_-12px_rgba(0,0,0,0.25)] shrink-0"
+          <div className="bg-white rounded-2xl px-3 py-2 shadow-[0_6px_20px_-10px_rgba(0,0,0,0.18)] shrink-0"
             data-testid="mp-today-stat">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Vandaag</p>
-            <p className="text-[19px] font-black text-emerald-600 tracking-tight whitespace-nowrap leading-tight mt-0.5">
+            <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500">Vandaag</p>
+            <p className="text-[14px] font-black text-emerald-600 tracking-tight whitespace-nowrap leading-tight mt-0.5">
               {currency} {fmtAmount(todaySum, currency)}
             </p>
-            <p className="text-[10px] text-slate-400 font-bold mt-0.5 text-center">
+            <p className="text-[9px] text-slate-400 font-bold mt-0.5 text-center">
               {todayItems.length} betaling{todayItems.length !== 1 ? 'en' : ''}
             </p>
           </div>
         </div>
 
         <button onClick={() => setCreating(true)} data-testid="mp-new-btn" type="button"
-          className="w-full h-[72px] rounded-[28px] bg-[#FF6A1A] hover:bg-[#F05C0E] text-white font-black text-[19px] inline-flex items-center justify-center gap-3 shadow-[0_18px_36px_-12px_rgba(255,92,0,0.7)] active:scale-[0.985] transition-transform tracking-tight">
-          <Plus className="w-6 h-6 stroke-[2.5]" /> Nieuwe betaling
+          className="w-full h-14 rounded-2xl bg-[#FF6A1A] hover:bg-[#F05C0E] text-white font-black text-[15px] inline-flex items-center justify-center gap-2 shadow-[0_12px_24px_-10px_rgba(255,92,0,0.55)] active:scale-[0.985] transition-transform tracking-tight">
+          <Plus className="w-5 h-5 stroke-[2.5]" /> Nieuwe betaling
         </button>
 
         <div className="flex items-end gap-3 pt-1">
