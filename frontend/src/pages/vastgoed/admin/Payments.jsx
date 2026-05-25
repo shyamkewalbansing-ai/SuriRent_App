@@ -98,30 +98,44 @@ function MobilePaymentCard({ p, onClick }) {
   return (
     <button onClick={onClick} type="button"
       data-testid={`mp-card-${p.id}`}
-      className="w-full text-left bg-gradient-to-br from-[#FFDDA8] via-[#FFCF8A] to-[#FFC57A] rounded-3xl px-4 py-3.5 shadow-[0_6px_18px_-8px_rgba(220,120,30,0.35)] active:scale-[0.99] transition-transform">
+      className="w-full text-left bg-gradient-to-br from-[#FFDDA8] via-[#FFCF8A] to-[#FFC57A] rounded-3xl shadow-[0_6px_18px_-8px_rgba(220,120,30,0.35)] active:scale-[0.99] transition-transform"
+      style={{ padding: 'clamp(12px, 3.4vw, 18px) clamp(14px, 3.8vw, 20px)' }}>
       <div className="flex items-center gap-3 min-w-0">
-        <div className="w-12 h-12 rounded-full flex items-center justify-center font-black text-[15px] shrink-0 shadow-[0_2px_6px_-2px_rgba(0,0,0,0.15)]"
-          style={{ background: avatar.bg, color: avatar.fg }}>
+        <div className="rounded-full flex items-center justify-center font-black shrink-0 shadow-[0_2px_6px_-2px_rgba(0,0,0,0.15)]"
+          style={{
+            background: avatar.bg, color: avatar.fg,
+            width: 'clamp(44px, 12vw, 56px)', height: 'clamp(44px, 12vw, 56px)',
+            fontSize: 'clamp(14px, 4vw, 18px)',
+          }}>
           {initials(p.tenant_name)}
         </div>
         <div className="flex-1 min-w-0">
-          <p className="font-extrabold text-slate-900 text-[16px] leading-tight truncate">{p.tenant_name || '—'}</p>
-          <p className="text-[11px] text-slate-600/80 font-semibold truncate mt-0.5">{sub}</p>
+          <p className="font-extrabold text-slate-900 leading-tight truncate"
+            style={{ fontSize: 'clamp(15px, 4.2vw, 19px)' }}>
+            {p.tenant_name || '—'}
+          </p>
+          <p className="text-slate-600/85 font-semibold truncate mt-0.5"
+            style={{ fontSize: 'clamp(11px, 3vw, 13px)' }}>
+            {sub}
+          </p>
           <div className="mt-1.5">
             <MethodPill method={p.method} />
           </div>
         </div>
         <div className="text-right shrink-0 flex flex-col items-end gap-0.5">
-          <p className="text-[16px] font-black text-emerald-600 tracking-tight whitespace-nowrap"
-            data-testid={`mp-amount-${p.id}`}>
+          <p className="font-black text-emerald-600 tracking-tight whitespace-nowrap"
+            data-testid={`mp-amount-${p.id}`}
+            style={{ fontSize: 'clamp(15px, 4.2vw, 19px)' }}>
             {p.currency} {fmtAmount(p.amount, p.currency)}
           </p>
           {p.period_month && (
-            <p className="text-[10px] text-slate-500 font-bold capitalize">
+            <p className="text-slate-500 font-bold capitalize"
+              style={{ fontSize: 'clamp(10px, 2.6vw, 12px)' }}>
               {MONTHS_NL[p.period_month - 1].slice(0, 3)} {p.period_year}
             </p>
           )}
-          <ChevronRight className="w-4 h-4 text-slate-400/80 mt-0.5" />
+          <ChevronRight className="text-slate-400/80 mt-0.5"
+            style={{ width: 'clamp(14px, 3.8vw, 18px)', height: 'clamp(14px, 3.8vw, 18px)' }} />
         </div>
       </div>
     </button>
@@ -131,14 +145,16 @@ function MobilePaymentCard({ p, onClick }) {
 function MobileTabPill({ active, onClick, label, count, testid }) {
   return (
     <button onClick={onClick} type="button" data-testid={testid}
-      className={`shrink-0 relative px-4 pb-2 pt-1 inline-flex flex-col items-center justify-end font-extrabold transition ${
-        active ? 'text-[#FF5C00]' : 'text-slate-500'
-      }`}>
-      <span className="text-[15px] leading-tight">{label}</span>
-      <span className={`text-[12px] leading-tight mt-0.5 font-bold ${active ? 'text-[#FF5C00]/85' : 'text-slate-400'}`}>
+      className={`shrink-0 relative px-3 pb-2 pt-1 inline-flex flex-col items-center justify-end font-extrabold transition ${
+        active ? 'text-[#FF8A3D]' : 'text-slate-500'
+      }`}
+      style={{ fontSize: 'clamp(15px, 4.2vw, 18px)' }}>
+      <span className="leading-tight">{label}</span>
+      <span className={`leading-tight mt-0.5 font-bold ${active ? 'text-[#FF8A3D]/85' : 'text-slate-400'}`}
+        style={{ fontSize: 'clamp(11px, 3vw, 13px)' }}>
         ({count})
       </span>
-      {active && <span className="absolute bottom-0 left-3 right-3 h-[3px] rounded-full bg-[#FF5C00]" />}
+      {active && <span className="absolute bottom-0 left-2 right-2 h-[3px] rounded-full bg-[#FF8A3D]" />}
     </button>
   );
 }
@@ -580,30 +596,43 @@ export default function Payments() {
           MOBILE (phone) — POS-terminal stijl. Verborgen vanaf md (>=768px).
           ================================================================= */}
       <div className="md:hidden space-y-4" data-testid="payments-mobile">
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center justify-between gap-2.5">
           <div className="min-w-0 flex-1">
-            <h1 className="text-[32px] font-black text-slate-900 tracking-tight leading-[1.05]">Betalingen</h1>
-            <p className="text-[12px] text-slate-500 mt-0.5 font-bold">{items.length} kwitanties</p>
+            <h1 className="font-black text-slate-900 tracking-tight leading-[1.02]"
+              style={{ fontSize: 'clamp(32px, 11vw, 56px)' }}>
+              Betalingen
+            </h1>
+            <p className="text-slate-500 mt-1 font-bold"
+              style={{ fontSize: 'clamp(12px, 3.4vw, 15px)' }}>
+              {items.length} kwitanties
+            </p>
           </div>
-          <div className="bg-white rounded-2xl px-3 py-2 shadow-[0_6px_20px_-10px_rgba(0,0,0,0.18)] shrink-0"
+          <div className="bg-white rounded-2xl shadow-[0_8px_22px_-10px_rgba(0,0,0,0.18)] shrink-0"
+            style={{ padding: 'clamp(8px, 2.4vw, 12px) clamp(10px, 3vw, 14px)' }}
             data-testid="mp-today-stat">
-            <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500">Vandaag</p>
-            <p className="text-[14px] font-black text-emerald-600 tracking-tight whitespace-nowrap leading-tight mt-0.5">
+            <p className="font-bold uppercase tracking-wider text-slate-500"
+              style={{ fontSize: 'clamp(9px, 2.4vw, 11px)' }}>
+              Vandaag
+            </p>
+            <p className="font-black text-emerald-600 tracking-tight whitespace-nowrap leading-tight mt-0.5"
+              style={{ fontSize: 'clamp(14px, 4vw, 19px)' }}>
               {currency} {fmtAmount(todaySum, currency)}
             </p>
-            <p className="text-[9px] text-slate-400 font-bold mt-0.5 text-center">
+            <p className="text-slate-400 font-bold mt-0.5 text-center"
+              style={{ fontSize: 'clamp(9px, 2.4vw, 11px)' }}>
               {todayItems.length} betaling{todayItems.length !== 1 ? 'en' : ''}
             </p>
           </div>
         </div>
 
         <button onClick={() => setCreating(true)} data-testid="mp-new-btn" type="button"
-          className="w-full h-14 rounded-2xl bg-[#FF6A1A] hover:bg-[#F05C0E] text-white font-black text-[15px] inline-flex items-center justify-center gap-2 shadow-[0_12px_24px_-10px_rgba(255,92,0,0.55)] active:scale-[0.985] transition-transform tracking-tight">
-          <Plus className="w-5 h-5 stroke-[2.5]" /> Nieuwe betaling
+          className="w-full rounded-2xl bg-[#FF6A1A] hover:bg-[#F05C0E] text-white font-black inline-flex items-center justify-center gap-2 shadow-[0_14px_28px_-10px_rgba(255,92,0,0.55)] active:scale-[0.985] transition-transform tracking-tight"
+          style={{ height: 'clamp(56px, 16vw, 72px)', fontSize: 'clamp(15px, 4.2vw, 19px)' }}>
+          <Plus className="stroke-[2.5]" style={{ width: 'clamp(20px, 5.5vw, 26px)', height: 'clamp(20px, 5.5vw, 26px)' }} /> Nieuwe betaling
         </button>
 
-        <div className="flex items-end gap-3 pt-1">
-          <div className="flex-1 min-w-0 flex items-end gap-1 overflow-x-auto no-scrollbar pb-1">
+        <div className="flex items-end gap-2 pt-1">
+          <div className="flex-1 min-w-0 flex items-end gap-0.5 overflow-x-auto no-scrollbar pb-1">
             <MobileTabPill active={tab === 'all'}    onClick={() => setTab('all')}    label="Alle"     count={sorted.length}     testid="mp-tab-all" />
             <MobileTabPill active={tab === 'today'}  onClick={() => setTab('today')}  label="Vandaag"  count={todayItems.length} testid="mp-tab-today" />
             <MobileTabPill active={tab === 'week'}   onClick={() => setTab('week')}   label="Week"     count={weekItems.length}  testid="mp-tab-week" />
@@ -611,11 +640,12 @@ export default function Payments() {
           </div>
           <div className="relative shrink-0">
             <button onClick={() => setFilterOpen(!filterOpen)} data-testid="mp-filter-btn" type="button"
-              className={`h-11 w-11 rounded-2xl border bg-white inline-flex items-center justify-center shadow-sm transition ${
-                methodFilter !== 'all' ? 'border-[#FF5C00] text-[#FF5C00]' : 'border-orange-100 text-slate-600'
-              }`}>
-              <SlidersHorizontal className="w-4 h-4" />
-              {methodFilter !== 'all' && <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-[#FF5C00] ring-2 ring-white" />}
+              className={`rounded-2xl border bg-white inline-flex items-center justify-center shadow-sm transition ${
+                methodFilter !== 'all' ? 'border-[#FF8A3D] text-[#FF8A3D]' : 'border-orange-100 text-slate-600'
+              }`}
+              style={{ height: 'clamp(40px, 11vw, 48px)', width: 'clamp(40px, 11vw, 48px)' }}>
+              <SlidersHorizontal style={{ width: 'clamp(16px, 4.4vw, 18px)', height: 'clamp(16px, 4.4vw, 18px)' }} />
+              {methodFilter !== 'all' && <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-[#FF8A3D] ring-2 ring-white" />}
             </button>
             {filterOpen && <FilterMenu method={methodFilter} setMethod={setMethodFilter} onClose={() => setFilterOpen(false)} />}
           </div>
