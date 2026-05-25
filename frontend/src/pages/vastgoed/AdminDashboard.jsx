@@ -198,15 +198,15 @@ function MobileTopLogo({ user, activeCompany }) {
   const fullName = activeCompany?.name || (user?.role === 'superadmin' ? 'Alle bedrijven' : 'SuriRent');
   const [namePart1, namePart2] = splitNameHalf(fullName);
   return (
-    <header className="md:hidden sticky top-0 z-30 bg-transparent backdrop-blur-md"
+    <header className="md:hidden sticky top-0 z-30 bg-[#FFF7F0]/85 backdrop-blur-md"
       style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
       data-testid="mobile-top-logo">
-      <div className="px-4 md:px-8 py-3 md:py-4 landscape:py-1.5 flex items-center gap-3 md:gap-4 landscape:gap-2 max-w-4xl md:mx-auto md:w-full">
-        <div className="w-12 h-12 md:w-14 md:h-14 landscape:w-9 landscape:h-9 rounded-2xl landscape:rounded-xl bg-gradient-to-br from-[#FF8A3D] to-[#C74600] p-1.5 md:p-2 landscape:p-1 shadow-[0_10px_22px_-6px_rgba(255,92,0,0.55)] shrink-0">
+      <div className="px-4 md:px-8 py-3 md:py-4 landscape:py-1.5 flex items-center gap-3.5 md:gap-4 landscape:gap-2 max-w-4xl md:mx-auto md:w-full">
+        <div className="w-16 h-16 md:w-14 md:h-14 landscape:w-9 landscape:h-9 rounded-2xl landscape:rounded-xl bg-gradient-to-br from-[#FF8A3D] to-[#C74600] p-2 md:p-2 landscape:p-1 shadow-[0_10px_22px_-6px_rgba(255,92,0,0.55)] shrink-0">
           <img src="/kiosk-icons/kiosk-512.png" alt="SuriRent" className="w-full h-full object-contain" />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-lg md:text-2xl landscape:text-sm font-black tracking-tight leading-tight truncate" data-testid="mobile-top-name">
+          <p className="text-2xl md:text-2xl landscape:text-sm font-black tracking-tight leading-tight truncate" data-testid="mobile-top-name">
             <span className="text-slate-900">{namePart1}</span>
             {namePart2 && (
               <>
@@ -215,7 +215,7 @@ function MobileTopLogo({ user, activeCompany }) {
               </>
             )}
           </p>
-          <p className="text-[10px] md:text-xs landscape:text-[9px] text-slate-400 font-bold tracking-[0.18em] uppercase truncate">
+          <p className="text-[11px] md:text-xs landscape:text-[9px] text-slate-500 font-bold tracking-[0.18em] uppercase truncate">
             {user?.role === 'superadmin' ? 'Superadmin' : 'Beheer'}{activeCompany?.plan ? ` · ${activeCompany.plan}` : ''}
           </p>
         </div>
@@ -1601,7 +1601,7 @@ export default function AdminDashboard() {
   const doLogout = async () => { await logout(); navigate('/login'); };
 
   return (
-    <div className={`min-h-screen flex ${tab === 'payments' ? 'bg-gradient-to-b from-[#FFCB85] via-[#FFD9A0] via-30% to-[#FFE7C0] md:bg-[#FFF7F0] md:bg-none' : 'bg-[#FFF7F0]'}`}>
+    <div className="min-h-screen bg-[#FFF7F0] flex">
       <Sidebar active={tab} onChange={handleSetTab} onLogout={doLogout}
         user={user} tabs={tabs} badgeCount={badgeCount} />
       <div className="flex-1 flex flex-col min-w-0">
