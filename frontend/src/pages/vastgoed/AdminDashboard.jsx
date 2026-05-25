@@ -1561,7 +1561,19 @@ function DesktopTopBar({ user, activeCompany, tab, tabs }) {
 export default function AdminDashboard() {
   const { user, logout, activeCompany } = useAuth();
   const tabs = getTabsFor(user);
-  const [tab, setTab] = useState(() => (user?.role === 'superadmin' ? 'subscriptions' : 'overview'));
+  // Mobiel landt direct op Betalingen (geen Overzicht meer) — tablet/desktop
+  // blijft op Overzicht starten. We detecteren op basis van window-breedte
+  // bij eerste render zodat de PWA-launch direct in de juiste tab opent.
+  const [tab, setTab] = useState(() => {
+    if (user?.role === 'superadmin') return 'subscriptions';
+    try {
+      if (typeof window !== 'undefined' && window.innerWidth < 768) return 'payments';
+    } catch { /* SSR-safe noop */ }
+    return 'overview';
+  });
+  // Filter de Overzicht-tab uit voor mobile MobileSheet zodat hij ook niet
+  // in het "+"-menu opduikt. Desktop sidebar laat hem wel staan.
+  const sheetTabs = tabs.filter((t) => t.id !== 'overview');
   const [drawerOpen, setDrawerOpen] = useState(false);
   const navigate = useBrandedNavigate();
   const location = useLocation();
@@ -1648,7 +1660,7 @@ export default function AdminDashboard() {
         onOpenMenu={() => setDrawerOpen(true)} badgeCount={badgeCount} />
       <MobileSheet open={drawerOpen} onClose={() => setDrawerOpen(false)}
         active={tab} onChange={handleSetTab} onLogout={doLogout}
-        user={user} tabs={tabs} activeCompany={activeCompany} badgeCount={badgeCount} />
+        user={user} tabs={sheetTabs} activeCompany={activeCompany} badgeCount={badgeCount} />
     </div>
   );
 }
