@@ -86,6 +86,63 @@ function MethodPill({ method }) {
 }
 
 // =====================================================================
+// Mobile-only (phone) views — geinspireerd op POS-terminal screenshot
+// =====================================================================
+function MobilePaymentCard({ p, onClick }) {
+  const avatar = avatarColor(p.tenant_name);
+  const sub = (() => {
+    if (p.location_name && p.apartment_number) return `${p.location_name} · ${p.apartment_number}`;
+    if (p.apartment_number) return p.apartment_number;
+    return '—';
+  })();
+  return (
+    <button onClick={onClick} type="button"
+      data-testid={`mp-card-${p.id}`}
+      className="w-full text-left bg-gradient-to-br from-[#FFF5E8] to-[#FFEAD0] rounded-2xl px-3.5 py-3 border border-orange-100/80 shadow-[0_2px_6px_-2px_rgba(255,140,40,0.15)] active:scale-[0.99] transition-transform">
+      <div className="flex items-center gap-3 min-w-0">
+        <div className="w-12 h-12 rounded-full flex items-center justify-center font-black text-[15px] shrink-0"
+          style={{ background: avatar.bg, color: avatar.fg }}>
+          {initials(p.tenant_name)}
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="font-extrabold text-slate-900 text-[15px] leading-tight truncate">{p.tenant_name || '—'}</p>
+          <p className="text-[11px] text-slate-500 font-medium truncate mt-0.5">{sub}</p>
+          <div className="mt-1.5">
+            <MethodPill method={p.method} />
+          </div>
+        </div>
+        <div className="text-right shrink-0">
+          <p className="text-[15px] font-black text-emerald-600 tracking-tight whitespace-nowrap"
+            data-testid={`mp-amount-${p.id}`}>
+            {p.currency} {fmtAmount(p.amount, p.currency)}
+          </p>
+          {p.period_month && (
+            <p className="text-[10px] text-slate-400 font-bold mt-0.5 capitalize">
+              {MONTHS_NL[p.period_month - 1].slice(0, 3)} {p.period_year}
+            </p>
+          )}
+        </div>
+      </div>
+    </button>
+  );
+}
+
+function MobileTabPill({ active, onClick, label, count, testid }) {
+  return (
+    <button onClick={onClick} type="button" data-testid={testid}
+      className={`shrink-0 relative h-11 px-3.5 inline-flex flex-col items-center justify-center font-extrabold transition ${
+        active ? 'text-[#FF5C00]' : 'text-slate-500'
+      }`}>
+      <span className="text-[13px] leading-none">{label}</span>
+      <span className={`text-[11px] leading-none mt-0.5 ${active ? 'text-[#FF5C00]/80' : 'text-slate-400'}`}>
+        ({count})
+      </span>
+      {active && <span className="absolute -bottom-0.5 left-2 right-2 h-[3px] rounded-full bg-[#FF5C00]" />}
+    </button>
+  );
+}
+
+// =====================================================================
 // Payment row
 // =====================================================================
 function PaymentRow({ p, expanded, onToggle, onEmail, apiBase }) {
@@ -517,7 +574,116 @@ export default function Payments() {
   }, [sorted]);
 
   return (
-    <div className="space-y-4 sm:space-y-5" data-testid="payments-page">
+    <div data-testid="payments-page">
+      {/* =================================================================
+          MOBILE (phone) — POS-terminal stijl. Verborgen vanaf md (>=768px).
+          ================================================================= */}
+      <div className="md:hidden space-y-3.5" data-testid="payments-mobile">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 pt-1">
+            <h1 className="text-[34px] font-black text-slate-900 tracking-tight leading-[1.05]">Betalingen</h1>
+            <p className="text-[13px] text-slate-500 mt-1 font-semibold">{items.length} kwitanties</p>
+          </div>
+          <div className="bg-white rounded-2xl border border-orange-100 px-3.5 py-2.5 shadow-[0_4px_14px_-6px_rgba(0,0,0,0.08)] shrink-0 max-w-[58%]"
+            data-testid="mp-today-stat">
+            <p className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400">Vandaag</p>
+            <p className="text-[15px] font-black text-emerald-600 tracking-tight whitespace-nowrap mt-0.5">
+              {currency} {fmtAmount(todaySum, currency)}
+            </p>
+            <p className="text-[10px] text-slate-400 font-bold mt-0.5">
+              {todayItems.length} betaling{todayItems.length !== 1 ? 'en' : ''}
+            </p>
+          </div>
+        </div>
+
+        <button onClick={() => setCreating(true)} data-testid="mp-new-btn" type="button"
+          className="w-full h-14 rounded-2xl bg-gradient-to-r from-[#FF8A3D] via-[#FF6B1F] to-[#FF5C00] text-white font-extrabold text-[15px] inline-flex items-center justify-center gap-2 shadow-[0_14px_30px_-10px_rgba(255,92,0,0.6)] active:scale-[0.99] transition-transform">
+          <Plus className="w-5 h-5" /> Nieuwe betaling
+        </button>
+
+        <div className="flex items-center gap-2">
+          <div className="flex-1 min-w-0 bg-white border border-orange-100 rounded-2xl px-1.5 flex items-center overflow-x-auto no-scrollbar">
+            <MobileTabPill active={tab === 'all'}    onClick={() => setTab('all')}    label="Alle"     count={sorted.length}     testid="mp-tab-all" />
+            <MobileTabPill active={tab === 'today'}  onClick={() => setTab('today')}  label="Vandaag"  count={todayItems.length} testid="mp-tab-today" />
+            <MobileTabPill active={tab === 'week'}   onClick={() => setTab('week')}   label="Week"     count={weekItems.length}  testid="mp-tab-week" />
+            <MobileTabPill active={tab === 'month'}  onClick={() => setTab('month')}  label="Maand"    count={monthItems.length} testid="mp-tab-month" />
+          </div>
+          <div className="relative shrink-0">
+            <button onClick={() => setFilterOpen(!filterOpen)} data-testid="mp-filter-btn" type="button"
+              className={`h-11 w-11 rounded-2xl border bg-white inline-flex items-center justify-center transition ${
+                methodFilter !== 'all' ? 'border-[#FF5C00] text-[#FF5C00]' : 'border-orange-100 text-slate-600'
+              }`}>
+              <SlidersHorizontal className="w-4 h-4" />
+              {methodFilter !== 'all' && <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-[#FF5C00] ring-2 ring-white" />}
+            </button>
+            {filterOpen && <FilterMenu method={methodFilter} setMethod={setMethodFilter} onClose={() => setFilterOpen(false)} />}
+          </div>
+        </div>
+
+        <div className="relative">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <input value={search} onChange={(e) => setSearch(e.target.value)}
+            placeholder="Zoek huurder, kwitantie..."
+            data-testid="mp-search"
+            className="w-full h-11 pl-10 pr-3.5 rounded-2xl bg-white border border-orange-100 text-[13px] font-semibold placeholder:text-slate-400 focus:border-[#FF5C00] outline-none" />
+        </div>
+
+        {loading ? (
+          <div className="bg-white rounded-2xl border border-orange-100 p-10 text-center">
+            <Loader2 className="w-6 h-6 text-orange-400 animate-spin mx-auto" />
+          </div>
+        ) : filteredItems.length === 0 ? (
+          <div className="bg-white rounded-2xl border border-orange-100 p-8 text-center" data-testid="mp-empty">
+            <Receipt className="w-9 h-9 text-orange-300 mx-auto mb-2" />
+            <p className="text-[13px] text-slate-500 font-bold">
+              {items.length === 0 ? 'Nog geen betalingen.' : 'Geen resultaten voor deze filter.'}
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {filteredItems.map((p) => (
+              <div key={p.id} data-testid={`mp-row-${p.id}`}>
+                <MobilePaymentCard p={p} onClick={() => toggleExpand(p.id)} />
+                {expanded === p.id && (
+                  <div className="mt-1.5 mb-1 px-1.5" data-testid={`mp-detail-${p.id}`}>
+                    <div className="bg-emerald-50/70 border border-emerald-100 rounded-2xl p-3.5 space-y-2 text-[12px]">
+                      <DetailRow label="Kwitantie" value={<span className="font-mono font-bold">{p.receipt_number}</span>} />
+                      {p.invoice_number && (
+                        <DetailRow label="Factuur" value={<span className="font-mono font-bold text-[#FF5C00]">{p.invoice_number}</span>} />
+                      )}
+                      <DetailRow label="Datum" value={new Date(p.paid_at).toLocaleString('nl-NL')} />
+                      <DetailRow label="Categorie" value={CATEGORY_LABELS[p.category] || p.category} />
+                      {p.note && <DetailRow label="Notitie" value={p.note} />}
+                      <div className="grid grid-cols-3 gap-1.5 pt-2">
+                        <a href={`${apiBase}/payments/${p.id}/pdf`} target="_blank" rel="noreferrer"
+                          data-testid={`mp-pdf-${p.id}`}
+                          className="inline-flex items-center justify-center gap-1 px-2 py-2 bg-white border border-slate-200 text-slate-700 font-bold rounded-xl text-[11px]">
+                          <FileText className="w-3.5 h-3.5" /> PDF
+                        </a>
+                        <button onClick={() => setEmailing(p)} type="button"
+                          data-testid={`mp-email-${p.id}`}
+                          className="inline-flex items-center justify-center gap-1 px-2 py-2 bg-white border border-blue-200 text-blue-700 font-bold rounded-xl text-[11px]">
+                          <Mail className="w-3.5 h-3.5" /> Verstuur
+                        </button>
+                        <a href={`${apiBase}/payments/${p.id}/secure-pdf`} target="_blank" rel="noreferrer"
+                          data-testid={`mp-secure-${p.id}`}
+                          className="inline-flex items-center justify-center gap-1 px-2 py-2 bg-white border border-orange-200 text-[#FF5C00] font-bold rounded-xl text-[11px]">
+                          <ShieldCheck className="w-3.5 h-3.5" /> QR
+                        </a>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* =================================================================
+          TABLET + DESKTOP (>=768px) — ongewijzigde layout.
+          ================================================================= */}
+      <div className="hidden md:block space-y-4 sm:space-y-5">
       {/* HEADER + Mobile KPI */}
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
@@ -623,6 +789,7 @@ export default function Payments() {
           ))}
         </div>
       )}
+      </div>
 
       {/* MODALS */}
       {creating && <PaymentForm tenants={tenants} initialInvoice={prefillInvoice}

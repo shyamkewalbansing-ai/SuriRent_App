@@ -396,6 +396,12 @@ User koos voor **Optie C — minimale herbouw** (kern eerst), dan vroeg om **Fas
 - ✅ **`MyUrlCard` integratie** — QR-iconen op alle 5 URL-rijen (subdomein, branded pad, admin kiosk, huurder kiosk, klantenscherm) in de Branding tab van de Admin Dashboard.
 - ✅ Geverifieerd: **20 nieuwe pytest cases (`test_qr_endpoint.py`) — alle kinds, auth, size-clamp, pyzbar-decode** + frontend e2e modal-open / download / kopieer (iteration_16 100% pass). Bonus: refactor-miss in AdminDashboard.jsx (3 vergeten `useNavigate` → `useBrandedNavigate`) opgelost.
 
+### Mobile-only POS-stijl Betalingen (uitgebreid — 2026-05-25)
+- ✅ **Telefoon-specifieke Betalingen pagina** (`md:hidden`, < 768px) — POS-terminal look gebaseerd op gebruikersmockup: grote "Betalingen" titel + "Vandaag" stat-kaart rechtsboven, gradient "Nieuwe betaling" pill, tab-pills (Alle/Vandaag/Week/Maand) met oranje underline, vierkante filter-icoon, soft-cream payment cards met avatar + naam + adres + CONTANT pill + groot groen bedrag.
+- ✅ **Inline expand-detail** — tikken op een kaart toont Kwitantie/Datum/Categorie/Notitie + PDF/Verstuur/QR knoppen in een emerald-tint paneel.
+- ✅ **Tablet + desktop ongewijzigd** (>= 768px): bestaande KPI cards + tabelweergave blijft werken (verified op 1440px viewport).
+- ✅ State + handlers gedeeld met bestaande Payments component (zelfde load/filter/expand logica) — geen DRY-schending.
+
 ## Prioritized Backlog (Fases E-F)
 - 📧 **Email notificaties** — wacht op SendGrid / Resend credentials van user
 - 📱 **WhatsApp/SMS herinneringen** — wacht op Twilio credentials
