@@ -9,6 +9,7 @@ import {
   FileText, ShieldCheck, Wrench, FileSignature, Bell, Briefcase, Mail,
   Zap, Power, Menu, MoreHorizontal, MapPin, Crown, Paintbrush, Palette,
   Gauge, Activity, Clock as ClockIcon, Monitor, QrCode,
+  ReceiptText, UsersRound, Building,
 } from 'lucide-react';
 import { api, formatError, fmtMoney, MONTHS_NL } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
@@ -168,7 +169,19 @@ function Sidebar({ active, onChange, onLogout, user, tabs, badgeCount }) {
 // Top 4 tabs always visible on the mobile bottom bar. The "Meer" button opens
 // a full drawer that exposes every other tab. Superadmins keep "Bedrijven"
 // on the bottom bar so they always have access to the company switcher.
-const MOBILE_PRIMARY_IDS = ['overview', 'apartments', 'tenants', 'payments'];
+const MOBILE_PRIMARY_IDS = ['payments', 'invoices', 'tenants', 'apartments'];
+
+/**
+ * Eigen iconenkeuze voor de mobiele bottom-tabbar — de sidebar/icoon op de
+ * Admin-pagina blijft het BASE_TABS-icoon gebruiken, maar in de bottom-bar
+ * tonen we duidelijker/POS-achtige icons (banknote i.p.v. receipt etc).
+ */
+const MOBILE_TAB_ICON_OVERRIDES = {
+  payments: Banknote,
+  invoices: ReceiptText,
+  tenants: UsersRound,
+  apartments: Building,
+};
 const MOBILE_SUPER_PRIMARY_IDS = ['companies', 'overview', 'apartments', 'tenants'];
 
 function MobileHeader_REMOVED({ activeCompany, user, onOpenMenu }) {
@@ -342,7 +355,7 @@ function MobileTabBar({ active, onChange, tabs, onOpenMenu, user, badgeCount }) 
   const right = primary.slice(2, 4);
 
   const renderTab = (t) => {
-    const Icon = t.icon;
+    const Icon = MOBILE_TAB_ICON_OVERRIDES[t.id] || t.icon;
     const isActive = active === t.id;
     const showBadge = t.id === 'notifications' && badgeCount > 0;
     return (
@@ -360,7 +373,7 @@ function MobileTabBar({ active, onChange, tabs, onOpenMenu, user, badgeCount }) 
         )}
         <span className="relative">
           <Icon
-            className={`transition-all ${isActive ? 'w-[22px] h-[22px] md:w-6 md:h-6 text-[#FF5C00]' : 'w-[20px] h-[20px] md:w-[22px] md:h-[22px] text-slate-500'}`}
+            className={`transition-all ${isActive ? 'w-[26px] h-[26px] md:w-7 md:h-7 text-[#FF5C00]' : 'w-[24px] h-[24px] md:w-[26px] md:h-[26px] text-slate-500'}`}
             strokeWidth={isActive ? 2.4 : 2}
           />
           {showBadge && (
