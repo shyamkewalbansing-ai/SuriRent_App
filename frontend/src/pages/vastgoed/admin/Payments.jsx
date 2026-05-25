@@ -98,29 +98,30 @@ function MobilePaymentCard({ p, onClick }) {
   return (
     <button onClick={onClick} type="button"
       data-testid={`mp-card-${p.id}`}
-      className="w-full text-left bg-gradient-to-br from-[#FFF5E8] to-[#FFEAD0] rounded-2xl px-3.5 py-3 border border-orange-100/80 shadow-[0_2px_6px_-2px_rgba(255,140,40,0.15)] active:scale-[0.99] transition-transform">
+      className="w-full text-left bg-gradient-to-br from-[#FFE9CB] via-[#FFE0B5] to-[#FFD49A] rounded-3xl px-4 py-3.5 shadow-[0_4px_14px_-6px_rgba(255,140,40,0.25)] active:scale-[0.99] transition-transform">
       <div className="flex items-center gap-3 min-w-0">
-        <div className="w-12 h-12 rounded-full flex items-center justify-center font-black text-[15px] shrink-0"
+        <div className="w-12 h-12 rounded-full flex items-center justify-center font-black text-[15px] shrink-0 shadow-[0_2px_6px_-2px_rgba(0,0,0,0.15)]"
           style={{ background: avatar.bg, color: avatar.fg }}>
           {initials(p.tenant_name)}
         </div>
         <div className="flex-1 min-w-0">
-          <p className="font-extrabold text-slate-900 text-[15px] leading-tight truncate">{p.tenant_name || '—'}</p>
-          <p className="text-[11px] text-slate-500 font-medium truncate mt-0.5">{sub}</p>
+          <p className="font-extrabold text-slate-900 text-[16px] leading-tight truncate">{p.tenant_name || '—'}</p>
+          <p className="text-[11px] text-slate-600/80 font-semibold truncate mt-0.5">{sub}</p>
           <div className="mt-1.5">
             <MethodPill method={p.method} />
           </div>
         </div>
-        <div className="text-right shrink-0">
-          <p className="text-[15px] font-black text-emerald-600 tracking-tight whitespace-nowrap"
+        <div className="text-right shrink-0 flex flex-col items-end gap-0.5">
+          <p className="text-[16px] font-black text-emerald-600 tracking-tight whitespace-nowrap"
             data-testid={`mp-amount-${p.id}`}>
             {p.currency} {fmtAmount(p.amount, p.currency)}
           </p>
           {p.period_month && (
-            <p className="text-[10px] text-slate-400 font-bold mt-0.5 capitalize">
+            <p className="text-[10px] text-slate-500 font-bold capitalize">
               {MONTHS_NL[p.period_month - 1].slice(0, 3)} {p.period_year}
             </p>
           )}
+          <ChevronRight className="w-4 h-4 text-slate-400/80 mt-0.5" />
         </div>
       </div>
     </button>
@@ -130,14 +131,14 @@ function MobilePaymentCard({ p, onClick }) {
 function MobileTabPill({ active, onClick, label, count, testid }) {
   return (
     <button onClick={onClick} type="button" data-testid={testid}
-      className={`shrink-0 relative h-11 px-3.5 inline-flex flex-col items-center justify-center font-extrabold transition ${
+      className={`shrink-0 relative px-4 pb-2 pt-1 inline-flex flex-col items-center justify-end font-extrabold transition ${
         active ? 'text-[#FF5C00]' : 'text-slate-500'
       }`}>
-      <span className="text-[13px] leading-none">{label}</span>
-      <span className={`text-[11px] leading-none mt-0.5 ${active ? 'text-[#FF5C00]/80' : 'text-slate-400'}`}>
+      <span className="text-[15px] leading-tight">{label}</span>
+      <span className={`text-[12px] leading-tight mt-0.5 font-bold ${active ? 'text-[#FF5C00]/85' : 'text-slate-400'}`}>
         ({count})
       </span>
-      {active && <span className="absolute -bottom-0.5 left-2 right-2 h-[3px] rounded-full bg-[#FF5C00]" />}
+      {active && <span className="absolute bottom-0 left-3 right-3 h-[3px] rounded-full bg-[#FF5C00]" />}
     </button>
   );
 }
@@ -578,31 +579,31 @@ export default function Payments() {
       {/* =================================================================
           MOBILE (phone) — POS-terminal stijl. Verborgen vanaf md (>=768px).
           ================================================================= */}
-      <div className="md:hidden space-y-3.5" data-testid="payments-mobile">
+      <div className="md:hidden space-y-4" data-testid="payments-mobile">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 pt-1">
-            <h1 className="text-[34px] font-black text-slate-900 tracking-tight leading-[1.05]">Betalingen</h1>
-            <p className="text-[13px] text-slate-500 mt-1 font-semibold">{items.length} kwitanties</p>
+            <h1 className="text-5xl font-black text-slate-900 tracking-tight leading-[0.95]">Betalingen</h1>
+            <p className="text-[13px] text-slate-500 mt-2 font-semibold">{items.length} kwitanties</p>
           </div>
-          <div className="bg-white rounded-2xl border border-orange-100 px-3.5 py-2.5 shadow-[0_4px_14px_-6px_rgba(0,0,0,0.08)] shrink-0 max-w-[58%]"
+          <div className="bg-white rounded-2xl px-3.5 py-2.5 shadow-[0_8px_24px_-10px_rgba(0,0,0,0.18)] shrink-0"
             data-testid="mp-today-stat">
-            <p className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400">Vandaag</p>
-            <p className="text-[15px] font-black text-emerald-600 tracking-tight whitespace-nowrap mt-0.5">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Vandaag</p>
+            <p className="text-[18px] font-black text-emerald-600 tracking-tight whitespace-nowrap leading-tight mt-0.5">
               {currency} {fmtAmount(todaySum, currency)}
             </p>
-            <p className="text-[10px] text-slate-400 font-bold mt-0.5">
+            <p className="text-[10px] text-slate-400 font-bold mt-0.5 text-center">
               {todayItems.length} betaling{todayItems.length !== 1 ? 'en' : ''}
             </p>
           </div>
         </div>
 
         <button onClick={() => setCreating(true)} data-testid="mp-new-btn" type="button"
-          className="w-full h-14 rounded-2xl bg-gradient-to-r from-[#FF8A3D] via-[#FF6B1F] to-[#FF5C00] text-white font-extrabold text-[15px] inline-flex items-center justify-center gap-2 shadow-[0_14px_30px_-10px_rgba(255,92,0,0.6)] active:scale-[0.99] transition-transform">
-          <Plus className="w-5 h-5" /> Nieuwe betaling
+          className="w-full h-[68px] rounded-3xl bg-gradient-to-br from-[#FF9447] via-[#FF6F1F] to-[#F05000] text-white font-black text-[18px] inline-flex items-center justify-center gap-2.5 shadow-[0_18px_36px_-12px_rgba(255,92,0,0.65)] active:scale-[0.985] transition-transform tracking-tight">
+          <Plus className="w-6 h-6 stroke-[2.5]" /> Nieuwe betaling
         </button>
 
-        <div className="flex items-center gap-2">
-          <div className="flex-1 min-w-0 bg-white border border-orange-100 rounded-2xl px-1.5 flex items-center overflow-x-auto no-scrollbar">
+        <div className="flex items-end gap-3 pt-1">
+          <div className="flex-1 min-w-0 flex items-end gap-1 overflow-x-auto no-scrollbar pb-1">
             <MobileTabPill active={tab === 'all'}    onClick={() => setTab('all')}    label="Alle"     count={sorted.length}     testid="mp-tab-all" />
             <MobileTabPill active={tab === 'today'}  onClick={() => setTab('today')}  label="Vandaag"  count={todayItems.length} testid="mp-tab-today" />
             <MobileTabPill active={tab === 'week'}   onClick={() => setTab('week')}   label="Week"     count={weekItems.length}  testid="mp-tab-week" />
@@ -610,7 +611,7 @@ export default function Payments() {
           </div>
           <div className="relative shrink-0">
             <button onClick={() => setFilterOpen(!filterOpen)} data-testid="mp-filter-btn" type="button"
-              className={`h-11 w-11 rounded-2xl border bg-white inline-flex items-center justify-center transition ${
+              className={`h-11 w-11 rounded-2xl border bg-white inline-flex items-center justify-center shadow-sm transition ${
                 methodFilter !== 'all' ? 'border-[#FF5C00] text-[#FF5C00]' : 'border-orange-100 text-slate-600'
               }`}>
               <SlidersHorizontal className="w-4 h-4" />
@@ -618,14 +619,6 @@ export default function Payments() {
             </button>
             {filterOpen && <FilterMenu method={methodFilter} setMethod={setMethodFilter} onClose={() => setFilterOpen(false)} />}
           </div>
-        </div>
-
-        <div className="relative">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-          <input value={search} onChange={(e) => setSearch(e.target.value)}
-            placeholder="Zoek huurder, kwitantie..."
-            data-testid="mp-search"
-            className="w-full h-11 pl-10 pr-3.5 rounded-2xl bg-white border border-orange-100 text-[13px] font-semibold placeholder:text-slate-400 focus:border-[#FF5C00] outline-none" />
         </div>
 
         {loading ? (
