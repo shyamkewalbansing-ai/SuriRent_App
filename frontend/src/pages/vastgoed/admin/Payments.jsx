@@ -89,6 +89,7 @@ function MethodPill({ method }) {
 // Mobile-only (phone) views — geinspireerd op POS-terminal screenshot
 // =====================================================================
 function MobilePaymentCard({ p, onClick }) {
+  const avatar = avatarColor(p.tenant_name);
   const sub = (() => {
     if (p.location_name && p.apartment_number) return `${p.location_name} · ${p.apartment_number}`;
     if (p.apartment_number) return p.apartment_number;
@@ -102,11 +103,13 @@ function MobilePaymentCard({ p, onClick }) {
         padding: 'clamp(14px, 4vw, 20px) clamp(14px, 4vw, 20px)',
       }}>
       <div className="flex items-center gap-3 min-w-0">
-        <div className="rounded-2xl flex items-center justify-center shrink-0 bg-gradient-to-br from-[#FFB770] to-[#FF8A3D] text-white shadow-[0_3px_8px_-2px_rgba(255,140,40,0.45)]"
+        <div className="rounded-full flex items-center justify-center font-black shrink-0 shadow-[0_2px_6px_-2px_rgba(0,0,0,0.12)]"
           style={{
+            background: avatar.bg, color: avatar.fg,
             width: 'clamp(48px, 13vw, 60px)', height: 'clamp(48px, 13vw, 60px)',
+            fontSize: 'clamp(16px, 4.4vw, 20px)',
           }}>
-          <HomeIcon style={{ width: 'clamp(22px, 6vw, 28px)', height: 'clamp(22px, 6vw, 28px)' }} strokeWidth={2.4} />
+          {initials(p.tenant_name)}
         </div>
         <div className="flex-1 min-w-0">
           <p className="font-extrabold text-slate-900 leading-tight truncate"

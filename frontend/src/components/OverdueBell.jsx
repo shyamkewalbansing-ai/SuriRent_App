@@ -124,20 +124,20 @@ export default function OverdueBell() {
         onClick={() => setOpen((v) => !v)}
         data-testid="overdue-bell-btn"
         aria-label={count > 0 ? `${count} huurders met achterstand` : 'Geen achterstanden'}
-        className={`relative w-11 h-11 landscape:w-9 landscape:h-9 rounded-2xl landscape:rounded-xl flex items-center justify-center transition active:scale-95 ${
+        className={`relative w-14 h-14 landscape:w-10 landscape:h-10 rounded-2xl landscape:rounded-xl flex items-center justify-center transition active:scale-95 ${
           count > 0
             ? 'bg-red-50 text-red-600 hover:bg-red-100 shadow-[0_6px_16px_-6px_rgba(239,68,68,0.45)]'
             : 'bg-white text-slate-500 hover:bg-orange-50 hover:text-[#FF5C00] border border-slate-200/70'
         }`}
       >
-        <Bell className="w-5 h-5 landscape:w-4 landscape:h-4" strokeWidth={count > 0 ? 2.4 : 2} />
+        <Bell className="w-7 h-7 landscape:w-5 landscape:h-5" strokeWidth={count > 0 ? 2.4 : 2} />
         {count > 0 && (
           <>
-            <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-black flex items-center justify-center ring-2 ring-[#FFF7F0]"
+            <span className="absolute -top-1 -right-1 min-w-[22px] h-[22px] px-1.5 rounded-full bg-red-500 text-white text-[11px] font-black flex items-center justify-center ring-2 ring-[#FFF7F0]"
               data-testid="overdue-bell-count">
               {count > 9 ? '9+' : count}
             </span>
-            <span className="absolute -top-1 -right-1 w-[18px] h-[18px] rounded-full bg-red-400 opacity-60 animate-ping" />
+            <span className="absolute -top-1 -right-1 w-[22px] h-[22px] rounded-full bg-red-400 opacity-60 animate-ping" />
           </>
         )}
       </button>
