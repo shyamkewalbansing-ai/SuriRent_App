@@ -98,44 +98,53 @@ function MobilePaymentCard({ p, onClick }) {
   return (
     <button onClick={onClick} type="button"
       data-testid={`mp-card-${p.id}`}
-      className="w-full text-left bg-gradient-to-br from-[#FFDDA8] via-[#FFCF8A] to-[#FFC57A] rounded-3xl shadow-[0_6px_18px_-8px_rgba(220,120,30,0.35)] active:scale-[0.99] transition-transform"
-      style={{ padding: 'clamp(12px, 3.4vw, 18px) clamp(14px, 3.8vw, 20px)' }}>
-      <div className="flex items-center gap-3 min-w-0">
-        <div className="rounded-full flex items-center justify-center font-black shrink-0 shadow-[0_2px_6px_-2px_rgba(0,0,0,0.15)]"
+      className="w-full text-left bg-gradient-to-br from-[#FFDDA8] via-[#FFCF8A] to-[#FFC57A] rounded-[28px] shadow-[0_8px_22px_-10px_rgba(220,120,30,0.4)] active:scale-[0.99] transition-transform"
+      style={{
+        padding: 'clamp(20px, 6vw, 32px) clamp(16px, 4.5vw, 24px)',
+        minHeight: 'clamp(170px, 28vh, 240px)',
+      }}>
+      <div className="flex items-center gap-3 min-w-0 h-full">
+        <div className="rounded-full flex items-center justify-center font-black shrink-0 shadow-[0_3px_8px_-2px_rgba(0,0,0,0.18)]"
           style={{
             background: avatar.bg, color: avatar.fg,
-            width: 'clamp(44px, 12vw, 56px)', height: 'clamp(44px, 12vw, 56px)',
-            fontSize: 'clamp(14px, 4vw, 18px)',
+            width: 'clamp(60px, 17vw, 84px)', height: 'clamp(60px, 17vw, 84px)',
+            fontSize: 'clamp(20px, 5.8vw, 28px)',
           }}>
           {initials(p.tenant_name)}
         </div>
         <div className="flex-1 min-w-0">
           <p className="font-extrabold text-slate-900 leading-tight truncate"
-            style={{ fontSize: 'clamp(15px, 4.2vw, 19px)' }}>
+            style={{ fontSize: 'clamp(19px, 5.4vw, 26px)' }}>
             {p.tenant_name || '—'}
           </p>
-          <p className="text-slate-600/85 font-semibold truncate mt-0.5"
-            style={{ fontSize: 'clamp(11px, 3vw, 13px)' }}>
+          <p className="text-slate-600/85 font-semibold truncate mt-1.5"
+            style={{ fontSize: 'clamp(13px, 3.6vw, 16px)' }}>
             {sub}
           </p>
-          <div className="mt-1.5">
-            <MethodPill method={p.method} />
+          <div className="mt-3">
+            <span className="inline-block font-bold uppercase tracking-wider rounded-md bg-emerald-50 text-emerald-700"
+              style={{
+                fontSize: 'clamp(11px, 3vw, 13px)',
+                padding: 'clamp(3px, 0.9vw, 5px) clamp(8px, 2.4vw, 12px)',
+              }}>
+              {METHOD_LABELS[p.method] || p.method}
+            </span>
           </div>
         </div>
-        <div className="text-right shrink-0 flex flex-col items-end gap-0.5">
+        <div className="text-right shrink-0 flex flex-col items-end gap-1">
           <p className="font-black text-emerald-600 tracking-tight whitespace-nowrap"
             data-testid={`mp-amount-${p.id}`}
-            style={{ fontSize: 'clamp(15px, 4.2vw, 19px)' }}>
+            style={{ fontSize: 'clamp(18px, 5.2vw, 25px)' }}>
             {p.currency} {fmtAmount(p.amount, p.currency)}
           </p>
           {p.period_month && (
             <p className="text-slate-500 font-bold capitalize"
-              style={{ fontSize: 'clamp(10px, 2.6vw, 12px)' }}>
+              style={{ fontSize: 'clamp(11px, 3vw, 13px)' }}>
               {MONTHS_NL[p.period_month - 1].slice(0, 3)} {p.period_year}
             </p>
           )}
-          <ChevronRight className="text-slate-400/80 mt-0.5"
-            style={{ width: 'clamp(14px, 3.8vw, 18px)', height: 'clamp(14px, 3.8vw, 18px)' }} />
+          <ChevronRight className="text-slate-400/80 mt-auto"
+            style={{ width: 'clamp(18px, 5vw, 22px)', height: 'clamp(18px, 5vw, 22px)' }} />
         </div>
       </div>
     </button>
@@ -663,7 +672,7 @@ export default function Payments() {
             </p>
           </div>
         ) : (
-          <div className="space-y-2">
+          <div className="space-y-3">
             {filteredItems.map((p) => (
               <div key={p.id} data-testid={`mp-row-${p.id}`}>
                 <MobilePaymentCard p={p} onClick={() => toggleExpand(p.id)} />
