@@ -1,7 +1,7 @@
 """PDF generation helpers using ReportLab."""
 import io
 from datetime import datetime
-from reportlab.lib.pagesizes import A4
+from reportlab.lib.pagesizes import A4, A6
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import mm
@@ -71,6 +71,17 @@ def _build(doc_elements):
     doc = SimpleDocTemplate(buf, pagesize=A4,
         leftMargin=20 * mm, rightMargin=20 * mm,
         topMargin=20 * mm, bottomMargin=20 * mm)
+    doc.build(doc_elements)
+    buf.seek(0)
+    return buf.getvalue()
+
+
+def _build_a6(doc_elements):
+    """A6 (105 x 148mm) print — ideaal voor stickers naast de voordeur."""
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A6,
+        leftMargin=6 * mm, rightMargin=6 * mm,
+        topMargin=6 * mm, bottomMargin=6 * mm)
     doc.build(doc_elements)
     buf.seek(0)
     return buf.getvalue()
@@ -504,3 +515,125 @@ def kiosk_sticker_pdf(*, apartment_number: str, address: str,
     ))
 
     return _build(elements)
+
+
+
+# ============== Tenant Portal A6 Poster ==============
+def portal_poster_pdf(*, company_name: str, portal_url: str,
+                      tenant_name: str | None = None,
+                      apartment_number: str | None = None,
+                      apartment_address: str | None = None,
+                      primary_hex: str = "#FF5C00") -> bytes:
+    """A6 (105 x 148mm) printbaar kaartje voor naast de voordeur of in een
+    welkomstmap. QR linkt naar het huurportaal van het bedrijf.
+    Per-huurder variant: `portal_url` bevat al `?identifier=…` zodat de
+    huurder alleen nog een PIN hoeft in te voeren."""
+    from reportlab.platypus import Image as RLImage
+    s = _styles()
+    accent = colors.HexColor(primary_hex) if str(primary_hex).startswith("#") else ORANGE
+
+    # A6 binnenwerk (na 6mm marge): ~93mm breed x 136mm hoog
+    inner_w = 93 * mm
+
+    el = []
+
+    # 1) Brand band — bedrijfsnaam + label
+    brand_band = Table(
+        [[
+            Paragraph(
+                f'<para align="center"><font color="white" size="9"><b>{(company_name or "").upper()}</b></font></para>',
+                s["Body"],
+            )
+        ],
+        [
+            Paragraph(
+                '<para align="center"><font color="white" size="14"><b>MIJN HUURPORTAAL</b></font></para>',
+                s["Body"],
+            )
+        ]],
+        colWidths=[inner_w], rowHeights=[7 * mm, 9 * mm],
+    )
+    brand_band.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, -1), accent),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("ROUNDEDCORNERS", [4, 4, 0, 0]),
+    ]))
+    el.append(brand_band)
+
+    # 2) Grote QR — gecentreerd
+    qr_png = _make_qr_png(portal_url, size_px=600)
+    qr_img = RLImage(io.BytesIO(qr_png), width=70 * mm, height=70 * mm)
+    qr_block = Table([[qr_img]], colWidths=[inner_w])
+    qr_block.setStyle(TableStyle([
+        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+        ("TOPPADDING", (0, 0), (-1, -1), 8),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+    ]))
+    el.append(qr_block)
+
+    # 3) Hoofd-instructie
+    el.append(Paragraph(
+        '<para align="center"><b>Scan voor mijn huurportaal</b></para>',
+        ParagraphStyle("PosterMain", parent=s["Body"], fontSize=11, leading=13,
+                       textColor=DARK, spaceAfter=2),
+    ))
+    el.append(Paragraph(
+        '<para align="center"><font color="#6b7280" size="8">'
+        'Betalen · Kwitanties · Onderhoud melden'
+        '</font></para>',
+        s["Body"],
+    ))
+    el.append(Spacer(1, 4 * mm))
+
+    # 4) Tenant + appartement info (alleen bij per-huurder variant)
+    if tenant_name or apartment_number:
+        rows = []
+        if tenant_name:
+            rows.append([
+                Paragraph(
+                    '<font color="#6b7280" size="7">VOOR</font>',
+                    s["Body"],
+                ),
+                Paragraph(
+                    f'<b>{tenant_name}</b>',
+                    ParagraphStyle("PosterTenant", parent=s["Body"], fontSize=9,
+                                   leading=11, textColor=DARK),
+                ),
+            ])
+        if apartment_number:
+            apt_label = f"Appt. {apartment_number}"
+            if apartment_address:
+                apt_label += f" · {apartment_address}"
+            rows.append([
+                Paragraph(
+                    '<font color="#6b7280" size="7">ADRES</font>',
+                    s["Body"],
+                ),
+                Paragraph(
+                    apt_label,
+                    ParagraphStyle("PosterAddr", parent=s["Body"], fontSize=8,
+                                   leading=10, textColor=DARK),
+                ),
+            ])
+        info = Table(rows, colWidths=[14 * mm, inner_w - 14 * mm])
+        info.setStyle(TableStyle([
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("BACKGROUND", (0, 0), (-1, -1), LIGHT),
+            ("BOX", (0, 0), (-1, -1), 0.4, colors.HexColor("#E5E7EB")),
+            ("LEFTPADDING", (0, 0), (-1, -1), 6),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+            ("TOPPADDING", (0, 0), (-1, -1), 4),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+        ]))
+        el.append(info)
+        el.append(Spacer(1, 3 * mm))
+
+    # 5) Footer
+    el.append(Paragraph(
+        f'<para align="center"><font color="#9CA3AF" size="6">'
+        f'{(company_name or "SuriRent")} · Powered by SuriRent'
+        f'</font></para>',
+        s["Body"],
+    ))
+
+    return _build_a6(el)

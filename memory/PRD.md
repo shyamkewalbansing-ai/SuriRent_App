@@ -412,6 +412,17 @@ User koos voor **Optie C — minimale herbouw** (kern eerst), dan vroeg om **Fas
 ## Prioritized Backlog (Fases E-F)
 - 📧 **Email notificaties** — wacht op SendGrid / Resend credentials van user
 - 📱 **WhatsApp/SMS herinneringen** — wacht op Twilio credentials
+
+### Huurportaal-poster · Share Feature (2026-02-26)
+- ✅ **Algemene huurportaal A6 poster** — `GET /api/companies/me/portal-poster.pdf` genereert printbare A6-kaart (105×148mm) met grote QR, bedrijfsnaam, "Scan voor mijn huurportaal" — QR linkt naar `/c/<slug>/huurder` (branded).
+- ✅ **Per-huurder A6 poster** — `GET /api/tenants/{id}/portal-poster.pdf` met QR die de identifier (email/telefoon) vooringevuld geeft via `?identifier=…`. Huurder hoeft alleen PIN te tikken.
+- ✅ **TenantLoginPage prefill** — `/huurder?identifier=jan@example.sr` slaat identifier-stap over en gaat direct naar PIN keypad, met identifier in back-button.
+- ✅ **Branding / "Uw login-URL" card** uitgebreid met "Mijn Huurportaal · deel met huurders" rij — QR + Print poster + Kopieer + Open knoppen.
+- ✅ **Huurders tabel** uitgebreid met groene Printer-knop per rij voor per-huurder A6 poster.
+- ✅ Nieuwe helper `portal_poster_pdf()` in `pdf_gen.py` + `_build_a6()` voor A6 paginagrootte.
+- ✅ Nieuwe veld `tenant_portal_url` in `/companies/me/url-info` response.
+- Verified via curl: beide endpoints HTTP 200, PDF 35–44KB. Frontend smoke test: pill zichtbaar op Branding, 2 printer-knoppen op Huurders tabel, prefill werkt op `/huurder?identifier=…`.
+
 - 💳 **Payment gateways** (SumUp/Mope/Uni5Pay) — wacht op credentials
 - 🤖 **AI assistent Nederlandse chat** — via Emergent LLM key
 - 🔔 **PWA push notificaties** — geen externe key, VAPID generen

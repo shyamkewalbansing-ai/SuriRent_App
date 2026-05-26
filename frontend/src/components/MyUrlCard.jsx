@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Copy, Check, Globe, Loader2, AlertCircle, ExternalLink, RefreshCw, Share2, QrCode } from 'lucide-react';
+import { Copy, Check, Globe, Loader2, AlertCircle, ExternalLink, RefreshCw, Share2, QrCode, Printer } from 'lucide-react';
 import { api, formatError } from '../lib/api';
 import QrCodeModal from './QrCodeModal';
 
@@ -51,7 +51,7 @@ function CopyButton({ value, testid }) {
 /** Reusable card showing the company's login URLs + live DNS status.
  *  `compact` = smaller version for dashboard overview. */
 
-function KioskUrlPill({ label, url, testid, onQr }) {
+function KioskUrlPill({ label, url, testid, onQr, onPrint }) {
   const [copied, setCopied] = useState(false);
   if (!url) return null;
   const copy = () => {
@@ -67,6 +67,13 @@ function KioskUrlPill({ label, url, testid, onQr }) {
         <p className="text-[9px] uppercase tracking-widest font-black text-white/60">{label}</p>
         <p className="font-mono text-[10px] text-white truncate">{url.replace(/^https?:\/\//, '')}</p>
       </div>
+      {onPrint && (
+        <button type="button" onClick={onPrint} title="Print A6 huurportaal-poster"
+          data-testid={`${testid}-print`}
+          className="shrink-0 w-7 h-7 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center transition">
+          <Printer className="w-3.5 h-3.5" />
+        </button>
+      )}
       {onQr && (
         <button type="button" onClick={onQr} title="Toon QR-code"
           data-testid={`${testid}-qr`}
@@ -205,6 +212,15 @@ export default function MyUrlCard({ compact = false }) {
             <KioskUrlPill label="Klantenscherm" url={info.customer_display_url} testid="my-url-kiosk-klant"
               onQr={() => setQr({ kind: 'customer_display', label: 'Klantenscherm', url: info.customer_display_url })} />
           </div>
+        )}
+
+        {/* Mijn Huurportaal — speciale "share" rij met print A6 poster */}
+        {!compact && info.tenant_portal_url && (
+          <KioskUrlPill label="Mijn Huurportaal · deel met huurders"
+            url={info.tenant_portal_url} testid="my-url-tenant-portal"
+            onQr={() => setQr({ kind: 'tenant_portal', label: 'Mijn Huurportaal', url: info.tenant_portal_url })}
+            onPrint={() => window.open(`${process.env.REACT_APP_BACKEND_URL}/api/companies/me/portal-poster.pdf`, '_blank', 'noopener')}
+          />
         )}
 
         {/* Always-works query URL */}

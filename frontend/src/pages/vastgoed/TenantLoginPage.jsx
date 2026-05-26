@@ -1,13 +1,16 @@
 import { useState, useEffect } from 'react';
 import { useBrandedNavigate } from '../../lib/branded-nav';
+import { useSearchParams } from 'react-router-dom';
 import { Loader2, Delete, ArrowLeft, Mail, Phone, Home } from 'lucide-react';
 import { api, formatError } from '../../lib/api';
 import { setPreferredRole } from '../../lib/pwaRole';
 
 export default function TenantLoginPage() {
   const navigate = useBrandedNavigate();
-  const [identifier, setIdentifier] = useState('');
-  const [step, setStep] = useState('identifier'); // identifier | pin
+  const [searchParams] = useSearchParams();
+  const prefillIdentifier = (searchParams.get('identifier') || '').trim();
+  const [identifier, setIdentifier] = useState(prefillIdentifier);
+  const [step, setStep] = useState(prefillIdentifier ? 'pin' : 'identifier');
   const [pin, setPin] = useState(['', '', '', '']);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');

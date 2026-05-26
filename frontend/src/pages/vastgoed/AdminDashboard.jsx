@@ -8,7 +8,7 @@ import {
   X, Check, Loader2, Search, Home, Banknote, KeySquare, ChevronRight, Wallet,
   FileText, ShieldCheck, Wrench, FileSignature, Bell, Briefcase, Mail,
   Zap, Power, Menu, MoreHorizontal, MapPin, Crown, Paintbrush, Palette,
-  Gauge, Activity, Clock as ClockIcon, Monitor, QrCode,
+  Gauge, Activity, Clock as ClockIcon, Monitor, QrCode, Printer,
   ReceiptText, UsersRound, Building,
 } from 'lucide-react';
 import { api, formatError, fmtMoney, MONTHS_NL } from '../../lib/api';
@@ -1487,6 +1487,11 @@ function Tenants() {
                     <button onClick={() => setPinFor(t)} data-testid={`tenant-pin-${t.id}`}
                       className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-orange-50 hover:bg-orange-100 text-[#FF5C00]" title="Portal PIN instellen">
                       <KeySquare className="w-3.5 h-3.5" />
+                    </button>
+                    <button onClick={() => window.open(`${process.env.REACT_APP_BACKEND_URL}/api/tenants/${t.id}/portal-poster.pdf`, '_blank', 'noopener')}
+                      data-testid={`tenant-poster-${t.id}`}
+                      className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700" title="Print A6 huurportaal-poster">
+                      <Printer className="w-3.5 h-3.5" />
                     </button>
                     <button onClick={() => setEditing(t)} data-testid={`tenant-edit-${t.id}`}
                       className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600">

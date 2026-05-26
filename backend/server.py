@@ -1948,6 +1948,7 @@ async def get_my_url_info(request: Request, user=Depends(get_current_user)):
     path_url = f"{base_url}/c/{slug}" if base_url else ""
     kiosk_url = f"{base_url}/c/{slug}/kiosk" if base_url else ""
     tenant_kiosk_url = f"{base_url}/c/{slug}/kiosk/huurder" if base_url else ""
+    tenant_portal_url = f"{base_url}/c/{slug}/huurder" if base_url else ""
     customer_display_url = f"{base_url}/c/{slug}/kiosk/klant" if base_url else ""
     subdomain_url = f"{scheme}://{slug}.{app_domain}" if slug and app_domain else None
 
@@ -1973,6 +1974,7 @@ async def get_my_url_info(request: Request, user=Depends(get_current_user)):
         "path_url": path_url,
         "kiosk_url": kiosk_url,
         "tenant_kiosk_url": tenant_kiosk_url,
+        "tenant_portal_url": tenant_portal_url,
         "customer_display_url": customer_display_url,
         "subdomain_url": subdomain_url,
         "app_domain": app_domain,
@@ -3130,6 +3132,74 @@ async def apartment_kiosk_sticker(apt_id: str):
         primary_hex=primary_hex,
     )
     return _pdf_response(pdf, f"kiosk-sticker-{apt.get('number', apt_id)}.pdf")
+
+
+@api.get("/companies/me/portal-poster.pdf")
+async def company_portal_poster(request: Request, user=Depends(get_current_user)):
+    """A6 printbare poster met QR-code naar het algemene huurportaal van het
+    bedrijf (`/c/<slug>/huurder`). Handig om als sticker bij de receptie of
+    in een welkomstmap op te hangen — huurders scannen, vullen email/telefoon
+    + PIN in en zijn binnen."""
+    cid = company_id_of(user)
+    if not cid:
+        raise HTTPException(status_code=400, detail="Geen actief bedrijf")
+    c = await db.companies.find_one({"id": cid}, {"_id": 0, "name": 1, "slug": 1, "branding": 1})
+    if not c or not c.get("slug"):
+        raise HTTPException(status_code=404, detail="Bedrijf niet gevonden")
+    base = _company_base_url(request) or _public_url("")
+    portal_url = f"{base}/c/{c['slug']}/huurder"
+    primary_hex = ((c.get("branding") or {}).get("primary_color")) or "#FF5C00"
+    from pdf_gen import portal_poster_pdf
+    pdf = portal_poster_pdf(
+        company_name=c.get("name") or "SuriRent",
+        portal_url=portal_url,
+        primary_hex=primary_hex,
+    )
+    return _pdf_response(pdf, f"huurportaal-{c['slug']}.pdf")
+
+
+@api.get("/tenants/{tenant_id}/portal-poster.pdf")
+async def tenant_portal_poster(tenant_id: str, request: Request, user=Depends(get_current_user)):
+    """Per-huurder A6 portal-poster — de QR linkt naar `/c/<slug>/huurder?identifier=<email_of_telefoon>`,
+    zodat de huurder alleen een PIN hoeft in te tikken om in te loggen."""
+    t = await db.tenants.find_one(
+        {"id": tenant_id, **scope(user)},
+        {"_id": 0, "id": 1, "name": 1, "email": 1, "phone": 1, "company_id": 1, "apartment_id": 1},
+    )
+    if not t:
+        raise HTTPException(status_code=404, detail="Huurder niet gevonden")
+    cid = t.get("company_id") or company_id_of(user)
+    c = await db.companies.find_one({"id": cid}, {"_id": 0, "name": 1, "slug": 1, "branding": 1})
+    if not c or not c.get("slug"):
+        raise HTTPException(status_code=404, detail="Bedrijf niet gevonden")
+    apt_number, apt_address = None, None
+    if t.get("apartment_id"):
+        a = await db.apartments.find_one(
+            {"id": t["apartment_id"]}, {"_id": 0, "number": 1, "address": 1},
+        )
+        if a:
+            apt_number = a.get("number")
+            apt_address = a.get("address")
+    # Prefer email als identifier (stabieler dan telefoonnotatie); val terug op phone.
+    identifier = (t.get("email") or t.get("phone") or "").strip()
+    from urllib.parse import quote as _q
+    base = _company_base_url(request) or _public_url("")
+    if identifier:
+        portal_url = f"{base}/c/{c['slug']}/huurder?identifier={_q(identifier)}"
+    else:
+        portal_url = f"{base}/c/{c['slug']}/huurder"
+    primary_hex = ((c.get("branding") or {}).get("primary_color")) or "#FF5C00"
+    from pdf_gen import portal_poster_pdf
+    pdf = portal_poster_pdf(
+        company_name=c.get("name") or "SuriRent",
+        portal_url=portal_url,
+        tenant_name=t.get("name"),
+        apartment_number=apt_number,
+        apartment_address=apt_address,
+        primary_hex=primary_hex,
+    )
+    safe_name = "".join(ch for ch in (t.get("name") or tenant_id) if ch.isalnum() or ch in "-_") or tenant_id
+    return _pdf_response(pdf, f"huurportaal-{safe_name}.pdf")
 
 
 # =====================================================================
