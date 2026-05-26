@@ -1938,11 +1938,10 @@ async def get_my_url_info(request: Request, user=Depends(get_current_user)):
     host = (request.headers.get("x-forwarded-host") or request.headers.get("host") or "").lower().split(":")[0].strip()
     forwarded_proto = (request.headers.get("x-forwarded-proto") or "").split(",")[0].strip().lower()
     scheme = forwarded_proto or "https"
+    # Zie comment in _company_base_url: GEEN slug-prefix strippen — dat brak
+    # preview/non-prod waar de host meer dan 3 DNS-componenten heeft maar geen
+    # company-subdomein is. Path bevat al `/c/<slug>/…`.
     app_domain = (os.environ.get("SAAS_APP_DOMAIN") or "").strip().lower() or host
-    # If runtime host is already a subdomain (slug.app.surirent.sr) → use apex
-    parts = app_domain.split(".") if app_domain else []
-    if len(parts) >= 4:
-        app_domain = ".".join(parts[1:])
     base_url = f"{scheme}://{app_domain}" if app_domain else ""
     query_url = f"{base_url}/login?c={slug}" if base_url else ""
     path_url = f"{base_url}/c/{slug}" if base_url else ""
@@ -2002,10 +2001,10 @@ _QR_KIND_PATHS = {
 def _company_base_url(request: Request) -> str:
     host = (request.headers.get("x-forwarded-host") or request.headers.get("host") or "").lower().split(":")[0].strip()
     proto = (request.headers.get("x-forwarded-proto") or "").split(",")[0].strip().lower() or "https"
+    # GEEN slug-prefix strippen — dat brak preview omgevingen waar de host meer
+    # dan 3 DNS-componenten heeft maar geen company-subdomein is. Path bevat
+    # al `/c/<slug>/…` zodat branding overal werkt.
     app_domain = (os.environ.get("SAAS_APP_DOMAIN") or "").strip().lower() or host
-    parts = app_domain.split(".") if app_domain else []
-    if len(parts) >= 4:
-        app_domain = ".".join(parts[1:])
     return f"{proto}://{app_domain}" if app_domain else ""
 
 
@@ -3104,8 +3103,8 @@ async def tenant_portal_lookup_apartment(apt_id: str):
 
 
 @api.get("/apartments/{apt_id}/kiosk-sticker.pdf")
-async def apartment_kiosk_sticker(apt_id: str):
-    """Genereert een A4 print-poster met QR-code → `/kiosk/huurder?apt=<id>`.
+async def apartment_kiosk_sticker(apt_id: str, request: Request):
+    """Genereert een A4 print-poster met QR-code → `/c/<slug>/kiosk/huurder?apt=<id>`.
     Publiek (geen auth) zodat de beheerder de link direct in een nieuw
     tabblad kan openen — het PDF bevat enkel het appartement-nummer en
     de huurder-naam (al fysiek leesbaar bij de voordeur)."""
@@ -3118,13 +3117,21 @@ async def apartment_kiosk_sticker(apt_id: str):
         tenant_name = (t or {}).get("name")
     company_name = "SuriRent"
     primary_hex = "#FF5C00"
+    slug = ""
     cid = apt.get("company_id")
     if cid:
-        c = await db.companies.find_one({"id": cid}, {"_id": 0, "name": 1, "branding": 1})
+        c = await db.companies.find_one({"id": cid}, {"_id": 0, "name": 1, "slug": 1, "branding": 1})
         if c:
             company_name = c.get("name") or company_name
             primary_hex = ((c.get("branding") or {}).get("primary_color")) or primary_hex
-    kiosk_url = _public_url(f"/kiosk/huurder?apt={apt_id}")
+            slug = c.get("slug") or ""
+    # Bouw een absolute URL met scheme + host. Als we de bedrijfsslug kennen
+    # gebruiken we het branded pad zodat de juiste kleuren laden bij scan.
+    base = _company_base_url(request) or _public_url("")
+    if slug:
+        kiosk_url = f"{base}/c/{slug}/kiosk/huurder?apt={apt_id}"
+    else:
+        kiosk_url = f"{base}/kiosk/huurder?apt={apt_id}"
     from pdf_gen import kiosk_sticker_pdf
     pdf = kiosk_sticker_pdf(
         apartment_number=apt.get("number", "—"),
@@ -6031,4 +6038,3 @@ async def manual_run_trial_reminders(user=Depends(require_role("superadmin"))):
 
 
 app.include_router(api)
-

@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Copy, Check, Globe, Loader2, AlertCircle, ExternalLink, RefreshCw, Share2, QrCode, Printer } from 'lucide-react';
-import { api, formatError } from '../lib/api';
+import { api, formatError, openAuthedPdf } from '../lib/api';
 import QrCodeModal from './QrCodeModal';
 
 const STATUS_META = {
@@ -219,7 +219,7 @@ export default function MyUrlCard({ compact = false }) {
           <KioskUrlPill label="Mijn Huurportaal · deel met huurders"
             url={info.tenant_portal_url} testid="my-url-tenant-portal"
             onQr={() => setQr({ kind: 'tenant_portal', label: 'Mijn Huurportaal', url: info.tenant_portal_url })}
-            onPrint={() => window.open(`${process.env.REACT_APP_BACKEND_URL}/api/companies/me/portal-poster.pdf`, '_blank', 'noopener')}
+            onPrint={() => openAuthedPdf('/companies/me/portal-poster.pdf', { filename: 'huurportaal.pdf' })}
           />
         )}
 

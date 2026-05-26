@@ -47,6 +47,29 @@ export function fmtMoney(amount, currency = 'SRD') {
   return `${currency} ${n.toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+/** Open een PDF endpoint dat auth vereist in een nieuw tabblad.
+ *  `window.open(url)` stuurt geen Authorization-header — als de huurder via
+ *  Bearer-token is ingelogd (en niet via cookie) krijgt het backend "Niet
+ *  ingelogd". Met `responseType:'blob'` haalt axios het PDF met juiste auth,
+ *  en openen we de blob-URL in een nieuw tabblad. */
+export async function openAuthedPdf(path, { filename } = {}) {
+  const { data } = await api.get(path, { responseType: 'blob' });
+  const blob = new Blob([data], { type: 'application/pdf' });
+  const url = URL.createObjectURL(blob);
+  const w = window.open(url, '_blank', 'noopener');
+  if (!w) {
+    // Popup geblokkeerd → forceer download zodat de gebruiker iets krijgt.
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename || 'document.pdf';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+  // Revoke na 60s — genoeg tijd voor PDF te laden in nieuw tabblad.
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+
 export const MONTHS_NL = [
   'januari', 'februari', 'maart', 'april', 'mei', 'juni',
   'juli', 'augustus', 'september', 'oktober', 'november', 'december',

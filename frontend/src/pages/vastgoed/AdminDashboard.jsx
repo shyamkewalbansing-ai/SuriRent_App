@@ -11,7 +11,7 @@ import {
   Gauge, Activity, Clock as ClockIcon, Monitor, QrCode, Printer,
   ReceiptText, UsersRound, Building,
 } from 'lucide-react';
-import { api, formatError, fmtMoney, MONTHS_NL } from '../../lib/api';
+import { api, formatError, fmtMoney, MONTHS_NL, openAuthedPdf } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { EmailDialog, SendDialog } from '../../components/EmailDialog';
 import Contracts from './admin/Contracts';
@@ -1488,7 +1488,7 @@ function Tenants() {
                       className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-orange-50 hover:bg-orange-100 text-[#FF5C00]" title="Portal PIN instellen">
                       <KeySquare className="w-3.5 h-3.5" />
                     </button>
-                    <button onClick={() => window.open(`${process.env.REACT_APP_BACKEND_URL}/api/tenants/${t.id}/portal-poster.pdf`, '_blank', 'noopener')}
+                    <button onClick={() => openAuthedPdf(`/tenants/${t.id}/portal-poster.pdf`, { filename: `huurportaal-${t.name || t.id}.pdf` })}
                       data-testid={`tenant-poster-${t.id}`}
                       className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700" title="Print A6 huurportaal-poster">
                       <Printer className="w-3.5 h-3.5" />

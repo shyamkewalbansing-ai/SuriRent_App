@@ -441,6 +441,23 @@ User koos voor **Optie C — minimale herbouw** (kern eerst), dan vroeg om **Fas
 - 🔔 **PWA push notificaties** — geen externe key, VAPID generen
 - 🔐 **AES-256 versleutelde PDFs** + QR verificatie
 
+
+### QR-code URL + Auth Fixes (2026-02-26)
+**Drie bugs gevonden bij testen van de QR-functionaliteit:**
+
+- ✅ **Apartement kiosk-sticker QR onleesbaar** — `_public_url("/kiosk/huurder?apt=…")` gaf alleen het relatieve pad terug omdat backend geen `APP_PUBLIC_URL` env var heeft. **Fix:** endpoint accepteert nu `Request`, gebruikt `_company_base_url()` voor absolute URL + branded `/c/<slug>/` pad.
+
+- ✅ **Company/Tenant poster QR miste subdomein** — `_company_base_url` knipte de eerste DNS-component af zodra de host >= 4 delen had ("vastgoed-app.preview.emergentagent.com" → "preview.emergentagent.com"). Dit was bedoeld voor "slug.app.surirent.sr" → "app.surirent.sr" recovery, maar brak elke preview-omgeving. **Fix:** strip-logica volledig verwijderd; path bevat al `/c/<slug>/…` dus branding werkt op elk (sub)domein.
+
+- ✅ **Per-tenant poster gaf 401 "Niet ingelogd"** — `window.open(url)` stuurt geen `Authorization: Bearer` header en de cookie was niet altijd beschikbaar in nieuwe tabs. **Fix:** nieuwe `openAuthedPdf(path)` helper in `lib/api.js` — fetch met `responseType:'blob'` (inclusief Bearer header) + opent blob URL in nieuw tabblad. Toegepast op company poster + tenant poster knoppen.
+
+- ✅ **Bonus:** legacy duplicaat code (dood) onderaan `server.py` opgeruimd (12 regels indentatie-fout die backend voorkwam te starten).
+
+**Verified via QR decode (pyzbar):**
+- APT_STICKER: `https://vastgoed-app.preview.emergentagent.com/c/surirent/kiosk/huurder?apt=…`
+- COMPANY_POSTER + TENANT_POSTER: `https://vastgoed-app.preview.emergentagent.com/c/surirent/kiosk/huurder`
+- Frontend network test: Tenant poster fetch → HTTP 200 application/pdf
+
 ### Fase 3 (multi-bedrijf)
 - Multi-bedrijf SaaS (companies, subscription, superadmin)
 - Tenant portal (huurder login + betalingsgeschiedenis)
