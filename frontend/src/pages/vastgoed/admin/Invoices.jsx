@@ -898,22 +898,18 @@ export default function Invoices() {
           </button>
         </div>
 
-        {/* Zoekbalk + filter — mobile */}
-        <div className="flex items-center gap-2">
-          <div className="relative flex-1 min-w-0">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input value={search} onChange={(e) => setSearch(e.target.value)}
-              placeholder="Zoek huurder, factuur..."
-              data-testid="mi-search"
-              className="w-full h-11 pl-10 pr-3.5 rounded-2xl bg-white border border-orange-100 text-[13px] font-semibold placeholder:text-slate-400 focus:border-[#FF5C00] outline-none" />
-          </div>
-          <div className="relative shrink-0">
+        {/* Filter rechts boven · zoekbalk eronder — mobile */}
+        <div className="flex justify-end">
+          <div className="relative">
             <button onClick={() => setFilterOpen(!filterOpen)} data-testid="mi-filter-btn" type="button"
-              className={`h-11 w-11 rounded-2xl border bg-white inline-flex items-center justify-center shadow-sm transition ${
-                tab !== 'all' || filterSeverity !== 'all' ? 'border-[#FF8A3D] text-[#FF8A3D]' : 'border-orange-100 text-slate-600'
+              className={`h-10 px-3.5 rounded-2xl border bg-white inline-flex items-center gap-1.5 shadow-sm transition ${
+                tab !== 'all' || filterSeverity !== 'all' ? 'border-[#FF8A3D] text-[#FF8A3D]' : 'border-orange-100 text-slate-700'
               }`}>
               <SlidersHorizontal className="w-4 h-4" />
-              {(tab !== 'all' || filterSeverity !== 'all') && <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-[#FF8A3D] ring-2 ring-white" />}
+              <span className="font-extrabold text-[13px]">
+                {tab === 'open' ? 'Achterstand' : tab === 'paid' ? 'Betaald' : 'Filter'}
+              </span>
+              {(tab !== 'all' || filterSeverity !== 'all') && <span className="w-2 h-2 rounded-full bg-[#FF8A3D]" />}
             </button>
             {filterOpen && (
               <MobileFilterMenu tab={tab} setTab={setTab}
@@ -922,6 +918,14 @@ export default function Invoices() {
                 counts={{ all: allCount, open: openCount, paid: paidCount }} />
             )}
           </div>
+        </div>
+
+        <div className="relative">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <input value={search} onChange={(e) => setSearch(e.target.value)}
+            placeholder="Zoek huurder, factuur..."
+            data-testid="mi-search"
+            className="w-full h-11 pl-10 pr-3.5 rounded-2xl bg-white border border-orange-100 text-[13px] font-semibold placeholder:text-slate-400 focus:border-[#FF5C00] outline-none" />
         </div>
 
         {loading ? (
