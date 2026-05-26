@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
-  Plus, X, Check, Loader2, Search, FileText, Mail, ShieldCheck, ChevronRight,
+  Plus, X, Check, Loader2, Search, FileText, Mail, ShieldCheck, ChevronRight, ChevronLeft,
   ChevronDown, SlidersHorizontal, CalendarDays, Banknote, CheckCircle2,
   TrendingUp, Receipt, Wallet, Home as HomeIcon,
 } from 'lucide-react';
@@ -450,6 +450,41 @@ function PaymentForm({ tenants, onCancel, onSaved, initialInvoice = null }) {
 }
 
 // =====================================================================
+// Maand-stepper — pijltjes om maand vooruit/terug te navigeren
+// =====================================================================
+function MonthStepper({ year, month, onPrev, onNext, isCurrent, count, sum, currency, compact = false }) {
+  const label = `${MONTHS_NL[month]} ${year}`;
+  return (
+    <div className={`flex items-center justify-between gap-2 bg-white rounded-2xl border border-orange-100 ${compact ? 'px-2 py-1.5' : 'px-3 py-2'}`}
+      data-testid="month-stepper">
+      <button type="button" onClick={onPrev} data-testid="month-prev"
+        className="w-9 h-9 rounded-xl bg-slate-50 hover:bg-orange-50 active:scale-95 transition flex items-center justify-center text-slate-700">
+        <ChevronLeft className="w-4 h-4" strokeWidth={2.4} />
+      </button>
+      <div className="flex-1 min-w-0 text-center">
+        <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 leading-tight">
+          {isCurrent ? 'Deze maand' : 'Maand'}
+        </p>
+        <p className="font-extrabold text-slate-900 capitalize tracking-tight leading-tight truncate"
+          style={{ fontSize: 'clamp(14px, 4vw, 17px)' }} data-testid="month-stepper-label">
+          {label}
+        </p>
+        {!compact && (
+          <p className="text-[10px] text-slate-500 font-bold leading-tight mt-0.5">
+            {count} betaling{count !== 1 ? 'en' : ''} · {currency} {Number(sum).toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </p>
+        )}
+      </div>
+      <button type="button" onClick={onNext} data-testid="month-next"
+        disabled={isCurrent}
+        className="w-9 h-9 rounded-xl bg-slate-50 hover:bg-orange-50 disabled:opacity-40 disabled:hover:bg-slate-50 active:scale-95 transition flex items-center justify-center text-slate-700">
+        <ChevronRight className="w-4 h-4" strokeWidth={2.4} />
+      </button>
+    </div>
+  );
+}
+
+// =====================================================================
 // Filter dropdown
 // =====================================================================
 function FilterMenu({ method, setMethod, onClose }) {
@@ -535,6 +570,17 @@ export default function Payments() {
 
   const apiBase = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
+  // Maand-picker — selectie van een specifieke (jaar, maand) waarop "Maand"
+  // tab filtert. Default = huidige maand. Pijltjes stappen 1 maand terug/vooruit.
+  const [selectedYear, setSelectedYear] = useState(today.getFullYear());
+  const [selectedMonth, setSelectedMonth] = useState(today.getMonth()); // 0-11
+  const stepMonth = (delta) => {
+    const d = new Date(selectedYear, selectedMonth + delta, 1);
+    setSelectedYear(d.getFullYear());
+    setSelectedMonth(d.getMonth());
+  };
+  const isCurrentMonth = selectedYear === today.getFullYear() && selectedMonth === today.getMonth();
+
   // Sorteer: nieuwste eerst
   const sorted = useMemo(() => {
     return [...items].sort((a, b) => new Date(b.paid_at) - new Date(a.paid_at));
@@ -545,11 +591,15 @@ export default function Payments() {
   const currency = sorted[0]?.currency || 'SRD';
   const startOfToday = startOfDayUTC(today);
   const startOfWeek = new Date(startOfToday); startOfWeek.setDate(startOfWeek.getDate() - 7);
-  const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+  const monthStart = new Date(selectedYear, selectedMonth, 1);
+  const monthEnd = new Date(selectedYear, selectedMonth + 1, 1);
 
   const todayItems = useMemo(() => sorted.filter((p) => new Date(p.paid_at) >= startOfToday), [sorted, startOfToday]);
   const weekItems = useMemo(() => sorted.filter((p) => new Date(p.paid_at) >= startOfWeek), [sorted, startOfWeek]);
-  const monthItems = useMemo(() => sorted.filter((p) => new Date(p.paid_at) >= startOfMonth), [sorted, startOfMonth]);
+  const monthItems = useMemo(() => sorted.filter((p) => {
+    const d = new Date(p.paid_at);
+    return d >= monthStart && d < monthEnd;
+  }), [sorted, monthStart, monthEnd]);
 
   const sumOf = (arr) => arr.reduce((s, p) => s + Number(p.amount || 0), 0);
   const todaySum = sumOf(todayItems);
@@ -658,6 +708,13 @@ export default function Payments() {
             {filterOpen && <FilterMenu method={methodFilter} setMethod={setMethodFilter} onClose={() => setFilterOpen(false)} />}
           </div>
         </div>
+
+        {tab === 'month' && (
+          <MonthStepper year={selectedYear} month={selectedMonth}
+            onPrev={() => stepMonth(-1)} onNext={() => stepMonth(1)}
+            isCurrent={isCurrentMonth}
+            count={monthItems.length} sum={sumOf(monthItems)} currency={currency} />
+        )}
 
         {loading ? (
           <div className="bg-white rounded-2xl border border-orange-100 p-10 text-center">
@@ -776,6 +833,13 @@ export default function Payments() {
           {filterOpen && <FilterMenu method={methodFilter} setMethod={setMethodFilter} onClose={() => setFilterOpen(false)} />}
         </div>
       </div>
+
+      {tab === 'month' && (
+        <MonthStepper year={selectedYear} month={selectedMonth}
+          onPrev={() => stepMonth(-1)} onNext={() => stepMonth(1)}
+          isCurrent={isCurrentMonth}
+          count={monthItems.length} sum={sumOf(monthItems)} currency={currency} />
+      )}
 
       {/* SEARCH */}
       <div className="relative">
