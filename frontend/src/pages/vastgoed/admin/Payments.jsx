@@ -487,25 +487,21 @@ function MonthStepper({ year, month, onPrev, onNext, isCurrent, count, sum, curr
 // =====================================================================
 // Filter dropdown
 // =====================================================================
-function FilterMenu({ method, setMethod, onClose }) {
+function FilterMenu({ tab, setTab, onClose }) {
   const opts = [
-    { v: 'all', l: 'Alle methodes' },
-    { v: 'contant', l: 'Contant' },
-    { v: 'bank', l: 'Bank' },
-    { v: 'mope', l: 'Mope' },
-    { v: 'sumup', l: 'SumUp' },
-    { v: 'uni5pay', l: 'Uni5Pay' },
+    { v: 'today', l: 'Vandaag' },
+    { v: 'month', l: 'Maand' },
   ];
   return (
     <>
       <div className="fixed inset-0 z-40" onClick={onClose} />
-      <div className="absolute right-0 top-12 z-50 bg-white rounded-xl shadow-2xl border border-orange-100 py-1 min-w-[200px]"
+      <div className="absolute right-0 top-12 z-50 bg-white rounded-xl shadow-2xl border border-orange-100 py-1 min-w-[180px]"
         data-testid="filter-menu">
         {opts.map((o) => (
-          <button key={o.v} onClick={() => { setMethod(o.v); onClose(); }}
+          <button key={o.v} onClick={() => { setTab(o.v); onClose(); }}
             data-testid={`filter-${o.v}`}
             className={`w-full text-left px-4 py-2.5 text-sm font-medium hover:bg-orange-50 transition ${
-              method === o.v ? 'text-[#FF5C00] font-bold' : 'text-slate-700'
+              tab === o.v ? 'text-[#FF5C00] font-bold' : 'text-slate-700'
             }`}>{o.l}</button>
         ))}
       </div>
@@ -537,7 +533,6 @@ export default function Payments() {
   const [emailing, setEmailing] = useState(null);
   const [search, setSearch] = useState('');
   const [tab, setTab] = useState('month'); // all | today | week | month — start op huidige maand
-  const [methodFilter, setMethodFilter] = useState('all');
   const [filterOpen, setFilterOpen] = useState(false);
   const [expanded, setExpanded] = useState(null);
   // Track de meest recent gezien betaling-id zodat we de "nieuwste" rij
@@ -613,14 +608,13 @@ export default function Payments() {
     if (tab === 'week') base = weekItems;
     if (tab === 'month') base = monthItems;
     return base.filter((p) => {
-      if (methodFilter !== 'all' && p.method !== methodFilter) return false;
       if (q) {
         const hay = `${p.tenant_name || ''} ${p.receipt_number || ''} ${p.apartment_number || ''} ${p.location_name || ''}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
     });
-  }, [sorted, tab, methodFilter, search, todayItems, weekItems, monthItems]);
+  }, [sorted, tab, search, todayItems, monthItems]);
 
   const toggleExpand = (id) => setExpanded((cur) => (cur === id ? null : id));
 
@@ -689,21 +683,20 @@ export default function Payments() {
           <Plus className="stroke-[2.5]" style={{ width: 'clamp(20px, 5.5vw, 26px)', height: 'clamp(20px, 5.5vw, 26px)' }} /> Nieuwe betaling
         </button>
 
-        <div className="flex items-end gap-2 pt-1">
-          <div className="flex-1 min-w-0 flex items-end gap-0.5 overflow-x-auto no-scrollbar pb-1">
-            <MobileTabPill active={tab === 'today'}  onClick={() => setTab('today')}  label="Vandaag"  count={todayItems.length} testid="mp-tab-today" />
-            <MobileTabPill active={tab === 'month'}  onClick={() => setTab('month')}  label="Maand"    count={monthItems.length} testid="mp-tab-month" />
-          </div>
+        <div className="flex items-center gap-2 pt-1">
+          <div className="flex-1" />
           <div className="relative shrink-0">
             <button onClick={() => setFilterOpen(!filterOpen)} data-testid="mp-filter-btn" type="button"
-              className={`rounded-2xl border bg-white inline-flex items-center justify-center shadow-sm transition ${
-                methodFilter !== 'all' ? 'border-[#FF8A3D] text-[#FF8A3D]' : 'border-orange-100 text-slate-600'
+              className={`rounded-2xl border bg-white inline-flex items-center gap-2 px-3 shadow-sm transition ${
+                tab !== 'month' ? 'border-[#FF8A3D] text-[#FF8A3D]' : 'border-orange-100 text-slate-700'
               }`}
-              style={{ height: 'clamp(40px, 11vw, 48px)', width: 'clamp(40px, 11vw, 48px)' }}>
+              style={{ height: 'clamp(40px, 11vw, 48px)', minHeight: 'clamp(40px, 11vw, 48px)' }}>
               <SlidersHorizontal style={{ width: 'clamp(16px, 4.4vw, 18px)', height: 'clamp(16px, 4.4vw, 18px)' }} />
-              {methodFilter !== 'all' && <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-[#FF8A3D] ring-2 ring-white" />}
+              <span className="font-extrabold capitalize" style={{ fontSize: 'clamp(13px, 3.6vw, 15px)' }}>
+                {tab === 'today' ? 'Vandaag' : 'Maand'}
+              </span>
             </button>
-            {filterOpen && <FilterMenu method={methodFilter} setMethod={setMethodFilter} onClose={() => setFilterOpen(false)} />}
+            {filterOpen && <FilterMenu tab={tab} setTab={setTab} onClose={() => setFilterOpen(false)} />}
           </div>
         </div>
 
@@ -814,19 +807,14 @@ export default function Payments() {
 
       {/* TAB BAR */}
       <div className="bg-white rounded-2xl border border-orange-100 px-2 sm:px-3 py-2 flex items-center gap-1 sm:gap-2" data-testid="payment-tabs">
-        <Tab v="today" tab={tab} setTab={setTab} label={`Vandaag (${todayItems.length})`} testid="tab-today" />
-        <Tab v="month" tab={tab} setTab={setTab} label={`Maand (${monthItems.length})`} testid="tab-month" />
         <div className="flex-1" />
         <div className="relative">
           <button onClick={() => setFilterOpen(!filterOpen)} data-testid="payment-filter-btn"
-            className={`h-9 sm:h-10 px-3 sm:px-4 rounded-xl border bg-white inline-flex items-center gap-1.5 sm:gap-2 font-bold text-sm transition ${
-              methodFilter !== 'all' ? 'border-[#FF5C00] text-[#FF5C00]' : 'border-slate-200 text-slate-700 hover:border-orange-300'
-            }`}>
+            className="h-9 sm:h-10 px-3 sm:px-4 rounded-xl border border-slate-200 bg-white inline-flex items-center gap-1.5 sm:gap-2 font-bold text-sm text-slate-700 hover:border-orange-300 transition">
             <SlidersHorizontal className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-            <span className="hidden sm:inline">Filter</span>
-            {methodFilter !== 'all' && <span className="w-1.5 h-1.5 rounded-full bg-[#FF5C00]" />}
+            <span className="capitalize">{tab === 'today' ? 'Vandaag' : 'Maand'}</span>
           </button>
-          {filterOpen && <FilterMenu method={methodFilter} setMethod={setMethodFilter} onClose={() => setFilterOpen(false)} />}
+          {filterOpen && <FilterMenu tab={tab} setTab={setTab} onClose={() => setFilterOpen(false)} />}
         </div>
       </div>
 
