@@ -498,4 +498,16 @@ Verified via mobile screenshot (393×852): alle wijzigingen zichtbaar en consist
 
 - PDF endpoints zijn public via UUID — voor productie: signed/expiring tokens
 - Deposit `deduction <= amount` validatie strenger maken
+
+### Appartementen + Huurders pagina polish (2026-02-26)
+- ✅ **Appartementen kaarten**: oranje borders → slate-100 + subtiele shadow, padding `p-5` → `p-4`, oranje gradient Maandhuur-blok → strakke slate-50 met slate-100 border, gap `gap-4` → `gap-3`.
+- ✅ **Appartementen actie-knoppen**: QR-knop `bg-[#FFE6D3]` → `bg-orange-50` (subtieler, alleen accent), Shelly-knop ook subtieler.
+- ✅ **Appartementen empty state**: oranje strepen → slate-200 dashed, icoon-kleur slate-300.
+- ✅ **Huurders tabel container**: oranje borders → slate-100 + subtiele shadow.
+- ✅ **Huurders tabel-header**: `bg-orange-50/50` → `bg-slate-50/70`, tekst `slate-500` → `slate-400`.
+- ✅ **Huurders rij-borders**: oranje-50 → slate-100, hover slate-50/60 (was orange-50/30).
+- ✅ **Huurders maandhuur kolom**: `text-slate-700 semibold` → `text-slate-900 bold`.
+- ✅ **Huurders empty state**: oranje icon → slate-300.
+- Verified via screenshot (1440×900): beide pagina's consistent met Overzicht/Betalingen/Facturen — uniform premium SaaS look.
+
 - Maintenance reopen `resolved_at` clearen

@@ -905,17 +905,17 @@ function Apartments() {
           className="w-full h-12 pl-11 pr-4 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] outline-none bg-white" />
       </div>
 
-      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {filtered.length === 0 && (
-          <div className="col-span-full bg-white rounded-2xl border-2 border-dashed border-orange-200 p-10 text-center">
-            <Building2 className="w-10 h-10 text-orange-300 mx-auto mb-3" />
+          <div className="col-span-full bg-white rounded-2xl border border-dashed border-slate-200 p-10 text-center">
+            <Building2 className="w-10 h-10 text-slate-300 mx-auto mb-3" />
             <p className="text-slate-500 font-semibold">Nog geen appartementen.</p>
             <p className="text-sm text-slate-400 mt-1">Voeg uw eerste appartement toe.</p>
           </div>
         )}
         {filtered.map((a) => (
           <div key={a.id} data-testid={`apt-card-${a.id}`}
-            className="bg-white rounded-2xl border border-orange-100 overflow-hidden hover:border-[#FF5C00]/30 transition-colors flex flex-col">
+            className="bg-white rounded-2xl border border-slate-100 shadow-[0_1px_4px_-2px_rgba(15,23,42,0.06)] overflow-hidden hover:border-slate-200 transition-colors flex flex-col">
             {a.photo_url && (
               <div className="relative w-full h-32 bg-slate-100 shrink-0">
                 <img src={a.photo_url} alt={a.number} className="w-full h-full object-cover"
@@ -927,11 +927,11 @@ function Apartments() {
                 </span>
               </div>
             )}
-            <div className="p-5 flex-1 flex flex-col">
+            <div className="p-4 flex-1 flex flex-col">
             <div className="flex items-start justify-between mb-3">
-              <div>
-                <p className="text-xs font-black uppercase tracking-widest text-[#FF5C00]">Appt. {a.number}</p>
-                <p className="text-sm text-slate-500 mt-0.5 truncate">{a.address || '—'}</p>
+              <div className="min-w-0">
+                <p className="text-[10px] font-black uppercase tracking-widest text-[#FF5C00]">Appt. {a.number}</p>
+                <p className="text-sm font-semibold text-slate-900 mt-0.5 truncate">{a.address || '—'}</p>
               </div>
               {!a.photo_url && (
                 <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-1 rounded-full ${
@@ -941,14 +941,14 @@ function Apartments() {
                 </span>
               )}
             </div>
-            <div className="bg-gradient-to-r from-[#FFF4EC] to-[#FFE6D3] border border-[#FF5C00]/20 rounded-xl p-3 mb-3">
-              <p className="text-xs font-bold text-[#C74600]">Maandhuur</p>
-              <p className="text-xl font-black text-slate-900 tracking-tight">{fmtMoney(a.rent_amount, a.currency)}</p>
+            <div className="bg-slate-50 border border-slate-100 rounded-xl p-3 mb-3">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Maandhuur</p>
+              <p className="text-xl font-black text-slate-900 tracking-tight mt-0.5">{fmtMoney(a.rent_amount, a.currency)}</p>
             </div>
             {a.tenant_name ? (
-              <div className="flex items-center justify-between bg-slate-50 rounded-xl p-3 mb-3">
+              <div className="flex items-center justify-between bg-slate-50 rounded-xl p-3 mb-3 border border-slate-100">
                 <div className="min-w-0">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Huurder</p>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Huurder</p>
                   <p className="text-sm font-bold text-slate-900 truncate">{a.tenant_name}</p>
                 </div>
                 <button onClick={() => removeT(a.id)} data-testid={`apt-remove-tenant-${a.id}`}
@@ -969,14 +969,14 @@ function Apartments() {
                 target="_blank" rel="noreferrer"
                 data-testid={`apt-qr-${a.id}`}
                 title="QR-sticker voor naast de voordeur"
-                className="w-10 h-10 rounded-xl bg-[#FFE6D3] hover:bg-[#FFD0AA] text-[#C74600] flex items-center justify-center">
+                className="w-10 h-10 rounded-xl bg-orange-50 hover:bg-orange-100 text-[#FF5C00] flex items-center justify-center">
                 <QrCode className="w-4 h-4" />
               </a>
               <button onClick={() => setShellyFor(a)} data-testid={`apt-shelly-${a.id}`}
                 title={a.shelly?.device_id ? `Stroom: ${a.shelly.label || a.shelly.device_id}` : 'Stroom koppelen'}
                 className={`w-10 h-10 rounded-xl flex items-center justify-center ${
                   a.shelly?.device_id
-                    ? 'bg-[#FFE6D3] text-[#C74600] hover:bg-[#FFD0AA]'
+                    ? 'bg-orange-50 text-[#FF5C00] hover:bg-orange-100'
                     : 'bg-slate-100 hover:bg-slate-200 text-slate-500'
                 }`}>
                 <Zap className="w-4 h-4" />
@@ -1448,16 +1448,16 @@ function Tenants() {
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Zoek op naam" data-testid="tenant-search"
           className="w-full h-12 pl-11 pr-4 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] outline-none bg-white" />
       </div>
-      <div className="bg-white rounded-2xl border border-orange-100 overflow-hidden">
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-[0_1px_4px_-2px_rgba(15,23,42,0.06)] overflow-hidden">
         {filtered.length === 0 ? (
           <div className="p-10 text-center">
-            <Users className="w-10 h-10 text-orange-300 mx-auto mb-3" />
+            <Users className="w-10 h-10 text-slate-300 mx-auto mb-3" />
             <p className="text-slate-500 font-semibold">Geen huurders gevonden.</p>
           </div>
         ) : (
           <table className="w-full text-sm">
-            <thead className="bg-orange-50/50 text-left">
-              <tr className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+            <thead className="bg-slate-50/70 text-left">
+              <tr className="text-[10px] font-black uppercase tracking-widest text-slate-400">
                 <th className="px-5 py-3">Naam</th>
                 <th className="px-5 py-3 hidden md:table-cell">Contact</th>
                 <th className="px-5 py-3">Appartement</th>
@@ -1467,7 +1467,7 @@ function Tenants() {
             </thead>
             <tbody>
               {filtered.map((t) => (
-                <tr key={t.id} data-testid={`tenant-row-${t.id}`} className="border-t border-orange-50 hover:bg-orange-50/30">
+                <tr key={t.id} data-testid={`tenant-row-${t.id}`} className="border-t border-slate-100 hover:bg-slate-50/60">
                   <td className="px-5 py-4 font-bold text-slate-900">{t.name}</td>
                   <td className="px-5 py-4 hidden md:table-cell text-slate-500">
                     <p>{t.phone || '—'}</p>
@@ -1478,7 +1478,7 @@ function Tenants() {
                       <span className="inline-block px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700 text-xs font-bold">Appt. {t.apartment_number}</span>
                     ) : <span className="text-slate-400">—</span>}
                   </td>
-                  <td className="px-5 py-4 hidden md:table-cell text-slate-700 font-semibold">
+                  <td className="px-5 py-4 hidden md:table-cell text-slate-900 font-bold">
                     {t.rent_amount ? fmtMoney(t.rent_amount, t.currency) : '—'}
                   </td>
                   <td className="px-5 py-4 text-right space-x-1">
