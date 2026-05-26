@@ -403,17 +403,17 @@ function MobileTabBar({ active, onChange, tabs, onOpenMenu, user, badgeCount }) 
         >
         {left.map(renderTab)}
 
-        {/* Center FAB — opent het volledige menu. De FAB zit perfect IN de
-            page-bg gekleurde bol zodat het visueel een ingedrukte knop in
-            een holle uitsparing lijkt. Bol diameter ~12px groter dan FAB,
-            beide centers op exact dezelfde Y-positie. */}
+        {/* Center FAB — opent het volledige menu. De FAB zit volledig BINNEN
+            de page-bg gekleurde bol met flink wat ruimte rondom (16px+ margin
+            aan elke kant), zodat het visueel een knop in een holle uitsparing
+            lijkt waar de hele + in past. */}
         <div className="relative flex items-end justify-center pb-0.5">
-          {/* Page-bg "bol" — zit met center precies op center van FAB.
-              Mobile: FAB 48px @ -mt-3.5 (=-14px) → center +10. Bol 60px → top -20px. 
-              Tablet: FAB 64px @ -mt-5 (=-20px) → center +12. Bol 80px → top -28px. */}
+          {/* Bol — fors groter dan de FAB (80×80 vs 48×48 op mobile, 100×100
+              vs 64×64 op tablet). Center matcht exact het FAB-center zodat de
+              FAB nergens buiten de bol valt. */}
           <span
             aria-hidden
-            className="absolute left-1/2 -translate-x-1/2 -top-5 md:-top-7 w-[60px] h-[60px] md:w-[80px] md:h-[80px] rounded-full bg-[#F7F8FA] pointer-events-none"
+            className="absolute left-1/2 -translate-x-1/2 -top-[30px] md:-top-[38px] w-[80px] h-[80px] md:w-[100px] md:h-[100px] rounded-full bg-[#F7F8FA] pointer-events-none"
           />
           <button
             onClick={onOpenMenu}
