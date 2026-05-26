@@ -1106,6 +1106,20 @@ function ReceiptScreen({ payment, overview, onDone }) {
                   <Building2 className="w-5 h-5 text-white" />
                 </div>
               </div>
+              {/* Prominente medewerker-banner — direct boven het bedrag.
+                  Geeft de huurder vertrouwen + helpt bij klachten. */}
+              {payment.received_by && (
+                <div className="bg-orange-50 border border-orange-200 rounded-xl px-3 py-2 mb-3 flex items-center gap-2.5"
+                  data-testid="receipt-received-by-banner">
+                  <div className="w-8 h-8 rounded-full bg-orange-500 text-white flex items-center justify-center text-xs font-black shrink-0">
+                    {(payment.received_by || '?').trim().split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase()}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-orange-700">Ontvangen door</p>
+                    <p className="text-sm font-extrabold text-slate-900 truncate" data-testid="receipt-received-by">{payment.received_by}</p>
+                  </div>
+                </div>
+              )}
               <div className="space-y-1.5 text-sm">
                 <RowSlim label="Huurder" value={payment.tenant_name} />
                 <RowSlim label="Appartement" value={payment.apartment_number || '—'} />
@@ -1113,7 +1127,9 @@ function ReceiptScreen({ payment, overview, onDone }) {
                 {payment.period_month && <RowSlim label="Periode" value={`${MONTHS_NL[payment.period_month - 1]} ${payment.period_year}`} />}
                 <RowSlim label="Methode" value={payment.method} />
                 <RowSlim label="Datum" value={new Date(payment.paid_at).toLocaleString('nl-NL')} />
-                {payment.approved_by && <RowSlim label="Goedgekeurd door" value={payment.approved_by} />}
+                {payment.approved_by && payment.approved_by !== payment.received_by && (
+                  <RowSlim label="Goedgekeurd door" value={payment.approved_by} />
+                )}
                 <div className="flex justify-between pt-2 border-t border-dashed border-slate-200 mt-2">
                   <span className="text-slate-500 font-bold">Betaald</span>
                   <span className="font-extrabold text-slate-900 text-lg" data-testid="receipt-paid">{fmtMoney(payment.amount, payment.currency)}</span>
@@ -1224,16 +1240,26 @@ export default function KioskLayout() {
   const exit = useCallback(() => {
     // Reset customer-display naar idle bij uitloggen.
     api.delete('/kiosk/customer-display').catch(() => {});
-    localStorage.removeItem('kiosk_token');
-    localStorage.removeItem('kiosk_company');
-    // Eventuele kiosk-medewerker sessie ook opruimen.
+    // VOLLEDIGE reset zodat een volgende gebruiker (vooral een andere
+    // medewerker op een gedeeld kiosk-toestel) cleanly bij de PIN-keypad
+    // landt zonder oude tokens of role-voorkeur. Anders krijgt de PWA
+    // een auto-redirect terug naar /kiosk of /admin met de stale tokens
+    // van de vorige gebruiker.
+    try {
+      localStorage.removeItem('kiosk_token');
+      localStorage.removeItem('kiosk_company');
+      localStorage.removeItem('admin_token');
+      localStorage.removeItem('pwa_preferred_role');
+      localStorage.removeItem('active_company_id');
+    } catch { /* ignore */ }
     try {
       sessionStorage.removeItem('kiosk_emp_id');
       sessionStorage.removeItem('kiosk_emp_name');
       sessionStorage.removeItem('kiosk_emp_pin');
     } catch { /* ignore */ }
-    navigate('/login', { replace: true });
-  }, [navigate]);
+    // Hard reload zodat AuthProvider zijn cached state óók kwijt is.
+    window.location.assign('/login?pick=1');
+  }, []);
 
   // Push huidige state naar het klantenscherm. Idempotent — we sturen
   // alleen waarden die de klant ook mag zien (geen pin_hash, geen company_id).
@@ -1358,8 +1384,15 @@ export default function KioskLayout() {
   const [showEmpLogin, setShowEmpLogin] = useState(false);
   // Bij stap 'pay' (eerste interactie waar een betaling wordt opgezet)
   // zorg dat een kiosk-medewerker is ingelogd. Zo nee → toon login sheet.
+  // UITZONDERING: als de gebruiker een admin_token heeft (beheerder of
+  // boekhouder werkt vanaf de Kiosk), GEEN sheet tonen — zijn betalingen
+  // gaan via de legacy directe-goedkeuring flow (status=approved).
   useEffect(() => {
-    if (step === 'pay' && !getKioskEmployee()) setShowEmpLogin(true);
+    if (step !== 'pay') return;
+    let hasAdmin = false;
+    try { hasAdmin = !!localStorage.getItem('admin_token'); } catch { /* ignore */ }
+    if (hasAdmin) return;
+    if (!getKioskEmployee()) setShowEmpLogin(true);
   }, [step]);
 
   return (
@@ -1415,7 +1448,9 @@ export default function KioskLayout() {
             </span>
           </div>
           <div className="flex items-center gap-2 sm:gap-4">
-            <KioskEmployeeBar onLoginClick={() => setShowEmpLogin(true)} />
+            {/* Medewerker-bar alleen voor niet-admin gebruikers; admin/boekhouder
+                tikt direct via legacy flow zonder PIN-sessie. */}
+            {!hasAdminAccess && <KioskEmployeeBar onLoginClick={() => setShowEmpLogin(true)} />}
             {apartment && step !== 'select' && (
               <div className="flex items-center gap-2">
                 <span className="text-sm text-slate-400 font-medium hidden sm:inline">{apartment.tenant_name}</span>
@@ -1429,8 +1464,9 @@ export default function KioskLayout() {
           </div>
         </div>
       )}
-      {/* Mobile floating Medewerker-badge — bottom-left, niet in flow */}
-      {showDesktopBar && (
+      {/* Mobile floating Medewerker-badge — bottom-left, niet in flow.
+          Alleen tonen voor niet-admin gebruikers (admin tikt zonder PIN). */}
+      {showDesktopBar && !hasAdminAccess && (
         <div className="md:hidden fixed left-3 z-40"
           style={{ bottom: 'max(env(safe-area-inset-bottom, 12px), 12px)' }}
           data-testid="kiosk-emp-bar-mobile">

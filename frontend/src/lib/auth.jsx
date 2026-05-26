@@ -68,6 +68,18 @@ export function AuthProvider({ children }) {
     localStorage.removeItem('admin_token');
     localStorage.removeItem('kiosk_token');
     localStorage.removeItem(ACTIVE_COMPANY_KEY);
+    // PWA-state óók opruimen zodat een volgende gebruiker (bv. een
+    // medewerker op een gedeeld toestel) niet automatisch wordt
+    // doorgestuurd naar /admin via de bewaarde preferred role.
+    try {
+      localStorage.removeItem('pwa_preferred_role');
+      localStorage.removeItem('kiosk_company');
+    } catch { /* ignore */ }
+    try {
+      sessionStorage.removeItem('kiosk_emp_id');
+      sessionStorage.removeItem('kiosk_emp_name');
+      sessionStorage.removeItem('kiosk_emp_pin');
+    } catch { /* ignore */ }
     setActiveCompanyIdState(null);
     setActiveCompanyMeta(null);
     setUser(null);

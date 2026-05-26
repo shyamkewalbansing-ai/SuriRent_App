@@ -32,6 +32,56 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+// Response-interceptor: bij 401 op een protected endpoint → verwijder de
+// stale token zodat de PWA niet vastloopt in een redirect-loop (zoals
+// op iOS PWA na een verlopen admin_token). De gebruiker komt automatisch
+// terug op /login en kan opnieuw inloggen of zijn PIN intikken.
+const PUBLIC_401_PATHS = [
+  '/auth/login', '/auth/register', '/auth/kiosk-pin',
+  '/tenant-portal/login', '/tenant-portal/pin-login',
+  '/auth/me',  // AuthProvider handles this itself
+];
+api.interceptors.response.use(
+  (r) => r,
+  (err) => {
+    if (err?.response?.status === 401) {
+      const url = (err.config?.url || '');
+      const isPublic = PUBLIC_401_PATHS.some((p) => url.startsWith(p));
+      if (!isPublic) {
+        try {
+          if (url.startsWith('/tenant-portal/')) {
+            localStorage.removeItem('tenant_token');
+          } else if (url.startsWith('/kiosk/')) {
+            localStorage.removeItem('kiosk_token');
+            // Employee-sessie meenemen — die hoort bij de kiosk-token.
+            try {
+              sessionStorage.removeItem('kiosk_emp_id');
+              sessionStorage.removeItem('kiosk_emp_name');
+              sessionStorage.removeItem('kiosk_emp_pin');
+            } catch { /* ignore */ }
+          } else {
+            // Admin path 401 → admin_token verlopen.
+            localStorage.removeItem('admin_token');
+          }
+        } catch { /* ignore */ }
+        // Forceer naar login indien gebruiker niet al op een /login of /onderteken
+        // pagina zit (waar 401 niet relevant is voor UX-redirect).
+        try {
+          const path = window.location.pathname || '';
+          const safe = path === '/login' || path.startsWith('/onderteken') || path === '/' ||
+            path.endsWith('/login') || path.endsWith('/c');
+          if (!safe) {
+            // Hard navigate met source=stale zodat /login expliciet weet dat
+            // we van een stale-token-redirect komen (kan UI hints tonen).
+            window.location.assign('/login?stale=1');
+          }
+        } catch { /* ignore */ }
+      }
+    }
+    return Promise.reject(err);
+  }
+);
+
 export function formatError(err, fallback = 'Er is iets misgegaan') {
   const detail = err?.response?.data?.detail;
   if (detail == null) return err?.message || fallback;

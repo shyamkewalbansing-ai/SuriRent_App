@@ -106,8 +106,14 @@ def receipt_pdf(payment: dict) -> bytes:
         ("Categorie", payment.get("category", "").capitalize()),
         ("Periode", period),
         ("Betaalwijze", payment.get("method", "").capitalize()),
-        ("Bedrag", f"{payment['currency']} {payment['amount']:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")),
     ]
+    # Medewerker prominent boven het bedrag — geeft de huurder direct
+    # zekerheid wie hem heeft geholpen (handig bij eventuele klachten).
+    if payment.get("received_by"):
+        rows.append(("Ontvangen door", payment["received_by"]))
+    rows.append(("Bedrag", f"{payment['currency']} {payment['amount']:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")))
+    if payment.get("approved_by") and payment.get("approved_by") != payment.get("received_by"):
+        rows.append(("Goedgekeurd door", payment["approved_by"]))
     el.append(_kv_table(rows))
     el.append(Spacer(1, 16))
     if payment.get("note"):

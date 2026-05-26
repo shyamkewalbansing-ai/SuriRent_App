@@ -1,0 +1,50 @@
+{
+  "summary": "Iteration 19: tested 3 follow-up fixes (receipt medewerker-naam, admin-skip employee prompt, full-reset on Uit/logout + 401 interceptor). Backend: 5/5 new + 20/20 regression (1 throttle test deselected to avoid 5-min IP lockout). Frontend: receipt banner, admin-skip on both viewports, Uit full-reset, and kiosk_token 401 interceptor all WORK. ONE issue: admin_token is NOT cleared by the 401 interceptor when a stale admin_token is used — root cause is that /auth/me is in PUBLIC_401_PATHS so AuthProvider redirects to /login but never removes the stale admin_token. URL also lacks ?stale=1 hint in that case.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "401 interceptor — stale admin_token (FIX 3)",
+        "issue": "When localStorage.admin_token is invalid and user navigates to a protected admin page, the user IS redirected to /login but localStorage.admin_token remains 'invalid-token-xyz' and URL lacks ?stale=1. Root cause: AuthProvider's first call is /auth/me which is included in PUBLIC_401_PATHS, so the response interceptor short-circuits and AuthProvider's own 401 handler redirects without clearing admin_token. kiosk_token (FIX 3) works correctly because /kiosk/* endpoints are NOT in the public list — kiosk_token cleared, sessionStorage emp keys cleared, redirected to /login?stale=1.",
+        "affected_selectors": ["localStorage.admin_token", "window.location.href"]
+      }
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration19_receipt_name.py",
+    "/app/test_reports/pytest/iteration19_receipt_name.xml",
+    "/app/test_reports/pytest/iteration19_regression.xml"
+  ],
+  "action_items": [
+    "FIX-3 admin_token interceptor: ensure stale admin_token is cleared on 401. Options: (a) make AuthProvider clear localStorage.admin_token + redirect to /login?stale=1 inside the /auth/me catch block, OR (b) remove '/auth/me' from PUBLIC_401_PATHS in /app/frontend/src/lib/api.js (the interceptor already handles it correctly via the 'else' branch that clears admin_token).",
+    "Optional: also clear localStorage.tenant_token in AuthProvider when /auth/me 401s, for symmetry."
+  ],
+  "critical_code_review_comments": [
+    "/app/frontend/src/lib/api.js line 42: '/auth/me' is in PUBLIC_401_PATHS — this means a stale admin_token never gets cleared by the interceptor because the very first protected call the app makes is /auth/me. Either remove it from the list or ensure AuthProvider clears the token itself.",
+    "/app/backend/server.py — kiosk PINs (Maria=9999, Rayshree=8888) were NOT set in the seed; the testing agent had to re-create them via POST /api/employees/{id}/kiosk-pin. Verify the seed_admin / seed_employees idempotently re-sets these PINs so a fresh DB has them.",
+    "/app/frontend/src/pages/vastgoed/KioskLayout.jsx is 1487 lines — exceeds the 700-line guideline. Consider splitting (ReceiptScreen, EmployeeBar, KeypadStep) into separate components."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration19_receipt_name.py (new)"
+  ],
+  "success_rate": {
+    "backend": "100% (25/25: 5 new + 20 regression; 1 throttle test deselected)",
+    "frontend": "92% (11/12 sub-checks; admin_token 401 clear fails)"
+  },
+  "test_credentials": {
+    "admin": "admin@vastgoed.sr / admin123",
+    "company_pin": "1234",
+    "employee_maria_pin": "9999 (re-seeded during this iteration)",
+    "employee_rayshree_pin": "8888 (re-seeded during this iteration)"
+  },
+  "seed_data_creation": "Re-applied kiosk PIN 9999 to Maria K. and 8888 to Rayshree via POST /api/employees/{id}/kiosk-pin because has_kiosk_pin was False at start of iteration. Also created 2 test pending-approval payments (TEST iter19 auto-name + TEST iter19 explicit) on first available apartment, amount SRD 1.00 each — visible in admin pending list.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "FIX 1 (receipt medewerker NAAM) and FIX 2 (admin skips employee prompt + emp-bar hidden on mobile+desktop) are fully verified and working. FIX 3 is half-working: kiosk_token 401 interceptor + Uit full-reset + Uitloggen full-reset all work. The remaining FIX 3 gap is admin_token-specific (see action_items). When verifying the fix, use this exact reproduction: clear cookies, set localStorage.admin_token='invalid-token-xyz', navigate to /admin/payments, then check (a) admin_token absent and (b) URL contains ?stale=1. Backend tests file /app/backend/tests/test_iteration19_receipt_name.py covers receipt name auto-population and 401 status codes — runs in ~6s.",
+  "rca_of_the_issue": "AuthProvider boots by calling GET /api/auth/me with the current admin_token. The response interceptor in /app/frontend/src/lib/api.js skips 401-handling for any URL starting with '/auth/me' (PUBLIC_401_PATHS line 42). When /auth/me returns 401, AuthProvider's catch sets user=null and the router redirects to /login — but no code path removes localStorage.admin_token. Subsequent protected calls never fire (user is logged out client-side) so the interceptor's admin-branch (line 64: removeItem('admin_token')) is never reached. As a result, a returning visitor with a stale admin_token in localStorage stays on /login but the bad token persists until they explicitly log in again, which can mask the issue on iOS PWA where the user just sees /login indefinitely without the stale=1 hint."
+}
