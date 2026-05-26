@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   Plus, X, Check, Loader2, Search, FileText, Mail, ShieldCheck, ChevronRight, ChevronLeft,
-  ChevronDown, SlidersHorizontal, CalendarDays, Banknote, CheckCircle2,
+  ChevronDown, CalendarDays, Banknote, CheckCircle2,
   TrendingUp, Receipt, Wallet, Home as HomeIcon,
 } from 'lucide-react';
 import { api, formatError, fmtMoney, MONTHS_NL } from '../../../lib/api';
@@ -150,22 +150,8 @@ function MobilePaymentCard({ p, onClick }) {
   );
 }
 
-function MobileTabPill({ active, onClick, label, count, testid }) {
-  return (
-    <button onClick={onClick} type="button" data-testid={testid}
-      className={`shrink-0 relative px-3 pb-2 pt-1 inline-flex flex-col items-center justify-end font-extrabold transition ${
-        active ? 'text-[#FF8A3D]' : 'text-slate-500'
-      }`}
-      style={{ fontSize: 'clamp(15px, 4.2vw, 18px)' }}>
-      <span className="leading-tight">{label}</span>
-      <span className={`leading-tight mt-0.5 font-bold ${active ? 'text-[#FF8A3D]/85' : 'text-slate-400'}`}
-        style={{ fontSize: 'clamp(11px, 3vw, 13px)' }}>
-        ({count})
-      </span>
-      {active && <span className="absolute bottom-0 left-2 right-2 h-[3px] rounded-full bg-[#FF8A3D]" />}
-    </button>
-  );
-}
+// MobileTabPill, FilterMenu, Tab componenten verwijderd — we tonen
+// nu standaard alleen de huidige maand met een MonthStepper voor navigatie.
 
 // =====================================================================
 // Payment row
@@ -484,43 +470,8 @@ function MonthStepper({ year, month, onPrev, onNext, isCurrent, count, sum, curr
   );
 }
 
-// =====================================================================
-// Filter dropdown
-// =====================================================================
-function FilterMenu({ tab, setTab, onClose }) {
-  const opts = [
-    { v: 'today', l: 'Vandaag' },
-    { v: 'month', l: 'Maand' },
-  ];
-  return (
-    <>
-      <div className="fixed inset-0 z-40" onClick={onClose} />
-      <div className="absolute right-0 top-12 z-50 bg-white rounded-xl shadow-2xl border border-orange-100 py-1 min-w-[180px]"
-        data-testid="filter-menu">
-        {opts.map((o) => (
-          <button key={o.v} onClick={() => { setTab(o.v); onClose(); }}
-            data-testid={`filter-${o.v}`}
-            className={`w-full text-left px-4 py-2.5 text-sm font-medium hover:bg-orange-50 transition ${
-              tab === o.v ? 'text-[#FF5C00] font-bold' : 'text-slate-700'
-            }`}>{o.l}</button>
-        ))}
-      </div>
-    </>
-  );
-}
-
-function Tab({ v, tab, setTab, label, testid }) {
-  const active = tab === v;
-  return (
-    <button onClick={() => setTab(v)} data-testid={testid}
-      className={`relative px-3 sm:px-4 h-9 sm:h-10 rounded-xl font-bold text-xs sm:text-sm inline-flex items-center gap-1.5 transition ${
-        active ? 'text-[#FF5C00]' : 'text-slate-500 hover:text-slate-700'
-      }`}>
-      {label}
-      {active && <span className="absolute -bottom-2 left-3 right-3 h-0.5 bg-[#FF5C00] rounded-full" />}
-    </button>
-  );
-}
+// FilterMenu en Tab componenten verwijderd — Payments toont nu altijd de
+// huidige maand-filter; navigatie via MonthStepper.
 
 // =====================================================================
 // Main page
@@ -532,8 +483,7 @@ export default function Payments() {
   const [creating, setCreating] = useState(false);
   const [emailing, setEmailing] = useState(null);
   const [search, setSearch] = useState('');
-  const [tab, setTab] = useState('month'); // all | today | week | month — start op huidige maand
-  const [filterOpen, setFilterOpen] = useState(false);
+  const [tab] = useState('month'); // altijd op Maand; vandaag-tab/methodes verwijderd
   const [expanded, setExpanded] = useState(null);
   // Track de meest recent gezien betaling-id zodat we de "nieuwste" rij
   // automatisch kunnen open klappen wanneer er een binnenkomt via auto-refresh.
@@ -683,23 +633,6 @@ export default function Payments() {
           <Plus className="stroke-[2.5]" style={{ width: 'clamp(20px, 5.5vw, 26px)', height: 'clamp(20px, 5.5vw, 26px)' }} /> Nieuwe betaling
         </button>
 
-        <div className="flex items-center gap-2 pt-1">
-          <div className="flex-1" />
-          <div className="relative shrink-0">
-            <button onClick={() => setFilterOpen(!filterOpen)} data-testid="mp-filter-btn" type="button"
-              className={`rounded-2xl border bg-white inline-flex items-center gap-2 px-3 shadow-sm transition ${
-                tab !== 'month' ? 'border-[#FF8A3D] text-[#FF8A3D]' : 'border-orange-100 text-slate-700'
-              }`}
-              style={{ height: 'clamp(40px, 11vw, 48px)', minHeight: 'clamp(40px, 11vw, 48px)' }}>
-              <SlidersHorizontal style={{ width: 'clamp(16px, 4.4vw, 18px)', height: 'clamp(16px, 4.4vw, 18px)' }} />
-              <span className="font-extrabold capitalize" style={{ fontSize: 'clamp(13px, 3.6vw, 15px)' }}>
-                {tab === 'today' ? 'Vandaag' : 'Maand'}
-              </span>
-            </button>
-            {filterOpen && <FilterMenu tab={tab} setTab={setTab} onClose={() => setFilterOpen(false)} />}
-          </div>
-        </div>
-
         {tab === 'month' && (
           <MonthStepper year={selectedYear} month={selectedMonth}
             onPrev={() => stepMonth(-1)} onNext={() => stepMonth(1)}
@@ -805,18 +738,7 @@ export default function Payments() {
         </button>
       </div>
 
-      {/* TAB BAR */}
-      <div className="bg-white rounded-2xl border border-orange-100 px-2 sm:px-3 py-2 flex items-center gap-1 sm:gap-2" data-testid="payment-tabs">
-        <div className="flex-1" />
-        <div className="relative">
-          <button onClick={() => setFilterOpen(!filterOpen)} data-testid="payment-filter-btn"
-            className="h-9 sm:h-10 px-3 sm:px-4 rounded-xl border border-slate-200 bg-white inline-flex items-center gap-1.5 sm:gap-2 font-bold text-sm text-slate-700 hover:border-orange-300 transition">
-            <SlidersHorizontal className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-            <span className="capitalize">{tab === 'today' ? 'Vandaag' : 'Maand'}</span>
-          </button>
-          {filterOpen && <FilterMenu tab={tab} setTab={setTab} onClose={() => setFilterOpen(false)} />}
-        </div>
-      </div>
+      {/* TAB BAR — verborgen op mobiel/desktop; we tonen alleen de maand-stepper hieronder */}
 
       {tab === 'month' && (
         <MonthStepper year={selectedYear} month={selectedMonth}
