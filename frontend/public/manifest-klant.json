@@ -1,0 +1,22 @@
+{
+  "name": "SuriRent Klantenscherm",
+  "short_name": "Klantenscherm",
+  "description": "Klantenscherm voor SuriRent — toont huur, kwitanties en betaal-QR aan de huurder.",
+  "start_url": "/login?source=pwa&target=klant",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#F3E8FF",
+  "theme_color": "#9333EA",
+  "lang": "nl",
+  "dir": "ltr",
+  "categories": ["business", "productivity"],
+  "id": "/?app=klant",
+  "prefer_related_applications": false,
+  "icons": [
+    { "src": "/kiosk-icons/klant-72.png",  "sizes": "72x72",   "type": "image/png", "purpose": "any" },
+    { "src": "/kiosk-icons/klant-144.png", "sizes": "144x144", "type": "image/png", "purpose": "any" },
+    { "src": "/kiosk-icons/klant-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/kiosk-icons/klant-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
