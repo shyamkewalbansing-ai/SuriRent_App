@@ -567,5 +567,15 @@ Lint clean. Verified via desktop screenshots (1440×900): élke admin-pagina (Ov
 - ✅ **Backend pytest** `/app/backend/tests/test_payment_approval_workflow.py` — 12/12 PASS covering: kiosk PIN, employee-verify, pending payment creation, pending-count, approve+signature, invoice link, reject reason, legacy direct-approve fallback (no employee_id).
 - ✅ **Frontend e2e** (iteration_17): mobile kiosk flow PIN → apt → Volgende → auto Employee Login Sheet (PIN 9999) → Huur → Contant → Bevestig → Receipt. Admin flow: Bell badge increments → desktop pending sectie → ApprovePaymentSheet → SignaturePad draw → Goedkeuren → badge decrements + payment moves to approved list.
 
+### Session 2026-02-26 — Medewerker-PIN direct login op /login ✅
+- ✅ **Backend** `POST /api/auth/kiosk-pin` uitgebreid: probeert eerst company-shared PIN, daarna `employees.kiosk_pin_hash` (alle bedrijven). Medewerker-match → returnt `kiosk_token + employee:{id,name,pin}`, **`admin_token=null`**. Company-match → ongewijzigd (kiosk_token + admin_token).
+- ✅ **PIN-uniqueness afgedwongen**:
+  - `POST /api/employees/{id}/kiosk-pin` → 409 als PIN gelijk is aan een company-PIN of een andere medewerker-PIN (naam in detail)
+  - `POST /api/auth/kiosk-set-pin` → 409 als de gekozen company-PIN gelijk is aan een actieve medewerker-PIN
+- ✅ **Frontend `/login`**: bij PIN-match met `data.employee` aanwezig → `setKioskEmployee()` + `localStorage.removeItem('admin_token')` + navigate naar `/kiosk`. Shared-PIN gedrag (admin_token + clearKioskEmployee) blijft behouden.
+- ✅ **Kiosk Beheerder-knop verborgen** voor medewerkers: nieuwe `hasAdminAccess` state in `KioskLayout` luistert naar `kiosk-employee-changed` + `storage` events; ApartmentSelect krijgt `onAdmin=null` als geen admin_token → mobile knop verdwijnt; desktop knop krijgt `hidden` class.
+- ✅ **Uit-knop** ruimt nu ook `sessionStorage.kiosk_emp_*` op (clean logout per dienst).
+- ✅ **Tested (iteration_18)**: 9/9 nieuwe pytest cases + 12/12 regressie (approval workflow) + frontend e2e (mobile employee 9999 → /kiosk zonder admin → no Beheerder; mobile company 1234 → /kiosk MET admin → Beheerder zichtbaar → directe /admin). 21/21 backend + 100% frontend.
+
 
 - ✅ **Bottom-nav FAB curved indent**: iOS-stijl holle boog rond de + knop. Een `#F7F8FA` (page-bg) gekleurde cirkel-puck (60×60 mobile, 80×80 tablet) absolute-positioned achter de FAB doorbreekt de witte nav-top → simuleert een uitgesneden boog waar de FAB "doorheen steekt". FAB iets groter (w-10→w-12), ring matcht nu page-bg ipv wit, shadow iets sterker voor diepte.

@@ -32,11 +32,16 @@ Endpoints:
 - Test tenant (Company A): `Jan de Vries` (email `jan@example.sr`, phone `+597 8001234`, PIN `5678`)
 - Login accepteert email of telefoon (volledig string OF alleen cijfers) — case-insensitive voor email.
 
-## Kiosk Medewerker PIN (Approval Workflow)
+## Kiosk Medewerker PIN (Approval Workflow + Direct Login)
 - First kiosk employee (Maria K.) PIN: `9999` (reset during iteration_17 voor test stabiliteit)
+- Second kiosk employee (Rayshree) PIN: `8888` (reset during iteration_18)
+- **NIEUW 2026-02-26**: medewerkers loggen direct in op `/login` met hun eigen PIN → landen op `/kiosk` met employee-sessie. GEEN admin_token, dus geen toegang tot Beheer.
+- **PIN-uniqueness** wereldwijd afgedwongen — geen botsingen tussen company-PINs en employee-PINs (409 met naam in detail).
 - Endpoints:
-  - `POST /api/employees/{id}/kiosk-pin` body `{pin}` — admin sets/rotates PIN
-  - `POST /api/kiosk/employee-verify` body `{pin}` — kiosk verifies, returns employee_id+name
+  - `POST /api/auth/kiosk-pin` body `{pin}` — match-volgorde: company-PIN → employee-PIN. Employee-match returnt `{token, employee, admin_token:null}`.
+  - `POST /api/employees/{id}/kiosk-pin` body `{pin}` — admin sets/rotates employee PIN (uniqueness afgedwongen)
+  - `POST /api/auth/kiosk-set-pin` body `{pin}` — admin sets company-shared PIN (uniqueness afgedwongen)
+  - `POST /api/kiosk/employee-verify` body `{pin}` — legacy: kiosk verifies employee in eigen sessie (nog gebruikt door de inline LoginSheet)
   - `POST /api/kiosk/payments?employee_id=X&employee_pin=Y` — submit met pending_approval
   - `POST /api/payments/{id}/approve` body `{signature_data_url}` — admin approves
   - `POST /api/payments/{id}/reject` body `{reason}` — admin rejects
