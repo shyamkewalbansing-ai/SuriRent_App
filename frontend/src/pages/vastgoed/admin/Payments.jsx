@@ -691,9 +691,7 @@ export default function Payments() {
 
         <div className="flex items-end gap-2 pt-1">
           <div className="flex-1 min-w-0 flex items-end gap-0.5 overflow-x-auto no-scrollbar pb-1">
-            <MobileTabPill active={tab === 'all'}    onClick={() => setTab('all')}    label="Alle"     count={sorted.length}     testid="mp-tab-all" />
             <MobileTabPill active={tab === 'today'}  onClick={() => setTab('today')}  label="Vandaag"  count={todayItems.length} testid="mp-tab-today" />
-            <MobileTabPill active={tab === 'week'}   onClick={() => setTab('week')}   label="Week"     count={weekItems.length}  testid="mp-tab-week" />
             <MobileTabPill active={tab === 'month'}  onClick={() => setTab('month')}  label="Maand"    count={monthItems.length} testid="mp-tab-month" />
           </div>
           <div className="relative shrink-0">
@@ -816,9 +814,7 @@ export default function Payments() {
 
       {/* TAB BAR */}
       <div className="bg-white rounded-2xl border border-orange-100 px-2 sm:px-3 py-2 flex items-center gap-1 sm:gap-2" data-testid="payment-tabs">
-        <Tab v="all" tab={tab} setTab={setTab} label={`Alle (${sorted.length})`} testid="tab-all" />
         <Tab v="today" tab={tab} setTab={setTab} label={`Vandaag (${todayItems.length})`} testid="tab-today" />
-        <Tab v="week" tab={tab} setTab={setTab} label={`Week (${weekItems.length})`} testid="tab-week" />
         <Tab v="month" tab={tab} setTab={setTab} label={`Maand (${monthItems.length})`} testid="tab-month" />
         <div className="flex-1" />
         <div className="relative">
