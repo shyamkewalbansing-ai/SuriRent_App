@@ -171,51 +171,22 @@ function ReminderModal({ group, initialChannel = 'whatsapp', onClose, onSent }) 
 }
 
 // =====================================================================
-// Mobile filter dropdown — combineert tab (Alle/Achterstand/Betaald) +
-// severity (Kritiek/1 maand/Op tijd) in 1 lijst.
+// Mobile filter pill — altijd zichtbaar in de balk (Alle/Achterstand/Betaald)
 // =====================================================================
-function MobileFilterMenu({ tab, setTab, filterSeverity, setFilterSeverity, onClose, counts }) {
-  const tabs = [
-    { v: 'all',  l: 'Alle',         c: counts.all },
-    { v: 'open', l: 'Achterstand',  c: counts.open,  dot: 'bg-red-500' },
-    { v: 'paid', l: 'Betaald',      c: counts.paid,  dot: 'bg-emerald-500' },
-  ];
-  const sevs = [
-    { v: 'all',      l: 'Alle severities' },
-    { v: 'critical', l: '2+ maanden (kritiek)' },
-    { v: 'late',     l: '1 maand achter' },
-    { v: 'ok',       l: 'Op tijd' },
-  ];
+function MobileFilterPill({ active, onClick, label, count, dot, testid }) {
   return (
-    <>
-      <div className="fixed inset-0 z-40" onClick={onClose} />
-      <div className="absolute right-0 top-12 z-50 bg-white rounded-2xl shadow-2xl border border-orange-100 py-2 min-w-[240px] max-w-[calc(100vw-2rem)]"
-        data-testid="mi-filter-menu">
-        <p className="px-4 pb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Toon</p>
-        {tabs.map((o) => (
-          <button key={o.v} onClick={() => { setTab(o.v); onClose(); }}
-            data-testid={`mi-filter-tab-${o.v}`}
-            className={`w-full text-left px-4 py-2.5 text-sm font-medium hover:bg-orange-50 transition flex items-center justify-between ${
-              tab === o.v ? 'text-[#FF5C00] font-bold' : 'text-slate-700'
-            }`}>
-            <span className="inline-flex items-center gap-2">
-              {o.dot && <span className={`w-1.5 h-1.5 rounded-full ${o.dot}`} />}
-              {o.l}
-            </span>
-            <span className="text-[11px] text-slate-400 font-bold">({o.c})</span>
-          </button>
-        ))}
-        <div className="my-1 border-t border-slate-100" />
-        <p className="px-4 pb-1 pt-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Severity</p>
-        {sevs.map((o) => (
-          <button key={o.v} onClick={() => { setFilterSeverity(o.v); onClose(); }}
-            data-testid={`mi-filter-sev-${o.v}`}
-            className={`w-full text-left px-4 py-2.5 text-sm font-medium hover:bg-orange-50 transition ${
-              filterSeverity === o.v ? 'text-[#FF5C00] font-bold' : 'text-slate-700'
-            }`}>{o.l}</button>
-        ))}
-      </div>
-    </>
+    <button onClick={onClick} type="button" data-testid={testid}
+      className={`shrink-0 h-10 px-3.5 rounded-2xl border inline-flex items-center gap-1.5 font-extrabold text-[13px] transition active:scale-95 ${
+        active
+          ? 'bg-[#FF6A1A] border-[#FF6A1A] text-white shadow-[0_8px_18px_-8px_rgba(255,92,0,0.55)]'
+          : 'bg-white border-orange-100 text-slate-700'
+      }`}>
+      {dot && <span className={`w-1.5 h-1.5 rounded-full ${active ? 'bg-white' : dot}`} />}
+      <span>{label}</span>
+      <span className={`text-[11px] font-bold ${active ? 'text-white/85' : 'text-slate-400'}`}>
+        ({count})
+      </span>
+    </button>
   );
 }
 
@@ -898,26 +869,14 @@ export default function Invoices() {
           </button>
         </div>
 
-        {/* Filter rechts boven · zoekbalk eronder — mobile */}
-        <div className="flex justify-end">
-          <div className="relative">
-            <button onClick={() => setFilterOpen(!filterOpen)} data-testid="mi-filter-btn" type="button"
-              className={`h-10 px-3.5 rounded-2xl border bg-white inline-flex items-center gap-1.5 shadow-sm transition ${
-                tab !== 'all' || filterSeverity !== 'all' ? 'border-[#FF8A3D] text-[#FF8A3D]' : 'border-orange-100 text-slate-700'
-              }`}>
-              <SlidersHorizontal className="w-4 h-4" />
-              <span className="font-extrabold text-[13px]">
-                {tab === 'open' ? 'Achterstand' : tab === 'paid' ? 'Betaald' : 'Filter'}
-              </span>
-              {(tab !== 'all' || filterSeverity !== 'all') && <span className="w-2 h-2 rounded-full bg-[#FF8A3D]" />}
-            </button>
-            {filterOpen && (
-              <MobileFilterMenu tab={tab} setTab={setTab}
-                filterSeverity={filterSeverity} setFilterSeverity={setFilterSeverity}
-                onClose={() => setFilterOpen(false)}
-                counts={{ all: allCount, open: openCount, paid: paidCount }} />
-            )}
-          </div>
+        {/* Filter pills — zichtbaar bovenaan, geen dropdown */}
+        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar -mx-1 px-1" data-testid="mi-filter-bar">
+          <MobileFilterPill active={tab === 'all'}   onClick={() => setTab('all')}
+            label="Alle" count={allCount} testid="mi-pill-all" />
+          <MobileFilterPill active={tab === 'open'}  onClick={() => setTab('open')}
+            label="Achterstand" count={openCount} dot="bg-red-500" testid="mi-pill-open" />
+          <MobileFilterPill active={tab === 'paid'}  onClick={() => setTab('paid')}
+            label="Betaald" count={paidCount} dot="bg-emerald-500" testid="mi-pill-paid" />
         </div>
 
         <div className="relative">
