@@ -351,10 +351,15 @@ function PaymentForm({ tenants, onCancel, onSaved, initialInvoice = null }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-white/30 backdrop-blur-md flex items-center justify-center p-4 modal-open"
+    <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm md:bg-white/30 md:backdrop-blur-md flex items-end md:items-center justify-center md:p-4 modal-open animate-fade-in"
       data-testid="payment-modal" onClick={onCancel}>
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg p-6 sm:p-8 animate-slide-up max-h-[90vh] overflow-auto"
+      <div className="bg-white w-full md:max-w-lg rounded-t-3xl md:rounded-3xl shadow-2xl pt-3 pb-6 px-5 md:p-8 animate-slide-up-sheet md:animate-slide-up max-h-[92vh] overflow-auto"
+        style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 24px), 24px)' }}
         onClick={(e) => e.stopPropagation()}>
+        {/* Drag-handle alleen op mobile, signaalt "swipe down to close" */}
+        <div className="md:hidden flex justify-center mb-3">
+          <span className="w-10 h-1.5 rounded-full bg-slate-200" />
+        </div>
         <div className="flex items-center justify-between mb-5">
           <h3 className="text-xl font-black text-slate-900">Nieuwe betaling</h3>
           <button onClick={onCancel} className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center"><X className="w-4 h-4" /></button>
