@@ -61,7 +61,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
-    <title>SuriRent</title>
+    <title>App</title>
     <script>
       // ===========================================================
       // PWA-rol detectie — DRAAIT ALS EERSTE, vóór alle andere scripts
@@ -81,8 +81,12 @@
           var sub = p;
           if (p.indexOf('/c/') === 0) sub = '/' + p.split('/').slice(3).join('/');
           var role = 'beheer';
+          // BELANGRIJK: specifieke routes EERST (kiosk/klant, kiosk/huurder)
+          // VOORDAT we de algemene /kiosk match doen, anders worden
+          // /kiosk/huurder en /kiosk/klant verkeerd als 'kiosk' herkend.
           if (sub.indexOf('/admin') === 0) role = 'beheer';
           else if (sub.indexOf('/kiosk/klant') === 0) role = 'klant';
+          else if (sub.indexOf('/kiosk/huurder') === 0) role = 'huurder';
           else if (sub === '/kiosk' || sub.indexOf('/kiosk/') === 0 || sub.indexOf('/kiosk') === 0) role = 'kiosk';
           else if (sub.indexOf('/huurder') === 0) role = 'huurder';
           // /login route met target hint → leid af

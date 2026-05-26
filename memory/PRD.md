@@ -402,6 +402,13 @@ User koos voor **Optie C — minimale herbouw** (kern eerst), dan vroeg om **Fas
 - ✅ **Tablet + desktop ongewijzigd** (>= 768px): bestaande KPI cards + tabelweergave blijft werken (verified op 1440px viewport).
 - ✅ State + handlers gedeeld met bestaande Payments component (zelfde load/filter/expand logica) — geen DRY-schending.
 
+
+### PWA fix (2026-02-26)
+- ✅ **iOS PWA install-naam + start_url bug FIXED** — Het inline `<head>`-script in `index.html` controleerde `/kiosk` vóór `/kiosk/huurder`, waardoor de tenant kiosk route werd herkend als de algemene `kiosk` rol. Resultaat: PWA werd geïnstalleerd met de kiosk-naam/manifest, en startte bij `/kiosk?source=pwa` (vastgoed kiosk) in plaats van `/kiosk/huurder?source=pwa` (huurder kiosk). Volgorde aangepast: specifieke routes (`/kiosk/klant`, `/kiosk/huurder`) eerst, daarna pas algemene `/kiosk`.
+- ✅ Static `<title>` van "SuriRent" → "App" zodat fallback niet brand-naam toont vóór script runt.
+- ✅ Service Worker cache versie gebumpt v49 → v50 om oude cache van iOS/Safari te invalideren.
+- Verified via screenshot tool: `/kiosk/huurder` → manifest-huurder.json + title "Huurder" + theme #10B981 ✅
+
 ## Prioritized Backlog (Fases E-F)
 - 📧 **Email notificaties** — wacht op SendGrid / Resend credentials van user
 - 📱 **WhatsApp/SMS herinneringen** — wacht op Twilio credentials
