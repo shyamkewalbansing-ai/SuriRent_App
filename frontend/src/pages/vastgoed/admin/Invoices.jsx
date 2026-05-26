@@ -171,6 +171,55 @@ function ReminderModal({ group, initialChannel = 'whatsapp', onClose, onSent }) 
 }
 
 // =====================================================================
+// Mobile filter dropdown — combineert tab (Alle/Achterstand/Betaald) +
+// severity (Kritiek/1 maand/Op tijd) in 1 lijst.
+// =====================================================================
+function MobileFilterMenu({ tab, setTab, filterSeverity, setFilterSeverity, onClose, counts }) {
+  const tabs = [
+    { v: 'all',  l: 'Alle',         c: counts.all },
+    { v: 'open', l: 'Achterstand',  c: counts.open,  dot: 'bg-red-500' },
+    { v: 'paid', l: 'Betaald',      c: counts.paid,  dot: 'bg-emerald-500' },
+  ];
+  const sevs = [
+    { v: 'all',      l: 'Alle severities' },
+    { v: 'critical', l: '2+ maanden (kritiek)' },
+    { v: 'late',     l: '1 maand achter' },
+    { v: 'ok',       l: 'Op tijd' },
+  ];
+  return (
+    <>
+      <div className="fixed inset-0 z-40" onClick={onClose} />
+      <div className="absolute right-0 top-12 z-50 bg-white rounded-2xl shadow-2xl border border-orange-100 py-2 min-w-[240px] max-w-[calc(100vw-2rem)]"
+        data-testid="mi-filter-menu">
+        <p className="px-4 pb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Toon</p>
+        {tabs.map((o) => (
+          <button key={o.v} onClick={() => { setTab(o.v); onClose(); }}
+            data-testid={`mi-filter-tab-${o.v}`}
+            className={`w-full text-left px-4 py-2.5 text-sm font-medium hover:bg-orange-50 transition flex items-center justify-between ${
+              tab === o.v ? 'text-[#FF5C00] font-bold' : 'text-slate-700'
+            }`}>
+            <span className="inline-flex items-center gap-2">
+              {o.dot && <span className={`w-1.5 h-1.5 rounded-full ${o.dot}`} />}
+              {o.l}
+            </span>
+            <span className="text-[11px] text-slate-400 font-bold">({o.c})</span>
+          </button>
+        ))}
+        <div className="my-1 border-t border-slate-100" />
+        <p className="px-4 pb-1 pt-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Severity</p>
+        {sevs.map((o) => (
+          <button key={o.v} onClick={() => { setFilterSeverity(o.v); onClose(); }}
+            data-testid={`mi-filter-sev-${o.v}`}
+            className={`w-full text-left px-4 py-2.5 text-sm font-medium hover:bg-orange-50 transition ${
+              filterSeverity === o.v ? 'text-[#FF5C00] font-bold' : 'text-slate-700'
+            }`}>{o.l}</button>
+        ))}
+      </div>
+    </>
+  );
+}
+
+// =====================================================================
 // MOBIELE POS-card — compacte rij per huurder voor telefoon-weergave
 // =====================================================================
 function MobileTenantCard({ group, onClick }) {
@@ -847,6 +896,32 @@ export default function Invoices() {
             style={{ height: 'clamp(56px, 16vw, 72px)', fontSize: 'clamp(15px, 4.2vw, 19px)' }}>
             <Plus className="stroke-[2.5]" style={{ width: 'clamp(20px, 5.5vw, 26px)', height: 'clamp(20px, 5.5vw, 26px)' }} /> Nieuwe
           </button>
+        </div>
+
+        {/* Zoekbalk + filter — mobile */}
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1 min-w-0">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <input value={search} onChange={(e) => setSearch(e.target.value)}
+              placeholder="Zoek huurder, factuur..."
+              data-testid="mi-search"
+              className="w-full h-11 pl-10 pr-3.5 rounded-2xl bg-white border border-orange-100 text-[13px] font-semibold placeholder:text-slate-400 focus:border-[#FF5C00] outline-none" />
+          </div>
+          <div className="relative shrink-0">
+            <button onClick={() => setFilterOpen(!filterOpen)} data-testid="mi-filter-btn" type="button"
+              className={`h-11 w-11 rounded-2xl border bg-white inline-flex items-center justify-center shadow-sm transition ${
+                tab !== 'all' || filterSeverity !== 'all' ? 'border-[#FF8A3D] text-[#FF8A3D]' : 'border-orange-100 text-slate-600'
+              }`}>
+              <SlidersHorizontal className="w-4 h-4" />
+              {(tab !== 'all' || filterSeverity !== 'all') && <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-[#FF8A3D] ring-2 ring-white" />}
+            </button>
+            {filterOpen && (
+              <MobileFilterMenu tab={tab} setTab={setTab}
+                filterSeverity={filterSeverity} setFilterSeverity={setFilterSeverity}
+                onClose={() => setFilterOpen(false)}
+                counts={{ all: allCount, open: openCount, paid: paidCount }} />
+            )}
+          </div>
         </div>
 
         {loading ? (
