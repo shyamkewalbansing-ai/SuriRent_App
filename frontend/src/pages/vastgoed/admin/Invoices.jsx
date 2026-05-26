@@ -32,6 +32,10 @@ function fmtAmount(value, currency) {
   // Toon alleen het getal (currency wordt los gerenderd).
   return fmtMoney(value, currency).replace(currency, '').trim();
 }
+// Variant zonder cent-decimalen voor compacte weergaves (POS-stijl op mobile).
+function fmtAmountWhole(value) {
+  return Number(value || 0).toLocaleString('nl-NL', { maximumFractionDigits: 0 });
+}
 
 function groupByTenant(invoices) {
   const map = new Map();
@@ -163,6 +167,61 @@ function ReminderModal({ group, initialChannel = 'whatsapp', onClose, onSent }) 
         </div>
       </div>
     </div>
+  );
+}
+
+// =====================================================================
+// MOBIELE POS-card — compacte rij per huurder voor telefoon-weergave
+// =====================================================================
+function MobileTenantCard({ group, onClick }) {
+  const sev = group.severity;
+  const sub = group.location_name && group.apartment_number
+    ? `${group.location_name} · ${group.apartment_number}`
+    : group.apartment_number || 'Geen appartement';
+  const amtCls = sev === 'critical' ? 'text-red-600'
+    : sev === 'late' ? 'text-orange-600'
+    : group.upcomingCount > 0 ? 'text-blue-600'
+    : 'text-emerald-600';
+  return (
+    <button onClick={onClick} type="button"
+      data-testid={`mi-card-${group.tenant_id}`}
+      className="w-full text-left bg-white rounded-3xl border border-slate-100 shadow-[0_2px_8px_-4px_rgba(0,0,0,0.08)] active:scale-[0.99] transition-transform"
+      style={{ padding: 'clamp(14px, 4vw, 20px) clamp(14px, 4vw, 20px)' }}>
+      <div className="flex items-center gap-3 min-w-0">
+        <div className="rounded-2xl flex items-center justify-center shrink-0 bg-gradient-to-br from-[#FFB770] to-[#FF8A3D] text-white shadow-[0_3px_8px_-2px_rgba(255,140,40,0.45)]"
+          style={{ width: 'clamp(48px, 13vw, 60px)', height: 'clamp(48px, 13vw, 60px)' }}>
+          <FileText style={{ width: 'clamp(20px, 5.5vw, 26px)', height: 'clamp(20px, 5.5vw, 26px)' }} strokeWidth={2.4} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="font-extrabold text-slate-900 leading-tight truncate"
+            style={{ fontSize: 'clamp(16px, 4.4vw, 20px)' }}>
+            {group.tenant_name}
+          </p>
+          <p className="text-slate-600/85 font-semibold truncate mt-0.5"
+            style={{ fontSize: 'clamp(11px, 3vw, 13px)' }}>
+            {sub}
+          </p>
+          <div className="mt-1.5">
+            <StatusPill severity={sev} overdueCount={group.overdueCount} upcomingCount={group.upcomingCount} />
+          </div>
+        </div>
+        <div className="text-right shrink-0 flex flex-col items-end gap-0.5">
+          <p className={`font-black tracking-tight whitespace-nowrap ${amtCls}`}
+            data-testid={`mi-amount-${group.tenant_id}`}
+            style={{ fontSize: 'clamp(15px, 4.2vw, 19px)' }}>
+            {group.currency} {fmtAmountWhole(group.totalOpen)}
+          </p>
+          {group.openCount > 0 && (
+            <p className="text-slate-500 font-bold"
+              style={{ fontSize: 'clamp(10px, 2.8vw, 12px)' }}>
+              {group.openCount}× open
+            </p>
+          )}
+          <ChevronRight className="text-slate-400/80 mt-0.5"
+            style={{ width: 'clamp(14px, 3.8vw, 18px)', height: 'clamp(14px, 3.8vw, 18px)' }} />
+        </div>
+      </div>
+    </button>
   );
 }
 
@@ -741,7 +800,141 @@ export default function Invoices() {
   };
 
   return (
-    <div className="space-y-4 sm:space-y-5" data-testid="invoices-page">
+    <div data-testid="invoices-page">
+      {/* =================================================================
+          MOBILE (< md) — POS-stijl: titel + open totaal + grote knoppen +
+          witte huurder-cards. Tab/filter/search verborgen voor focus.
+          ================================================================= */}
+      <div className="md:hidden space-y-4" data-testid="invoices-mobile">
+        <div className="flex items-center justify-between gap-2.5">
+          <div className="min-w-0 flex-1">
+            <h1 className="font-black text-slate-900 tracking-tight leading-[1.02]"
+              style={{ fontSize: 'clamp(32px, 11vw, 56px)' }}>
+              Facturen
+            </h1>
+            <p className="text-slate-500 mt-1 font-bold"
+              style={{ fontSize: 'clamp(12px, 3.4vw, 15px)' }}>
+              {allCount} huurder{allCount !== 1 ? 's' : ''}{openCount > 0 ? ` · ${openCount} open` : ''}
+            </p>
+          </div>
+          <div className="bg-white rounded-2xl shadow-[0_8px_22px_-10px_rgba(0,0,0,0.18)] shrink-0"
+            style={{ padding: 'clamp(8px, 2.4vw, 12px) clamp(10px, 3vw, 14px)' }}
+            data-testid="mi-open-stat">
+            <p className="font-bold uppercase tracking-wider text-slate-500"
+              style={{ fontSize: 'clamp(9px, 2.4vw, 11px)' }}>
+              Open
+            </p>
+            <p className={`font-black tracking-tight whitespace-nowrap leading-tight mt-0.5 ${totalOpenAmount > 0 ? 'text-red-500' : 'text-emerald-600'}`}
+              style={{ fontSize: 'clamp(14px, 4vw, 19px)' }}>
+              {totalOpenCurrency} {fmtAmountWhole(totalOpenAmount)}
+            </p>
+            <p className="text-slate-400 font-bold mt-0.5 text-center"
+              style={{ fontSize: 'clamp(9px, 2.4vw, 11px)' }}>
+              {totalOpenMonths} maand{totalOpenMonths !== 1 ? 'en' : ''}
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          <button onClick={generateMonth} disabled={generating} data-testid="mi-generate-btn" type="button"
+            className="rounded-2xl bg-white border-2 border-orange-200 text-[#FF6A1A] font-black inline-flex items-center justify-center gap-2 shadow-sm active:scale-[0.985] transition-transform tracking-tight"
+            style={{ height: 'clamp(56px, 16vw, 72px)', fontSize: 'clamp(13px, 3.6vw, 16px)' }}>
+            {generating ? <Loader2 className="w-5 h-5 animate-spin" /> : <Wand2 style={{ width: 'clamp(18px, 5vw, 22px)', height: 'clamp(18px, 5vw, 22px)' }} />}
+            Genereer
+          </button>
+          <button onClick={() => setCreating(true)} data-testid="mi-new-btn" type="button"
+            className="rounded-2xl bg-[#FF6A1A] hover:bg-[#F05C0E] text-white font-black inline-flex items-center justify-center gap-2 shadow-[0_14px_28px_-10px_rgba(255,92,0,0.55)] active:scale-[0.985] transition-transform tracking-tight"
+            style={{ height: 'clamp(56px, 16vw, 72px)', fontSize: 'clamp(15px, 4.2vw, 19px)' }}>
+            <Plus className="stroke-[2.5]" style={{ width: 'clamp(20px, 5.5vw, 26px)', height: 'clamp(20px, 5.5vw, 26px)' }} /> Nieuwe
+          </button>
+        </div>
+
+        {loading ? (
+          <div className="bg-white rounded-2xl border border-orange-100 p-10 text-center">
+            <Loader2 className="w-6 h-6 text-orange-400 animate-spin mx-auto" />
+          </div>
+        ) : filteredGroups.length === 0 ? (
+          <div className="bg-white rounded-2xl border border-orange-100 p-8 text-center" data-testid="mi-empty">
+            <FileText className="w-9 h-9 text-orange-300 mx-auto mb-2" />
+            <p className="text-[13px] text-slate-500 font-bold">
+              {items.length === 0 ? 'Nog geen facturen.' : 'Geen resultaten.'}
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {filteredGroups.map((g) => (
+              <div key={g.tenant_id} data-testid={`mi-row-${g.tenant_id}`}>
+                <MobileTenantCard group={g} onClick={() => toggleExpand(g.tenant_id)} />
+                {expanded === g.tenant_id && g.openCount > 0 && (
+                  <div className="mt-2 mx-1" data-testid={`mi-detail-${g.tenant_id}`}>
+                    <div className={`rounded-2xl p-3.5 ${
+                      g.severity === 'critical' ? 'bg-red-50'
+                        : g.severity === 'late' ? 'bg-orange-50'
+                        : 'bg-blue-50'
+                    }`}>
+                      <p className={`text-[12px] font-bold mb-2 ${
+                        g.severity === 'critical' ? 'text-red-700'
+                          : g.severity === 'late' ? 'text-orange-700'
+                          : 'text-blue-700'
+                      }`}>
+                        {g.severity === 'ok' ? `Komende facturen (${g.upcomingCount})` : `Openstaande maanden (${g.openCount})`}
+                      </p>
+                      <div className="space-y-1.5">
+                        {g.open.map((inv) => (
+                          <div key={inv.id} className="flex items-center justify-between gap-2 text-[12px]"
+                            data-testid={`mi-invoice-${inv.id}`}>
+                            <span className="text-slate-700 capitalize truncate">
+                              {MONTHS_NL[inv.period_month - 1]} {inv.period_year}
+                            </span>
+                            <span className="text-slate-700 font-bold whitespace-nowrap">
+                              {inv.currency} {fmtAmountWhole(inv.amount)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="mt-3 pt-3 border-t border-slate-200/60 flex items-center justify-between">
+                        <span className="text-[11px] font-bold text-slate-500">Totaal</span>
+                        <span className={`text-[15px] font-black tracking-tight ${
+                          g.severity === 'critical' ? 'text-red-600'
+                            : g.severity === 'late' ? 'text-orange-600'
+                            : 'text-blue-600'
+                        }`}>
+                          {g.currency} {fmtAmountWhole(g.totalOpen)}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 mt-3">
+                        <button onClick={(e) => { e.stopPropagation(); openReminder(g, 'email'); }}
+                          data-testid={`mi-email-${g.tenant_id}`}
+                          className="h-10 rounded-xl bg-white border border-orange-200 text-[#FF6A1A] font-bold text-[12px] inline-flex items-center justify-center gap-1.5">
+                          <Mail className="w-3.5 h-3.5" /> E-mail
+                        </button>
+                        <button onClick={(e) => {
+                          e.stopPropagation();
+                          const t = tenants?.find((x) => x.id === g.tenant_id);
+                          const phone = (t?.phone || '').replace(/\D/g, '');
+                          if (!phone) { alert(`${g.tenant_name} heeft geen telefoonnummer.`); return; }
+                          const list = g.open.map((i) => `• ${MONTHS_NL[i.period_month - 1]} ${i.period_year}: ${g.currency} ${Number(i.amount).toFixed(2)}`).join('\n');
+                          const msg = `Beste ${g.tenant_name},\n\nVriendelijke herinnering — u heeft ${g.openCount} openstaande factu${g.openCount > 1 ? 'ren' : 'ur'}:\n\n${list}\n\n*Totaal openstaand: ${g.currency} ${Number(g.totalOpen).toFixed(2)}*\n\n— SuriRent`;
+                          window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank', 'noopener');
+                        }}
+                          data-testid={`mi-wa-${g.tenant_id}`}
+                          className="h-10 rounded-xl bg-emerald-500 text-white font-bold text-[12px] inline-flex items-center justify-center gap-1.5">
+                          <MessageCircle className="w-3.5 h-3.5" /> WhatsApp
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* =================================================================
+          TABLET + DESKTOP (>= md) — bestaande layout ongewijzigd.
+          ================================================================= */}
+      <div className="hidden md:block space-y-4 sm:space-y-5">
       {/* HEADER — mobile shows compact KPI right of title */}
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
@@ -869,6 +1062,7 @@ export default function Invoices() {
           ))}
         </div>
       )}
+      </div>
 
       {/* MODALS */}
       {creating && <InvoiceForm tenants={tenants}
