@@ -567,6 +567,17 @@ Lint clean. Verified via desktop screenshots (1440×900): élke admin-pagina (Ov
 - ✅ **Backend pytest** `/app/backend/tests/test_payment_approval_workflow.py` — 12/12 PASS covering: kiosk PIN, employee-verify, pending payment creation, pending-count, approve+signature, invoice link, reject reason, legacy direct-approve fallback (no employee_id).
 - ✅ **Frontend e2e** (iteration_17): mobile kiosk flow PIN → apt → Volgende → auto Employee Login Sheet (PIN 9999) → Huur → Contant → Bevestig → Receipt. Admin flow: Bell badge increments → desktop pending sectie → ApprovePaymentSheet → SignaturePad draw → Goedkeuren → badge decrements + payment moves to approved list.
 
+### Session 2026-02-26 — 3 follow-up fixes: receipt naam, admin skip, mobile PWA reset ✅
+- ✅ **Medewerker NAAM op kwitantie**: `_create_payment_doc()` populeert `received_by` automatisch met `kiosk_employee_name` als geen expliciete value gegeven. PDF kwitantie (`pdf_gen.receipt_pdf`) toont "Ontvangen door" row direct boven het bedrag + apart "Goedgekeurd door" als verschillend. Kiosk receipt UI toont nu een oranje banner met avatar-initials boven het bedrag (`data-testid="receipt-received-by-banner"`).
+- ✅ **Admin skipt medewerker-prompt**: in `KioskLayout` controleert het `step==='pay'`-effect nu eerst `admin_token` — admins krijgen de `KioskEmployeeLoginSheet` niet meer (legacy directe approval flow). De mobile floating bar en desktop bottom-bar `KioskEmployeeBar` zijn ook verborgen voor admins (`!hasAdminAccess`).
+- ✅ **Mobile PWA login fix** (Android + iPhone): 
+  - Nieuwe 401-response-interceptor in `lib/api.js` ruimt stale tokens op (`admin_token`, `kiosk_token`, `tenant_token`) + sessionStorage employee-keys, en hard-redirecten naar `/login?stale=1`. Voorkomt redirect-loops bij verlopen tokens op PWA.
+  - `KioskLayout.exit()` doet nu een **volledige reset**: alle localStorage-tokens (admin + kiosk + company + active_company_id), `pwa_preferred_role`, sessionStorage employee, en hard-navigate naar `/login?pick=1`. Een volgende medewerker krijgt direct de PIN-keypad.
+  - `AuthProvider.logout()` ruimt ook `pwa_preferred_role`, `kiosk_company` en sessionStorage emp-keys op.
+  - SW cache bumped naar `surirent-v51`.
+- ✅ **Tested (iteration_19)**: 25/25 backend (5 new + 20 regression) + frontend met stale-token reproductie (admin_token='invalid-xyz' → /admin → automatic redirect naar /login?stale=1 → token cleared, PIN keypad zichtbaar).
+
+
 ### Session 2026-02-26 — Medewerker-PIN direct login op /login ✅
 - ✅ **Backend** `POST /api/auth/kiosk-pin` uitgebreid: probeert eerst company-shared PIN, daarna `employees.kiosk_pin_hash` (alle bedrijven). Medewerker-match → returnt `kiosk_token + employee:{id,name,pin}`, **`admin_token=null`**. Company-match → ongewijzigd (kiosk_token + admin_token).
 - ✅ **PIN-uniqueness afgedwongen**:

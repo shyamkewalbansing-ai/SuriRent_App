@@ -39,7 +39,6 @@ api.interceptors.request.use((config) => {
 const PUBLIC_401_PATHS = [
   '/auth/login', '/auth/register', '/auth/kiosk-pin',
   '/tenant-portal/login', '/tenant-portal/pin-login',
-  '/auth/me',  // AuthProvider handles this itself
 ];
 api.interceptors.response.use(
   (r) => r,
