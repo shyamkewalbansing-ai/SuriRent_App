@@ -114,7 +114,7 @@ export default function Locations() {
         <div className="py-16 flex items-center justify-center"><Loader2 className="w-8 h-8 text-[#FF5C00] animate-spin" /></div>
       ) : items.length === 0 ? (
         <div className="bg-white rounded-2xl border-2 border-dashed border-orange-200 p-10 text-center">
-          <MapPin className="w-10 h-10 text-orange-300 mx-auto mb-3" />
+          <MapPin className="w-10 h-10 text-slate-300 mx-auto mb-3" />
           <p className="text-slate-500 font-semibold">Nog geen locaties.</p>
           <p className="text-sm text-slate-400 mt-1">Voeg een locatie toe en koppel uw appartementen.</p>
         </div>
@@ -122,7 +122,7 @@ export default function Locations() {
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {items.map((loc) => (
             <div key={loc.id} data-testid={`loc-card-${loc.id}`}
-              className="bg-white rounded-2xl border border-orange-100 overflow-hidden hover:border-[#FF5C00]/30 transition-colors">
+              className="bg-white rounded-2xl border border-slate-100 shadow-[0_1px_4px_-2px_rgba(15,23,42,0.06)] overflow-hidden hover:border-slate-200 transition-colors">
               {loc.photo_url ? (
                 <div className="h-32 bg-slate-100 overflow-hidden">
                   <img src={loc.photo_url} alt={loc.name} className="w-full h-full object-cover"

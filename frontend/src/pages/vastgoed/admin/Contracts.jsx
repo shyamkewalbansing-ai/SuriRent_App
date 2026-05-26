@@ -162,15 +162,15 @@ export default function Contracts() {
           </button>
         }
       />
-      <div className="bg-white rounded-2xl border border-orange-100 overflow-hidden">
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-[0_1px_4px_-2px_rgba(15,23,42,0.06)] overflow-hidden">
         {items.length === 0 ? (
           <div className="p-10 text-center">
-            <FileText className="w-10 h-10 text-orange-300 mx-auto mb-3" />
+            <FileText className="w-10 h-10 text-slate-300 mx-auto mb-3" />
             <p className="text-slate-500 font-semibold">Geen contracten.</p>
           </div>
         ) : (
           <table className="w-full text-sm">
-            <thead className="bg-orange-50/50 text-left">
+            <thead className="bg-slate-50/70 text-left">
               <tr className="text-[10px] font-black uppercase tracking-widest text-slate-500">
                 <th className="px-5 py-3">Nummer</th>
                 <th className="px-5 py-3">Huurder</th>
@@ -182,7 +182,7 @@ export default function Contracts() {
             </thead>
             <tbody>
               {items.map((c) => (
-                <tr key={c.id} data-testid={`contract-row-${c.id}`} className="border-t border-orange-50 hover:bg-orange-50/30">
+                <tr key={c.id} data-testid={`contract-row-${c.id}`} className="border-t border-slate-100 hover:bg-slate-50/60">
                   <td className="px-5 py-3 font-mono text-xs font-bold text-slate-900">{c.contract_number}</td>
                   <td className="px-5 py-3 font-semibold text-slate-900">{c.tenant_name}</td>
                   <td className="px-5 py-3 hidden md:table-cell text-slate-600">Appt. {c.apartment_number || '—'}</td>

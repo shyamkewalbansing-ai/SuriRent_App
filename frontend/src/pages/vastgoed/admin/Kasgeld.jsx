@@ -123,7 +123,7 @@ export default function Kasgeld() {
       <div className="grid sm:grid-cols-3 gap-4 mb-6">
         {['SRD', 'USD', 'EUR'].map((cur) => (
           <div key={cur} data-testid={`balance-${cur}`}
-            className={`rounded-2xl p-5 border ${balances[cur] >= 0 ? 'bg-white border-orange-100' : 'bg-red-50 border-red-200'}`}>
+            className={`rounded-2xl p-5 border shadow-[0_1px_4px_-2px_rgba(15,23,42,0.06)] ${balances[cur] >= 0 ? 'bg-white border-slate-100' : 'bg-red-50 border-red-200'}`}>
             <div className="flex items-center gap-2 mb-2">
               <Wallet className={`w-5 h-5 ${balances[cur] >= 0 ? 'text-[#FF5C00]' : 'text-red-500'}`} />
               <p className="text-xs font-bold uppercase tracking-widest text-slate-500">{cur} saldo</p>
@@ -134,13 +134,13 @@ export default function Kasgeld() {
           </div>
         ))}
       </div>
-      <div className="bg-white rounded-2xl border border-orange-100 overflow-hidden">
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-[0_1px_4px_-2px_rgba(15,23,42,0.06)] overflow-hidden">
         {items.length === 0 ? (
-          <div className="p-10 text-center"><Wallet className="w-10 h-10 text-orange-300 mx-auto mb-3" />
+          <div className="p-10 text-center"><Wallet className="w-10 h-10 text-slate-300 mx-auto mb-3" />
             <p className="text-slate-500 font-semibold">Geen mutaties.</p></div>
         ) : (
           <table className="w-full text-sm">
-            <thead className="bg-orange-50/50 text-left">
+            <thead className="bg-slate-50/70 text-left">
               <tr className="text-[10px] font-black uppercase tracking-widest text-slate-500">
                 <th className="px-5 py-3">Datum</th>
                 <th className="px-5 py-3">Omschrijving</th>
@@ -151,7 +151,7 @@ export default function Kasgeld() {
             </thead>
             <tbody>
               {items.map((c) => (
-                <tr key={c.id} data-testid={`cash-row-${c.id}`} className="border-t border-orange-50 hover:bg-orange-50/30">
+                <tr key={c.id} data-testid={`cash-row-${c.id}`} className="border-t border-slate-100 hover:bg-slate-50/60">
                   <td className="px-5 py-3 text-slate-500 text-xs">{new Date(c.created_at).toLocaleDateString('nl-NL')}</td>
                   <td className="px-5 py-3 font-semibold text-slate-900">
                     <div className="flex items-center gap-2">

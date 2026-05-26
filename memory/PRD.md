@@ -511,3 +511,15 @@ Verified via mobile screenshot (393×852): alle wijzigingen zichtbaar en consist
 - Verified via screenshot (1440×900): beide pagina's consistent met Overzicht/Betalingen/Facturen — uniform premium SaaS look.
 
 - Maintenance reopen `resolved_at` clearen
+
+
+### Locaties, Contracten, Onderhoud, Borg, Kasgeld polish (2026-02-26)
+Zelfde patroon toegepast op de laatste 5 admin-pagina's voor volledige Beheer-suite uniformiteit:
+
+- ✅ **Locaties** (`Locations.jsx`): card border `orange-100` → `slate-100` + shadow, empty-state icoon → `slate-300`.
+- ✅ **Contracten** (`Contracts.jsx`): tabel-container `orange-100` → `slate-100`, header `bg-orange-50/50` → `bg-slate-50/70`, row-borders `orange-50` → `slate-100`, hover `slate-50/60`.
+- ✅ **Onderhoud** (`Maintenance.jsx`): ticket-cards `orange-100` → `slate-100` + subtiele shadow.
+- ✅ **Borg/Deposits** (`Deposits.jsx`): tabel-container + header + row-borders → slate.
+- ✅ **Kasgeld** (`Kasgeld.jsx`): balance-cards (positief) `orange-100` → `slate-100` + shadow, tabel idem. Rode (negatief) balance behoudt rode styling als waarschuwing.
+
+Lint clean. Verified via desktop screenshots (1440×900): élke admin-pagina (Overzicht, Locaties, Appartementen, Huurders, Contracten, Betalingen, Facturen, Borg, Kasgeld, Onderhoud) gebruikt nu hetzelfde patroon — uniform premium SaaS look.

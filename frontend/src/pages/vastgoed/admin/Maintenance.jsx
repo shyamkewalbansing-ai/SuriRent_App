@@ -158,12 +158,12 @@ export default function Maintenance() {
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {filtered.length === 0 ? (
           <div className="col-span-full bg-white rounded-2xl border-2 border-dashed border-orange-200 p-10 text-center">
-            <Wrench className="w-10 h-10 text-orange-300 mx-auto mb-3" />
+            <Wrench className="w-10 h-10 text-slate-300 mx-auto mb-3" />
             <p className="text-slate-500 font-semibold">Geen tickets.</p>
           </div>
         ) : filtered.map((m) => (
           <div key={m.id} data-testid={`maint-card-${m.id}`}
-            className="bg-white rounded-2xl border border-orange-100 p-5 hover:border-[#FF5C00]/30 transition-colors">
+            className="bg-white rounded-2xl border border-slate-100 shadow-[0_1px_4px_-2px_rgba(15,23,42,0.06)] p-5 hover:border-slate-200 transition-colors">
             <div className="flex items-start justify-between mb-2 gap-2">
               <p className="text-xs font-bold uppercase tracking-widest text-[#FF5C00]">Appt. {m.apartment_number}</p>
               <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${PRIO_COLORS[m.priority]}`}>{m.priority}</span>
