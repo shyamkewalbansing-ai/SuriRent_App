@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './lib/auth';
 import { useRegisterServiceWorker, InstallPrompt } from './lib/pwa';
 import { usePwaManifest } from './lib/pwa-manifest';
+import { useSheetSwipeToDismiss } from './lib/sheet-swipe';
 import RotateNotice from './components/RotateNotice';
 import BrandedShell from './components/BrandedShell';
 import { isMarketingHost, appUrl } from './lib/env';
@@ -123,6 +124,7 @@ function HybridRoutes() {
 export default function App() {
   useRegisterServiceWorker();
   usePwaManifest();
+  useSheetSwipeToDismiss();
   const mode = isMarketingHost() ? 'marketing' : (appUrl() ? 'app' : 'hybrid');
   return (
     <AuthProvider>
