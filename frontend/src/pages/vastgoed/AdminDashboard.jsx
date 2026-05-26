@@ -202,14 +202,13 @@ function splitNameHalf(name) {
 }
 
 function MobileTopLogo({ user, activeCompany }) {
-  // Minimalistische topbar: brand-logo links + bedrijfsnaam + notificatie-bell
-  // rechtsboven (achterstanden). Geen menu-knop, geen Kiosk-knop, geen Live
-  // indicator — die zitten in de "+"-sheet. In landscape (telefoon zijwaarts)
-  // schalen we de top bar omlaag zodat er voldoende ruimte voor content blijft.
-  // Op iPad (md+) schalen we juist op (groter logo + meer padding) voor een
-  // vriendelijker tablet-uiterlijk.
+  // Minimalistische topbar met SuriRent-stijl: oranje pill + huis-icoon links,
+  // daarnaast bedrijfsnaam (donker) + "BEHEER · PRO" subtitel waarin "BEHEER"
+  // navy is en het tweede deel (plan) in brand-oranje. Geen menu-knop, geen
+  // Kiosk-knop, geen Live indicator — die zitten in de "+"-sheet.
   const fullName = activeCompany?.name || (user?.role === 'superadmin' ? 'Alle bedrijven' : 'SuriRent');
-  const [namePart1, namePart2] = splitNameHalf(fullName);
+  const planLabel = user?.role === 'superadmin' ? 'Superadmin' : 'Beheer';
+  const planSuffix = activeCompany?.plan ? String(activeCompany.plan).toUpperCase() : 'PRO';
   return (
     <header className="md:hidden sticky top-0 z-30 bg-[#FFF7F0]/85 backdrop-blur-md"
       style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
@@ -219,17 +218,13 @@ function MobileTopLogo({ user, activeCompany }) {
           <img src="/kiosk-icons/kiosk-512.png" alt="SuriRent" className="w-full h-full object-contain" />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-2xl md:text-2xl landscape:text-sm font-black tracking-tight leading-tight truncate" data-testid="mobile-top-name">
-            <span className="text-slate-900">{namePart1}</span>
-            {namePart2 && (
-              <>
-                {namePart1 ? ' ' : ''}
-                <span className="text-[#FF5C00]">{namePart2}</span>
-              </>
-            )}
+          <p className="text-2xl md:text-2xl landscape:text-sm font-black tracking-tight leading-tight truncate text-slate-900" data-testid="mobile-top-name">
+            {fullName}
           </p>
-          <p className="text-[11px] md:text-xs landscape:text-[9px] text-slate-500 font-bold tracking-[0.18em] uppercase truncate">
-            {user?.role === 'superadmin' ? 'Superadmin' : 'Beheer'}{activeCompany?.plan ? ` · ${activeCompany.plan}` : ''}
+          <p className="text-[13px] md:text-sm landscape:text-[10px] font-extrabold tracking-[0.18em] uppercase truncate mt-0.5">
+            <span className="text-slate-700">{planLabel}</span>
+            <span className="text-slate-400"> · </span>
+            <span className="text-[#FF5C00]">{planSuffix}</span>
           </p>
         </div>
         {user?.role !== 'superadmin' && (

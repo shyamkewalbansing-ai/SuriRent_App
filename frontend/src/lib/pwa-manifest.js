@@ -2,48 +2,99 @@ import { useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 
 /**
- * Wissel de actieve PWA-manifest dynamisch op basis van de huidige route.
- * Hierdoor kan iemand op het Beheer-scherm een "SuriRent Beheer"-PWA
- * installeren, terwijl hetzelfde origin op het Kiosk-scherm een "SuriRent
- * Kiosk"-PWA aanbiedt. Elke variant heeft een eigen naam, kleur en icon.
- *
- * Mapping (eerste match wint):
- *   /admin*                         -> beheer
- *   /kiosk, /kiosk/huurder          -> kiosk
- *   /kiosk/klant                    -> klant
- *   /huurder*                       -> huurder
- *   alle overige paden              -> beheer (default — landing/login)
- *
- * iOS-/Android-installers kiezen de manifest van het tabblad op het moment
- * van installatie; daarna gebruikt de PWA `start_url` als entry-point.
+ * Per-rol PWA configuratie — naam, kleur en icoon-bestanden.
+ * iOS/Android lezen op INSTALL-MOMENT alle metadata uit de DOM:
+ *   - <link rel="manifest"> voor Android (naam, icon, theme).
+ *   - <meta name="apple-mobile-web-app-title"> en <link rel="apple-touch-icon">
+ *     voor iOS Safari "Toevoegen aan beginscherm".
+ * Beide moeten dus dynamisch worden bijgewerkt zodat de gebruiker de juiste
+ * naam/icon krijgt afhankelijk van welke pagina hij installeert.
  */
+const ROLE_CONFIG = {
+  beheer: {
+    name: 'SuriRent Beheer', shortName: 'Beheer',
+    theme: '#FF5C00', icon: 'beheer',
+  },
+  kiosk: {
+    name: 'SuriRent Kiosk', shortName: 'Kiosk',
+    theme: '#2563EB', icon: 'kioskpwa',
+  },
+  huurder: {
+    name: 'SuriRent Huurder', shortName: 'Huurder',
+    theme: '#10B981', icon: 'huurder',
+  },
+  klant: {
+    name: 'SuriRent Klantenscherm', shortName: 'Klantenscherm',
+    theme: '#9333EA', icon: 'klant',
+  },
+};
+
 export function usePwaManifest() {
   const { pathname } = useLocation();
   useEffect(() => {
     const role = pickRole(pathname);
-    const href = `/manifest-${role}.json`;
-    const themeByRole = {
-      beheer:  '#FF5C00',
-      kiosk:   '#2563EB',
-      huurder: '#10B981',
-      klant:   '#9333EA',
-    };
-    let link = document.querySelector('link[rel="manifest"]');
-    if (!link) {
-      link = document.createElement('link');
-      link.rel = 'manifest';
-      document.head.appendChild(link);
-    }
-    if (link.getAttribute('href') !== href) link.setAttribute('href', href);
+    const cfg = ROLE_CONFIG[role] || ROLE_CONFIG.beheer;
 
-    // Werk ook de theme-color meta tag bij voor de iOS status-bar tint
-    // wanneer geïnstalleerd vanuit dit scherm.
-    const meta = document.querySelector('meta[name="theme-color"]:not([media])')
-      || document.querySelector('meta[name="theme-color"]');
-    if (meta && themeByRole[role]) {
-      meta.setAttribute('content', themeByRole[role]);
+    // 1) <link rel="manifest"> — Android PWA install
+    setLink('link[rel="manifest"]', { rel: 'manifest', href: `/manifest-${role}.json` });
+
+    // 2) theme-color meta — Android system UI tint
+    setMetaContent('meta[name="theme-color"]:not([media])', cfg.theme);
+    setMetaContent('meta[name="theme-color"]', cfg.theme); // fallback selector
+
+    // 3) iOS Safari title — "Toevoegen aan beginscherm" gebruikt deze
+    setMetaContent('meta[name="apple-mobile-web-app-title"]', cfg.shortName);
+    setMetaContent('meta[name="application-name"]', cfg.shortName);
+
+    // 4) iOS apple-touch-icon — icoon op het beginscherm na installatie
+    //    iOS pakt de grootste beschikbare <link rel="apple-touch-icon"> die
+    //    op dat moment in de DOM staat. We vervangen alle bestaande verwijzingen
+    //    naar de standaard `kiosk-*.png` met de role-specifieke variant.
+    document.querySelectorAll('link[rel="apple-touch-icon"]').forEach((el) => {
+      const href = el.getAttribute('href') || '';
+      // Match `/kiosk-icons/<naam>-<size>.png` en vervang `<naam>` met cfg.icon.
+      const m = href.match(/^(\/kiosk-icons\/)([a-z]+)(-\d+\.png)$/i);
+      if (m) el.setAttribute('href', `${m[1]}${cfg.icon}${m[3]}`);
+    });
+
+    // 5) Microsoft Tiles (Windows Edge "Pin tot start")
+    setMetaContent('meta[name="msapplication-TileColor"]', cfg.theme);
+    document.querySelectorAll('meta[name="msapplication-TileImage"]').forEach((el) => {
+      const href = el.getAttribute('content') || '';
+      const m = href.match(/^(\/kiosk-icons\/)([a-z]+)(-\d+\.png)$/i);
+      if (m) el.setAttribute('content', `${m[1]}${cfg.icon}${m[3]}`);
+    });
+
+    // 6) Page title — staat alleen onder dropdown in browser, maar telt soms
+    //    mee voor de PWA install prompt op Android.
+    if (document.title && !document.title.startsWith(cfg.name)) {
+      document.title = `${cfg.name} — SuriRent`;
     }
   }, [pathname]);
+}
+
+function setLink(selector, attrs) {
+  let el = document.querySelector(selector);
+  if (!el) {
+    el = document.createElement('link');
+    document.head.appendChild(el);
+  }
+  Object.entries(attrs).forEach(([k, v]) => el.setAttribute(k, v));
+}
+
+function setMetaContent(selector, content) {
+  const els = document.querySelectorAll(selector);
+  els.forEach((el) => el.setAttribute('content', content));
+  if (els.length === 0) {
+    // Maak meta als niet aanwezig (zo dat hook self-contained werkt).
+    const name = selector.match(/name="([^"]+)"/)?.[1];
+    if (name) {
+      const el = document.createElement('meta');
+      el.setAttribute('name', name);
+      el.setAttribute('content', content);
+      document.head.appendChild(el);
+    }
+  }
 }
 
 function pickRole(path = '') {
@@ -52,7 +103,6 @@ function pickRole(path = '') {
   if (p === '/kiosk/klant' || p.startsWith('/kiosk/klant')) return 'klant';
   if (p === '/kiosk' || p.startsWith('/kiosk')) return 'kiosk';
   if (p.startsWith('/huurder')) return 'huurder';
-  // Branded routes (/c/<slug>/...) — kijk naar het sub-pad
   if (p.startsWith('/c/')) {
     const rest = p.split('/').slice(3).join('/');
     return pickRole('/' + rest);
