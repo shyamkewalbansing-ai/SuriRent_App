@@ -2,7 +2,7 @@
   "name": "SuriRent Beheer",
   "short_name": "Beheer",
   "description": "Beheerdersapp voor SuriRent — appartementen, huurders, betalingen en facturen.",
-  "start_url": "/login?source=pwa&target=admin",
+  "start_url": "/login?view=admin&source=pwa",
   "scope": "/",
   "display": "standalone",
   "orientation": "any",

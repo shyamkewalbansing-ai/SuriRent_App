@@ -2,7 +2,7 @@
   "name": "SuriRent Kiosk",
   "short_name": "Kiosk",
   "description": "Receptie- en huurders-kiosk voor SuriRent — snelle PIN-toegang en zelfservice.",
-  "start_url": "/login?source=pwa&target=kiosk",
+  "start_url": "/kiosk?source=pwa",
   "scope": "/",
   "display": "standalone",
   "orientation": "any",

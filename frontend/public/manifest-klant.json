@@ -2,7 +2,7 @@
   "name": "SuriRent Klantenscherm",
   "short_name": "Klantenscherm",
   "description": "Klantenscherm voor SuriRent — toont huur, kwitanties en betaal-QR aan de huurder.",
-  "start_url": "/login?source=pwa&target=klant",
+  "start_url": "/kiosk/klant?source=pwa",
   "scope": "/",
   "display": "standalone",
   "orientation": "any",

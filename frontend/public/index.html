@@ -85,6 +85,60 @@
         } catch (e) { /* no-op */ }
       })();
     </script>
+
+    <!-- ===========================================================
+         Inline PWA-rol detectie — DRAAIT VÓÓR React mount
+         ===========================================================
+         iOS Safari leest `apple-mobile-web-app-title` en `apple-touch-icon`
+         tijdens "Toevoegen aan beginscherm". Onze React-hook draait pas na
+         hydration; iOS kan op dat moment al de oude waarden cachen. Dit
+         inline-script zorgt dat de meta-tags al goed staan op het moment
+         dat de gebruiker op "Delen → Toevoegen aan beginscherm" tikt. -->
+    <script>
+      (function () {
+        try {
+          var ROLES = {
+            beheer:  { name: 'SuriRent Beheer',         short: 'Beheer',         theme: '#FF5C00', icon: 'beheer'   },
+            kiosk:   { name: 'SuriRent Kiosk',          short: 'Kiosk',          theme: '#2563EB', icon: 'kioskpwa' },
+            huurder: { name: 'SuriRent Huurder',        short: 'Huurder',        theme: '#10B981', icon: 'huurder'  },
+            klant:   { name: 'SuriRent Klantenscherm',  short: 'Klantenscherm',  theme: '#9333EA', icon: 'klant'    }
+          };
+          var p = (location.pathname || '').toLowerCase();
+          // Branded routes (/c/<slug>/...): strip prefix
+          var sub = p;
+          if (p.indexOf('/c/') === 0) {
+            sub = '/' + p.split('/').slice(3).join('/');
+          }
+          var role = 'beheer';
+          if (sub.indexOf('/admin') === 0) role = 'beheer';
+          else if (sub === '/kiosk/klant' || sub.indexOf('/kiosk/klant') === 0) role = 'klant';
+          else if (sub === '/kiosk' || sub.indexOf('/kiosk') === 0) role = 'kiosk';
+          else if (sub.indexOf('/huurder') === 0) role = 'huurder';
+
+          var cfg = ROLES[role];
+          // 1. Manifest
+          var m = document.querySelector('link[rel="manifest"]');
+          if (m) m.setAttribute('href', '/manifest-' + role + '.json');
+          // 2. iOS title
+          var t = document.querySelector('meta[name="apple-mobile-web-app-title"]');
+          if (t) t.setAttribute('content', cfg.short);
+          var an = document.querySelector('meta[name="application-name"]');
+          if (an) an.setAttribute('content', cfg.short);
+          // 3. theme-color
+          var th = document.querySelectorAll('meta[name="theme-color"]');
+          for (var i = 0; i < th.length; i++) th[i].setAttribute('content', cfg.theme);
+          // 4. apple-touch-icon — vervang /kiosk-icons/<naam>-<size>.png met cfg.icon
+          var icons = document.querySelectorAll('link[rel="apple-touch-icon"]');
+          for (var j = 0; j < icons.length; j++) {
+            var h = icons[j].getAttribute('href') || '';
+            var match = h.match(/^(\/kiosk-icons\/)([a-z]+)(-\d+\.png)$/i);
+            if (match) icons[j].setAttribute('href', match[1] + cfg.icon + match[3]);
+          }
+          // 5. Page title
+          document.title = cfg.name + ' — SuriRent';
+        } catch (e) { /* no-op */ }
+      })();
+    </script>
   </head>
   <body style="background-color: #FFF7F0;">
     <noscript>JavaScript is vereist om deze app te gebruiken.</noscript>

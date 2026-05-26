@@ -1186,7 +1186,7 @@ export default function KioskLayout() {
   useEffect(() => {
     document.title = 'Vastgoed Kiosk';
     const tok = localStorage.getItem('kiosk_token');
-    if (!tok) { navigate('/login', { replace: true }); return; }
+    if (!tok) { navigate('/login?target=kiosk', { replace: true }); return; }
     setCompany(getKioskCompany());
     setStep('select');
   }, [navigate]);
