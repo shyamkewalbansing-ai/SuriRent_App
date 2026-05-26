@@ -54,6 +54,15 @@ body {
   body.tenant-mode { background-color: #FFF7F0; }
 }
 
+/* Buiten PWA-mode (gewone browser tab) — kleur ook html+body in login/kiosk
+   modes zodat iOS scroll-bounce of de witte ruimte onder een korte pagina
+   nooit door-prikt naar wit. Dit lost het "witte onderkant"-effect op dat
+   gebruikers na uitloggen op iPhone/Android Safari zien. */
+html.login-mode-html,
+body.login-mode { background-color: var(--login-bg, #FF5C00); }
+html.kiosk-mode-html,
+body.kiosk-mode { background-color: #FF5C00; }
+
 /* Utility for screens that should respect safe area manually. */
 .safe-top { padding-top: env(safe-area-inset-top); }
 .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }

@@ -575,14 +575,18 @@ export default function LoginPage() {
   useEffect(() => {
     const primary = (branding?.primary_color || '#FF5C00');
     document.body.classList.add('login-mode');
+    document.documentElement.classList.add('login-mode-html');
     document.body.style.setProperty('--login-bg', primary);
+    document.documentElement.style.setProperty('--login-bg', primary);
     const meta = document.querySelector('meta[name="theme-color"]:not([media])')
       || document.querySelector('meta[name="theme-color"]');
     const prev = meta?.getAttribute('content');
     if (meta) meta.setAttribute('content', primary);
     return () => {
       document.body.classList.remove('login-mode');
+      document.documentElement.classList.remove('login-mode-html');
       document.body.style.removeProperty('--login-bg');
+      document.documentElement.style.removeProperty('--login-bg');
       if (meta && prev) meta.setAttribute('content', prev);
     };
   }, [branding]);
