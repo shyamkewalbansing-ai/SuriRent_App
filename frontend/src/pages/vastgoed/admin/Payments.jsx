@@ -138,7 +138,7 @@ function MobilePaymentCard({ p, onClick }) {
           <p className="font-black text-emerald-600 tracking-tight whitespace-nowrap"
             data-testid={`mp-amount-${p.id}`}
             style={{ fontSize: 'clamp(15px, 4.2vw, 19px)' }}>
-            {p.currency} {fmtAmount(p.amount, p.currency)}
+            {p.currency} {fmtAmountWhole(p.amount)}
           </p>
           {p.period_month && (
             <p className="text-slate-500 font-bold capitalize"
@@ -213,7 +213,7 @@ function PaymentRow({ p, expanded, onToggle, onEmail, apiBase }) {
           <div className="text-right shrink-0 whitespace-nowrap">
             <p className="text-base sm:text-lg font-black tracking-tight text-emerald-600"
               data-testid={`payment-amount-${p.id}`}>
-              {p.currency} {fmtAmount(p.amount, p.currency)}
+              {p.currency} {fmtAmountWhole(p.amount)}
             </p>
             {p.period_month && (
               <p className="text-[10px] text-slate-400 mt-0.5 capitalize">
@@ -461,7 +461,7 @@ function MonthStepper({ year, month, onPrev, onNext, isCurrent, count, sum, curr
         </p>
         {!compact && (
           <p className="text-[10px] text-slate-500 font-bold leading-tight mt-0.5">
-            {count} betaling{count !== 1 ? 'en' : ''} · {currency} {Number(sum).toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            {count} betaling{count !== 1 ? 'en' : ''} · {currency} {fmtAmountWhole(sum)}
           </p>
         )}
       </div>
