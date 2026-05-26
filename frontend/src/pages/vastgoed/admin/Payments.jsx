@@ -25,6 +25,10 @@ function avatarColor(name) {
 function fmtAmount(value, currency) {
   return fmtMoney(value, currency).replace(currency, '').trim();
 }
+// Versie zonder cent-decimalen — voor compacte stats (bv. "Vandaag" card).
+function fmtAmountWhole(value) {
+  return Number(value || 0).toLocaleString('nl-NL', { maximumFractionDigits: 0 });
+}
 function startOfDayUTC(d) {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 }
@@ -618,7 +622,7 @@ export default function Payments() {
             </p>
             <p className="font-black text-emerald-600 tracking-tight whitespace-nowrap leading-tight mt-0.5"
               style={{ fontSize: 'clamp(14px, 4vw, 19px)' }}>
-              {currency} {fmtAmount(todaySum, currency)}
+              {currency} {fmtAmountWhole(todaySum)}
             </p>
             <p className="text-slate-400 font-bold mt-0.5 text-center"
               style={{ fontSize: 'clamp(9px, 2.4vw, 11px)' }}>
