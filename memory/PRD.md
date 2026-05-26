@@ -577,6 +577,14 @@ Lint clean. Verified via desktop screenshots (1440×900): élke admin-pagina (Ov
   - SW cache bumped naar `surirent-v51`.
 - ✅ **Tested (iteration_19)**: 25/25 backend (5 new + 20 regression) + frontend met stale-token reproductie (admin_token='invalid-xyz' → /admin → automatic redirect naar /login?stale=1 → token cleared, PIN keypad zichtbaar).
 
+### Session 2026-02-26 — Pending-approval push notificaties ✅
+- ✅ **Backend** `kiosk_create_payment` differentieert nu de push-melding:
+  - Pending: title `"Goedkeuring nodig · SRD 7.000"`, body `"Door Maria K. · Bharat · Appt. 7B"`, `data.kind='payment_pending_approval'`, `data.url='/admin/payments?filter=pending'`, `data.require_approval=true`
+  - Approved (legacy/admin): originele `"Betaling X"` title behouden
+- ✅ **Service Worker** (`sw.js` v52): `require_approval=true` triggert **sticky banner** (`requireInteraction=true`), langere vibratie, **unieke tag per payment_id** zodat meerdere pending betalingen niet elkaar overschrijven, en `Bekijk + goedkeuren` actie-knop. NotificationClick voor `payment_pending_approval` → `/admin/payments?filter=pending`.
+- ✅ **Frontend** Payments.jsx: `?filter=pending` query → auto-scroll naar pending sectie + amber ring-highlight (2.4s). PendingApprovalBell + Payments luisteren beide naar `BADGE_CHANGED` SW-message voor instant refresh (ipv 8s/30s polling).
+- ✅ **Tested (iteration_20)**: 27/27 backend (7 new + 20 regression). Push delivery infra verified: `/api/push/test` sent=11/failed=0 op 11 geabonneerde admin-devices. End-to-end pending → notification → click → scroll-to-pending → approve werkt volledig.
+
 
 ### Session 2026-02-26 — Medewerker-PIN direct login op /login ✅
 - ✅ **Backend** `POST /api/auth/kiosk-pin` uitgebreid: probeert eerst company-shared PIN, daarna `employees.kiosk_pin_hash` (alle bedrijven). Medewerker-match → returnt `kiosk_token + employee:{id,name,pin}`, **`admin_token=null`**. Company-match → ongewijzigd (kiosk_token + admin_token).
