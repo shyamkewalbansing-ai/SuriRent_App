@@ -32,6 +32,16 @@ Endpoints:
 - Test tenant (Company A): `Jan de Vries` (email `jan@example.sr`, phone `+597 8001234`, PIN `5678`)
 - Login accepteert email of telefoon (volledig string OF alleen cijfers) — case-insensitive voor email.
 
+## Kiosk Medewerker PIN (Approval Workflow)
+- First kiosk employee (Maria K.) PIN: `9999` (reset during iteration_17 voor test stabiliteit)
+- Endpoints:
+  - `POST /api/employees/{id}/kiosk-pin` body `{pin}` — admin sets/rotates PIN
+  - `POST /api/kiosk/employee-verify` body `{pin}` — kiosk verifies, returns employee_id+name
+  - `POST /api/kiosk/payments?employee_id=X&employee_pin=Y` — submit met pending_approval
+  - `POST /api/payments/{id}/approve` body `{signature_data_url}` — admin approves
+  - `POST /api/payments/{id}/reject` body `{reason}` — admin rejects
+  - `GET /api/payments/pending-count` — admin bell badge
+
 ## Frontend Routes (dual-domain architecture)
 Production:
 - `https://surirent.sr/` — Marketing landing (marketing host only)

@@ -560,4 +560,12 @@ Lint clean. Verified via desktop screenshots (1440×900): élke admin-pagina (Ov
 - Receptie Kiosk UI: "Medewerker kiezen + PIN" stap vóór betaling registreren
 - Bell-badge in admin header met `/payments/pending-count`
 
+### Session 2026-02-26 — Approval Workflow afronden ✅
+- ✅ **Kiosk Employee Bar — mobile**: floating badge linksonder in `/kiosk` (md:hidden, gebruikt safe-area-inset-bottom). Toont actieve medewerker of "Medewerker login" CTA. Tikken → opent `KioskEmployeeLoginSheet` met PIN-pad. Auto-trigger op stap='pay' indien geen sessie.
+- ✅ **Desktop Pending Section**: `Wacht op goedkeuring` amber sectie nu OOK in desktop layout (`hidden md:block` branch) van `/admin/payments`. Voorheen alleen `md:hidden`. Beheerder kan nu betalingen goedkeuren zonder mobiel viewport.
+- ✅ **ESLint fix**: `react-hooks/exhaustive-deps` rule disable comment vervangen door `eslint-disable-next-line` (rule was niet geconfigureerd in deze codebase).
+- ✅ **Backend pytest** `/app/backend/tests/test_payment_approval_workflow.py` — 12/12 PASS covering: kiosk PIN, employee-verify, pending payment creation, pending-count, approve+signature, invoice link, reject reason, legacy direct-approve fallback (no employee_id).
+- ✅ **Frontend e2e** (iteration_17): mobile kiosk flow PIN → apt → Volgende → auto Employee Login Sheet (PIN 9999) → Huur → Contant → Bevestig → Receipt. Admin flow: Bell badge increments → desktop pending sectie → ApprovePaymentSheet → SignaturePad draw → Goedkeuren → badge decrements + payment moves to approved list.
+
+
 - ✅ **Bottom-nav FAB curved indent**: iOS-stijl holle boog rond de + knop. Een `#F7F8FA` (page-bg) gekleurde cirkel-puck (60×60 mobile, 80×80 tablet) absolute-positioned achter de FAB doorbreekt de witte nav-top → simuleert een uitgesneden boog waar de FAB "doorheen steekt". FAB iets groter (w-10→w-12), ring matcht nu page-bg ipv wit, shadow iets sterker voor diepte.

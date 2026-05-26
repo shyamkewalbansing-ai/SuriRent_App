@@ -914,6 +914,24 @@ export default function Payments() {
         </button>
       </div>
 
+      {/* PENDING APPROVAL — desktop variant. Tonen vóór de approved-lijst
+          zodat beheerder direct ziet wat z'n medewerkers indienen. */}
+      {pending.length > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 shadow-[0_1px_4px_-2px_rgba(245,158,11,0.20)]" data-testid="pending-section-desktop">
+          <div className="flex items-center justify-between mb-3 px-1">
+            <p className="text-[11px] font-black uppercase tracking-widest text-amber-700 inline-flex items-center gap-1.5">
+              <Clock className="w-4 h-4" />
+              Wacht op goedkeuring · {pending.length}
+            </p>
+          </div>
+          <div className="space-y-2">
+            {pending.map((p) => (
+              <PendingPaymentCard key={p.id} p={p} onApprove={() => setApproveFor(p)} />
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* TAB BAR — verborgen op mobiel/desktop; we tonen alleen de maand-stepper hieronder */}
 
       {tab === 'month' && (
