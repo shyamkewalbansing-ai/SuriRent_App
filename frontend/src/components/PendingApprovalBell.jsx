@@ -23,7 +23,23 @@ export default function PendingApprovalBell() {
     // Ook on focus refreshen zodat na approval het direct klopt.
     const onFocus = () => load();
     window.addEventListener('focus', onFocus);
-    return () => { cancelled = true; clearInterval(id); window.removeEventListener('focus', onFocus); };
+    // Wanneer de service worker een push notificatie ontvangt en de badge
+    // bijwerkt, dan triggeren we ook direct een count-refresh — dit geeft
+    // de admin een instant update zonder te wachten op de 30s poll.
+    const onSwMsg = (ev) => {
+      if (ev?.data?.type === 'BADGE_CHANGED') load();
+    };
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.addEventListener('message', onSwMsg);
+    }
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+      window.removeEventListener('focus', onFocus);
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.removeEventListener('message', onSwMsg);
+      }
+    };
   }, []);
 
   if (count === 0) return null;

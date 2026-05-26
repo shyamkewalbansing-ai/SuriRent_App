@@ -1,0 +1,39 @@
+{
+  "summary": "Iteration 20 validated pending-approval push-notification differentiation. Backend: 27/27 tests PASS (7 new + 20 regression). Frontend: pending payment via kiosk creates pending_approval status with kiosk_employee_name='Maria K.', PendingApprovalBell visible (count=9+), /admin/payments?filter=pending applies ring-4 ring-amber-400 highlight on pending-section, SW BADGE_CHANGED message dispatch handled cleanly without crash. Push delivery infra confirmed working: /api/push/test → sent=11, failed=0. Historical 'Could not deserialize key data' errors in backend log are STALE (pre-VAPID-fix) — recent push activity all succeeded.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_push_pending_notification.py",
+    "/app/backend/tests/test_payment_approval_workflow.py",
+    "/app/backend/tests/test_employee_pin_login.py",
+    "/app/test_reports/pytest/iteration20_push_pending.xml",
+    "/app/test_reports/pytest/iteration20_regression.xml"
+  ],
+  "action_items": [
+    "(Optional, non-blocking) Consider truncating backend.out.log periodically — it is 22MB with many historical '[push] Could not deserialize key data' lines from earlier VAPID setup. Current logs are fine but log scanning by future testing agents could be misled by stale errors.",
+    "(Optional) Add an integration-level pytest that subscribes a fake PushSubscription endpoint (e.g., via httpbin) and asserts the actual payload title='Goedkeuring nodig · ...' is sent. Currently we only verify the call returns without errors, not the exact title in the payload (pywebpush is opaque from tests)."
+  ],
+  "critical_code_review_comments": [
+    "kiosk_create_payment in server.py (~line 4356-4410): clean conditional branching for pending vs approved title/body/data — looks correct.",
+    "sw.js notificationclick handler correctly switches on data.kind === 'payment_pending_approval' → routes to /admin/payments?filter=pending. requireInteraction + unique tag per payment_id is the right UX choice for approvals.",
+    "Payments.jsx uses both setTimeout(600ms) before scrolling AND ring removal at 2400ms — works fine but Pending list may not load within 600ms on slow connections. Consider re-attempting scroll if section not yet present.",
+    "PendingApprovalBell unregisters SW message listener correctly in cleanup; no listener leak."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_push_pending_notification.py (new)"
+  ],
+  "success_rate": {"backend": "100% (27/27)", "frontend": "100% (4/4 assertions)"},
+  "test_credentials": "Admin: admin@vastgoed.sr / admin123 ; Company PIN: 1234 ; Employee PIN: 9999 (Maria K., kiosk role).",
+  "seed_data_creation": "Created 2 test payments via kiosk during pytest run (1 pending, 1 approved-legacy) — these are real DB inserts marked with note='TEST iter20 ...' for later cleanup if desired. Also created 1 pending payment during Playwright smoke (note='iter20 FE pending', id=54e5c87b-d40d-4845-9a8b-f6684bf43a47).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Push delivery is working: /api/push/test → sent=11/failed=0 on admin@vastgoed.sr's 11 subscribed devices. _notify_company_admins() purges only on send failure, so devices count is stable. The historical 'Could not deserialize key data' lines in /var/log/supervisor/backend.out.log are STALE (from before VAPID config was fixed) — ignore them. To verify push works in future runs, check recent lines OR call /api/push/test and assert failed==0. Pending payment auto-scroll + ring-highlight on /admin/payments?filter=pending confirmed working on 1440x900 desktop. SW BADGE_CHANGED listener path in PendingApprovalBell + Payments.jsx are both registered correctly. Test data prefix used: 'TEST iter20' / 'iter20 FE pending'.",
+  "rca of the issue": "Original user complaint ('I get no notification when approval needed') addressed by: (a) backend now sends title='Goedkeuring nodig · CUR X,XX' + body='Door <emp_name> · <tenant> · Appt. <num>' instead of generic 'Betaling X' — clearly flagging it as needing action; (b) data.url='/admin/payments?filter=pending' so notificationclick deep-links to the right view; (c) require_approval=true triggers sticky banner (requireInteraction) so the notification doesn't auto-dismiss; (d) Payments.jsx ?filter=pending auto-scrolls + ring-highlights so admin sees pending list instantly; (e) PendingApprovalBell+Payments both listen to SW BADGE_CHANGED for instant refresh without waiting 8s/30s poll. All 5 layers verified end-to-end."
+}

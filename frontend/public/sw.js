@@ -6,7 +6,7 @@
  * - Bypass /api/* (always go to network)
  * - Push notifications + click handler
  */
-const CACHE_VERSION = 'surirent-v51';
+const CACHE_VERSION = 'surirent-v52';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 
@@ -167,19 +167,30 @@ self.addEventListener('push', (event) => {
   }
   const kind = (data.data && data.data.kind) || 'info';
   const inc = (data.data && data.data.badge_inc) || 1;
+  const requireApproval = !!(data.data && data.data.require_approval);
   const options = {
     body: data.body || '',
     icon: '/kiosk-icons/kiosk-192.png',
     badge: '/kiosk-icons/kiosk-72.png',
     data: data.data || {},
-    vibrate: [200, 100, 200, 100, 300],
-    actions: [
+    vibrate: requireApproval ? [300, 100, 300, 100, 300, 100, 500] : [200, 100, 200, 100, 300],
+    actions: requireApproval ? [
+      { action: 'open', title: 'Bekijk + goedkeuren' },
+      { action: 'dismiss', title: 'Later' },
+    ] : [
       { action: 'open', title: 'Bekijk' },
       { action: 'dismiss', title: 'Sluiten' },
     ],
-    tag: `surirent-${kind}`,
+    // Unique tag per payment_id zodat meerdere pending notificaties NIET
+    // elkaar overschrijven (de "kiosk-medewerker registreert 3 betalingen
+    // achter elkaar" use-case moet 3 banners tonen, niet 1).
+    tag: requireApproval && data.data?.payment_id
+      ? `surirent-${kind}-${data.data.payment_id}`
+      : `surirent-${kind}`,
     renotify: true,
-    requireInteraction: kind === 'overdue',
+    // Pending approval blijft staan tot admin het bekeken heeft —
+    // overdue ook (was al zo).
+    requireInteraction: kind === 'overdue' || requireApproval,
     silent: false,
     timestamp: Date.now(),
   };
@@ -206,6 +217,7 @@ self.addEventListener('notificationclick', (event) => {
     switch (data.kind) {
       case 'overdue': target = '/admin/invoices'; break;
       case 'payment': target = '/admin/payments'; break;
+      case 'payment_pending_approval': target = '/admin/payments?filter=pending'; break;
       case 'test':    target = '/admin/notifications'; break;
       default:        target = '/admin'; break;
     }

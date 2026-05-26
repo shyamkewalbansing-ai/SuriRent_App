@@ -4371,19 +4371,31 @@ async def kiosk_create_payment(
         apt = enriched.get("apartment_number")
         method = enriched.get("method", "")
         apt_str = f" · Appt. {apt}" if apt else ""
-        # Concreet in de TITEL zodat het bedrag direct zichtbaar is, ook
-        # naast de iOS "From [app]" badge.
+        if status == "pending_approval":
+            emp_name = kiosk_emp_name or "Medewerker"
+            title = f"Goedkeuring nodig · {currency} {amount:,.2f}"
+            body_msg = f"Door {emp_name} · {tenant}{apt_str}"
+            push_kind = "payment_pending_approval"
+            push_url = "/admin/payments?filter=pending"
+        else:
+            title = f"Betaling {currency} {amount:,.2f}"
+            body_msg = f"{tenant}{apt_str} via {method}"
+            push_kind = "payment"
+            push_url = "/admin/payments"
         await _notify_company_admins(
             cid,
-            f"Betaling {currency} {amount:,.2f}",
-            f"{tenant}{apt_str} via {method}",
+            title,
+            body_msg,
             {
-                "kind": "payment",
-                "url": "/admin/payments",
+                "kind": push_kind,
+                "url": push_url,
                 "payment_id": enriched.get("id"),
                 "amount": amount,
                 "tenant": tenant,
+                "status": status,
+                "received_by": kiosk_emp_name or "",
                 "badge_inc": 1,
+                "require_approval": status == "pending_approval",
             },
         )
     except Exception as e:

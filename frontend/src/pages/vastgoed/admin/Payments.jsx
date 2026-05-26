@@ -648,6 +648,30 @@ export default function Payments() {
     } finally { if (!silent) setLoading(false); }
   }, []);
   useEffect(() => { load(); }, [load]);
+
+  // Wanneer een admin de push-notificatie van een pending betaling
+  // aanklikt landt hij hier met ?filter=pending in de URL. We scrollen
+  // dan automatisch naar de "Wacht op goedkeuring" sectie en geven
+  // een korte pulse-highlight zodat hij direct ziet waar te tikken.
+  // Refresht ook direct (in plaats van wachten op 30s-poll) want de
+  // pending list is hoogstwaarschijnlijk net gemuteerd.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('filter') !== 'pending') return;
+    load();
+    const tryScroll = () => {
+      const el = document.querySelector('[data-testid="pending-section-desktop"]')
+        || document.querySelector('[data-testid="pending-section"]');
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        el.classList.add('ring-4', 'ring-amber-400', 'ring-offset-2');
+        setTimeout(() => el.classList.remove('ring-4', 'ring-amber-400', 'ring-offset-2'), 2400);
+      }
+    };
+    // Wacht tot pending lijst is geladen + DOM gerendered.
+    const t = setTimeout(tryScroll, 600);
+    return () => clearTimeout(t);
+  }, [load]);
   // Globale event-listener: andere componenten (zoals de QuickPay knop in
   // de top header, of de "Betaal"-knop op Facturen) kunnen `quick-pay-open`
   // dispatchen om de PaymentForm direct te openen. Werkt vanuit elke route.
@@ -662,6 +686,22 @@ export default function Payments() {
   }, []);
   // Stille polling — geen spinner / scroll-reset tijdens auto-refresh.
   useAutoRefresh(() => load({ silent: true }), { interval: 8000, enabled: !creating && !emailing });
+
+  // Push-notificatie binnen → direct silent reload zodat de pending sectie
+  // meteen up-to-date is (i.p.v. wachten op 8s poll).
+  useEffect(() => {
+    const onSwMsg = (ev) => {
+      if (ev?.data?.type === 'BADGE_CHANGED') load({ silent: true });
+    };
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.addEventListener('message', onSwMsg);
+    }
+    return () => {
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.removeEventListener('message', onSwMsg);
+      }
+    };
+  }, [load]);
 
   const apiBase = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
