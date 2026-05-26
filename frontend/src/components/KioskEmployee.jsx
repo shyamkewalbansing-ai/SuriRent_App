@@ -102,7 +102,8 @@ export function KioskEmployeeLoginSheet({ onCancel, onSuccess }) {
   // submit is een gewone functie binnen de component scope; opnemen
   // in de deps array zou een loop veroorzaken. We willen alleen op
   // pin-changes triggeren.
-  }, [pin]); // eslint-disable-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line
+  }, [pin]);
 
   const tap = (d) => setPin((p) => (p.length < 6 ? p + d : p));
   const back = () => setPin((p) => p.slice(0, -1));

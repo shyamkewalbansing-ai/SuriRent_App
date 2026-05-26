@@ -1403,6 +1403,14 @@ export default function KioskLayout() {
           </div>
         </div>
       )}
+      {/* Mobile floating Medewerker-badge — bottom-left, niet in flow */}
+      {showDesktopBar && (
+        <div className="md:hidden fixed left-3 z-40"
+          style={{ bottom: 'max(env(safe-area-inset-bottom, 12px), 12px)' }}
+          data-testid="kiosk-emp-bar-mobile">
+          <KioskEmployeeBar onLoginClick={() => setShowEmpLogin(true)} />
+        </div>
+      )}
       {/* Kiosk-medewerker login sheet — verschijnt automatisch bij eerste
           betaling als er nog geen sessie is, of handmatig via banner. */}
       {showEmpLogin && (
