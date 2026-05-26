@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Mail, X, Loader2, Send, AlertCircle, Check, MessageCircle, Phone } from 'lucide-react';
 import { api, formatError } from '../lib/api';
+import { openWhatsApp } from '../lib/external-link';
 
 const CHANNELS = [
   { id: 'email', label: 'E-mail', icon: Mail, contact: 'email', endpointKey: 'email' },
@@ -174,8 +175,7 @@ export function SendDialog({
                   const greeting = `Beste ${tenantName || 'huurder'},`;
                   const intro = msg.trim() || `Hierbij uw ${documentLabel}.`;
                   const fullMsg = `${greeting}\n\n${intro}\n\n${pdfUrl}\n\nMet vriendelijke groet,\nSuriRent`;
-                  const waUrl = `https://wa.me/${phone}?text=${encodeURIComponent(fullMsg)}`;
-                  window.open(waUrl, '_blank', 'noopener');
+                  openWhatsApp(phone, fullMsg);
                 }}
                 data-testid="send-whatsapp-open"
                 className="w-full h-11 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-bold flex items-center justify-center gap-2 transition shadow-[0_8px_20px_-5px_rgba(16,185,129,0.5)]">

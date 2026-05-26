@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { api, formatError, fmtMoney, MONTHS_NL } from '../../../lib/api';
 import { useAutoRefresh } from '../../../lib/auto-refresh';
+import { openWhatsApp } from '../../../lib/external-link';
 
 // =====================================================================
 // Helpers
@@ -474,7 +475,7 @@ function TenantRow({ group, expanded, onToggle, onReminder, tenants }) {
                     .map((i) => `• ${MONTHS_NL[i.period_month - 1]} ${i.period_year}: ${cur} ${Number(i.amount).toFixed(2)}`)
                     .join('\n');
                   const msg = `Beste ${group.tenant_name},\n\nVriendelijke herinnering — u heeft ${group.openCount} openstaande factu${group.openCount > 1 ? 'ren' : 'ur'}:\n\n${list}\n\n*Totaal openstaand: ${cur} ${Number(group.totalOpen).toFixed(2)}*\n\nGelieve zo spoedig mogelijk te betalen.\n\n— SuriRent`;
-                  window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank', 'noopener');
+                  openWhatsApp(phone, msg);
                 }}
                 data-testid={`reminder-wa-manual-${group.tenant_id}`}
                 className="inline-flex items-center justify-center gap-1.5 px-2 py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl text-xs sm:text-sm shadow-[0_6px_16px_-4px_rgba(16,185,129,0.5)]">
@@ -609,10 +610,9 @@ function BulkWhatsAppModal({ groups, tenants, onClose }) {
     return `Beste ${g.tenant_name},\n\nVriendelijke herinnering — u heeft ${g.openCount} openstaande factu${g.openCount > 1 ? 'ren' : 'ur'}:\n\n${list}\n\n*Totaal openstaand: ${g.currency} ${Number(g.totalOpen).toFixed(2)}*\n\nGelieve zo spoedig mogelijk te betalen.\n\n— SuriRent`;
   };
 
-  const openWhatsApp = () => {
+  const openWhatsAppAction = () => {
     if (!cur) return;
-    const url = `https://wa.me/${cur.phone}?text=${encodeURIComponent(buildMsg(cur))}`;
-    window.open(url, '_blank', 'noopener');
+    openWhatsApp(cur.phone, buildMsg(cur));
     setDone((d) => [...d, cur.tenant_id]);
     // Verschuif naar volgende — kleine delay zodat WhatsApp tab opent voordat we doorgaan
     setTimeout(() => setIdx((i) => i + 1), 200);
@@ -681,7 +681,7 @@ function BulkWhatsAppModal({ groups, tenants, onClose }) {
                   className="h-11 rounded-xl border-2 border-slate-200 text-slate-700 font-bold inline-flex items-center justify-center gap-2 hover:bg-slate-50">
                   <SkipForward className="w-4 h-4" /> Sla over
                 </button>
-                <button onClick={openWhatsApp} data-testid="bulk-open-wa"
+                <button onClick={openWhatsAppAction} data-testid="bulk-open-wa"
                   className="h-11 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-extrabold inline-flex items-center justify-center gap-2 shadow-[0_8px_20px_-5px_rgba(16,185,129,0.5)]">
                   <Send className="w-4 h-4" /> Open
                 </button>
@@ -953,7 +953,7 @@ export default function Invoices() {
                           if (!phone) { alert(`${g.tenant_name} heeft geen telefoonnummer.`); return; }
                           const list = g.open.map((i) => `• ${MONTHS_NL[i.period_month - 1]} ${i.period_year}: ${g.currency} ${Number(i.amount).toFixed(2)}`).join('\n');
                           const msg = `Beste ${g.tenant_name},\n\nVriendelijke herinnering — u heeft ${g.openCount} openstaande factu${g.openCount > 1 ? 'ren' : 'ur'}:\n\n${list}\n\n*Totaal openstaand: ${g.currency} ${Number(g.totalOpen).toFixed(2)}*\n\n— SuriRent`;
-                          window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank', 'noopener');
+                          openWhatsApp(phone, msg);
                         }}
                           data-testid={`mi-wa-${g.tenant_id}`}
                           className="h-10 rounded-xl bg-emerald-500 text-white font-bold text-[12px] inline-flex items-center justify-center gap-1.5">
