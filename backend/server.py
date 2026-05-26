@@ -1948,7 +1948,9 @@ async def get_my_url_info(request: Request, user=Depends(get_current_user)):
     path_url = f"{base_url}/c/{slug}" if base_url else ""
     kiosk_url = f"{base_url}/c/{slug}/kiosk" if base_url else ""
     tenant_kiosk_url = f"{base_url}/c/{slug}/kiosk/huurder" if base_url else ""
-    tenant_portal_url = f"{base_url}/c/{slug}/huurder" if base_url else ""
+    # tenant_portal_url linkt nu naar dezelfde Huurder Kiosk — de standalone
+    # /huurder route is afgeschaft, huurders loggen alleen nog via QR + PIN in.
+    tenant_portal_url = tenant_kiosk_url
     customer_display_url = f"{base_url}/c/{slug}/kiosk/klant" if base_url else ""
     subdomain_url = f"{scheme}://{slug}.{app_domain}" if slug and app_domain else None
 
@@ -1991,7 +1993,8 @@ _QR_KIND_PATHS = {
     "kiosk":           "/c/{slug}/kiosk",
     "tenant_kiosk":    "/c/{slug}/kiosk/huurder",
     "customer_display":"/c/{slug}/kiosk/klant",
-    "tenant_portal":   "/c/{slug}/huurder",
+    # Huurportaal = zelfde route als de huurder-kiosk (PIN-only via QR).
+    "tenant_portal":   "/c/{slug}/kiosk/huurder",
     "query":           "/login?c={slug}",
 }
 
@@ -3147,7 +3150,7 @@ async def company_portal_poster(request: Request, user=Depends(get_current_user)
     if not c or not c.get("slug"):
         raise HTTPException(status_code=404, detail="Bedrijf niet gevonden")
     base = _company_base_url(request) or _public_url("")
-    portal_url = f"{base}/c/{c['slug']}/huurder"
+    portal_url = f"{base}/c/{c['slug']}/kiosk/huurder"
     primary_hex = ((c.get("branding") or {}).get("primary_color")) or "#FF5C00"
     from pdf_gen import portal_poster_pdf
     pdf = portal_poster_pdf(
@@ -3180,14 +3183,12 @@ async def tenant_portal_poster(tenant_id: str, request: Request, user=Depends(ge
         if a:
             apt_number = a.get("number")
             apt_address = a.get("address")
-    # Prefer email als identifier (stabieler dan telefoonnotatie); val terug op phone.
-    identifier = (t.get("email") or t.get("phone") or "").strip()
-    from urllib.parse import quote as _q
+    # Huurportaal = Huurder Kiosk (PIN-only). De QR linkt voor alle huurders
+    # naar dezelfde route — de PIN identificeert de huurder. We tonen op de
+    # poster wel naam + appartement zodat iedereen weet welke sticker bij
+    # welk huis hoort.
     base = _company_base_url(request) or _public_url("")
-    if identifier:
-        portal_url = f"{base}/c/{c['slug']}/huurder?identifier={_q(identifier)}"
-    else:
-        portal_url = f"{base}/c/{c['slug']}/huurder"
+    portal_url = f"{base}/c/{c['slug']}/kiosk/huurder"
     primary_hex = ((c.get("branding") or {}).get("primary_color")) or "#FF5C00"
     from pdf_gen import portal_poster_pdf
     pdf = portal_poster_pdf(

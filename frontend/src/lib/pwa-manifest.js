@@ -103,7 +103,6 @@ function pickRole(path = '', search = '') {
   if (p === '/kiosk/klant' || p.startsWith('/kiosk/klant')) return 'klant';
   if (p === '/kiosk/huurder' || p.startsWith('/kiosk/huurder')) return 'huurder';
   if (p === '/kiosk' || p.startsWith('/kiosk')) return 'kiosk';
-  if (p.startsWith('/huurder')) return 'huurder';
   if (p === '/login' || p.startsWith('/login')) {
     const q = (search || '').toLowerCase();
     if (q.includes('target=kiosk')) return 'kiosk';

@@ -424,6 +424,19 @@ User koos voor **Optie C — minimale herbouw** (kern eerst), dan vroeg om **Fas
 - Verified via curl: beide endpoints HTTP 200, PDF 35–44KB. Frontend smoke test: pill zichtbaar op Branding, 2 printer-knoppen op Huurders tabel, prefill werkt op `/huurder?identifier=…`.
 
 - 💳 **Payment gateways** (SumUp/Mope/Uni5Pay) — wacht op credentials
+
+### Refactor: /huurder route afgeschaft → kiosk/huurder is enige tenant login (2026-02-26)
+- ✅ **Routes verwijderd**: `/huurder` en `/huurder/portaal` (TenantLoginPage + TenantDashboard pagina's verwijderd).
+- ✅ **Legacy redirects**: `/huurder` → `/kiosk/huurder` (zowel root als branded `/c/<slug>/huurder`).
+- ✅ **QR-codes ompunten**: zowel algemene als per-huurder poster linkt nu naar `/c/<slug>/kiosk/huurder` (PIN-only via QR).
+- ✅ **Backend `_QR_KIND_PATHS.tenant_portal`** verwijst naar `kiosk/huurder` (legacy field gehandhaafd voor compat).
+- ✅ **`tenant_portal_url`** in `/companies/me/url-info` is nu identiek aan `tenant_kiosk_url`.
+- ✅ **Per-huurder poster**: identifier-prefill verwijderd (niet meer nodig, PIN identificeert). Toont nog wel naam + appartement op de poster zelf.
+- ✅ **pwa-manifest.js + index.html inline script**: `/huurder` rol-detectie verwijderd (route bestaat niet meer).
+- ✅ **pwaRole.js**: `routeForRole('tenant')` → `/kiosk/huurder`.
+- ✅ **MarketingLanding footer**: tenant_portal link → `/kiosk/huurder`.
+- Verified: /huurder, /huurder/portaal en /c/surirent/huurder redirecten allemaal naar `/kiosk/huurder` (eventueel branded). Branded `/c/surirent/kiosk/huurder` toont meteen "HUURDER KIOSK · SuriRent" PIN keypad met juiste branding.
+
 - 🤖 **AI assistent Nederlandse chat** — via Emergent LLM key
 - 🔔 **PWA push notificaties** — geen externe key, VAPID generen
 - 🔐 **AES-256 versleutelde PDFs** + QR verificatie

@@ -37,6 +37,6 @@ export function isStandalonePWA() {
 export function routeForRole(role) {
   if (role === 'kiosk') return '/kiosk';
   if (role === 'admin') return '/admin';
-  if (role === 'tenant') return '/huurder';
+  if (role === 'tenant') return '/kiosk/huurder';
   return '/login';
 }

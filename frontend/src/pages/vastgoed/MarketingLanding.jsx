@@ -749,7 +749,7 @@ function Footer({ onLogin, c = {} }) {
                   return <li key={i}><button onClick={onLogin} data-testid="footer-login-btn" className="text-slate-700 hover:text-[#FF5C00] transition-colors font-semibold">{lnk.label}</button></li>;
                 }
                 if (lnk.kind === 'tenant_portal') {
-                  return <li key={i}><a href={appLink('/huurder')} data-testid="footer-tenant-portal" className="text-slate-700 hover:text-[#FF5C00] transition-colors font-semibold">{lnk.label}</a></li>;
+                  return <li key={i}><a href={appLink('/kiosk/huurder')} data-testid="footer-tenant-portal" className="text-slate-700 hover:text-[#FF5C00] transition-colors font-semibold">{lnk.label}</a></li>;
                 }
                 if (lnk.kind === 'anchor') {
                   return <li key={i}><a href={`#${lnk.anchor}`} className="text-slate-700 hover:text-[#FF5C00] transition-colors font-semibold">{lnk.label}</a></li>;

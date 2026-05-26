@@ -12,11 +12,9 @@ import KioskLayout from './pages/vastgoed/KioskLayout';
 import TenantKioskLayout from './pages/vastgoed/TenantKioskLayout';
 import CustomerDisplay from './pages/vastgoed/CustomerDisplay';
 import ContractSignPage from './pages/vastgoed/ContractSignPage';
-import TenantLoginPage from './pages/vastgoed/TenantLoginPage';
-import TenantDashboard from './pages/vastgoed/TenantDashboard';
 
 /* Per-company branded routes (path-based). Mounted under both AppRoutes and
-   HybridRoutes so each bedrijf krijgt: `/c/<slug>/{login,kiosk,kiosk/huurder,kiosk/klant,admin,huurder,...}`
+   HybridRoutes so each bedrijf krijgt: `/c/<slug>/{login,kiosk,kiosk/huurder,kiosk/klant,admin,...}`
    met de eigen kleur + logo. Subdomain-based branding (klantnaam.surirent.sr) blijft
    ook werken via de bestaande `detectCompanySlug` + `fetchBrandingByHost`. */
 function BrandedRouteTree() {
@@ -29,8 +27,9 @@ function BrandedRouteTree() {
         <Route path="kiosk" element={<KioskLayout />} />
         <Route path="kiosk/huurder" element={<TenantKioskLayout />} />
         <Route path="kiosk/klant" element={<CustomerDisplay />} />
-        <Route path="huurder" element={<TenantLoginPage />} />
-        <Route path="huurder/portaal" element={<TenantDashboard />} />
+        {/* Legacy /huurder paths → redirect naar Huurder Kiosk (PIN-only via QR). */}
+        <Route path="huurder" element={<Navigate to="../kiosk/huurder" replace />} />
+        <Route path="huurder/portaal" element={<Navigate to="../kiosk/huurder" replace />} />
         <Route path="*" element={<Navigate to="" replace />} />
       </Routes>
     </BrandedShell>
@@ -73,8 +72,9 @@ function AppRoutes() {
       <Route path="/kiosk/klant" element={<CustomerDisplay />} />
       <Route path="/c/:slug/*" element={<BrandedRouteTree />} />
       <Route path="/onderteken/:token" element={<ContractSignPage />} />
-      <Route path="/huurder" element={<TenantLoginPage />} />
-      <Route path="/huurder/portaal" element={<TenantDashboard />} />
+      {/* Legacy /huurder paths → redirect naar Huurder Kiosk (PIN-only via QR). */}
+      <Route path="/huurder" element={<Navigate to="/kiosk/huurder" replace />} />
+      <Route path="/huurder/portaal" element={<Navigate to="/kiosk/huurder" replace />} />
 
       {/* Legacy /vastgoed/* redirects, so old bookmarks keep working during transition. */}
       <Route path="/vastgoed" element={<Navigate to="/" replace />} />
@@ -92,7 +92,7 @@ function AppRoutes() {
 function HybridRoutes() {
   // On a single-domain deployment (preview / local), we expose both worlds:
   // - `/` shows marketing landing
-  // - All app paths reachable directly (/login, /admin, /kiosk, /huurder, ...)
+  // - All app paths reachable directly (/login, /admin, /kiosk, ...)
   return (
     <Routes>
       <Route path="/" element={<MarketingLanding />} />
@@ -103,8 +103,9 @@ function HybridRoutes() {
       <Route path="/kiosk/klant" element={<CustomerDisplay />} />
       <Route path="/c/:slug/*" element={<BrandedRouteTree />} />
       <Route path="/onderteken/:token" element={<ContractSignPage />} />
-      <Route path="/huurder" element={<TenantLoginPage />} />
-      <Route path="/huurder/portaal" element={<TenantDashboard />} />
+      {/* Legacy /huurder paths → redirect naar Huurder Kiosk (PIN-only via QR). */}
+      <Route path="/huurder" element={<Navigate to="/kiosk/huurder" replace />} />
+      <Route path="/huurder/portaal" element={<Navigate to="/kiosk/huurder" replace />} />
 
       {/* Legacy /vastgoed/* redirects */}
       <Route path="/vastgoed" element={<Navigate to="/" replace />} />

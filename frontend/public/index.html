@@ -88,7 +88,6 @@
           else if (sub.indexOf('/kiosk/klant') === 0) role = 'klant';
           else if (sub.indexOf('/kiosk/huurder') === 0) role = 'huurder';
           else if (sub === '/kiosk' || sub.indexOf('/kiosk/') === 0 || sub.indexOf('/kiosk') === 0) role = 'kiosk';
-          else if (sub.indexOf('/huurder') === 0) role = 'huurder';
           // /login route met target hint → leid af
           if (sub === '/login' || sub.indexOf('/login') === 0) {
             var qs = location.search || '';
