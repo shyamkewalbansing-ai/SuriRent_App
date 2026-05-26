@@ -468,6 +468,20 @@ User koos voor **Optie C — minimale herbouw** (kern eerst), dan vroeg om **Fas
 - Tenda router koppeling (internet plannen)
 - Eigen domein + SSL deployment
 
+### Mobile PWA Beheerder polish (2026-02-26)
+Zes UI-verbeteringen voor de mobiele Beheer-PWA om premium/iOS-native te voelen:
+
+1. ✅ **Achtergrond**: van beige `#FFF7F0` → licht grijs `#F7F8FA` (mobile only, desktop houdt cream). Witte cards komen nu duidelijker naar voren.
+2. ✅ **Bedragen donkerblauw**: `text-emerald-600` → `text-slate-900` in MobilePaymentCard, MobileTenantCard, "Vandaag" stat-card, "Open" stat-card. Rood/oranje blijft voor achterstand. Status badges behouden hun groene "Op tijd" pill.
+3. ✅ **Cards compacter**: padding `clamp(14,4vw,20)` → `clamp(11,3.4vw,16)`, avatars `48-60px` → `42-52px`, ruimte tussen cards `space-y-3` → `space-y-2.5`, `rounded-3xl` → `rounded-2xl`, shadow lichter.
+4. ✅ **Status badges distinct**: nieuwe `METHOD_PILL_CLASSES` map — CONTANT=oranje, BANK=slate, MOPE=paars, SUMUP=roze, UNI5PAY=blauw (was allemaal groen).
+5. ✅ **Header polish**: subtitle "BEHEER · PRO" naar `slate-400` (subtieler), bell-icoon 14→12 op mobile, logo-shadow zachter (`0.55` → `0.45`).
+6. ✅ **Bottom nav polish**: FAB `w-11 h-11` → `w-10 h-10` op mobile, shadow van `0.65` opacity → `0.45`, ring `3px` → `[3px]`, border kleur subtieler.
+
+Files: `AdminDashboard.jsx`, `OverdueBell.jsx`, `Payments.jsx`, `Invoices.jsx`.
+Verified via mobile screenshot (393×852): alle wijzigingen zichtbaar en consistent.
+
+
 ### Tech debt (van code review)
 - Splits `server.py` (~1460 regels) in routers per resource
 - PDF endpoints zijn public via UUID — voor productie: signed/expiring tokens

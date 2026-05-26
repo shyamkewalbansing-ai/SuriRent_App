@@ -210,21 +210,19 @@ function MobileTopLogo({ user, activeCompany }) {
   const planLabel = user?.role === 'superadmin' ? 'Superadmin' : 'Beheer';
   const planSuffix = activeCompany?.plan ? String(activeCompany.plan).toUpperCase() : 'PRO';
   return (
-    <header className="md:hidden sticky top-0 z-30 bg-[#FFF7F0]/85 backdrop-blur-md"
+    <header className="md:hidden sticky top-0 z-30 bg-[#F7F8FA]/85 backdrop-blur-md"
       style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
       data-testid="mobile-top-logo">
       <div className="px-4 md:px-8 py-3 md:py-4 landscape:py-1.5 flex items-center gap-3.5 md:gap-4 landscape:gap-2 max-w-4xl md:mx-auto md:w-full">
-        <div className="w-16 h-16 md:w-14 md:h-14 landscape:w-9 landscape:h-9 rounded-2xl landscape:rounded-xl bg-gradient-to-br from-[#FF8A3D] to-[#C74600] p-2 md:p-2 landscape:p-1 shadow-[0_10px_22px_-6px_rgba(255,92,0,0.55)] shrink-0">
+        <div className="w-14 h-14 md:w-14 md:h-14 landscape:w-9 landscape:h-9 rounded-2xl landscape:rounded-xl bg-gradient-to-br from-[#FF8A3D] to-[#C74600] p-2 md:p-2 landscape:p-1 shadow-[0_6px_14px_-4px_rgba(255,92,0,0.45)] shrink-0">
           <img src="/kiosk-icons/kiosk-512.png" alt="SuriRent" className="w-full h-full object-contain" />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-2xl md:text-2xl landscape:text-sm font-black tracking-tight leading-tight truncate text-slate-900" data-testid="mobile-top-name">
+          <p className="text-xl md:text-2xl landscape:text-sm font-black tracking-tight leading-tight truncate text-slate-900" data-testid="mobile-top-name">
             {fullName}
           </p>
-          <p className="text-[13px] md:text-sm landscape:text-[10px] font-extrabold tracking-[0.18em] uppercase truncate mt-0.5">
-            <span className="text-slate-700">{planLabel}</span>
-            <span className="text-slate-400"> · </span>
-            <span className="text-[#FF5C00]">{planSuffix}</span>
+          <p className="text-[11px] md:text-sm landscape:text-[10px] font-bold tracking-[0.14em] uppercase truncate mt-1 text-slate-400">
+            {planLabel}<span className="text-slate-300"> · </span>{planSuffix}
           </p>
         </div>
         {user?.role !== 'superadmin' && (
@@ -395,7 +393,7 @@ function MobileTabBar({ active, onChange, tabs, onOpenMenu, user, badgeCount }) 
     >
       {/* Op iPad (md+) zwevende rounded bar i.p.v. fullwidth strip — geeft
           duidelijker visueel ruststation tussen content en navigatie. */}
-      <div className="bg-white/90 backdrop-blur-xl border-t md:border md:border-orange-100 md:rounded-3xl border-orange-100/70 shadow-[0_-12px_36px_-12px_rgba(15,23,42,0.18)] md:shadow-[0_18px_36px_-12px_rgba(15,23,42,0.18)] md:mx-auto md:max-w-2xl md:mb-3 relative">
+      <div className="bg-white/95 backdrop-blur-xl border-t md:border md:border-orange-100 md:rounded-3xl border-slate-100 shadow-[0_-6px_22px_-12px_rgba(15,23,42,0.10)] md:shadow-[0_18px_36px_-12px_rgba(15,23,42,0.18)] md:mx-auto md:max-w-2xl md:mb-3 relative">
         {/* Brand accent line top-center */}
         <div aria-hidden className="absolute top-0 left-1/2 -translate-x-1/2 w-12 h-[3px] rounded-full bg-gradient-to-r from-[#FF8A3D] to-[#FF5C00] opacity-90 md:hidden" />
 
@@ -413,9 +411,9 @@ function MobileTabBar({ active, onChange, tabs, onOpenMenu, user, badgeCount }) 
             onClick={onOpenMenu}
             data-testid="mobile-fab-menu"
             aria-label="Open menu"
-            className="relative -mt-4 md:-mt-5 landscape:-mt-2 w-11 h-11 md:w-14 md:h-14 landscape:w-9 landscape:h-9 rounded-full bg-gradient-to-br from-[#FF8A3D] to-[#FF5C00] text-white flex items-center justify-center shadow-[0_8px_20px_-6px_rgba(255,92,0,0.65)] ring-[3px] md:ring-4 ring-white active:scale-95 transition-all"
+            className="relative -mt-3.5 md:-mt-5 landscape:-mt-2 w-10 h-10 md:w-14 md:h-14 landscape:w-9 landscape:h-9 rounded-full bg-gradient-to-br from-[#FF8A3D] to-[#FF5C00] text-white flex items-center justify-center shadow-[0_4px_12px_-4px_rgba(255,92,0,0.45)] ring-[3px] md:ring-4 ring-white active:scale-95 transition-all"
           >
-            <Plus className="w-5 h-5 md:w-6 md:h-6 landscape:w-4 landscape:h-4" strokeWidth={2.8} />
+            <Plus className="w-[18px] h-[18px] md:w-6 md:h-6 landscape:w-4 landscape:h-4" strokeWidth={2.6} />
             {badgeCount > 0 && (
               <span className="absolute -top-1 -right-1 min-w-[16px] md:min-w-[20px] h-4 md:h-5 px-1 rounded-full bg-red-500 text-white text-[9px] md:text-[11px] font-black flex items-center justify-center ring-2 ring-white"
                 data-testid="mobile-fab-badge">
@@ -1626,7 +1624,7 @@ export default function AdminDashboard() {
   const doLogout = async () => { await logout(); navigate('/login'); };
 
   return (
-    <div className="min-h-screen bg-[#FFF7F0] flex">
+    <div className="min-h-screen bg-[#F7F8FA] md:bg-[#FFF7F0] flex">
       <Sidebar active={tab} onChange={handleSetTab} onLogout={doLogout}
         user={user} tabs={tabs} badgeCount={badgeCount} />
       <div className="flex-1 flex flex-col min-w-0">

@@ -89,6 +89,16 @@ function MethodPill({ method }) {
   );
 }
 
+// Brand-aware status colors per betaalmethode — voorkomt dat alles eenheidsworst
+// (groen) is en geeft betere visuele scan-baarheid in de mobiele lijst.
+const METHOD_PILL_CLASSES = {
+  contant: 'bg-orange-50 text-[#C74600]',
+  bank:    'bg-slate-100 text-slate-700',
+  mope:    'bg-purple-50 text-purple-700',
+  sumup:   'bg-pink-50 text-pink-700',
+  uni5pay: 'bg-blue-50 text-blue-700',
+};
+
 // =====================================================================
 // Mobile-only (phone) views — geinspireerd op POS-terminal screenshot
 // =====================================================================
@@ -99,43 +109,44 @@ function MobilePaymentCard({ p, onClick }) {
     if (p.apartment_number) return p.apartment_number;
     return '—';
   })();
+  const methodCls = METHOD_PILL_CLASSES[p.method] || 'bg-slate-100 text-slate-700';
   return (
     <button onClick={onClick} type="button"
       data-testid={`mp-card-${p.id}`}
-      className="w-full text-left bg-white rounded-3xl border border-slate-100 shadow-[0_2px_8px_-4px_rgba(0,0,0,0.08)] active:scale-[0.99] transition-transform"
+      className="w-full text-left bg-white rounded-2xl border border-slate-100 shadow-[0_1px_4px_-2px_rgba(15,23,42,0.06)] active:scale-[0.99] transition-transform"
       style={{
-        padding: 'clamp(14px, 4vw, 20px) clamp(14px, 4vw, 20px)',
+        padding: 'clamp(11px, 3.4vw, 16px) clamp(13px, 3.8vw, 18px)',
       }}>
       <div className="flex items-center gap-3 min-w-0">
-        <div className="rounded-full flex items-center justify-center font-black shrink-0 shadow-[0_2px_6px_-2px_rgba(0,0,0,0.12)]"
+        <div className="rounded-full flex items-center justify-center font-black shrink-0 shadow-[0_1px_3px_-1px_rgba(0,0,0,0.10)]"
           style={{
             background: avatar.bg, color: avatar.fg,
-            width: 'clamp(48px, 13vw, 60px)', height: 'clamp(48px, 13vw, 60px)',
-            fontSize: 'clamp(16px, 4.4vw, 20px)',
+            width: 'clamp(42px, 11vw, 52px)', height: 'clamp(42px, 11vw, 52px)',
+            fontSize: 'clamp(14px, 3.8vw, 17px)',
           }}>
           {initials(p.tenant_name)}
         </div>
         <div className="flex-1 min-w-0">
           <p className="font-extrabold text-slate-900 leading-tight truncate"
-            style={{ fontSize: 'clamp(16px, 4.4vw, 20px)' }}>
+            style={{ fontSize: 'clamp(15px, 4.2vw, 18px)' }}>
             {p.tenant_name || '—'}
           </p>
-          <p className="text-slate-600/85 font-semibold truncate mt-0.5"
+          <p className="text-slate-500 font-semibold truncate mt-0.5"
             style={{ fontSize: 'clamp(11px, 3vw, 13px)' }}>
             {sub}
           </p>
           <div className="mt-1.5">
-            <span className="inline-block font-bold uppercase tracking-wider rounded-md bg-emerald-50 text-emerald-700"
+            <span className={`inline-block font-bold uppercase tracking-wider rounded-md ${methodCls}`}
               style={{
-                fontSize: 'clamp(10px, 2.8vw, 12px)',
-                padding: 'clamp(2px, 0.8vw, 4px) clamp(7px, 2vw, 10px)',
+                fontSize: 'clamp(10px, 2.6vw, 11px)',
+                padding: 'clamp(2px, 0.6vw, 3px) clamp(6px, 1.8vw, 9px)',
               }}>
               {METHOD_LABELS[p.method] || p.method}
             </span>
           </div>
         </div>
         <div className="text-right shrink-0 flex flex-col items-end gap-0.5">
-          <p className="font-black text-emerald-600 tracking-tight whitespace-nowrap"
+          <p className="font-black text-slate-900 tracking-tight whitespace-nowrap"
             data-testid={`mp-amount-${p.id}`}
             style={{ fontSize: 'clamp(15px, 4.2vw, 19px)' }}>
             {p.currency} {fmtAmountWhole(p.amount)}
@@ -620,7 +631,7 @@ export default function Payments() {
               style={{ fontSize: 'clamp(9px, 2.4vw, 11px)' }}>
               Vandaag
             </p>
-            <p className="font-black text-emerald-600 tracking-tight whitespace-nowrap leading-tight mt-0.5"
+            <p className="font-black text-slate-900 tracking-tight whitespace-nowrap leading-tight mt-0.5"
               style={{ fontSize: 'clamp(14px, 4vw, 19px)' }}>
               {currency} {fmtAmountWhole(todaySum)}
             </p>
@@ -656,7 +667,7 @@ export default function Payments() {
             </p>
           </div>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-2.5">
             {filteredItems.map((p) => (
               <div key={p.id} data-testid={`mp-row-${p.id}`}>
                 <MobilePaymentCard p={p} onClick={() => toggleExpand(p.id)} />

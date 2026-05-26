@@ -199,26 +199,28 @@ function MobileTenantCard({ group, onClick }) {
   const sub = group.location_name && group.apartment_number
     ? `${group.location_name} · ${group.apartment_number}`
     : group.apartment_number || 'Geen appartement';
+  // Bedragen standaard donkerblauw (slate-900). Alleen rood/oranje bij echte
+  // achterstand — dat zijn waarschuwingen, geen kleurkeuze. Status badge
+  // toont 'Op tijd' / 'Achterstand' apart in eigen kleur.
   const amtCls = sev === 'critical' ? 'text-red-600'
     : sev === 'late' ? 'text-orange-600'
-    : group.upcomingCount > 0 ? 'text-blue-600'
-    : 'text-emerald-600';
+    : 'text-slate-900';
   return (
     <button onClick={onClick} type="button"
       data-testid={`mi-card-${group.tenant_id}`}
-      className="w-full text-left bg-white rounded-3xl border border-slate-100 shadow-[0_2px_8px_-4px_rgba(0,0,0,0.08)] active:scale-[0.99] transition-transform"
-      style={{ padding: 'clamp(14px, 4vw, 20px) clamp(14px, 4vw, 20px)' }}>
+      className="w-full text-left bg-white rounded-2xl border border-slate-100 shadow-[0_1px_4px_-2px_rgba(15,23,42,0.06)] active:scale-[0.99] transition-transform"
+      style={{ padding: 'clamp(11px, 3.4vw, 16px) clamp(13px, 3.8vw, 18px)' }}>
       <div className="flex items-center gap-3 min-w-0">
-        <div className="rounded-2xl flex items-center justify-center shrink-0 bg-gradient-to-br from-[#FFB770] to-[#FF8A3D] text-white shadow-[0_3px_8px_-2px_rgba(255,140,40,0.45)]"
-          style={{ width: 'clamp(48px, 13vw, 60px)', height: 'clamp(48px, 13vw, 60px)' }}>
-          <FileText style={{ width: 'clamp(20px, 5.5vw, 26px)', height: 'clamp(20px, 5.5vw, 26px)' }} strokeWidth={2.4} />
+        <div className="rounded-2xl flex items-center justify-center shrink-0 bg-gradient-to-br from-[#FFB770] to-[#FF8A3D] text-white shadow-[0_2px_5px_-1px_rgba(255,140,40,0.35)]"
+          style={{ width: 'clamp(42px, 11vw, 52px)', height: 'clamp(42px, 11vw, 52px)' }}>
+          <FileText style={{ width: 'clamp(18px, 5vw, 22px)', height: 'clamp(18px, 5vw, 22px)' }} strokeWidth={2.4} />
         </div>
         <div className="flex-1 min-w-0">
           <p className="font-extrabold text-slate-900 leading-tight truncate"
-            style={{ fontSize: 'clamp(16px, 4.4vw, 20px)' }}>
+            style={{ fontSize: 'clamp(15px, 4.2vw, 18px)' }}>
             {group.tenant_name}
           </p>
-          <p className="text-slate-600/85 font-semibold truncate mt-0.5"
+          <p className="text-slate-500 font-semibold truncate mt-0.5"
             style={{ fontSize: 'clamp(11px, 3vw, 13px)' }}>
             {sub}
           </p>
@@ -844,7 +846,7 @@ export default function Invoices() {
               style={{ fontSize: 'clamp(9px, 2.4vw, 11px)' }}>
               Open
             </p>
-            <p className={`font-black tracking-tight whitespace-nowrap leading-tight mt-0.5 ${totalOpenAmount > 0 ? 'text-red-500' : 'text-emerald-600'}`}
+            <p className={`font-black tracking-tight whitespace-nowrap leading-tight mt-0.5 ${totalOpenAmount > 0 ? 'text-red-500' : 'text-slate-900'}`}
               style={{ fontSize: 'clamp(14px, 4vw, 19px)' }}>
               {totalOpenCurrency} {fmtAmountWhole(totalOpenAmount)}
             </p>
@@ -899,7 +901,7 @@ export default function Invoices() {
             </p>
           </div>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-2.5">
             {filteredGroups.map((g) => (
               <div key={g.tenant_id} data-testid={`mi-row-${g.tenant_id}`}>
                 <MobileTenantCard group={g} onClick={() => toggleExpand(g.tenant_id)} />
