@@ -484,6 +484,18 @@ Verified via mobile screenshot (393×852): alle wijzigingen zichtbaar en consist
 
 ### Tech debt (van code review)
 - Splits `server.py` (~1460 regels) in routers per resource
+
+### Overzicht polish + Desktop consistentie (2026-02-26)
+- ✅ **Root background**: van `#FFF7F0` (beige) → `#F7F8FA` (licht grijs) op **alle viewports** (was eerder alleen mobile).
+- ✅ **Sidebar**: cream gradient + oranje shadow → strak wit met slate-100 border + minimale shadow.
+- ✅ **Overzicht stat-cards**: padding `p-6` → `p-5`, iconen `w-11→w-10`, `text-4xl` → `text-3xl`, borders `orange-100` → `slate-100`, subtiele shadow toegevoegd.
+- ✅ **Income/Outstanding hero**: oranje gradient verwijderd → strakke witte card met slate-100 border en oranje iconen.
+- ✅ **Status Overzicht + Laatste Activiteiten**: borders `orange-100` → `slate-100`, kleinere padding.
+- ✅ **Donut-percentage**: 50% nu in `slate-900` ipv emerald-600.
+- ✅ **CTA's onderaan**: padding `p-6` → `p-5`, iconen kleiner.
+- ✅ **Desktop Payments row**: bedrag `text-emerald-600` → `text-slate-900`, "Vandaag" total ook slate, "Betaald bedrag" detail-panel amount ook slate (panel-bg blijft groen als BETAALD-indicator).
+- Verified via screenshot tool (1440×900 desktop + 393×852 mobile): alle wijzigingen consistent zichtbaar.
+
 - PDF endpoints zijn public via UUID — voor productie: signed/expiring tokens
 - Deposit `deduction <= amount` validatie strenger maken
 - Maintenance reopen `resolved_at` clearen

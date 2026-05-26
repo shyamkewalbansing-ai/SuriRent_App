@@ -86,11 +86,11 @@ function groupTabs(tabs) {
 function Sidebar({ active, onChange, onLogout, user, tabs, badgeCount }) {
   const groups = groupTabs(tabs);
   return (
-    <aside className="hidden md:flex flex-col w-56 lg:w-64 sticky top-0 h-screen bg-gradient-to-b from-white via-white to-[#FFF7F0] border-r border-orange-100/60 shadow-[8px_0_24px_-12px_rgba(255,92,0,0.12)]"
+    <aside className="hidden md:flex flex-col w-56 lg:w-64 sticky top-0 h-screen bg-white border-r border-slate-100 shadow-[1px_0_3px_0_rgba(15,23,42,0.04)]"
       data-testid="sidebar">
       {/* HEADER — logo + naam, vaste hoogte */}
-      <div className="px-5 pt-6 pb-5 flex items-center gap-3 border-b border-orange-50">
-        <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#FF8A3D] to-[#C74600] p-1.5 shadow-[0_10px_24px_-6px_rgba(255,92,0,0.55)] shrink-0">
+      <div className="px-5 pt-6 pb-5 flex items-center gap-3 border-b border-slate-100">
+        <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#FF8A3D] to-[#C74600] p-1.5 shadow-[0_8px_18px_-6px_rgba(255,92,0,0.45)] shrink-0">
           <img src="/kiosk-icons/kiosk-512.png" alt="SuriRent" className="w-full h-full object-contain" />
         </div>
         <div className="min-w-0">
@@ -548,7 +548,7 @@ function Overview() {
   const cards = [
     { label: 'Appartementen', value: stats.apartments_total, icon: Building2, accent: 'bg-orange-50 text-[#FF5C00]' },
     { label: 'Bezet', value: stats.apartments_occupied, icon: Home, accent: 'bg-emerald-50 text-emerald-600' },
-    { label: 'Vacant', value: stats.apartments_vacant, icon: KeySquare, accent: 'bg-slate-50 text-slate-600' },
+    { label: 'Vacant', value: stats.apartments_vacant, icon: KeySquare, accent: 'bg-slate-100 text-slate-600' },
     { label: 'Huurders', value: stats.tenants_total, icon: Users, accent: 'bg-amber-50 text-amber-600' },
   ];
 
@@ -577,87 +577,87 @@ function Overview() {
       <PageHeader title="Overzicht" subtitle="Snelle blik op uw vastgoedportefeuille" />
 
       {/* Mobile/tablet: combined "Portfolio in één oogopslag" card with 4 mini-stats */}
-      <div className="lg:hidden bg-white rounded-2xl border border-orange-100 p-5 mb-5" data-testid="portfolio-card-mobile">
-        <p className="text-[11px] font-bold uppercase tracking-widest text-slate-500 mb-4">Portfolio in één oogopslag</p>
+      <div className="lg:hidden bg-white rounded-2xl border border-slate-100 shadow-[0_1px_4px_-2px_rgba(15,23,42,0.06)] p-4 mb-4" data-testid="portfolio-card-mobile">
+        <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3">Portfolio in één oogopslag</p>
         <div className="grid grid-cols-4 divide-x divide-slate-100">
           {cards.map((c) => {
             const Icon = c.icon;
             return (
-              <div key={c.label} className="px-2 first:pl-0 last:pr-0 text-center">
-                <div className={`w-12 h-12 rounded-full ${c.accent} flex items-center justify-center mx-auto mb-3`}>
-                  <Icon className="w-5 h-5" />
+              <div key={c.label} className="px-1.5 first:pl-0 last:pr-0 text-center">
+                <div className={`w-10 h-10 rounded-full ${c.accent} flex items-center justify-center mx-auto mb-2`}>
+                  <Icon className="w-4 h-4" />
                 </div>
-                <p className="text-2xl font-black text-slate-900 tracking-tight" data-testid={`stat-m-${c.label.toLowerCase()}`}>{c.value}</p>
-                <p className="text-[11px] text-slate-500 font-semibold mt-1">{c.label}</p>
+                <p className="text-xl font-black text-slate-900 tracking-tight" data-testid={`stat-m-${c.label.toLowerCase()}`}>{c.value}</p>
+                <p className="text-[10px] text-slate-500 font-semibold mt-0.5">{c.label}</p>
               </div>
             );
           })}
         </div>
       </div>
 
-      {/* Desktop: 4 separate stat-kaarten */}
-      <div className="hidden lg:grid grid-cols-4 gap-4 mb-6">
+      {/* Desktop: 4 separate stat-kaarten — strakker, kleinere padding, slate-100 borders */}
+      <div className="hidden lg:grid grid-cols-4 gap-3 mb-5">
         {cards.map((c) => {
           const Icon = c.icon;
           return (
-            <div key={c.label} className="bg-white rounded-2xl border border-orange-100 p-6 hover:border-[#FF5C00]/30 transition-colors">
-              <div className={`w-11 h-11 rounded-xl ${c.accent} flex items-center justify-center mb-4`}>
-                <Icon className="w-5 h-5" />
+            <div key={c.label} className="bg-white rounded-2xl border border-slate-100 shadow-[0_1px_4px_-2px_rgba(15,23,42,0.06)] p-5 hover:border-slate-200 transition-colors">
+              <div className={`w-10 h-10 rounded-xl ${c.accent} flex items-center justify-center mb-3.5`}>
+                <Icon className="w-[18px] h-[18px]" />
               </div>
-              <p className="text-4xl font-black text-slate-900 tracking-tight" data-testid={`stat-${c.label.toLowerCase()}`}>{c.value}</p>
-              <p className="text-sm text-slate-500 font-semibold mt-1">{c.label}</p>
+              <p className="text-3xl font-black text-slate-900 tracking-tight leading-none" data-testid={`stat-${c.label.toLowerCase()}`}>{c.value}</p>
+              <p className="text-[12px] text-slate-500 font-semibold mt-1.5">{c.label}</p>
             </div>
           );
         })}
       </div>
 
-      {/* Inkomsten + Openstaand — oranje getinte hero op mobile, wit op desktop */}
-      <div className="rounded-2xl border border-orange-200 lg:border-orange-100 p-5 lg:p-6 mb-5 lg:mb-6 grid grid-cols-2 gap-3 lg:gap-6 bg-gradient-to-br from-orange-50 to-orange-100/40 lg:from-white lg:to-white lg:bg-white">
-        <div className="flex flex-col lg:flex-row lg:items-center gap-2 lg:gap-4 min-w-0">
-          <div className="w-10 h-10 lg:w-14 lg:h-14 rounded-xl lg:rounded-2xl bg-white lg:bg-orange-50 flex items-center justify-center shrink-0">
-            <Wallet className="w-5 h-5 lg:w-7 lg:h-7 text-[#FF5C00]" />
+      {/* Inkomsten + Openstaand — strakke witte card op alle viewports, geen oranje gradient meer */}
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-[0_1px_4px_-2px_rgba(15,23,42,0.06)] p-4 lg:p-5 mb-4 lg:mb-5 grid grid-cols-2 gap-3 lg:gap-5">
+        <div className="flex flex-col lg:flex-row lg:items-center gap-2 lg:gap-3.5 min-w-0">
+          <div className="w-10 h-10 lg:w-11 lg:h-11 rounded-xl bg-orange-50 flex items-center justify-center shrink-0">
+            <Wallet className="w-5 h-5 lg:w-[22px] lg:h-[22px] text-[#FF5C00]" />
           </div>
           <div className="min-w-0">
-            <p className="text-[10px] lg:text-[11px] font-bold uppercase tracking-widest text-slate-500">Inkomsten deze maand</p>
-            <p className="text-xl lg:text-3xl font-black text-slate-900 tracking-tight mt-1 truncate" data-testid="income-total">
+            <p className="text-[10px] lg:text-[11px] font-bold uppercase tracking-widest text-slate-400">Inkomsten deze maand</p>
+            <p className="text-xl lg:text-2xl font-black text-slate-900 tracking-tight mt-0.5 truncate" data-testid="income-total">
               {fmtMoney(incomeTotal, primaryCur)}
             </p>
-            <p className="text-[11px] lg:text-xs text-slate-500 lg:text-slate-400 mt-1">{incomeCount} betalingen</p>
+            <p className="text-[11px] text-slate-400 font-semibold mt-0.5">{incomeCount} betalingen</p>
           </div>
         </div>
         <button onClick={() => window.dispatchEvent(new CustomEvent('go-tab', { detail: 'invoices' }))}
           data-testid="outstanding-cta"
-          className="flex flex-col lg:flex-row lg:items-center gap-2 lg:gap-4 text-left hover:opacity-90 transition-opacity group min-w-0">
-          <div className="w-10 h-10 lg:w-14 lg:h-14 rounded-xl lg:rounded-2xl bg-white lg:bg-orange-50 flex items-center justify-center shrink-0">
-            <Gauge className="w-5 h-5 lg:w-7 lg:h-7 text-[#FF5C00]" />
+          className="flex flex-col lg:flex-row lg:items-center gap-2 lg:gap-3.5 text-left hover:opacity-90 transition-opacity group min-w-0 border-l border-slate-100 pl-3 lg:pl-5">
+          <div className="w-10 h-10 lg:w-11 lg:h-11 rounded-xl bg-orange-50 flex items-center justify-center shrink-0">
+            <Gauge className="w-5 h-5 lg:w-[22px] lg:h-[22px] text-[#FF5C00]" />
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex items-center justify-between gap-2">
-              <p className="text-[10px] lg:text-[11px] font-bold uppercase tracking-widest text-slate-500">Openstaand saldo</p>
+              <p className="text-[10px] lg:text-[11px] font-bold uppercase tracking-widest text-slate-400">Openstaand saldo</p>
               <ChevronRight className="lg:hidden w-4 h-4 text-[#FF5C00] shrink-0" />
             </div>
-            <p className="text-xl lg:text-3xl font-black text-[#FF5C00] tracking-tight mt-1 truncate" data-testid="outstanding-total">
+            <p className={`text-xl lg:text-2xl font-black tracking-tight mt-0.5 truncate ${outstandingTotal > 0 ? 'text-[#FF5C00]' : 'text-slate-900'}`} data-testid="outstanding-total">
               {fmtMoney(outstandingTotal, primaryCur)}
             </p>
-            <p className="text-[11px] lg:text-xs text-slate-500 lg:text-slate-400 mt-1">{outstandingCount} openstaand</p>
+            <p className="text-[11px] text-slate-400 font-semibold mt-0.5">{outstandingCount} openstaand</p>
           </div>
-          <ChevronRight className="hidden lg:block w-5 h-5 text-slate-300 group-hover:text-[#FF5C00] transition-colors shrink-0" />
+          <ChevronRight className="hidden lg:block w-4 h-4 text-slate-300 group-hover:text-[#FF5C00] transition-colors shrink-0" />
         </button>
       </div>
 
       {/* Status overzicht + Laatste activiteiten — 2 koloms op desktop */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 lg:gap-6 mb-5 lg:mb-6">
-        <div className="bg-white rounded-2xl border border-orange-100 p-5 lg:p-6 lg:col-span-2" data-testid="status-overview-card">
-          <div className="flex items-center justify-between mb-4">
-            <p className="text-[11px] font-bold uppercase tracking-widest text-slate-500">Status Overzicht</p>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-5 mb-4 lg:mb-5">
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-[0_1px_4px_-2px_rgba(15,23,42,0.06)] p-4 lg:p-5 lg:col-span-2" data-testid="status-overview-card">
+          <div className="flex items-center justify-between mb-3.5">
+            <p className="text-[10px] lg:text-[11px] font-bold uppercase tracking-widest text-slate-400">Status Overzicht</p>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 lg:gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 lg:gap-5">
             {/* Donut: Betalingsstatus */}
             <div>
               <p className="text-sm font-bold text-slate-900 mb-3">Betalingsstatus</p>
               <div className="flex items-center gap-4 lg:gap-5">
                 <StatusDonut paid={invStatus.paid} open={invStatus.open} overdue={invStatus.overdue} />
-                <div className="space-y-3">
+                <div className="space-y-2.5">
                   <StatusLegendItem color="#10B981" label="Betaald" count={invStatus.paid} percent={pct(invStatus.paid)} />
                   <StatusLegendItem color="#FF5C00" label="Openstaand" count={invStatus.open} percent={pct(invStatus.open)} />
                   <StatusLegendItem color="#94A3B8" label="Achterstand" count={invStatus.overdue} percent={pct(invStatus.overdue)} />
@@ -667,14 +667,14 @@ function Overview() {
             {/* Huurstatus: bezet/totaal + vacancy card */}
             <div>
               <p className="text-sm font-bold text-slate-900 mb-3">Huurstatus</p>
-              <div className="h-3 w-full rounded-full bg-slate-100 overflow-hidden mb-2">
+              <div className="h-2.5 w-full rounded-full bg-slate-100 overflow-hidden mb-2">
                 <div className="h-full bg-emerald-500 transition-all" style={{ width: `${occupiedPct}%` }} />
               </div>
-              <div className="flex items-center justify-between text-xs mb-5">
+              <div className="flex items-center justify-between text-xs mb-4">
                 <span className="text-slate-600 font-semibold">{stats.apartments_occupied} van {stats.apartments_total} bezet</span>
-                <span className="text-emerald-600 font-black">{occupiedPct}%</span>
+                <span className="text-slate-900 font-black">{occupiedPct}%</span>
               </div>
-              <div className={`rounded-xl border p-4 ${vacantCount === 0 ? 'bg-emerald-50/60 border-emerald-200' : 'bg-amber-50/60 border-amber-200'}`}>
+              <div className={`rounded-xl border p-3.5 ${vacantCount === 0 ? 'bg-emerald-50/60 border-emerald-100' : 'bg-amber-50/60 border-amber-100'}`}>
                 <div className="flex items-start gap-3">
                   <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${vacantCount === 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
                     <Home className="w-4 h-4" />
@@ -693,9 +693,9 @@ function Overview() {
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl border border-orange-100 p-5 lg:p-6" data-testid="recent-activity-card">
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-[0_1px_4px_-2px_rgba(15,23,42,0.06)] p-4 lg:p-5" data-testid="recent-activity-card">
           <div className="flex items-center justify-between mb-2">
-            <p className="text-[11px] font-bold uppercase tracking-widest text-slate-500">Laatste Activiteiten</p>
+            <p className="text-[10px] lg:text-[11px] font-bold uppercase tracking-widest text-slate-400">Laatste Activiteiten</p>
             <button onClick={() => window.dispatchEvent(new CustomEvent('go-tab', { detail: 'payments' }))}
               data-testid="recent-view-all"
               className="text-xs font-bold text-[#FF5C00] hover:underline">Bekijk alles</button>
@@ -713,28 +713,28 @@ function Overview() {
         </div>
       </div>
 
-      {/* CTA's onderaan */}
-      <div className="grid sm:grid-cols-2 gap-4">
+      {/* CTA's onderaan — strakker, kleinere padding */}
+      <div className="grid sm:grid-cols-2 gap-3">
         <button onClick={() => navigate('/kiosk')} data-testid="quick-kiosk"
-          className="bg-gradient-to-br from-[#FF8A3D] via-[#FF5C00] to-[#C74600] rounded-2xl p-6 text-white text-left hover:shadow-[0_20px_40px_-10px_rgba(255,92,0,0.5)] transition-shadow flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
-            <Building2 className="w-6 h-6" />
+          className="bg-gradient-to-br from-[#FF8A3D] via-[#FF5C00] to-[#C74600] rounded-2xl p-5 text-white text-left hover:shadow-[0_18px_36px_-12px_rgba(255,92,0,0.45)] transition-shadow flex items-center gap-3.5">
+          <div className="w-11 h-11 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
+            <Building2 className="w-5 h-5" />
           </div>
           <div className="flex-1">
-            <p className="text-lg font-black">Open Kiosk</p>
-            <p className="text-sm text-white/80">Selfservice terminal voor huurders</p>
+            <p className="text-base font-black">Open Kiosk</p>
+            <p className="text-xs text-white/80">Selfservice terminal voor huurders</p>
           </div>
           <ChevronRight className="w-5 h-5 shrink-0" />
         </button>
         <button onClick={() => window.dispatchEvent(new CustomEvent('go-tab', { detail: 'payments' }))}
           data-testid="quick-payments"
-          className="bg-white border border-orange-100 rounded-2xl p-6 text-left hover:border-[#FF5C00]/30 transition-colors flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-orange-50 flex items-center justify-center shrink-0">
+          className="bg-white border border-slate-100 shadow-[0_1px_4px_-2px_rgba(15,23,42,0.06)] rounded-2xl p-5 text-left hover:border-slate-200 transition-colors flex items-center gap-3.5">
+          <div className="w-11 h-11 rounded-xl bg-orange-50 flex items-center justify-center shrink-0">
             <Receipt className="w-5 h-5 text-[#FF5C00]" />
           </div>
           <div className="flex-1">
-            <p className="text-lg font-black text-slate-900">Betalingen bekijken</p>
-            <p className="text-sm text-slate-500">Alle kwitanties en transacties</p>
+            <p className="text-base font-black text-slate-900">Betalingen bekijken</p>
+            <p className="text-xs text-slate-500">Alle kwitanties en transacties</p>
           </div>
           <ChevronRight className="w-5 h-5 text-slate-300" />
         </button>
@@ -1624,7 +1624,7 @@ export default function AdminDashboard() {
   const doLogout = async () => { await logout(); navigate('/login'); };
 
   return (
-    <div className="min-h-screen bg-[#F7F8FA] md:bg-[#FFF7F0] flex">
+    <div className="min-h-screen bg-[#F7F8FA] flex">
       <Sidebar active={tab} onChange={handleSetTab} onLogout={doLogout}
         user={user} tabs={tabs} badgeCount={badgeCount} />
       <div className="flex-1 flex flex-col min-w-0">

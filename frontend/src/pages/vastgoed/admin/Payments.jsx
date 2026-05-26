@@ -222,7 +222,7 @@ function PaymentRow({ p, expanded, onToggle, onEmail, apiBase }) {
 
           {/* Bedrag */}
           <div className="text-right shrink-0 whitespace-nowrap">
-            <p className="text-base sm:text-lg font-black tracking-tight text-emerald-600"
+            <p className="text-base sm:text-lg font-black tracking-tight text-slate-900"
               data-testid={`payment-amount-${p.id}`}>
               {p.currency} {fmtAmountWhole(p.amount)}
             </p>
@@ -259,7 +259,7 @@ function PaymentRow({ p, expanded, onToggle, onEmail, apiBase }) {
               </div>
               <div className="md:border-l md:border-emerald-200 md:pl-4 md:min-w-[160px] flex md:flex-col justify-between md:justify-center items-end md:items-end">
                 <p className="text-xs font-bold text-slate-500">Betaald bedrag</p>
-                <p className="text-xl sm:text-2xl font-black tracking-tight text-emerald-600">
+                <p className="text-xl sm:text-2xl font-black tracking-tight text-slate-900">
                   {fmtMoney(p.amount, p.currency)}
                 </p>
               </div>
@@ -723,7 +723,7 @@ export default function Payments() {
         <div className="md:hidden bg-white rounded-2xl border border-orange-100 px-4 py-3 shadow-sm shrink-0 max-w-[60%]" data-testid="kpi-mobile-card">
           <p className="text-[11px] font-semibold text-slate-500 mb-0.5">Vandaag</p>
           <p className="text-base font-black text-slate-900 tracking-tight whitespace-nowrap">
-            {currency} <span className="text-emerald-600">{fmtAmount(todaySum, currency)}</span>
+            {currency} <span className="text-slate-900">{fmtAmount(todaySum, currency)}</span>
           </p>
           <p className="text-[10px] text-slate-400 mt-0.5">{todayItems.length} betaling{todayItems.length !== 1 ? 'en' : ''}</p>
         </div>
