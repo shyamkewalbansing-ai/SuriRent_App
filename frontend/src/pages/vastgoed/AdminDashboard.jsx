@@ -403,31 +403,27 @@ function MobileTabBar({ active, onChange, tabs, onOpenMenu, user, badgeCount }) 
         >
         {left.map(renderTab)}
 
-        {/* Center FAB — opent het volledige menu. De FAB zit volledig BINNEN
-            de page-bg gekleurde bol met flink wat ruimte rondom (16px+ margin
-            aan elke kant), zodat het visueel een knop in een holle uitsparing
-            lijkt waar de hele + in past. */}
-        <div className="relative flex items-end justify-center pb-0.5">
-          {/* Bol — strak rond de FAB met dunne page-bg ring (~3-4px) voor
-              een nette holle uitsparing zonder te veel ruimte. */}
-          <span
-            aria-hidden
-            className="absolute left-1/2 -translate-x-1/2 -top-[16px] md:-top-[22px] w-[54px] h-[54px] md:w-[72px] md:h-[72px] rounded-full bg-[#F7F8FA] pointer-events-none"
-          />
+        {/* Center FAB — clean ronde + knop die uitsteekt boven de nav, met
+            "Nieuw" label eronder zodat hij visueel meedoet met de andere
+            tab-iconen + labels. Geen bol/uitsparing meer rondom. */}
+        <div className="relative flex flex-col items-center justify-end pb-1">
           <button
             onClick={onOpenMenu}
             data-testid="mobile-fab-menu"
             aria-label="Open menu"
-            className="relative -mt-3.5 md:-mt-5 landscape:-mt-2 w-12 h-12 md:w-16 md:h-16 landscape:w-9 landscape:h-9 rounded-full bg-gradient-to-br from-[#FF8A3D] to-[#FF5C00] text-white flex items-center justify-center shadow-[0_6px_16px_-4px_rgba(255,92,0,0.55)] active:scale-95 transition-all"
+            className="relative -mt-6 md:-mt-8 landscape:-mt-3 w-14 h-14 md:w-16 md:h-16 landscape:w-10 landscape:h-10 rounded-full bg-gradient-to-br from-[#FF8A3D] to-[#FF5C00] text-white flex items-center justify-center shadow-[0_8px_18px_-4px_rgba(255,92,0,0.55)] active:scale-95 transition-all"
           >
-            <Plus className="w-5 h-5 md:w-7 md:h-7 landscape:w-4 landscape:h-4" strokeWidth={2.6} />
+            <Plus className="w-6 h-6 md:w-7 md:h-7 landscape:w-4 landscape:h-4" strokeWidth={2.8} />
             {badgeCount > 0 && (
-              <span className="absolute -top-1 -right-1 min-w-[16px] md:min-w-[20px] h-4 md:h-5 px-1 rounded-full bg-red-500 text-white text-[9px] md:text-[11px] font-black flex items-center justify-center ring-2 ring-white"
+              <span className="absolute -top-1 -right-1 min-w-[18px] md:min-w-[20px] h-[18px] md:h-5 px-1 rounded-full bg-red-500 text-white text-[10px] md:text-[11px] font-black flex items-center justify-center ring-2 ring-white"
                 data-testid="mobile-fab-badge">
                 {badgeCount > 9 ? '9+' : badgeCount}
               </span>
             )}
           </button>
+          <span className="mt-1 text-[10px] md:text-xs font-semibold text-slate-500 tracking-wide leading-tight">
+            Nieuw
+          </span>
         </div>
 
         {right.map(renderTab)}
