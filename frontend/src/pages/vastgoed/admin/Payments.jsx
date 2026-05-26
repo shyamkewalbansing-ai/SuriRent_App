@@ -673,13 +673,20 @@ export default function Payments() {
                 <MobilePaymentCard p={p} onClick={() => toggleExpand(p.id)} />
                 {expanded === p.id && (
                   <div className="mt-1.5 mb-1 px-1.5" data-testid={`mp-detail-${p.id}`}>
-                    <div className="bg-emerald-50/70 border border-emerald-100 rounded-2xl p-3.5 space-y-2 text-[12px]">
+                    <div className="bg-slate-50 border border-slate-100 rounded-2xl p-3.5 space-y-2 text-[12px]">
                       <DetailRow label="Kwitantie" value={<span className="font-mono font-bold">{p.receipt_number}</span>} />
                       {p.invoice_number && (
                         <DetailRow label="Factuur" value={<span className="font-mono font-bold text-[#FF5C00]">{p.invoice_number}</span>} />
                       )}
                       <DetailRow label="Datum" value={new Date(p.paid_at).toLocaleString('nl-NL')} />
                       <DetailRow label="Categorie" value={CATEGORY_LABELS[p.category] || p.category} />
+                      <DetailRow label="Methode" value={METHOD_LABELS[p.method] || p.method} />
+                      {p.period_month && (
+                        <DetailRow label="Periode" value={`${MONTHS_NL[p.period_month - 1]} ${p.period_year}`} />
+                      )}
+                      {p.approved_by && (
+                        <DetailRow label="Goedgekeurd door" value={p.approved_by} />
+                      )}
                       {p.note && <DetailRow label="Notitie" value={p.note} />}
                       <div className="grid grid-cols-3 gap-1.5 pt-2">
                         <a href={`${apiBase}/payments/${p.id}/pdf`} target="_blank" rel="noreferrer"

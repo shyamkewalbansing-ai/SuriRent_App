@@ -523,3 +523,8 @@ Zelfde patroon toegepast op de laatste 5 admin-pagina's voor volledige Beheer-su
 - ✅ **Kasgeld** (`Kasgeld.jsx`): balance-cards (positief) `orange-100` → `slate-100` + shadow, tabel idem. Rode (negatief) balance behoudt rode styling als waarschuwing.
 
 Lint clean. Verified via desktop screenshots (1440×900): élke admin-pagina (Overzicht, Locaties, Appartementen, Huurders, Contracten, Betalingen, Facturen, Borg, Kasgeld, Onderhoud) gebruikt nu hetzelfde patroon — uniform premium SaaS look.
+
+
+### Mobile Payment expand + Bottom-nav FAB curve (2026-02-26)
+- ✅ **Mobile Betaling-detail uitgebreid**: van 4 naar 6+ rijen (Kwitantie, Factuur, Datum, Categorie, **Methode**, Periode, **Goedgekeurd door**, Notitie) — matcht nu de desktop view. Detail-paneel ook van `bg-emerald-50/70` → `bg-slate-50` + slate-100 border (consistent).
+- ✅ **Bottom-nav FAB curved indent**: iOS-stijl holle boog rond de + knop. Een `#F7F8FA` (page-bg) gekleurde cirkel-puck (60×60 mobile, 80×80 tablet) absolute-positioned achter de FAB doorbreekt de witte nav-top → simuleert een uitgesneden boog waar de FAB "doorheen steekt". FAB iets groter (w-10→w-12), ring matcht nu page-bg ipv wit, shadow iets sterker voor diepte.
