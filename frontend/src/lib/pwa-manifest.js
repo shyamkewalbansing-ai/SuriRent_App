@@ -101,9 +101,9 @@ function pickRole(path = '', search = '') {
   const p = (path || '').toLowerCase();
   if (p.startsWith('/admin')) return 'beheer';
   if (p === '/kiosk/klant' || p.startsWith('/kiosk/klant')) return 'klant';
+  if (p === '/kiosk/huurder' || p.startsWith('/kiosk/huurder')) return 'huurder';
   if (p === '/kiosk' || p.startsWith('/kiosk')) return 'kiosk';
   if (p.startsWith('/huurder')) return 'huurder';
-  // /login → lees `?target=` query om af te leiden welke PWA-rol de gebruiker bezig is.
   if (p === '/login' || p.startsWith('/login')) {
     const q = (search || '').toLowerCase();
     if (q.includes('target=kiosk')) return 'kiosk';

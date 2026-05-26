@@ -2,7 +2,7 @@
   "name": "SuriRent Huurder",
   "short_name": "Huurder",
   "description": "Huurdersportaal voor SuriRent — saldo, betalingen, kwitanties en onderhoud.",
-  "start_url": "/huurder?source=pwa",
+  "start_url": "/kiosk/huurder?source=pwa",
   "scope": "/",
   "display": "standalone",
   "orientation": "any",
