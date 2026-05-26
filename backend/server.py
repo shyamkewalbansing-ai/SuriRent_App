@@ -2621,6 +2621,11 @@ async def kiosk_pin(body: PinIn, request: Request, response: Response):
     secret, so anyone who knows it is implicitly trusted to access admin
     surfaces of that company. This lets the kiosk "Beheerder" button drop
     the user straight into /admin without a second login.
+
+    NEW: Als de PIN niet matcht met een company-shared PIN, proberen we
+    ALLE actieve kiosk-medewerker PINs. Dat geeft elke medewerker een eigen
+    `/login` route → direct naar `/kiosk` mét vooringestelde employee-sessie.
+    Medewerkers krijgen GEEN admin_token (kunnen dus niet bij Beheer).
     """
     throttle_key = f"kiosk:{_client_ip(request)}"
     _pin_throttle_check(throttle_key)
@@ -2630,7 +2635,37 @@ async def kiosk_pin(body: PinIn, request: Request, response: Response):
         if verify_password(body.pin, d.get("pin_hash", "")):
             matched_company_id = d["company_id"]
             break
+
+    # ---- NIEUWE FLOW: employee PIN ----
     if not matched_company_id:
+        emp_docs = await db.employees.find(
+            {"active": True, "app_role": "kiosk", "kiosk_pin_hash": {"$exists": True, "$ne": None}},
+            {"_id": 0},
+        ).to_list(2000)
+        matched_emp = None
+        for e in emp_docs:
+            if verify_password(body.pin, e.get("kiosk_pin_hash", "")):
+                matched_emp = e
+                break
+        if matched_emp:
+            _pin_throttle_clear(throttle_key)
+            cid = matched_emp.get("company_id")
+            c = await db.companies.find_one({"id": cid}, {"_id": 0}) if cid else None
+            token = create_token({
+                "sub": "kiosk", "type": "kiosk", "company_id": cid,
+            }, KIOSK_TOKEN_MIN)
+            _set_access_cookie(response, token, name="kiosk_token", minutes=KIOSK_TOKEN_MIN)
+            return {
+                "token": token,
+                "company": c and {k: c[k] for k in ("id", "slug", "name")},
+                "admin_token": None,
+                "admin_user": None,
+                "employee": {
+                    "id": matched_emp["id"],
+                    "name": matched_emp.get("name", ""),
+                    "pin": body.pin,  # frontend gebruikt dit voor sessionStorage → withKioskEmployee()
+                },
+            }
         _pin_throttle_fail(throttle_key)
         raise HTTPException(status_code=401, detail="Ongeldige PIN code")
     _pin_throttle_clear(throttle_key)
@@ -2683,6 +2718,15 @@ async def set_kiosk_pin(body: SetPinIn, user=Depends(get_current_user)):
     for o in others:
         if verify_password(body.pin, o.get("pin_hash", "")):
             raise HTTPException(status_code=400, detail="Deze PIN is al in gebruik door een ander bedrijf, kies een andere")
+    # Check uniqueness against employee kiosk-PINs (since /auth/kiosk-pin now
+    # also tries employee PINs, a clash would cause unexpected employee login).
+    emps = await db.employees.find(
+        {"active": True, "kiosk_pin_hash": {"$exists": True, "$ne": None}},
+        {"_id": 0, "name": 1, "kiosk_pin_hash": 1},
+    ).to_list(2000)
+    for e in emps:
+        if verify_password(body.pin, e.get("kiosk_pin_hash", "")):
+            raise HTTPException(status_code=409, detail=f"Deze PIN is al in gebruik door medewerker {e.get('name', '')}, kies een andere")
     await db.kiosk_pins.update_one(
         {"company_id": cid},
         {"$set": {"company_id": cid, "pin_hash": hash_password(body.pin), "updated_at": iso(now_utc())}},
@@ -5012,13 +5056,31 @@ async def update_employee(eid: str, body: EmployeeIn, user=Depends(get_current_u
 async def set_employee_kiosk_pin(eid: str, body: EmployeeKioskPinIn, user=Depends(require_role("admin"))):
     """Beheerder zet/wijzigt een 4-6 cijferige PIN voor een kiosk-medewerker.
     Met deze PIN kan de medewerker zich op de Receptie Kiosk identificeren
-    voordat hij een betaling registreert (die dan in pending_approval gaat)."""
+    voordat hij een betaling registreert (die dan in pending_approval gaat).
+
+    Sinds 2026-02-26: deze PIN werkt ook op `/login` als directe medewerker-login.
+    Daarom moet de PIN globaal uniek zijn (geen botsing met company-PIN of een
+    andere medewerker-PIN), anders zou /auth/kiosk-pin de verkeerde sessie geven.
+    """
     pin = (body.pin or "").strip()
     if not pin.isdigit() or not (4 <= len(pin) <= 6):
         raise HTTPException(status_code=400, detail="PIN moet 4-6 cijfers zijn")
     e = await db.employees.find_one({"id": eid, **scope(user)}, {"_id": 0})
     if not e:
         raise HTTPException(status_code=404, detail="Werknemer niet gevonden")
+    # Uniqueness: company-shared PINs (any company)
+    company_pins = await db.kiosk_pins.find({}, {"_id": 0, "pin_hash": 1}).to_list(1000)
+    for cp in company_pins:
+        if verify_password(pin, cp.get("pin_hash", "")):
+            raise HTTPException(status_code=409, detail="Deze PIN is al in gebruik als bedrijfs-PIN, kies een andere")
+    # Uniqueness: andere medewerkers (alle bedrijven)
+    others = await db.employees.find(
+        {"id": {"$ne": eid}, "active": True, "kiosk_pin_hash": {"$exists": True, "$ne": None}},
+        {"_id": 0, "id": 1, "name": 1, "kiosk_pin_hash": 1, "company_id": 1},
+    ).to_list(2000)
+    for o in others:
+        if verify_password(pin, o.get("kiosk_pin_hash", "")):
+            raise HTTPException(status_code=409, detail=f"Deze PIN is al in gebruik door {o.get('name', 'een andere medewerker')}, kies een andere")
     pin_hash = hash_password(pin)
     await db.employees.update_one({"id": eid}, {"$set": {"kiosk_pin_hash": pin_hash, "app_role": "kiosk"}})
     return {"ok": True, "has_kiosk_pin": True}

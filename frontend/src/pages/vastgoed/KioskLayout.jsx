@@ -1226,6 +1226,12 @@ export default function KioskLayout() {
     api.delete('/kiosk/customer-display').catch(() => {});
     localStorage.removeItem('kiosk_token');
     localStorage.removeItem('kiosk_company');
+    // Eventuele kiosk-medewerker sessie ook opruimen.
+    try {
+      sessionStorage.removeItem('kiosk_emp_id');
+      sessionStorage.removeItem('kiosk_emp_name');
+      sessionStorage.removeItem('kiosk_emp_pin');
+    } catch { /* ignore */ }
     navigate('/login', { replace: true });
   }, [navigate]);
 
@@ -1282,8 +1288,10 @@ export default function KioskLayout() {
   // afgegeven (PIN is shared secret van het bedrijf), spring direct naar
   // /admin. We doen een hard navigation zodat AuthProvider zijn /auth/me
   // opnieuw uitvoert met het nieuwe admin_token (en niet de oude user=null
-  // state uit de cache van vóór de PIN-login). Anders terug naar /login in
-  // admin-modus zodat de gebruiker met wachtwoord kan inloggen.
+  // state uit de cache van vóór de PIN-login).
+  // Voor MEDEWERKER-logins (employee-PIN, geen admin_token): verbergen we
+  // de knop volledig — zij mogen niet bij de Beheer-omgeving. Daarom geven
+  // we adminMode hieronder alleen door aan de buttons als er een token is.
   const adminMode = useCallback(() => {
     let hasAdminToken = false;
     try { hasAdminToken = !!localStorage.getItem('admin_token'); } catch { /* ignore */ }
@@ -1293,6 +1301,24 @@ export default function KioskLayout() {
       navigate('/login?view=admin', { replace: true });
     }
   }, [navigate]);
+
+  // Snapshot van admin_token aanwezigheid — wordt herberekend wanneer er
+  // een medewerker (uit)logt zodat de Beheerder-knop direct verschijnt of
+  // verdwijnt.
+  const [hasAdminAccess, setHasAdminAccess] = useState(() => {
+    try { return !!localStorage.getItem('admin_token'); } catch { return false; }
+  });
+  useEffect(() => {
+    const refresh = () => {
+      try { setHasAdminAccess(!!localStorage.getItem('admin_token')); } catch { /* ignore */ }
+    };
+    window.addEventListener('storage', refresh);
+    window.addEventListener('kiosk-employee-changed', refresh);
+    return () => {
+      window.removeEventListener('storage', refresh);
+      window.removeEventListener('kiosk-employee-changed', refresh);
+    };
+  }, []);
 
   const reset = () => {
     setApartment(null); setOverview(null); setPaymentPayload(null); setPaymentResult(null);
@@ -1351,7 +1377,7 @@ export default function KioskLayout() {
           )}
           {step === 'select' && (
             <ApartmentSelect onSelect={(a) => { setApartment(a); setStep('overview'); }}
-              onAdmin={adminMode} onExit={exit} />
+              onAdmin={hasAdminAccess ? adminMode : null} onExit={exit} />
           )}
           {step === 'overview' && apartment && (
             <TenantOverview apartment={apartment} onBack={() => setStep('select')}
@@ -1397,7 +1423,7 @@ export default function KioskLayout() {
               </div>
             )}
             <button onClick={adminMode} data-testid="kiosk-admin-btn-desktop"
-              className="bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-lg px-5 py-2 text-sm">Beheerder</button>
+              className={`bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-lg px-5 py-2 text-sm ${hasAdminAccess ? '' : 'hidden'}`}>Beheerder</button>
             <button onClick={exit} data-testid="kiosk-lock-btn-desktop"
               className="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-lg px-5 py-2 text-sm">Uit</button>
           </div>

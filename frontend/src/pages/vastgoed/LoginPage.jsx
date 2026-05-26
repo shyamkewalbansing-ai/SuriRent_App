@@ -5,6 +5,7 @@ import { Loader2, Delete, KeyRound, ArrowLeft, Eye, EyeOff, UserPlus, LogIn, Che
 import { api, formatError } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { setPreferredRole, isStandalonePWA, getPreferredRole, routeForRole } from '../../lib/pwaRole';
+import { setKioskEmployee, clearKioskEmployee } from '../../components/KioskEmployee';
 import {
   detectCompanySlug, fetchBranding, fetchBrandingByHost, applyBranding,
   resolveLogoUrl, readCachedBranding, clearBrandingCache,
@@ -70,13 +71,28 @@ function PinLanding({ onSuccess, onPassword, onRegister, branding, pwaTarget }) 
       const { data } = await api.post('/auth/kiosk-pin', { pin: code });
       if (data?.token) localStorage.setItem('kiosk_token', data.token);
       if (data?.company) localStorage.setItem('kiosk_company', JSON.stringify(data.company));
-      // PIN is the company's shared secret — backend also returns an admin token
-      // for the company's primary admin so the Kiosk "Beheerder" button can drop
-      // directly into /admin without a second login.
-      if (data?.admin_token) localStorage.setItem('admin_token', data.admin_token);
-      // Preferred role for PWA auto-redirect on next launch follows the chosen
-      // shortcut: Beheer-icoon → admin, Kiosk-icoon → kiosk.
-      setPreferredRole(isAdminTarget ? 'admin' : 'kiosk');
+      // Detecteer of dit een MEDEWERKER-PIN was (eigen PIN) of een bedrijfs-PIN.
+      // Bij medewerker: GEEN admin_token (zij mogen niet bij Beheer), sla
+      // employee-sessie op zodat alle betalingen automatisch pending_approval
+      // krijgen met deze medewerker als ontvanger.
+      if (data?.employee?.id) {
+        // Eerst verzekerd verwijderen — een vorige admin-sessie mag geen
+        // ongewenste toegang houden voor deze medewerker.
+        try { localStorage.removeItem('admin_token'); } catch { /* ignore */ }
+        setKioskEmployee({
+          id: data.employee.id,
+          name: data.employee.name || 'Medewerker',
+          pin: data.employee.pin || code,
+        });
+        setPreferredRole('kiosk');
+      } else {
+        // Shared company-PIN: backend geeft ook een admin_token mee zodat
+        // de "Beheerder" knop direct doorgaat naar /admin. Vorige employee-
+        // sessie van een collega legen — anders blijft die meeknopen.
+        try { clearKioskEmployee(); } catch { /* ignore */ }
+        if (data?.admin_token) localStorage.setItem('admin_token', data.admin_token);
+        setPreferredRole(isAdminTarget ? 'admin' : 'kiosk');
+      }
       onSuccess();
     } catch (e) {
       setError(formatError(e, 'Ongeldige PIN code'));
@@ -665,8 +681,12 @@ export default function LoginPage() {
 
   // After PIN-success, navigate to the target surface. Both shortcuts require
   // PIN entry; the difference is only where the user lands afterwards.
+  // BELANGRIJK: medewerker-PIN logins krijgen GEEN admin_token, dus we sturen
+  // ze altijd naar /kiosk — ook als ze de "Beheer"-shortcut hebben gebruikt.
   const onPinSuccess = () => {
-    if (pwaTarget === 'admin') {
+    let hasAdmin = false;
+    try { hasAdmin = !!localStorage.getItem('admin_token'); } catch { /* ignore */ }
+    if (pwaTarget === 'admin' && hasAdmin) {
       setPreferredRole('admin');
       // Hard-navigate so AuthProvider re-runs /auth/me with the new admin_token
       // that the kiosk-pin endpoint just returned.

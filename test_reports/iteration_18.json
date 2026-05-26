@@ -1,0 +1,56 @@
+{
+  "summary": "Verified new Employee-PIN direct login feature (medewerker PIN op /login). Backend: 9/9 NEW pytest cases PASS (employee PIN→kiosk_token+employee+admin_token=null; company PIN→admin_token+admin_user; invalid→401; throttle locks after 8 fails→429; PIN-uniqueness 409 against company-PIN, against other employee with name in detail, and against /auth/kiosk-set-pin with employee PIN). Backend regression 12/12 PASS (test_payment_approval_workflow.py). Frontend mobile 393x852: employee PIN 9999 lands on /kiosk, admin_token absent, kiosk_token set, sessionStorage emp_id/name/pin populated, Beheerder button HIDDEN, Maria K. badge + Uit visible; Uit clears all storage and returns to /login. Company PIN 1234 lands on /kiosk WITH admin_token, Beheerder visible, click navigates to /admin (no second login). Admin email+password regression on desktop also passes. No critical issues.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/auth/kiosk-pin throttle", "issue": "In-memory PIN_ATTEMPTS uses request IP. Running TestZPinThrottle locks the kubernetes ingress IP for 5min and breaks regression tests in the SAME pytest session if executed afterwards. Workaround: restart backend (in-memory dict) or always run throttle LAST + separate session. The lockout itself is by design but the lack of an admin reset endpoint means rerunning suites within 5min requires supervisor restart."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_employee_pin_login.py",
+    "/app/backend/tests/test_payment_approval_workflow.py",
+    "/app/test_reports/pytest/iteration18_emppin.xml",
+    "/app/test_reports/pytest/iteration18_regression.xml"
+  ],
+  "action_items": [
+    "Optional: add an admin-only POST /api/auth/pin-throttle-reset endpoint or store throttle in MongoDB/Redis so lockout survives backend restarts and can be cleared without supervisor restart. Currently lockout is per-process in-memory only.",
+    "Optional: consider migrating the 5-min lockout window or attempt count to env vars surfaced in admin UI so support can debug."
+  ],
+  "critical_code_review_comments": [
+    "/app/backend/server.py L2615-2706: kiosk-pin endpoint now has both company-PIN and employee-PIN branches; logic is clear and uniqueness is enforced upstream at PIN-set endpoints — good defensive design.",
+    "/app/backend/server.py L5055-5086: employee kiosk-PIN setter now validates uniqueness across (a) all company-shared PINs and (b) all other active employee PINs across all companies — name of clashing employee included in 409 detail. Globally unique PIN across multi-tenant SaaS is correct given the login endpoint matches any PIN. Solid.",
+    "/app/backend/server.py L2727-2729: kiosk-set-pin uses status_code=409 with employee name in detail when admin tries to set a company PIN equal to an existing employee PIN — consistent with employee endpoint.",
+    "/app/frontend/src/pages/vastgoed/KioskLayout.jsx L1305-1320: hasAdminAccess state refreshes on 'kiosk-employee-changed' event AND every storage change — Beheerder button toggles correctly. Good.",
+    "/app/frontend/src/pages/vastgoed/LoginPage.jsx L70-95: onPinSuccess explicitly removes any stale admin_token before storing the employee session — prevents cross-session leakage if previous user was an admin. Good.",
+    "Throttle storage is in-memory per-process — a Kubernetes pod restart wipes lockouts. Acceptable for a single-pod deployment but worth flagging for future horizontal scaling (each pod would have its own throttle state)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_employee_pin_login.py (new — 9 pytest cases covering employee PIN login, throttle, uniqueness, regression)"
+  ],
+  "success_rate": {"backend": "100% (9/9 new + 12/12 regression = 21/21)", "frontend": "100% (3/3 kiosk flows + admin regression)"},
+  "test_credentials": "Admin: admin@vastgoed.sr / admin123, Company PIN: 1234, Employee Maria K.: 9999, Second kiosk employee reset to 8888",
+  "seed_data_creation": "Reset Maria K. (first kiosk employee) PIN to 9999 and second kiosk employee to 8888 for uniqueness tests. Created one TEST pending_approval payment during regression check.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Throttle is in-memory per process and uses request IP. If running PIN tests back-to-back, the throttle test in test_employee_pin_login.py (TestZPinThrottle) will lock the IP for 5min, breaking any subsequent /api/auth/kiosk-pin call until either 5min pass OR backend is restarted (`sudo supervisorctl restart backend`). Run test_payment_approval_workflow.py BEFORE the throttle test, or restart backend in between.",
+  "verification_points_status": {
+    "be_employee_pin_returns_kiosk_token_employee_no_admin": "PASS",
+    "be_company_pin_returns_admin_token_no_employee": "PASS",
+    "be_invalid_pin_401": "PASS",
+    "be_throttle_429_after_8_fails": "PASS",
+    "be_employee_pin_uniqueness_vs_company_pin_409": "PASS",
+    "be_employee_pin_uniqueness_vs_other_emp_409_with_name": "PASS",
+    "be_kiosk_set_pin_clash_with_employee_409": "PASS",
+    "be_regression_approval_workflow_12_of_12": "PASS",
+    "be_company_admin_token_usable_for_me": "PASS",
+    "fe_mobile_employee_pin_lands_kiosk_no_admin_token_no_beheerder": "PASS",
+    "fe_mobile_employee_uit_clears_storage_returns_login": "PASS",
+    "fe_mobile_company_pin_admin_token_beheerder_visible_routes_admin": "PASS",
+    "fe_desktop_admin_email_pw_regression": "PASS"
+  }
+}
