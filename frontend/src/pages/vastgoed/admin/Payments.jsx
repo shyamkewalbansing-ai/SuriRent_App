@@ -98,7 +98,7 @@ function MobilePaymentCard({ p, onClick }) {
   return (
     <button onClick={onClick} type="button"
       data-testid={`mp-card-${p.id}`}
-      className="w-full text-left bg-gradient-to-br from-[#FFFBF2] via-[#FFF6E4] to-[#FFF0D2] rounded-3xl shadow-[0_3px_10px_-6px_rgba(220,150,60,0.18)] active:scale-[0.99] transition-transform"
+      className="w-full text-left bg-white rounded-3xl border border-slate-100 shadow-[0_2px_8px_-4px_rgba(0,0,0,0.08)] active:scale-[0.99] transition-transform"
       style={{
         padding: 'clamp(14px, 4vw, 20px) clamp(14px, 4vw, 20px)',
       }}>
