@@ -408,12 +408,11 @@ function MobileTabBar({ active, onChange, tabs, onOpenMenu, user, badgeCount }) 
             aan elke kant), zodat het visueel een knop in een holle uitsparing
             lijkt waar de hele + in past. */}
         <div className="relative flex items-end justify-center pb-0.5">
-          {/* Bol — fors groter dan de FAB (80×80 vs 48×48 op mobile, 100×100
-              vs 64×64 op tablet). Center matcht exact het FAB-center zodat de
-              FAB nergens buiten de bol valt. */}
+          {/* Bol — strak rond de FAB met dunne page-bg ring (~3-4px) voor
+              een nette holle uitsparing zonder te veel ruimte. */}
           <span
             aria-hidden
-            className="absolute left-1/2 -translate-x-1/2 -top-[30px] md:-top-[38px] w-[80px] h-[80px] md:w-[100px] md:h-[100px] rounded-full bg-[#F7F8FA] pointer-events-none"
+            className="absolute left-1/2 -translate-x-1/2 -top-[16px] md:-top-[22px] w-[54px] h-[54px] md:w-[72px] md:h-[72px] rounded-full bg-[#F7F8FA] pointer-events-none"
           />
           <button
             onClick={onOpenMenu}
