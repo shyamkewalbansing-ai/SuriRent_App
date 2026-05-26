@@ -527,4 +527,37 @@ Lint clean. Verified via desktop screenshots (1440×900): élke admin-pagina (Ov
 
 ### Mobile Payment expand + Bottom-nav FAB curve (2026-02-26)
 - ✅ **Mobile Betaling-detail uitgebreid**: van 4 naar 6+ rijen (Kwitantie, Factuur, Datum, Categorie, **Methode**, Periode, **Goedgekeurd door**, Notitie) — matcht nu de desktop view. Detail-paneel ook van `bg-emerald-50/70` → `bg-slate-50` + slate-100 border (consistent).
+
+### Approval Workflow voor Kiosk-medewerker betalingen (2026-02-26)
+**Doel:** Betalingen van kiosk-medewerkers vereisen eerst beheerder-goedkeuring met handtekening voordat ze als "ontvangen" tellen.
+
+**Backend (`server.py`):**
+- Nieuwe velden op Payment: `status` (approved | pending_approval | rejected), `kiosk_employee_id`, `kiosk_employee_name`, `approved_at`, `approved_by_user_id`, `signature_data_url`, `rejected_reason`.
+- Nieuwe velden op Employee: `app_role` ("admin" | "boekhouder" | "kiosk"), `kiosk_pin_hash`, `has_kiosk_pin`.
+- `_create_payment_doc()` accepteert nu `status` + kiosk metadata. Pending betalingen koppelen GEEN factuur (pas bij approval).
+- `GET /api/payments?status=approved|pending_approval|all` — default sluit pending uit (totalen kloppen).
+- `GET /api/payments/pending-count` — lichte counter voor bell-badge.
+- `POST /api/payments/{id}/approve` — beheerder zet handtekening (`signature_data_url` data URL), factuur wordt alsnog gekoppeld + gesloten.
+- `POST /api/payments/{id}/reject` — beheerder wijst af met reden.
+- `POST /api/employees/{id}/kiosk-pin` — beheerder zet 4-6 cijferige PIN, employee krijgt `app_role=kiosk`.
+- `POST /api/kiosk/employee-verify` — kiosk verifieert medewerker-PIN, returnt id+naam.
+- `POST /api/kiosk/payments?employee_id=X&employee_pin=Y` — bestaand endpoint uitgebreid: met employee_id → status=`pending_approval` + push naar admins; zonder employee_id → legacy direct approved.
+
+**Frontend:**
+- Nieuwe `<SignaturePad>` component — canvas met touch/muis support, retina-correct, "Wissen" button, geeft PNG data URL terug via onChange.
+- `Payments.jsx` laadt nu pending parallel met approved + tonen ze in aparte "⏳ Wacht op goedkeuring · N" amber sectie bovenaan.
+- `<PendingPaymentCard>` met avatar, "Door Maria K. · Contant", amber bedrag, groene "Goedkeuren" knop.
+- `<ApprovePaymentSheet>` bottom sheet met betaling-info paneel, SignaturePad, en zowel "Goedkeuren" als "Afwijzen" met optionele reden.
+
+**Verified ✅:**
+- End-to-end backend test: pending creation → list filter → approve → factuur gekoppeld + gesloten → pending count terug naar 0
+- Legacy `/kiosk/payments` zonder employee_id blijft direct approved (backward compat)
+- Mobile screenshots tonen: pending sectie bovenaan, goedkeur sheet met handtekening canvas werkend
+- Lint clean (Python + JavaScript)
+
+**Nog te bouwen (P1 vervolg):**
+- Beheer UI om kiosk-medewerker PIN te kunnen instellen (Employees pagina)
+- Receptie Kiosk UI: "Medewerker kiezen + PIN" stap vóór betaling registreren
+- Bell-badge in admin header met `/payments/pending-count`
+
 - ✅ **Bottom-nav FAB curved indent**: iOS-stijl holle boog rond de + knop. Een `#F7F8FA` (page-bg) gekleurde cirkel-puck (60×60 mobile, 80×80 tablet) absolute-positioned achter de FAB doorbreekt de witte nav-top → simuleert een uitgesneden boog waar de FAB "doorheen steekt". FAB iets groter (w-10→w-12), ring matcht nu page-bg ipv wit, shadow iets sterker voor diepte.

@@ -331,6 +331,23 @@ class PaymentOut(BaseModel):
     note: Optional[str] = ""
     received_by: Optional[str] = ""
     approved_by: Optional[str] = ""
+    # Approval workflow — alleen Kiosk-medewerkers triggeren pending state.
+    # Beheerder/boekhouder betalingen krijgen direct status="approved".
+    status: Optional[str] = "approved"  # approved | pending_approval | rejected
+    kiosk_employee_id: Optional[str] = None
+    kiosk_employee_name: Optional[str] = None
+    approved_at: Optional[str] = None
+    approved_by_user_id: Optional[str] = None
+    signature_data_url: Optional[str] = None  # base64 PNG van handtekening
+    rejected_reason: Optional[str] = None
+
+
+class PaymentApproveIn(BaseModel):
+    signature_data_url: str  # base64 data URL van canvas handtekening
+
+
+class PaymentRejectIn(BaseModel):
+    reason: Optional[str] = ""
 
 
 # =====================================================================
@@ -3319,7 +3336,13 @@ async def _enrich_payment(p: dict) -> dict:
     return {**p, "tenant_name": tenant_name, "apartment_number": apt_number, "location_name": location_name}
 
 
-async def _create_payment_doc(body: PaymentIn, company_id: Optional[str] = None, approved_by: Optional[str] = None) -> dict:
+async def _create_payment_doc(body: PaymentIn, company_id: Optional[str] = None,
+                              approved_by: Optional[str] = None,
+                              status: str = "approved",
+                              kiosk_employee_id: Optional[str] = None,
+                              kiosk_employee_name: Optional[str] = None,
+                              approved_at: Optional[str] = None,
+                              approved_by_user_id: Optional[str] = None) -> dict:
     q = {"id": body.tenant_id}
     if company_id:
         q["company_id"] = company_id
@@ -3337,8 +3360,9 @@ async def _create_payment_doc(body: PaymentIn, company_id: Optional[str] = None,
     #  • Alleen voor categorie "huur" (overige categorieën hebben geen factuur).
     #  • Match op tenant + period_month + period_year wanneer beide aanwezig zijn.
     #  • Anders: pak de oudst openstaande huur-factuur van deze huurder.
+    #  • Bij pending_approval: koppelen we NIET automatisch — pas bij goedkeuring.
     matched_invoice = None
-    if body.category == "huur":
+    if body.category == "huur" and status == "approved":
         inv_q = {"tenant_id": body.tenant_id, "status": {"$ne": "paid"}}
         if company_id:
             inv_q["company_id"] = company_id
@@ -3367,14 +3391,17 @@ async def _create_payment_doc(body: PaymentIn, company_id: Optional[str] = None,
         "note": body.note or "",
         "received_by": (body.received_by or "").strip(),
         "approved_by": approved_by or company_name,
+        "status": status,
+        "kiosk_employee_id": kiosk_employee_id,
+        "kiosk_employee_name": kiosk_employee_name,
+        "approved_at": approved_at,
+        "approved_by_user_id": approved_by_user_id,
     }
     await db.payments.insert_one(doc)
     doc.pop("_id", None)
-    # Factuur sluiten — bedrag controleren tegen factuurbedrag is best-effort:
-    # huurder kan teveel of te weinig betalen. We sluiten als er minstens 95%
-    # van het factuurbedrag is voldaan; anders blijft de factuur open zodat
-    # de beheerder een tweede deel-betaling kan registreren.
-    if matched_invoice:
+    # Factuur sluiten — alleen voor approved payments. Pending betalingen krijgen
+    # bij goedkeuring alsnog de invoice-koppeling via /payments/{id}/approve.
+    if matched_invoice and status == "approved":
         try:
             tot_paid = float(body.amount or 0)
             inv_amt = float(matched_invoice.get("amount", 0))
@@ -3397,13 +3424,107 @@ async def _create_payment_doc(body: PaymentIn, company_id: Optional[str] = None,
 async def list_payments(
     user=Depends(get_current_user),
     tenant_id: Optional[str] = Query(None),
+    status: Optional[str] = Query(None, description="approved | pending_approval | all"),
     limit: int = Query(200),
 ):
     q = dict(scope(user))
     if tenant_id:
         q["tenant_id"] = tenant_id
+    # Standaard: alleen approved zien op de hoofdpagina. Pending heeft eigen sectie.
+    if status == "pending_approval":
+        q["status"] = "pending_approval"
+    elif status == "all":
+        pass  # geen filter
+    else:
+        # Default sluit pending uit zodat totalen kloppen.
+        q["status"] = {"$ne": "pending_approval"}
     docs = await db.payments.find(q, {"_id": 0}).sort("paid_at", -1).to_list(limit)
     return [await _enrich_payment(d) for d in docs]
+
+
+@api.get("/payments/pending-count")
+async def payments_pending_count(user=Depends(get_current_user)):
+    """Lichte endpoint voor de bell-badge: alleen telling, geen documenten."""
+    q = {**scope(user), "status": "pending_approval"}
+    n = await db.payments.count_documents(q)
+    return {"count": n}
+
+
+@api.post("/payments/{pid}/approve", response_model=PaymentOut)
+async def approve_payment(pid: str, body: PaymentApproveIn, user=Depends(require_role("admin"))):
+    """Beheerder keurt een pending kiosk-betaling goed. Slaat handtekening op
+    en koppelt eventueel een openstaande factuur (zelfde logic als nieuwe
+    approved betaling), zodat het bedrag NU pas meetelt in de totalen."""
+    q = {"id": pid, **scope(user)}
+    p = await db.payments.find_one(q, {"_id": 0})
+    if not p:
+        raise HTTPException(status_code=404, detail="Betaling niet gevonden")
+    if p.get("status") != "pending_approval":
+        raise HTTPException(status_code=400, detail="Deze betaling is geen pending betaling")
+    if not (body.signature_data_url or "").startswith("data:image/"):
+        raise HTTPException(status_code=400, detail="Handtekening ontbreekt")
+    approved_at = iso(now_utc())
+    # Probeer alsnog een openstaande factuur te matchen bij approval.
+    matched_invoice = None
+    if p.get("category") == "huur":
+        inv_q = {"tenant_id": p["tenant_id"], "status": {"$ne": "paid"}}
+        cid = p.get("company_id")
+        if cid:
+            inv_q["company_id"] = cid
+        if p.get("period_month") and p.get("period_year"):
+            scoped_q = {**inv_q, "period_month": p["period_month"], "period_year": p["period_year"]}
+            matched_invoice = await db.invoices.find_one(scoped_q, {"_id": 0})
+        if not matched_invoice:
+            matched_invoice = await db.invoices.find_one(
+                inv_q, {"_id": 0}, sort=[("period_year", 1), ("period_month", 1)]
+            )
+    update = {
+        "status": "approved",
+        "signature_data_url": body.signature_data_url,
+        "approved_at": approved_at,
+        "approved_by_user_id": user.get("id") or user.get("sub"),
+        "approved_by": user.get("name") or user.get("email") or "Beheerder",
+    }
+    if matched_invoice:
+        update["invoice_id"] = matched_invoice["id"]
+        update["invoice_number"] = matched_invoice.get("invoice_number")
+        # Sluit factuur als bedrag voldoende is.
+        try:
+            tot_paid = float(p.get("amount") or 0)
+            inv_amt = float(matched_invoice.get("amount", 0))
+            should_close = inv_amt <= 0 or tot_paid >= inv_amt * 0.95
+            inv_update = {
+                "payment_id": p["id"],
+                "receipt_number": p.get("receipt_number"),
+                "paid_method": p.get("method"),
+            }
+            if should_close:
+                inv_update["status"] = "paid"
+                inv_update["paid_at"] = approved_at
+            await db.invoices.update_one({"id": matched_invoice["id"]}, {"$set": inv_update})
+        except Exception as e:
+            print(f"[payments.approve] invoice close failed: {e}")
+    await db.payments.update_one({"id": pid}, {"$set": update})
+    p.update(update)
+    return await _enrich_payment(p)
+
+
+@api.post("/payments/{pid}/reject", response_model=PaymentOut)
+async def reject_payment(pid: str, body: PaymentRejectIn, user=Depends(require_role("admin"))):
+    """Beheerder wijst een pending betaling af (bv. verkeerd bedrag, geen geld
+    ontvangen). Bedrag wordt nooit meegerekend in totalen."""
+    q = {"id": pid, **scope(user)}
+    p = await db.payments.find_one(q, {"_id": 0})
+    if not p:
+        raise HTTPException(status_code=404, detail="Betaling niet gevonden")
+    if p.get("status") != "pending_approval":
+        raise HTTPException(status_code=400, detail="Deze betaling is geen pending betaling")
+    update = {"status": "rejected", "rejected_reason": (body.reason or "").strip(),
+              "approved_at": iso(now_utc()),
+              "approved_by_user_id": user.get("id") or user.get("sub")}
+    await db.payments.update_one({"id": pid}, {"$set": update})
+    p.update(update)
+    return await _enrich_payment(p)
 
 
 @api.post("/payments", response_model=PaymentOut)
@@ -4166,9 +4287,34 @@ async def get_customer_display(slug: str, response: Response):
 
 
 @api.post("/kiosk/payments", response_model=PaymentOut)
-async def kiosk_create_payment(body: PaymentIn, _session=Depends(get_kiosk_session)):
+async def kiosk_create_payment(
+    body: PaymentIn,
+    _session=Depends(get_kiosk_session),
+    employee_id: Optional[str] = Query(None, description="Kiosk-medewerker ID voor pending workflow"),
+    employee_pin: Optional[str] = Query(None, description="PIN ter dubbele bevestiging"),
+):
     cid = _session.get("company_id")
-    doc = await _create_payment_doc(body, cid)
+    # Als een kiosk-medewerker is opgegeven → betaling gaat in pending_approval.
+    # Beheerder ziet het en moet handtekening zetten om te bevestigen.
+    # Zonder employee_id → klassieke directe boeking (legacy gedrag).
+    kiosk_emp_id, kiosk_emp_name, status = None, None, "approved"
+    if employee_id:
+        emp = await db.employees.find_one(
+            {"id": employee_id, "company_id": cid, "active": True, "app_role": "kiosk"},
+            {"_id": 0},
+        )
+        if not emp:
+            raise HTTPException(status_code=404, detail="Kiosk-medewerker niet gevonden")
+        if not emp.get("kiosk_pin_hash") or not verify_password((employee_pin or "").strip(), emp["kiosk_pin_hash"]):
+            raise HTTPException(status_code=401, detail="Ongeldige PIN")
+        kiosk_emp_id, kiosk_emp_name, status = emp["id"], emp.get("name", ""), "pending_approval"
+
+    doc = await _create_payment_doc(
+        body, cid,
+        status=status,
+        kiosk_employee_id=kiosk_emp_id,
+        kiosk_employee_name=kiosk_emp_name,
+    )
     enriched = await _enrich_payment(doc)
 
     # Push notify alle admins van deze company (fire-and-forget — niet
@@ -4805,7 +4951,12 @@ async def invoice_pdf_endpoint(invoice_id: str):
 # =====================================================================
 class EmployeeIn(BaseModel):
     name: str
-    role: Optional[str] = ""
+    role: Optional[str] = ""  # legacy free-text role
+    # Nieuwe gestructureerde rol bepaalt wat de medewerker mag in de app:
+    #  - admin       : beheerder, kan goedkeuren en alles
+    #  - boekhouder  : zelfde betalings-rechten als admin (geen approval nodig)
+    #  - kiosk       : kiosk-medewerker — betalingen gaan in pending_approval
+    app_role: Optional[Literal["admin", "boekhouder", "kiosk"]] = None
     phone: Optional[str] = ""
     email: Optional[str] = ""
     monthly_salary: float = 0
@@ -4816,11 +4967,19 @@ class EmployeeIn(BaseModel):
 class EmployeeOut(EmployeeIn):
     id: str
     created_at: str
+    has_kiosk_pin: bool = False
+
+
+class EmployeeKioskPinIn(BaseModel):
+    pin: str  # 4-6 cijfers
 
 
 @api.get("/employees", response_model=List[EmployeeOut])
 async def list_employees(user=Depends(get_current_user)):
     docs = await db.employees.find(scope(user), {"_id": 0}).sort("name", 1).to_list(500)
+    # Strip pin_hash uit response; voeg has_kiosk_pin boolean toe.
+    for d in docs:
+        d["has_kiosk_pin"] = bool(d.pop("kiosk_pin_hash", None))
     return docs
 
 
@@ -4832,6 +4991,7 @@ async def create_employee(body: EmployeeIn, user=Depends(get_current_user)):
     doc = {"id": new_id(), "company_id": cid, **body.model_dump(), "created_at": iso(now_utc())}
     await db.employees.insert_one(doc)
     doc.pop("_id", None)
+    doc["has_kiosk_pin"] = False
     return doc
 
 
@@ -4844,7 +5004,50 @@ async def update_employee(eid: str, body: EmployeeIn, user=Depends(get_current_u
     )
     if not res:
         raise HTTPException(status_code=404, detail="Werknemer niet gevonden")
+    res["has_kiosk_pin"] = bool(res.pop("kiosk_pin_hash", None))
     return res
+
+
+@api.post("/employees/{eid}/kiosk-pin")
+async def set_employee_kiosk_pin(eid: str, body: EmployeeKioskPinIn, user=Depends(require_role("admin"))):
+    """Beheerder zet/wijzigt een 4-6 cijferige PIN voor een kiosk-medewerker.
+    Met deze PIN kan de medewerker zich op de Receptie Kiosk identificeren
+    voordat hij een betaling registreert (die dan in pending_approval gaat)."""
+    pin = (body.pin or "").strip()
+    if not pin.isdigit() or not (4 <= len(pin) <= 6):
+        raise HTTPException(status_code=400, detail="PIN moet 4-6 cijfers zijn")
+    e = await db.employees.find_one({"id": eid, **scope(user)}, {"_id": 0})
+    if not e:
+        raise HTTPException(status_code=404, detail="Werknemer niet gevonden")
+    pin_hash = hash_password(pin)
+    await db.employees.update_one({"id": eid}, {"$set": {"kiosk_pin_hash": pin_hash, "app_role": "kiosk"}})
+    return {"ok": True, "has_kiosk_pin": True}
+
+
+class KioskEmployeePinIn(BaseModel):
+    pin: str
+
+
+@api.post("/kiosk/employee-verify")
+async def kiosk_employee_verify(body: KioskEmployeePinIn, kiosk=Depends(get_kiosk_session)):
+    """Verifieert kiosk-medewerker PIN voor het gekoppelde bedrijf. Wordt
+    aangeroepen op de Receptie Kiosk vlak voor het registreren van een
+    pending betaling. Geeft de medewerker-info terug zodat de frontend
+    direct kan submitten met `kiosk_employee_id`."""
+    cid = kiosk.get("company_id")
+    if not cid:
+        raise HTTPException(status_code=401, detail="Kiosk niet gekoppeld aan een bedrijf")
+    pin = (body.pin or "").strip()
+    if not pin:
+        raise HTTPException(status_code=400, detail="PIN ontbreekt")
+    candidates = await db.employees.find(
+        {"company_id": cid, "active": True, "app_role": "kiosk"}, {"_id": 0}
+    ).to_list(500)
+    for emp in candidates:
+        h = emp.get("kiosk_pin_hash")
+        if h and verify_password(pin, h):
+            return {"employee_id": emp["id"], "employee_name": emp.get("name", "")}
+    raise HTTPException(status_code=401, detail="Ongeldige PIN")
 
 
 @api.delete("/employees/{eid}")

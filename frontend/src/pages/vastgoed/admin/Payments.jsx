@@ -1,12 +1,13 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   Plus, X, Check, Loader2, Search, FileText, Mail, ShieldCheck, ChevronRight, ChevronLeft,
-  ChevronDown, CalendarDays, Banknote, CheckCircle2,
+  ChevronDown, CalendarDays, Banknote, CheckCircle2, Clock,
   TrendingUp, Receipt, Wallet, Home as HomeIcon,
 } from 'lucide-react';
 import { api, formatError, fmtMoney, MONTHS_NL } from '../../../lib/api';
 import { useAutoRefresh } from '../../../lib/auto-refresh';
 import { SendDialog } from '../../../components/EmailDialog';
+import SignaturePad from '../../../components/SignaturePad';
 
 // =====================================================================
 // Helpers
@@ -98,6 +99,129 @@ const METHOD_PILL_CLASSES = {
   sumup:   'bg-pink-50 text-pink-700',
   uni5pay: 'bg-blue-50 text-blue-700',
 };
+
+// =====================================================================
+// PendingPaymentCard — zelfde stijl als MobilePaymentCard, maar met
+// "Goedkeuren" knop ipv expand. Bedrag in oranje (waarschuwing kleur).
+// =====================================================================
+function PendingPaymentCard({ p, onApprove }) {
+  const avatar = avatarColor(p.tenant_name);
+  return (
+    <div data-testid={`pending-card-${p.id}`}
+      className="bg-white rounded-2xl border border-amber-100 shadow-[0_1px_3px_-1px_rgba(245,158,11,0.15)] p-3 flex items-center gap-3 min-w-0">
+      <div className="rounded-full flex items-center justify-center font-black shrink-0 shadow-[0_1px_3px_-1px_rgba(0,0,0,0.10)]"
+        style={{ background: avatar.bg, color: avatar.fg, width: 42, height: 42, fontSize: 14 }}>
+        {initials(p.tenant_name)}
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="font-extrabold text-slate-900 leading-tight truncate text-[15px]">
+          {p.tenant_name || '—'}
+        </p>
+        <p className="text-slate-500 font-semibold truncate text-[11px] mt-0.5">
+          Door <span className="text-slate-700 font-bold">{p.kiosk_employee_name || 'Kiosk'}</span> · {METHOD_LABELS[p.method] || p.method}
+        </p>
+        <p className="font-black text-amber-700 tracking-tight mt-0.5 text-[15px]">
+          {p.currency} {fmtAmountWhole(p.amount)}
+        </p>
+      </div>
+      <button onClick={onApprove} data-testid={`pending-approve-${p.id}`}
+        className="shrink-0 h-10 px-3 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 text-white font-bold text-xs flex items-center gap-1.5 active:scale-95 transition shadow-[0_2px_6px_-2px_rgba(16,185,129,0.45)]">
+        <CheckCircle2 className="w-4 h-4" /> Goedkeuren
+      </button>
+    </div>
+  );
+}
+
+
+// =====================================================================
+// ApprovePaymentSheet — bottom sheet met handtekening canvas + bevestig
+// =====================================================================
+function ApprovePaymentSheet({ payment, onCancel, onApproved }) {
+  const [sig, setSig] = useState('');
+  const [hasSig, setHasSig] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState('');
+  const [showReject, setShowReject] = useState(false);
+  const [rejectReason, setRejectReason] = useState('');
+
+  const submit = async () => {
+    if (!hasSig) { setErr('Teken eerst uw handtekening'); return; }
+    setErr(''); setSaving(true);
+    try {
+      await api.post(`/payments/${payment.id}/approve`, { signature_data_url: sig });
+      onApproved();
+    } catch (e) { setErr(formatError(e)); }
+    finally { setSaving(false); }
+  };
+  const reject = async () => {
+    setErr(''); setSaving(true);
+    try {
+      await api.post(`/payments/${payment.id}/reject`, { reason: rejectReason });
+      onApproved();
+    } catch (e) { setErr(formatError(e)); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm md:bg-white/30 md:backdrop-blur-md flex items-end md:items-center justify-center md:p-4 modal-open"
+      data-testid="approve-modal" onClick={onCancel}>
+      <div className="bg-white w-full md:max-w-md rounded-t-3xl md:rounded-3xl shadow-2xl pt-3 pb-6 px-5 md:p-8 animate-slide-up-sheet md:animate-slide-up max-h-[92vh] overflow-auto"
+        style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 24px), 24px)' }}
+        onClick={(e) => e.stopPropagation()}>
+        <div className="md:hidden flex justify-center mb-3">
+          <span className="w-10 h-1.5 rounded-full bg-slate-200" />
+        </div>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-xl font-black text-slate-900">Goedkeuren</h3>
+          <button onClick={onCancel} className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center"><X className="w-4 h-4" /></button>
+        </div>
+        <div className="bg-slate-50 border border-slate-100 rounded-2xl p-3.5 mb-4 space-y-1.5 text-[13px]">
+          <DetailRow label="Huurder" value={<span className="font-bold text-slate-900">{payment.tenant_name}</span>} />
+          <DetailRow label="Bedrag" value={<span className="font-bold text-slate-900">{payment.currency} {fmtAmountWhole(payment.amount)}</span>} />
+          <DetailRow label="Methode" value={METHOD_LABELS[payment.method] || payment.method} />
+          <DetailRow label="Ontvangen door" value={payment.kiosk_employee_name || '—'} />
+        </div>
+        {!showReject ? (
+          <>
+            <p className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-2">Uw handtekening</p>
+            <SignaturePad onChange={(url, has) => { setSig(url); setHasSig(has); }} height={170} />
+            {err && <div className="mt-3 p-2.5 bg-red-50 border border-red-200 text-red-600 rounded-xl text-sm">{err}</div>}
+            <div className="mt-4 flex gap-2">
+              <button onClick={() => setShowReject(true)} disabled={saving} data-testid="approve-reject-btn"
+                className="px-3 h-12 rounded-xl bg-red-50 hover:bg-red-100 text-red-600 font-bold text-sm">
+                Afwijzen
+              </button>
+              <button onClick={submit} disabled={!hasSig || saving} data-testid="approve-confirm-btn"
+                className="flex-1 h-12 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 text-white font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-50 active:scale-95 transition">
+                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <><CheckCircle2 className="w-4 h-4" /> Goedkeuren</>}
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <p className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-2">Reden voor afwijzing (optioneel)</p>
+            <textarea value={rejectReason} onChange={(e) => setRejectReason(e.target.value)}
+              data-testid="reject-reason" rows={3}
+              className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-red-300"
+              placeholder="Bv. bedrag klopt niet, contant geld niet ontvangen…" />
+            {err && <div className="mt-3 p-2.5 bg-red-50 border border-red-200 text-red-600 rounded-xl text-sm">{err}</div>}
+            <div className="mt-4 flex gap-2">
+              <button onClick={() => setShowReject(false)} disabled={saving}
+                className="px-3 h-12 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm">
+                Terug
+              </button>
+              <button onClick={reject} disabled={saving} data-testid="reject-confirm-btn"
+                className="flex-1 h-12 rounded-xl bg-red-500 hover:bg-red-600 text-white font-bold text-sm flex items-center justify-center gap-2 active:scale-95 transition">
+                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <>Definitief afwijzen</>}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 
 // =====================================================================
 // Mobile-only (phone) views — geinspireerd op POS-terminal screenshot
@@ -499,6 +623,8 @@ function MonthStepper({ year, month, onPrev, onNext, isCurrent, count, sum, curr
 export default function Payments() {
   const [items, setItems] = useState([]);
   const [tenants, setTenants] = useState([]);
+  const [pending, setPending] = useState([]);
+  const [approveFor, setApproveFor] = useState(null);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [emailing, setEmailing] = useState(null);
@@ -513,8 +639,12 @@ export default function Payments() {
   const load = useCallback(async ({ silent = false } = {}) => {
     if (!silent) setLoading(true);
     try {
-      const [p, t] = await Promise.all([api.get('/payments'), api.get('/tenants')]);
-      setItems(p.data); setTenants(t.data);
+      const [p, t, pend] = await Promise.all([
+        api.get('/payments'),
+        api.get('/tenants'),
+        api.get('/payments?status=pending_approval'),
+      ]);
+      setItems(p.data); setTenants(t.data); setPending(pend.data || []);
     } finally { if (!silent) setLoading(false); }
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -658,6 +788,25 @@ export default function Payments() {
             onPrev={() => stepMonth(-1)} onNext={() => stepMonth(1)}
             isCurrent={isCurrentMonth}
             count={monthItems.length} sum={sumOf(monthItems)} currency={currency} />
+        )}
+
+        {/* PENDING APPROVAL — sectie bovenaan, vóór de approved-lijst.
+            Alleen zichtbaar als er pending betalingen wachten op goedkeuring.
+            Bedragen tellen NIET mee in "Vandaag" / "Maand" totalen. */}
+        {pending.length > 0 && (
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3 shadow-[0_1px_4px_-2px_rgba(245,158,11,0.20)]" data-testid="pending-section">
+            <div className="flex items-center justify-between mb-2 px-1">
+              <p className="text-[10px] font-black uppercase tracking-widest text-amber-700 inline-flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5" />
+                Wacht op goedkeuring · {pending.length}
+              </p>
+            </div>
+            <div className="space-y-2">
+              {pending.map((p) => (
+                <PendingPaymentCard key={p.id} p={p} onApprove={() => setApproveFor(p)} />
+              ))}
+            </div>
+          </div>
         )}
 
         {loading ? (
@@ -823,6 +972,13 @@ export default function Payments() {
       {creating && <PaymentForm tenants={tenants} initialInvoice={prefillInvoice}
         onCancel={() => { setCreating(false); setPrefillInvoice(null); }}
         onSaved={() => { setCreating(false); setPrefillInvoice(null); load(); }} />}
+      {approveFor && (
+        <ApprovePaymentSheet
+          payment={approveFor}
+          onCancel={() => setApproveFor(null)}
+          onApproved={() => { setApproveFor(null); load(); }}
+        />
+      )}
       {emailing && (
         <SendDialog
           documentType="payment"
