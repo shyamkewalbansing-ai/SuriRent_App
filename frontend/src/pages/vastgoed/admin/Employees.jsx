@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Plus, X, Check, Loader2, FileText, Users as UsersIcon, Trash2, Pencil, Receipt } from 'lucide-react';
+import { Plus, X, Check, Loader2, FileText, Users as UsersIcon, Trash2, Pencil, Receipt, KeyRound, ShieldCheck } from 'lucide-react';
 import { api, formatError, fmtMoney, MONTHS_NL } from '../../../lib/api';
 
 function PageHeader({ title, subtitle, action }) {
@@ -16,7 +16,7 @@ function PageHeader({ title, subtitle, action }) {
 
 function EmployeeForm({ initial, onCancel, onSaved }) {
   const [data, setData] = useState(initial || {
-    name: '', role: '', phone: '', email: '', monthly_salary: 0, currency: 'SRD', active: true,
+    name: '', role: '', app_role: 'admin', phone: '', email: '', monthly_salary: 0, currency: 'SRD', active: true,
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -34,6 +34,11 @@ function EmployeeForm({ initial, onCancel, onSaved }) {
     } catch (e) { setError(formatError(e)); }
     finally { setLoading(false); }
   };
+  const APP_ROLES = [
+    { value: 'admin', label: 'Beheerder', desc: 'Volledige toegang, betalingen direct geboekt' },
+    { value: 'boekhouder', label: 'Boekhouder', desc: 'Betalingen direct geboekt, financiën' },
+    { value: 'kiosk', label: 'Kiosk medewerker', desc: 'Betalingen via kiosk → goedkeuring vereist' },
+  ];
   return (
     <div className="fixed inset-0 z-50 bg-white/30 backdrop-blur-md flex items-center justify-center p-4 modal-sheet-auto" data-testid="employee-modal">
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg p-6 sm:p-8 animate-slide-up max-h-[90vh] overflow-auto">
@@ -49,8 +54,25 @@ function EmployeeForm({ initial, onCancel, onSaved }) {
               className="w-full mt-1 h-12 px-4 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] outline-none" />
           </div>
           <div>
-            <label className="text-xs font-bold uppercase tracking-widest text-slate-500">Functie</label>
+            <label className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-1.5 block">Systeemrol *</label>
+            <div className="grid grid-cols-1 gap-2">
+              {APP_ROLES.map((r) => (
+                <button key={r.value} type="button" onClick={() => setData({ ...data, app_role: r.value })}
+                  data-testid={`emp-approle-${r.value}`}
+                  className={`text-left p-3 rounded-xl border-2 transition ${data.app_role === r.value ? 'border-[#FF5C00] bg-orange-50' : 'border-slate-200 hover:border-slate-300'}`}>
+                  <div className="flex items-center justify-between">
+                    <p className="font-bold text-sm text-slate-900">{r.label}</p>
+                    {data.app_role === r.value && <Check className="w-4 h-4 text-[#FF5C00]" />}
+                  </div>
+                  <p className="text-xs text-slate-500 mt-0.5">{r.desc}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label className="text-xs font-bold uppercase tracking-widest text-slate-500">Functie / titel (optioneel)</label>
             <input value={data.role} onChange={(e) => setData({ ...data, role: e.target.value })} data-testid="emp-role"
+              placeholder="Bv. Receptionist, Kassier…"
               className="w-full mt-1 h-12 px-4 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] outline-none" />
           </div>
           <div className="grid sm:grid-cols-2 gap-3">
@@ -218,6 +240,7 @@ export default function Employees() {
   const [editing, setEditing] = useState(null);
   const [creatingEmp, setCreatingEmp] = useState(false);
   const [creatingSal, setCreatingSal] = useState(false);
+  const [pinFor, setPinFor] = useState(null);
 
   const load = useCallback(async () => {
     const [e, s] = await Promise.all([api.get('/employees'), api.get('/salaries')]);
@@ -264,16 +287,16 @@ export default function Employees() {
       </div>
 
       {view === 'employees' ? (
-        <div className="bg-white rounded-2xl border border-orange-100 overflow-hidden">
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-[0_1px_4px_-2px_rgba(15,23,42,0.06)] overflow-hidden">
           {employees.length === 0 ? (
-            <div className="p-10 text-center"><UsersIcon className="w-10 h-10 text-orange-300 mx-auto mb-3" />
+            <div className="p-10 text-center"><UsersIcon className="w-10 h-10 text-slate-300 mx-auto mb-3" />
               <p className="text-slate-500 font-semibold">Geen werknemers.</p></div>
           ) : (
             <table className="w-full text-sm">
-              <thead className="bg-orange-50/50 text-left">
-                <tr className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+              <thead className="bg-slate-50/70 text-left">
+                <tr className="text-[10px] font-black uppercase tracking-widest text-slate-400">
                   <th className="px-5 py-3">Naam</th>
-                  <th className="px-5 py-3 hidden md:table-cell">Functie</th>
+                  <th className="px-5 py-3">Rol</th>
                   <th className="px-5 py-3 hidden md:table-cell">Contact</th>
                   <th className="px-5 py-3 text-right">Salaris</th>
                   <th className="px-5 py-3">Status</th>
@@ -282,19 +305,31 @@ export default function Employees() {
               </thead>
               <tbody>
                 {employees.map((e) => (
-                  <tr key={e.id} data-testid={`emp-row-${e.id}`} className="border-t border-orange-50 hover:bg-orange-50/30">
-                    <td className="px-5 py-3 font-bold text-slate-900">{e.name}</td>
-                    <td className="px-5 py-3 hidden md:table-cell text-slate-600">{e.role || '—'}</td>
+                  <tr key={e.id} data-testid={`emp-row-${e.id}`} className="border-t border-slate-100 hover:bg-slate-50/60">
+                    <td className="px-5 py-3 font-bold text-slate-900">
+                      {e.name}
+                      {e.role && <span className="block text-[11px] font-normal text-slate-400 mt-0.5">{e.role}</span>}
+                    </td>
+                    <td className="px-5 py-3">
+                      <RoleBadge appRole={e.app_role} hasKioskPin={e.has_kiosk_pin} />
+                    </td>
                     <td className="px-5 py-3 hidden md:table-cell text-slate-500 text-xs">
                       <p>{e.phone || '—'}</p><p>{e.email}</p>
                     </td>
-                    <td className="px-5 py-3 text-right font-semibold text-slate-900">{fmtMoney(e.monthly_salary, e.currency)}</td>
+                    <td className="px-5 py-3 text-right font-bold text-slate-900">{fmtMoney(e.monthly_salary, e.currency)}</td>
                     <td className="px-5 py-3">
                       <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${e.active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
                         {e.active ? 'Actief' : 'Inactief'}
                       </span>
                     </td>
                     <td className="px-5 py-3 text-right space-x-1">
+                      {e.app_role === 'kiosk' && (
+                        <button onClick={() => setPinFor(e)} data-testid={`emp-pin-${e.id}`}
+                          title={e.has_kiosk_pin ? 'PIN wijzigen' : 'PIN instellen'}
+                          className={`inline-flex items-center justify-center w-8 h-8 rounded-lg ${e.has_kiosk_pin ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700' : 'bg-amber-50 hover:bg-amber-100 text-amber-700'}`}>
+                          <KeyRound className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                       <button onClick={() => setEditing(e)} data-testid={`emp-edit-${e.id}`}
                         className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600">
                         <Pencil className="w-3.5 h-3.5" />
@@ -311,9 +346,9 @@ export default function Employees() {
           )}
         </div>
       ) : (
-        <div className="bg-white rounded-2xl border border-orange-100 overflow-hidden">
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-[0_1px_4px_-2px_rgba(15,23,42,0.06)] overflow-hidden">
           {salaries.length === 0 ? (
-            <div className="p-10 text-center"><Receipt className="w-10 h-10 text-orange-300 mx-auto mb-3" />
+            <div className="p-10 text-center"><Receipt className="w-10 h-10 text-slate-300 mx-auto mb-3" />
               <p className="text-slate-500 font-semibold">Geen loonstroken.</p></div>
           ) : (
             <table className="w-full text-sm">
@@ -360,6 +395,98 @@ export default function Employees() {
       {creatingSal && <SalaryForm employees={employees}
         onCancel={() => setCreatingSal(false)}
         onSaved={() => { setCreatingSal(false); load(); }} />}
+      {pinFor && <KioskPinModal employee={pinFor}
+        onCancel={() => setPinFor(null)}
+        onSaved={() => { setPinFor(null); load(); }} />}
+    </div>
+  );
+}
+
+// =====================================================================
+// RoleBadge — visuele indicator van de systeemrol
+// =====================================================================
+function RoleBadge({ appRole, hasKioskPin }) {
+  if (!appRole) {
+    return <span className="text-xs text-slate-400 italic">Niet ingesteld</span>;
+  }
+  const variants = {
+    admin:      { label: 'Beheerder',   cls: 'bg-orange-50 text-[#C74600] border-orange-200' },
+    boekhouder: { label: 'Boekhouder',  cls: 'bg-blue-50 text-blue-700 border-blue-200' },
+    kiosk:      { label: 'Kiosk',       cls: 'bg-amber-50 text-amber-700 border-amber-200' },
+  };
+  const v = variants[appRole] || variants.admin;
+  return (
+    <div className="flex items-center gap-1.5">
+      <span className={`inline-block text-[10px] uppercase tracking-wider font-black px-2 py-0.5 rounded-full border ${v.cls}`}>
+        {v.label}
+      </span>
+      {appRole === 'kiosk' && !hasKioskPin && (
+        <span className="text-[10px] text-amber-600 font-bold" title="Stel een kiosk-PIN in om betalingen te kunnen registreren">
+          ⚠ PIN
+        </span>
+      )}
+    </div>
+  );
+}
+
+// =====================================================================
+// KioskPinModal — stel/wijzig PIN voor kiosk-medewerker
+// =====================================================================
+function KioskPinModal({ employee, onCancel, onSaved }) {
+  const [pin, setPin] = useState('');
+  const [pin2, setPin2] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState('');
+  const submit = async () => {
+    setErr('');
+    if (!/^\d{4,6}$/.test(pin)) { setErr('PIN moet 4-6 cijfers zijn'); return; }
+    if (pin !== pin2) { setErr('PIN herhalen klopt niet'); return; }
+    setSaving(true);
+    try {
+      await api.post(`/employees/${employee.id}/kiosk-pin`, { pin });
+      onSaved();
+    } catch (e) { setErr(formatError(e)); }
+    finally { setSaving(false); }
+  };
+  return (
+    <div className="fixed inset-0 z-50 bg-white/30 backdrop-blur-md flex items-center justify-center p-4 modal-sheet-auto"
+      data-testid="kiosk-pin-modal" onClick={onCancel}>
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-6 sm:p-8 animate-slide-up" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2.5">
+            <div className="w-10 h-10 rounded-2xl bg-amber-100 flex items-center justify-center">
+              <KeyRound className="w-5 h-5 text-amber-700" />
+            </div>
+            <h3 className="text-lg font-black text-slate-900">Kiosk PIN</h3>
+          </div>
+          <button onClick={onCancel} className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center"><X className="w-4 h-4" /></button>
+        </div>
+        <p className="text-sm text-slate-500 mb-4">
+          PIN voor <span className="font-bold text-slate-900">{employee.name}</span> om in te loggen op de kiosk vóór elke betaling.
+        </p>
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs font-bold uppercase tracking-widest text-slate-500">Nieuwe PIN (4-6 cijfers)</label>
+            <input value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              data-testid="kiosk-pin-input" type="password" inputMode="numeric" maxLength={6}
+              className="w-full mt-1 h-12 px-4 rounded-xl border-2 border-slate-200 focus:border-amber-500 outline-none font-mono text-lg tracking-widest text-center" />
+          </div>
+          <div>
+            <label className="text-xs font-bold uppercase tracking-widest text-slate-500">Herhaal PIN</label>
+            <input value={pin2} onChange={(e) => setPin2(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              data-testid="kiosk-pin-input-2" type="password" inputMode="numeric" maxLength={6}
+              className="w-full mt-1 h-12 px-4 rounded-xl border-2 border-slate-200 focus:border-amber-500 outline-none font-mono text-lg tracking-widest text-center" />
+          </div>
+        </div>
+        {err && <div className="mt-3 p-2.5 bg-red-50 border border-red-200 text-red-600 rounded-xl text-sm">{err}</div>}
+        <div className="mt-5 flex gap-2">
+          <button onClick={onCancel} className="px-4 h-11 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm">Annuleer</button>
+          <button onClick={submit} disabled={saving} data-testid="kiosk-pin-save"
+            className="flex-1 h-11 rounded-xl bg-gradient-to-br from-amber-500 to-amber-600 text-white font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-50 active:scale-95">
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <><ShieldCheck className="w-4 h-4" /> PIN opslaan</>}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

@@ -35,6 +35,7 @@ import TrialBanner from '../../components/TrialBanner';
 import ImpersonationBanner from '../../components/ImpersonationBanner';
 import LiveIndicator from '../../components/LiveIndicator';
 import OverdueBell from '../../components/OverdueBell';
+import PendingApprovalBell from '../../components/PendingApprovalBell';
 import ApartmentsBell from '../../components/ApartmentsBell';
 import QuickPayButton from '../../components/QuickPayButton';
 import PhotoUpload from '../../components/PhotoUpload';
@@ -227,6 +228,7 @@ function MobileTopLogo({ user, activeCompany }) {
         </div>
         {user?.role !== 'superadmin' && (
           <div className="flex items-center gap-2 md:gap-3 landscape:gap-1.5 shrink-0">
+            <PendingApprovalBell />
             <OverdueBell />
           </div>
         )}
@@ -1553,6 +1555,7 @@ function DesktopTopBar({ user, activeCompany, tab, tabs }) {
       <div className="flex items-center gap-2.5 shrink-0">
         <QuickPayButton />
         <ApartmentsBell />
+        <PendingApprovalBell />
         <OverdueBell />
       </div>
     </div>

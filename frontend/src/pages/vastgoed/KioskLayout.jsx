@@ -8,6 +8,10 @@ import {
   Droplets, User, Settings as SettingsIcon, Hash, CheckCircle,
 } from 'lucide-react';
 import { api, formatError, fmtMoney, MONTHS_NL } from '../../lib/api';
+import {
+  KioskEmployeeBar, KioskEmployeeLoginSheet,
+  getKioskEmployee, withKioskEmployee,
+} from '../../components/KioskEmployee';
 
 const variants = {
   enter: { opacity: 0, x: 60 },
@@ -727,7 +731,7 @@ function PaymentConfirm({ payload, overview, onBack, onSuccess }) {
   const submit = async () => {
     setLoading(true); setErr('');
     try {
-      const { data } = await api.post('/kiosk/payments', payload);
+      const { data } = await api.post(withKioskEmployee('/kiosk/payments'), payload);
       onSuccess(data);
     } catch (e) { setErr(formatError(e)); }
     finally { setLoading(false); }
@@ -770,7 +774,7 @@ function PaymentConfirm({ payload, overview, onBack, onSuccess }) {
           const finalPayload = { ...payload, note: `${payload.note || 'Mope'} · Ref ${ref}`.trim() };
           setLoading(true);
           try {
-            const { data: pay } = await api.post('/kiosk/payments', finalPayload);
+            const { data: pay } = await api.post(withKioskEmployee('/kiosk/payments'), finalPayload);
             onSuccess(pay);
           } catch (e) { setErr(formatError(e)); setLoading(false); }
           return;
@@ -1325,6 +1329,12 @@ export default function KioskLayout() {
   }, [step, overview]);
 
   const showDesktopBar = step !== 'check';
+  const [showEmpLogin, setShowEmpLogin] = useState(false);
+  // Bij stap 'pay' (eerste interactie waar een betaling wordt opgezet)
+  // zorg dat een kiosk-medewerker is ingelogd. Zo nee → toon login sheet.
+  useEffect(() => {
+    if (step === 'pay' && !getKioskEmployee()) setShowEmpLogin(true);
+  }, [step]);
 
   return (
     <div className="kiosk-fullscreen bg-orange-500" data-testid="kiosk-root">
@@ -1379,6 +1389,7 @@ export default function KioskLayout() {
             </span>
           </div>
           <div className="flex items-center gap-2 sm:gap-4">
+            <KioskEmployeeBar onLoginClick={() => setShowEmpLogin(true)} />
             {apartment && step !== 'select' && (
               <div className="flex items-center gap-2">
                 <span className="text-sm text-slate-400 font-medium hidden sm:inline">{apartment.tenant_name}</span>
@@ -1391,6 +1402,14 @@ export default function KioskLayout() {
               className="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-lg px-5 py-2 text-sm">Uit</button>
           </div>
         </div>
+      )}
+      {/* Kiosk-medewerker login sheet — verschijnt automatisch bij eerste
+          betaling als er nog geen sessie is, of handmatig via banner. */}
+      {showEmpLogin && (
+        <KioskEmployeeLoginSheet
+          onCancel={() => setShowEmpLogin(false)}
+          onSuccess={() => setShowEmpLogin(false)}
+        />
       )}
     </div>
   );
