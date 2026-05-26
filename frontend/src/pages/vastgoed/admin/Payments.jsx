@@ -501,7 +501,7 @@ export default function Payments() {
   const [creating, setCreating] = useState(false);
   const [emailing, setEmailing] = useState(null);
   const [search, setSearch] = useState('');
-  const [tab, setTab] = useState('all'); // all | today | week | month
+  const [tab, setTab] = useState('month'); // all | today | week | month — start op huidige maand
   const [methodFilter, setMethodFilter] = useState('all');
   const [filterOpen, setFilterOpen] = useState(false);
   const [expanded, setExpanded] = useState(null);
