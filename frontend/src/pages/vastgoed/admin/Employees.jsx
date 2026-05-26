@@ -35,7 +35,7 @@ function EmployeeForm({ initial, onCancel, onSaved }) {
     finally { setLoading(false); }
   };
   return (
-    <div className="fixed inset-0 z-50 bg-white/30 backdrop-blur-md flex items-center justify-center p-4" data-testid="employee-modal">
+    <div className="fixed inset-0 z-50 bg-white/30 backdrop-blur-md flex items-center justify-center p-4 modal-sheet-auto" data-testid="employee-modal">
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg p-6 sm:p-8 animate-slide-up max-h-[90vh] overflow-auto">
         <div className="flex items-center justify-between mb-5">
           <h3 className="text-xl font-black text-slate-900">{initial ? 'Werknemer bewerken' : 'Nieuwe werknemer'}</h3>
@@ -135,7 +135,7 @@ function SalaryForm({ employees, onCancel, onSaved }) {
     finally { setLoading(false); }
   };
   return (
-    <div className="fixed inset-0 z-50 bg-white/30 backdrop-blur-md flex items-center justify-center p-4" data-testid="salary-modal">
+    <div className="fixed inset-0 z-50 bg-white/30 backdrop-blur-md flex items-center justify-center p-4 modal-sheet-auto" data-testid="salary-modal">
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg p-6 sm:p-8 animate-slide-up max-h-[90vh] overflow-auto">
         <div className="flex items-center justify-between mb-5">
           <h3 className="text-xl font-black text-slate-900">Nieuwe loonstrook</h3>

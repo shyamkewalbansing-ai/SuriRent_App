@@ -137,6 +137,40 @@ html { scroll-behavior: smooth; }
 @keyframes slideUpSheet { from { transform: translateY(100%); } to { transform: translateY(0); } }
 .animate-slide-up-sheet { animation: slideUpSheet 0.32s cubic-bezier(0.16, 1, 0.3, 1); }
 
+/* Auto-converteert standaard modal-shells naar full-width bottom sheets op
+   mobile (< md). Voegt ook automatisch een drag-handle toe via ::before
+   zodat elke "Nieuw" modal native voelt zonder per-modal refactor. */
+@media (max-width: 767px) {
+  .modal-sheet-auto {
+    align-items: flex-end !important;
+    padding: 0 !important;
+  }
+  .modal-sheet-auto > div {
+    width: 100% !important;
+    max-width: none !important;
+    border-top-left-radius: 24px !important;
+    border-top-right-radius: 24px !important;
+    border-bottom-left-radius: 0 !important;
+    border-bottom-right-radius: 0 !important;
+    margin: 0 !important;
+    padding-top: 12px !important;
+    padding-bottom: max(env(safe-area-inset-bottom, 24px), 24px) !important;
+    max-height: 92vh !important;
+    overflow-y: auto !important;
+    position: relative !important;
+    animation: slideUpSheet 0.32s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  }
+  .modal-sheet-auto > div::before {
+    content: '';
+    display: block;
+    width: 40px;
+    height: 5px;
+    border-radius: 9999px;
+    background: rgb(226 232 240);
+    margin: 0 auto 14px;
+  }
+}
+
 
 @keyframes slideIn { from { opacity: 0; transform: translateX(-16px); } to { opacity: 1; transform: translateX(0); } }
 .animate-slide-in { animation: slideIn 0.25s ease-out; }

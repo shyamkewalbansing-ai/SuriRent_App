@@ -119,7 +119,7 @@ function ReminderModal({ group, initialChannel = 'whatsapp', onClose, onSent }) 
   ];
 
   return (
-    <div className="fixed inset-0 z-50 bg-white/30 backdrop-blur-md flex items-center justify-center p-4 modal-open"
+    <div className="fixed inset-0 z-50 bg-white/30 backdrop-blur-md flex items-center justify-center p-4 modal-open modal-sheet-auto"
       onClick={onClose} data-testid="reminder-modal">
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-6 sm:p-8" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-1">
@@ -531,7 +531,7 @@ function InvoiceForm({ tenants, onCancel, onSaved }) {
     finally { setLoading(false); }
   };
   return (
-    <div className="fixed inset-0 z-50 bg-white/30 backdrop-blur-md flex items-center justify-center p-4 modal-open"
+    <div className="fixed inset-0 z-50 bg-white/30 backdrop-blur-md flex items-center justify-center p-4 modal-open modal-sheet-auto"
       data-testid="invoice-modal" onClick={onCancel}>
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-6 sm:p-8" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-5">
@@ -631,7 +631,7 @@ function BulkWhatsAppModal({ groups, tenants, onClose }) {
   const progress = total > 0 ? Math.round(((done.length + skipped.length) / total) * 100) : 100;
 
   return (
-    <div className="fixed inset-0 z-50 bg-white/30 backdrop-blur-md flex items-center justify-center p-4 modal-open"
+    <div className="fixed inset-0 z-50 bg-white/30 backdrop-blur-md flex items-center justify-center p-4 modal-open modal-sheet-auto"
       onClick={onClose} data-testid="bulk-wa-modal">
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-auto" onClick={(e) => e.stopPropagation()}>
         <div className="p-6 sm:p-8">
