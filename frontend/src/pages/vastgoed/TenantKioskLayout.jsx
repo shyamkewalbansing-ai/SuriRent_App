@@ -777,7 +777,7 @@ export default function TenantKioskLayout() {
   };
 
   useEffect(() => {
-    document.title = 'Huurder Kiosk';
+    // document.title wordt centraal beheerd door usePwaManifest()
     document.documentElement.style.backgroundColor = primary;
     document.body.style.backgroundColor = primary;
     return () => {

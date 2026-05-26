@@ -13,7 +13,7 @@ export default function TenantLoginPage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    document.title = 'Mijn huurportaal - inloggen';
+    // document.title wordt centraal beheerd door usePwaManifest()
     if (localStorage.getItem('tenant_token')) {
       navigate('/huurder/portaal', { replace: true });
     }

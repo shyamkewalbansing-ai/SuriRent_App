@@ -157,7 +157,7 @@ export default function TenantDashboard() {
   }, [navigate]);
 
   useEffect(() => {
-    document.title = 'Mijn huurportaal';
+    // document.title wordt centraal beheerd door usePwaManifest()
     if (!localStorage.getItem('tenant_token')) {
       navigate('/huurder', { replace: true });
       return;

@@ -641,7 +641,7 @@ export default function CustomerDisplay() {
   // Full-screen background bound to brand primary.
   const primary = branding?.primary_color || '#FF5C00';
   useEffect(() => {
-    document.title = 'Klantenscherm';
+    // document.title wordt centraal beheerd door usePwaManifest()
     document.documentElement.style.backgroundColor = primary;
     document.body.style.backgroundColor = primary;
     return () => {

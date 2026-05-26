@@ -8,7 +8,7 @@
          kleur gebruikt als de iPhone PWA standalone — brand cream voor de
          admin, oranje wordt dynamisch gezet door KioskLayout). -->
     <meta name="description" content="SuriRent - Complete huurbeheer & kiosk oplossing voor vastgoed" />
-    <meta name="application-name" content="SuriRent" />
+    <meta name="application-name" content="Beheer" />
 
     <!-- PWA -->
     <link rel="manifest" href="/manifest.json" />
@@ -25,7 +25,7 @@
          blijft de witte header doorlopen — iOS rendert de klok wel wit,
          maar admin-gebruikers gebruiken vooral de in-app navigatie. -->
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="SuriRent" />
+    <meta name="apple-mobile-web-app-title" content="Beheer" />
     <meta name="format-detection" content="telephone=no" />
     <link rel="apple-touch-icon" href="/kiosk-icons/kiosk-192.png" />
     <link rel="apple-touch-icon" sizes="144x144" href="/kiosk-icons/kiosk-144.png" />
@@ -61,7 +61,61 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
-    <title>SuriRent - Vastgoed Kiosk</title>
+    <title>SuriRent</title>
+    <script>
+      // ===========================================================
+      // PWA-rol detectie — DRAAIT ALS EERSTE, vóór alle andere scripts
+      // iOS Safari leest `<title>` en `apple-mobile-web-app-title` op het
+      // moment van "Toevoegen aan beginscherm". Dit script zet ze meteen
+      // afhankelijk van de URL zodat de gebruiker de juiste naam krijgt.
+      // ===========================================================
+      (function () {
+        try {
+          var ROLES = {
+            beheer:  { name: 'Beheer',         theme: '#FF5C00', icon: 'beheer'   },
+            kiosk:   { name: 'Kiosk',          theme: '#2563EB', icon: 'kioskpwa' },
+            huurder: { name: 'Huurder',        theme: '#10B981', icon: 'huurder'  },
+            klant:   { name: 'Klantenscherm',  theme: '#9333EA', icon: 'klant'    }
+          };
+          var p = (location.pathname || '').toLowerCase();
+          var sub = p;
+          if (p.indexOf('/c/') === 0) sub = '/' + p.split('/').slice(3).join('/');
+          var role = 'beheer';
+          if (sub.indexOf('/admin') === 0) role = 'beheer';
+          else if (sub.indexOf('/kiosk/klant') === 0) role = 'klant';
+          else if (sub === '/kiosk' || sub.indexOf('/kiosk/') === 0 || sub.indexOf('/kiosk') === 0) role = 'kiosk';
+          else if (sub.indexOf('/huurder') === 0) role = 'huurder';
+          // /login route met target hint → leid af
+          if (sub === '/login' || sub.indexOf('/login') === 0) {
+            var qs = location.search || '';
+            if (qs.indexOf('target=kiosk') !== -1) role = 'kiosk';
+            else if (qs.indexOf('target=huurder') !== -1) role = 'huurder';
+            else if (qs.indexOf('target=klant') !== -1) role = 'klant';
+            else if (qs.indexOf('view=admin') !== -1 || qs.indexOf('target=admin') !== -1) role = 'beheer';
+            else role = 'beheer';
+          }
+          var cfg = ROLES[role];
+          // Belangrijk: zet <title> EERSTE — iOS gebruikt dit als default in
+          // "Voeg toe aan beginscherm" dialoog.
+          document.title = cfg.name;
+
+          var manifest = document.querySelector('link[rel="manifest"]');
+          if (manifest) manifest.setAttribute('href', '/manifest-' + role + '.json');
+          var t = document.querySelector('meta[name="apple-mobile-web-app-title"]');
+          if (t) t.setAttribute('content', cfg.name);
+          var an = document.querySelector('meta[name="application-name"]');
+          if (an) an.setAttribute('content', cfg.name);
+          var th = document.querySelectorAll('meta[name="theme-color"]');
+          for (var i = 0; i < th.length; i++) th[i].setAttribute('content', cfg.theme);
+          var icons = document.querySelectorAll('link[rel="apple-touch-icon"]');
+          for (var j = 0; j < icons.length; j++) {
+            var h = icons[j].getAttribute('href') || '';
+            var match = h.match(/^(\/kiosk-icons\/)([a-z]+)(-\d+\.png)$/i);
+            if (match) icons[j].setAttribute('href', match[1] + cfg.icon + match[3]);
+          }
+        } catch (e) { /* no-op */ }
+      })();
+    </script>
     <script>
       // First-paint background: voorkomt witte flits + witte strook onderaan
       // op iOS PWA standalone bij start van /login, /kiosk, of /. We zetten
@@ -86,59 +140,9 @@
       })();
     </script>
 
-    <!-- ===========================================================
-         Inline PWA-rol detectie — DRAAIT VÓÓR React mount
-         ===========================================================
-         iOS Safari leest `apple-mobile-web-app-title` en `apple-touch-icon`
-         tijdens "Toevoegen aan beginscherm". Onze React-hook draait pas na
-         hydration; iOS kan op dat moment al de oude waarden cachen. Dit
-         inline-script zorgt dat de meta-tags al goed staan op het moment
-         dat de gebruiker op "Delen → Toevoegen aan beginscherm" tikt. -->
-    <script>
-      (function () {
-        try {
-          var ROLES = {
-            beheer:  { name: 'SuriRent Beheer',         short: 'Beheer',         theme: '#FF5C00', icon: 'beheer'   },
-            kiosk:   { name: 'SuriRent Kiosk',          short: 'Kiosk',          theme: '#2563EB', icon: 'kioskpwa' },
-            huurder: { name: 'SuriRent Huurder',        short: 'Huurder',        theme: '#10B981', icon: 'huurder'  },
-            klant:   { name: 'SuriRent Klantenscherm',  short: 'Klantenscherm',  theme: '#9333EA', icon: 'klant'    }
-          };
-          var p = (location.pathname || '').toLowerCase();
-          // Branded routes (/c/<slug>/...): strip prefix
-          var sub = p;
-          if (p.indexOf('/c/') === 0) {
-            sub = '/' + p.split('/').slice(3).join('/');
-          }
-          var role = 'beheer';
-          if (sub.indexOf('/admin') === 0) role = 'beheer';
-          else if (sub === '/kiosk/klant' || sub.indexOf('/kiosk/klant') === 0) role = 'klant';
-          else if (sub === '/kiosk' || sub.indexOf('/kiosk') === 0) role = 'kiosk';
-          else if (sub.indexOf('/huurder') === 0) role = 'huurder';
-
-          var cfg = ROLES[role];
-          // 1. Manifest
-          var m = document.querySelector('link[rel="manifest"]');
-          if (m) m.setAttribute('href', '/manifest-' + role + '.json');
-          // 2. iOS title
-          var t = document.querySelector('meta[name="apple-mobile-web-app-title"]');
-          if (t) t.setAttribute('content', cfg.short);
-          var an = document.querySelector('meta[name="application-name"]');
-          if (an) an.setAttribute('content', cfg.short);
-          // 3. theme-color
-          var th = document.querySelectorAll('meta[name="theme-color"]');
-          for (var i = 0; i < th.length; i++) th[i].setAttribute('content', cfg.theme);
-          // 4. apple-touch-icon — vervang /kiosk-icons/<naam>-<size>.png met cfg.icon
-          var icons = document.querySelectorAll('link[rel="apple-touch-icon"]');
-          for (var j = 0; j < icons.length; j++) {
-            var h = icons[j].getAttribute('href') || '';
-            var match = h.match(/^(\/kiosk-icons\/)([a-z]+)(-\d+\.png)$/i);
-            if (match) icons[j].setAttribute('href', match[1] + cfg.icon + match[3]);
-          }
-          // 5. Page title
-          document.title = cfg.name + ' — SuriRent';
-        } catch (e) { /* no-op */ }
-      })();
-    </script>
+    <!-- (oudere PWA-rol detectie is vervangen door het inline-script
+         bovenin de <head> dat eerder draait dan de brand-color injector
+         en de juiste <title>/manifest/icon set vóór React mount.) -->
   </head>
   <body style="background-color: #FFF7F0;">
     <noscript>JavaScript is vereist om deze app te gebruiken.</noscript>

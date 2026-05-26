@@ -564,7 +564,7 @@ export default function LoginPage() {
   });
 
   useEffect(() => {
-    document.title = 'Vastgoed Kiosk - Login';
+    // document.title wordt centraal beheerd door usePwaManifest()
   }, []);
 
   // Login is volledig brand-oranje. We zetten body+#root in PWA standalone
@@ -611,7 +611,7 @@ export default function LoginPage() {
       const enriched = { ...data, _logoResolved: resolveLogoUrl(data.logo_url) };
       applyBranding(data);
       setBranding(enriched);
-      document.title = `${data.app_name || data.name} - Login`;
+      // document.title wordt centraal beheerd door usePwaManifest()
     })();
     return () => { cancelled = true; };
   }, []);

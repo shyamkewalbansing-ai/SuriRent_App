@@ -30,9 +30,9 @@ const ROLE_CONFIG = {
 };
 
 export function usePwaManifest() {
-  const { pathname } = useLocation();
+  const location = useLocation();
   useEffect(() => {
-    const role = pickRole(pathname);
+    const role = pickRole(location.pathname, location.search);
     const cfg = ROLE_CONFIG[role] || ROLE_CONFIG.beheer;
 
     // 1) <link rel="manifest"> — Android PWA install
@@ -65,12 +65,13 @@ export function usePwaManifest() {
       if (m) el.setAttribute('content', `${m[1]}${cfg.icon}${m[3]}`);
     });
 
-    // 6) Page title — staat alleen onder dropdown in browser, maar telt soms
-    //    mee voor de PWA install prompt op Android.
-    if (document.title && !document.title.startsWith(cfg.name)) {
-      document.title = `${cfg.name} — SuriRent`;
+    // 6) Page title — schoon. iOS gebruikt deze als default in "Voeg toe
+    //    aan beginscherm". We zetten precies cfg.shortName zodat
+    //    "Beheer"/"Kiosk"/"Huurder"/"Klantenscherm" verschijnt.
+    if (document.title !== cfg.shortName) {
+      document.title = cfg.shortName;
     }
-  }, [pathname]);
+  }, [location.pathname, location.search]);
 }
 
 function setLink(selector, attrs) {
@@ -86,7 +87,6 @@ function setMetaContent(selector, content) {
   const els = document.querySelectorAll(selector);
   els.forEach((el) => el.setAttribute('content', content));
   if (els.length === 0) {
-    // Maak meta als niet aanwezig (zo dat hook self-contained werkt).
     const name = selector.match(/name="([^"]+)"/)?.[1];
     if (name) {
       const el = document.createElement('meta');
@@ -97,15 +97,23 @@ function setMetaContent(selector, content) {
   }
 }
 
-function pickRole(path = '') {
+function pickRole(path = '', search = '') {
   const p = (path || '').toLowerCase();
   if (p.startsWith('/admin')) return 'beheer';
   if (p === '/kiosk/klant' || p.startsWith('/kiosk/klant')) return 'klant';
   if (p === '/kiosk' || p.startsWith('/kiosk')) return 'kiosk';
   if (p.startsWith('/huurder')) return 'huurder';
+  // /login → lees `?target=` query om af te leiden welke PWA-rol de gebruiker bezig is.
+  if (p === '/login' || p.startsWith('/login')) {
+    const q = (search || '').toLowerCase();
+    if (q.includes('target=kiosk')) return 'kiosk';
+    if (q.includes('target=huurder')) return 'huurder';
+    if (q.includes('target=klant')) return 'klant';
+    return 'beheer';
+  }
   if (p.startsWith('/c/')) {
     const rest = p.split('/').slice(3).join('/');
-    return pickRole('/' + rest);
+    return pickRole('/' + rest, search);
   }
   return 'beheer';
 }

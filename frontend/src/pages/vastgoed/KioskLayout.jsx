@@ -1184,7 +1184,7 @@ export default function KioskLayout() {
   const [company, setCompany] = useState(getKioskCompany());
 
   useEffect(() => {
-    document.title = 'Vastgoed Kiosk';
+    // document.title wordt centraal beheerd door usePwaManifest() in App.js
     const tok = localStorage.getItem('kiosk_token');
     if (!tok) { navigate('/login?target=kiosk', { replace: true }); return; }
     setCompany(getKioskCompany());

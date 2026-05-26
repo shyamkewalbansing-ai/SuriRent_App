@@ -1598,7 +1598,7 @@ export default function AdminDashboard() {
       navigate(target, { replace: false });
     }
   };
-  useEffect(() => { document.title = 'SuriRent - Beheer'; }, []);
+  useEffect(() => { /* document.title centraal beheerd via usePwaManifest() */ }, []);
   useEffect(() => {
     const handler = (e) => {
       const id = e.detail;
