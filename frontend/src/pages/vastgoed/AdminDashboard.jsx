@@ -403,24 +403,23 @@ function MobileTabBar({ active, onChange, tabs, onOpenMenu, user, badgeCount }) 
         >
         {left.map(renderTab)}
 
-        {/* Center FAB — opent het volledige menu. Compact (44×44), oranje
-            gradient, met witte ring zodat hij visueel "drijft" boven de bar.
-            Op iPad (md+) groter (52×52) voor vriendelijker tablet-uiterlijk.
-            Curved-indent: een page-bg gekleurde puck achter de FAB doorbreekt
-            de nav-top, geeft een holle boog zoals iOS native apps. */}
+        {/* Center FAB — opent het volledige menu. De FAB zit perfect IN de
+            page-bg gekleurde bol zodat het visueel een ingedrukte knop in
+            een holle uitsparing lijkt. Bol diameter ~12px groter dan FAB,
+            beide centers op exact dezelfde Y-positie. */}
         <div className="relative flex items-end justify-center pb-0.5">
-          {/* Curved cutout — circle in same color as page bg (#F7F8FA) drukt
-              door de nav-top heen en simuleert een holle uitsparing waar de
-              FAB doorheen steekt. Diameter iets groter dan de FAB + ring. */}
+          {/* Page-bg "bol" — zit met center precies op center van FAB.
+              Mobile: FAB 48px @ -mt-3.5 (=-14px) → center +10. Bol 60px → top -20px. 
+              Tablet: FAB 64px @ -mt-5 (=-20px) → center +12. Bol 80px → top -28px. */}
           <span
             aria-hidden
-            className="absolute left-1/2 -translate-x-1/2 -top-7 md:-top-9 w-[60px] h-[60px] md:w-[80px] md:h-[80px] rounded-full bg-[#F7F8FA] pointer-events-none"
+            className="absolute left-1/2 -translate-x-1/2 -top-5 md:-top-7 w-[60px] h-[60px] md:w-[80px] md:h-[80px] rounded-full bg-[#F7F8FA] pointer-events-none"
           />
           <button
             onClick={onOpenMenu}
             data-testid="mobile-fab-menu"
             aria-label="Open menu"
-            className="relative -mt-3.5 md:-mt-5 landscape:-mt-2 w-12 h-12 md:w-16 md:h-16 landscape:w-9 landscape:h-9 rounded-full bg-gradient-to-br from-[#FF8A3D] to-[#FF5C00] text-white flex items-center justify-center shadow-[0_6px_16px_-4px_rgba(255,92,0,0.55)] ring-[3px] md:ring-4 ring-[#F7F8FA] active:scale-95 transition-all"
+            className="relative -mt-3.5 md:-mt-5 landscape:-mt-2 w-12 h-12 md:w-16 md:h-16 landscape:w-9 landscape:h-9 rounded-full bg-gradient-to-br from-[#FF8A3D] to-[#FF5C00] text-white flex items-center justify-center shadow-[0_6px_16px_-4px_rgba(255,92,0,0.55)] active:scale-95 transition-all"
           >
             <Plus className="w-5 h-5 md:w-7 md:h-7 landscape:w-4 landscape:h-4" strokeWidth={2.6} />
             {badgeCount > 0 && (
