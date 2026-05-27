@@ -585,6 +585,20 @@ Lint clean. Verified via desktop screenshots (1440×900): élke admin-pagina (Ov
 - ✅ **Frontend** Payments.jsx: `?filter=pending` query → auto-scroll naar pending sectie + amber ring-highlight (2.4s). PendingApprovalBell + Payments luisteren beide naar `BADGE_CHANGED` SW-message voor instant refresh (ipv 8s/30s polling).
 - ✅ **Tested (iteration_20)**: 27/27 backend (7 new + 20 regression). Push delivery infra verified: `/api/push/test` sent=11/failed=0 op 11 geabonneerde admin-devices. End-to-end pending → notification → click → scroll-to-pending → approve werkt volledig.
 
+### Session 2026-02-27 — PIN vergeten? feature voor Huurder Kiosk ✅
+- ✅ **Backend** `POST /api/tenant-portal/forgot-pin` (body `{identifier, company_id|slug}`):
+  - Zoekt huurder via email (case-insensitive) of telefoon-suffix (laatste 4-12 cijfers van `phone_digits`)
+  - Genereert nieuwe 4-cijferige PIN, garandeert uniciteit binnen company via `_generate_unique_pin()` (bcrypt-verify tegen alle andere actieve PINs)
+  - Stuurt naar **Email** (SMTP via `get_company_section(cid,'smtp')`) **+ WhatsApp** (Twilio) of **SMS-fallback**
+  - Anti-enumeratie: 200 `{ok:true, via:[]}` voor onbekende identifiers (geen leak)
+  - Anti-misbruik: shared throttle bucket `forgot-pin:<ip>` (bumped op tenant-not-found + send-failure)
+- ✅ **Frontend** TenantKioskLayout LoginScreen:
+  - Telt foute PIN-pogingen (`failedAttempts`). Na 3× verschijnt "PIN vergeten? Vraag nieuwe code" knop (`data-testid="tk-forgot-pin-btn"`)
+  - Tap → `ForgotPinSheet` bottom-sheet met input (`tk-forgot-identifier`) + Verstuur-knop
+  - Success state met groen check-icon + "Verstuurd via Email + WhatsApp" bericht
+  - Close → reset failedAttempts naar 0
+- ✅ **Tested (iteration_23)**: 7/7 backend (POST tests + PIN-invalidation regression + phone-suffix lookup) + 7/7 frontend (hidden voor 3 fails → visible → sheet open → submit → success → close reset). Backend regression 40/42 (2 pre-existing throttle-bleed tussen modules, niet door deze feature).
+
 ### Session 2026-02-27 — Bugfix: Tenant + Klant login niet meer hard-redirect ✅
 - ✅ **Probleem**: het 401-interceptor uit iteration_19 (`api.js`) redirecteerde élke 401 op een non-public endpoint naar `/login?stale=1`, óók als de huurder een verkeerde PIN intikte op `/c/{slug}/kiosk/huurder` of de klant kiosk. Dit brak alle niet-admin login flows.
 - ✅ **Fix**: hard-redirect naar `/login?stale=1` gebeurt nu ALLEEN als `path.startsWith('/admin')`. Tenant 401 → clear `tenant_token` + sessionStorage, blijf op pagina. Kiosk 401 → clear `kiosk_token` + emp-session, blijf op pagina. De lokale UI handelt de re-login zelf af.

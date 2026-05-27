@@ -232,10 +232,11 @@ function ForgotPinSheet({ branding, onClose, onSent }) {
 
   const submit = async (e) => {
     e?.preventDefault?.();
-    if (!identifier.trim()) { setError('Vul uw email of telefoon in'); return; }
+    const value = identifier.trim();
+    if (!value) { setError('Vul uw email of telefoon in'); return; }
     setBusy(true); setError('');
     try {
-      const payload = { identifier: identifier.trim() };
+      const payload = { identifier: value };
       if (branding?.id) payload.company_id = branding.id;
       else if (branding?.slug) payload.company_slug = branding.slug;
       const { data } = await api.post('/tenant-portal/forgot-pin', payload);
@@ -283,7 +284,7 @@ function ForgotPinSheet({ branding, onClose, onSent }) {
                   className="flex-1 px-4 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-sm">
                   Annuleren
                 </button>
-                <button type="submit" disabled={busy || !identifier.trim()}
+                <button type="submit" disabled={busy}
                   data-testid="tk-forgot-submit"
                   className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 bg-[#FF5C00] hover:bg-[#E05200] text-white font-bold rounded-xl text-sm disabled:opacity-50">
                   {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
