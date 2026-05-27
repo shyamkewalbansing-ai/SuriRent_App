@@ -585,6 +585,18 @@ Lint clean. Verified via desktop screenshots (1440×900): élke admin-pagina (Ov
 - ✅ **Frontend** Payments.jsx: `?filter=pending` query → auto-scroll naar pending sectie + amber ring-highlight (2.4s). PendingApprovalBell + Payments luisteren beide naar `BADGE_CHANGED` SW-message voor instant refresh (ipv 8s/30s polling).
 - ✅ **Tested (iteration_20)**: 27/27 backend (7 new + 20 regression). Push delivery infra verified: `/api/push/test` sent=11/failed=0 op 11 geabonneerde admin-devices. End-to-end pending → notification → click → scroll-to-pending → approve werkt volledig.
 
+### Session 2026-02-27 — Huurder Kiosk volledig herontworpen (kiosk-look + history + multi-step pay) ✅
+- ✅ **Dashboard look 1:1 zoals operator kiosk**: links "Financieel overzicht" met Maandhuur / Openstaande huur / Servicekosten / Boetes / Internet rows + "Totaal openstaand" footer. Rechts groot Saldo-paneel met Wallet/CheckCircle2 icon en "Volgende"-knop. Onderaan 3 SecondaryTiles (Onderhoud / Gegevens / Contact).
+- ✅ **Betalingsgeschiedenis** toegevoegd via `TenantHistoryView`: fetch `/tenant-portal/payments`, lijst met badges (categorie + methode), datum, kwitantienummer, "Ontvangen door" / "Goedgekeurd door" + per-rij PDF-download knop (blob fetch met tenant_token). Trigger: knop onder "Volgende".
+- ✅ **Multi-step pay flow** (vervangt oude single-tap-auto-pay bug):
+  - **TenantPaySelect**: checkbox-lijst (Huur / Servicekosten / Boete / Internet) + "Alles betalen" + custom-bedrag keypad (mobile toggle + desktop side-keypad), exact dezelfde UX als operator kiosk's PaySelect
+  - **TenantPayMethod**: 3 tegels — Contant / Mope / Uni5Pay
+  - **TenantPayConfirm**: overzicht-card + Bevestig-knop met loading state
+  - **PaidView**: success scherm + Klaar-knop terug naar dashboard
+- ✅ Back-navigatie tussen alle stappen werkt zonder crashes.
+- ✅ **Tested (iteration_24)**: 14/14 frontend scenarios (mobile + desktop) + 21/21 backend regression PASS. Een echte 1 SRD testbetaling end-to-end uitgevoerd, kwitantie auto-gegenereerd. Oude `/tk-pay-{id}` per-factuur knop is volledig verwijderd.
+
+
 ### Session 2026-02-27 — PIN vergeten? feature voor Huurder Kiosk ✅
 - ✅ **Backend** `POST /api/tenant-portal/forgot-pin` (body `{identifier, company_id|slug}`):
   - Zoekt huurder via email (case-insensitive) of telefoon-suffix (laatste 4-12 cijfers van `phone_digits`)

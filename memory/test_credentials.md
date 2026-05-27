@@ -35,6 +35,7 @@ Endpoints:
 ## Kiosk Medewerker PIN (Approval Workflow + Direct Login)
 - First kiosk employee (Maria K.) PIN: `9999` (reset during iteration_17 voor test stabiliteit)
 - Second kiosk employee (Rayshree) PIN: `8888` (reset during iteration_18)
+- Tenant Bharat Kewalbansing PIN: `7777` (set during iteration_24 voor testing van /c/surirent/kiosk/huurder)
 - **NIEUW 2026-02-26**: medewerkers loggen direct in op `/login` met hun eigen PIN → landen op `/kiosk` met employee-sessie. GEEN admin_token, dus geen toegang tot Beheer.
 - **PIN-uniqueness** wereldwijd afgedwongen — geen botsingen tussen company-PINs en employee-PINs (409 met naam in detail).
 - Endpoints:
