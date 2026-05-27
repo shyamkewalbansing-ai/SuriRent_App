@@ -595,6 +595,21 @@ Lint clean. Verified via desktop screenshots (1440×900): élke admin-pagina (Ov
 - ✅ **Toggle UI** in `/admin/notifications` boven het apparaten-blok: groene/grijze switch met Volume2/VolumeX icon + uitleg. Voorkeur in `localStorage.tap_sounds_enabled` (default ON).
 - ✅ Smoke-test bevestigd op /login: AudioContext beschikbaar, PIN-tap registreert correct, geen crashes.
 
+### Session 2026-02-27 — iOS Guided Access workaround: in-app foreground notificaties ✅
+- ✅ **Probleem**: Apple blokkeert ALLE system-level push notificaties tijdens iOS Guided Access — geen enkele app (web of native) krijgt iets binnen. Push-flow uit iteration_20 werkt buiten Guided Access wel.
+- ✅ **Oplossing**: in-app foreground polling. `lib/foreground-notify.js` `useForegroundPendingNotify` hook pollt elke 5s `/api/payments/pending-count`. Bij detectie van een NIEUWE pending (latest.id verschilt van localStorage `last_pending_id_seen`) toont het:
+  - Vanilla DOM banner bovenaan (oranje left-border, safe-area-inset-top respecteren, 8s auto-dismiss), data-testid `foreground-pending-banner`
+  - Ding-ding geluid (`playPendingApprovalDing` uit `notify-sound.js`)
+  - Tap → `/admin/payments?filter=pending`
+- ✅ Warm-up tick: bij eerste poll geen toast voor pendings die al bestonden vóór open. Page refresh re-triggert niet (LS dedup).
+- ✅ **Backend uitbreiding** `GET /api/payments/pending-count` retourneert nu naast `count` ook `latest: {id, amount, currency, tenant_name, apartment_number, received_by, category, created_at}`. Backward-compatible voor bestaande callers (lezen alleen `count`).
+- ✅ **2 bugs gefixed na testing_agent_v3 (iteration_25)**:
+  - sort key `created_at` → `paid_at` (payment docs hebben geen `created_at` veld, gevolg: sort werkte niet → latest gaf willekeurige order met meerdere pendings)
+  - tenant_name + apartment_number niet persistent op payment doc → on-the-fly lookup uit tenants + apartments collecties zodat banner echte naam toont i.p.v. "Onbekende huurder"
+- ✅ Verified: 2 pendings 2s uit elkaar → latest = juiste id + "Bharat Kewalbansing · HUIS 7B · door Maria K."
+- ✅ **AdminDashboard** mount `useForegroundPendingNotify({enabled:true})` (na useBadge). `/admin/notificaties` heeft een nieuwe amber info-card (`guided-access-info`) die de workaround uitlegt aan de gebruiker.
+- ✅ **Tested (iteration_25)**: 19/19 regression backend + 11/11 frontend e2e PASS. Backend bug-fixes geverifieerd met handmatige curl-test (P2 == latest.id, tenant_name + apt_number populated).
+
 ### Session 2026-02-27 — Premium action sounds (swoosh / success / error / approve / pen) ✅
 - ✅ **`lib/tap-sounds.js` uitgebreid** met 5 nieuwe sound-generators (WebAudio, geen audio-files):
   - `playSwoosh()` — sawtooth filter-sweep 220→660Hz · 220ms (bottom sheets / modals openen)
