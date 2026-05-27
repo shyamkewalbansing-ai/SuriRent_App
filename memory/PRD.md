@@ -585,6 +585,11 @@ Lint clean. Verified via desktop screenshots (1440×900): élke admin-pagina (Ov
 - ✅ **Frontend** Payments.jsx: `?filter=pending` query → auto-scroll naar pending sectie + amber ring-highlight (2.4s). PendingApprovalBell + Payments luisteren beide naar `BADGE_CHANGED` SW-message voor instant refresh (ipv 8s/30s polling).
 - ✅ **Tested (iteration_20)**: 27/27 backend (7 new + 20 regression). Push delivery infra verified: `/api/push/test` sent=11/failed=0 op 11 geabonneerde admin-devices. End-to-end pending → notification → click → scroll-to-pending → approve werkt volledig.
 
+### Session 2026-02-27 — Bugfix: Tenant + Klant login niet meer hard-redirect ✅
+- ✅ **Probleem**: het 401-interceptor uit iteration_19 (`api.js`) redirecteerde élke 401 op een non-public endpoint naar `/login?stale=1`, óók als de huurder een verkeerde PIN intikte op `/c/{slug}/kiosk/huurder` of de klant kiosk. Dit brak alle niet-admin login flows.
+- ✅ **Fix**: hard-redirect naar `/login?stale=1` gebeurt nu ALLEEN als `path.startsWith('/admin')`. Tenant 401 → clear `tenant_token` + sessionStorage, blijf op pagina. Kiosk 401 → clear `kiosk_token` + emp-session, blijf op pagina. De lokale UI handelt de re-login zelf af.
+- ✅ **Tested (iteration_22)**: 6/6 frontend scenarios PASS (tenant wrong PIN, tenant stale token, kiosk stale token, admin stale token, public /auth/login 401, public /tenant-portal/pin-login 401).
+
 ### Session 2026-02-26 — Ding-ding geluid + device-management ✅
 - ✅ **Distinctive ding-ding** (`/app/frontend/src/lib/notify-sound.js`): WebAudio 2-tone bell (E6 → G6, 180ms gap, sine wave + exponential decay) speelt automatisch zodra een pending-approval push binnenkomt terwijl de app open is. Anti-spam: 800ms minimum tussen plays. Service Worker (v53) broadcastet `BADGE_CHANGED` met `require_approval` + `kind` velden zodat alleen pending-approvals het geluid triggeren.
 - ✅ **AdminDashboard** installeert de listener via `installPendingApprovalDingListener()` op mount (idempotent).
