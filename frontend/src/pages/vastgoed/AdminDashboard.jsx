@@ -39,6 +39,7 @@ import PendingApprovalBell from '../../components/PendingApprovalBell';
 import ApartmentsBell from '../../components/ApartmentsBell';
 import QuickPayButton from '../../components/QuickPayButton';
 import PhotoUpload from '../../components/PhotoUpload';
+import { installPendingApprovalDingListener } from '../../lib/notify-sound';
 
 const BASE_TABS = [
   { id: 'overview', label: 'Overzicht', icon: LayoutDashboard },
@@ -1582,6 +1583,10 @@ export default function AdminDashboard() {
   const navigate = useBrandedNavigate();
   const location = useLocation();
   const { count: badgeCount } = useBadge();
+
+  // Activeer de "ding-ding" sound bij binnenkomende pending-approval pushes.
+  // Idempotent — meerdere mounts registreren maar één listener.
+  useEffect(() => { installPendingApprovalDingListener(); }, []);
 
   // URL → tab sync. Bij paden zoals /admin/invoices, /admin/payments etc.
   // wordt de tab automatisch ingesteld. Belangrijk voor:

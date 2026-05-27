@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Bell, BellOff, Loader2, Check, AlertTriangle, Send, Shield, FileText, RotateCw, Smartphone } from 'lucide-react';
+import { Bell, BellOff, Loader2, Check, AlertTriangle, Send, Shield, FileText, RotateCw, Smartphone, Trash2, Volume2 } from 'lucide-react';
 import { api, formatError } from '../../../lib/api';
 import { useBadge } from '../../../lib/pwa';
+import { playPendingApprovalDing } from '../../../lib/notify-sound';
 
 function urlBase64ToUint8Array(base64String) {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
@@ -22,6 +23,8 @@ export default function Notifications() {
   const [error, setError] = useState('');
   const [msg, setMsg] = useState('');
   const [vapidKey, setVapidKey] = useState('');
+  const [devices, setDevices] = useState([]);
+  const [currentEndpoint, setCurrentEndpoint] = useState('');
 
   // Bij openen van de pagina: clear de app-icon badge — gebruiker heeft
   // alles gezien.
@@ -31,6 +34,10 @@ export default function Notifications() {
     try {
       const { data } = await api.get('/push/status');
       setDeviceCount(data.devices || 0);
+    } catch { /* noop */ }
+    try {
+      const { data } = await api.get('/push/devices');
+      setDevices(Array.isArray(data) ? data : []);
     } catch { /* noop */ }
   }, []);
 
@@ -44,6 +51,7 @@ export default function Notifications() {
     navigator.serviceWorker.ready.then(async (reg) => {
       const sub = await reg.pushManager.getSubscription();
       setSubscribed(!!sub);
+      setCurrentEndpoint(sub?.endpoint || '');
     }).catch(() => {});
     refreshStatus();
   }, [refreshStatus]);
@@ -79,7 +87,11 @@ export default function Notifications() {
     await api.post('/push/subscribe', {
       endpoint: subJson.endpoint,
       keys: subJson.keys,
+      // user_agent sturen we mee zodat we in /push/devices kunnen tonen
+      // welk apparaat ("iPhone · Safari", "Windows · Chrome") gekoppeld is.
+      user_agent: (typeof navigator !== 'undefined' && navigator.userAgent) || '',
     });
+    setCurrentEndpoint(subJson.endpoint || '');
     return sub;
   };
 
@@ -145,6 +157,33 @@ export default function Notifications() {
       const { data } = await api.post('/push/notify-overdue');
       setMsg(`${data.message} (verstuurd naar ${data.sent} apparaten)`);
     } catch (e) { setError(formatError(e)); }
+    finally { setLoading(false); }
+  };
+
+  // Verwijder een specifiek apparaat uit de gekoppelde push-devices.
+  // Wanneer de admin het HUIDIGE apparaat verwijdert moeten we óók de
+  // browser-subscription cleanen, anders denkt de browser nog dat hij
+  // geabonneerd is en zal /push/subscribe niet opnieuw worden geactiveerd
+  // tot reRegister wordt gebruikt.
+  const removeDevice = async (dev) => {
+    if (!dev?.id) return;
+    if (!window.confirm(`Apparaat "${dev.label}" verwijderen? Het ontvangt geen meldingen meer.`)) return;
+    setLoading(true); setError(''); setMsg('');
+    try {
+      await api.delete(`/push/devices/${dev.id}`);
+      // Is dit het huidige apparaat? Dan ook lokaal unsubscriben.
+      if (dev.endpoint && dev.endpoint === currentEndpoint) {
+        try {
+          const reg = await navigator.serviceWorker.getRegistration();
+          const sub = reg && (await reg.pushManager.getSubscription());
+          if (sub) await sub.unsubscribe();
+        } catch { /* ignore */ }
+        setSubscribed(false);
+        setCurrentEndpoint('');
+      }
+      setMsg(`"${dev.label}" verwijderd.`);
+      await refreshStatus();
+    } catch (e) { setError(formatError(e, 'Verwijderen mislukt')); }
     finally { setLoading(false); }
   };
 
@@ -234,6 +273,11 @@ export default function Notifications() {
                     <AlertTriangle className="w-4 h-4" />
                     Overdue overzicht
                   </button>
+                  <button onClick={() => playPendingApprovalDing()} data-testid="ding-test"
+                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-emerald-50 hover:bg-emerald-100 border-2 border-emerald-200 text-emerald-700 font-bold rounded-xl">
+                    <Volume2 className="w-4 h-4" />
+                    Test geluid
+                  </button>
                   <button onClick={reRegister} disabled={loading} data-testid="push-reregister"
                     className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-50 hover:bg-blue-100 border-2 border-blue-200 text-blue-700 font-bold rounded-xl disabled:opacity-50">
                     <RotateCw className="w-4 h-4" />
@@ -258,6 +302,59 @@ export default function Notifications() {
                 Klik op <b>Opnieuw registreren</b> om het te herstellen.
               </p>
             )}
+          </div>
+
+          <div className="mt-4 bg-white border border-orange-100 rounded-2xl p-6" data-testid="devices-section">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Smartphone className="w-5 h-5 text-[#FF5C00]" />
+                <h3 className="font-black text-slate-900">Gekoppelde apparaten</h3>
+              </div>
+              <span className="text-xs font-bold text-slate-500 bg-slate-100 px-2 py-1 rounded-full" data-testid="devices-list-count">
+                {devices.length}
+              </span>
+            </div>
+            {devices.length === 0 ? (
+              <p className="text-sm text-slate-500">
+                Nog geen apparaten gekoppeld. Klik op <b>Activeer notificaties</b> hierboven om dit apparaat te koppelen.
+              </p>
+            ) : (
+              <ul className="divide-y divide-slate-100 -mx-2">
+                {devices.map((d) => {
+                  const isCurrent = d.endpoint && d.endpoint === currentEndpoint;
+                  const addedAt = d.created_at ? new Date(d.created_at).toLocaleDateString('nl-NL', {
+                    day: '2-digit', month: 'short', year: 'numeric',
+                  }) : '—';
+                  return (
+                    <li key={d.id} className="flex items-center gap-3 px-2 py-3" data-testid={`device-row-${d.id}`}>
+                      <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center shrink-0">
+                        <Smartphone className="w-5 h-5 text-slate-600" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="font-bold text-slate-900 text-sm truncate">{d.label}</p>
+                          {isCurrent && (
+                            <span className="text-[10px] font-black uppercase tracking-widest bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">
+                              Dit toestel
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-slate-500 mt-0.5">Gekoppeld op {addedAt}</p>
+                      </div>
+                      <button onClick={() => removeDevice(d)} disabled={loading}
+                        data-testid={`device-delete-${d.id}`}
+                        className="shrink-0 inline-flex items-center gap-1.5 px-3 py-2 bg-red-50 hover:bg-red-100 active:bg-red-200 text-red-700 font-bold rounded-lg text-xs disabled:opacity-50 min-h-[40px]">
+                        <Trash2 className="w-3.5 h-3.5" /> Verwijder
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+            <p className="mt-3 text-xs text-slate-500">
+              Verwijder een apparaat hier als je het niet meer gebruikt (oude telefoon, gedeeld toestel).
+              Het ontvangt dan geen meldingen meer.
+            </p>
           </div>
 
           <div className="mt-4 bg-white border border-orange-100 rounded-2xl p-6">

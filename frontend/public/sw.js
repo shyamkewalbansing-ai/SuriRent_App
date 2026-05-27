@@ -6,7 +6,7 @@
  * - Bypass /api/* (always go to network)
  * - Push notifications + click handler
  */
-const CACHE_VERSION = 'surirent-v52';
+const CACHE_VERSION = 'surirent-v53';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 
@@ -200,9 +200,16 @@ self.addEventListener('push', (event) => {
     await _saveBadge();
     await _setAppBadge(_badgeCount);
     // Vertel evt. open tabs zodat React de badge ook in-app kan tonen
+    // EN — bij pending-approval — een distinctive "ding-ding" kan spelen
+    // (zie src/lib/notify-sound.js installPendingApprovalDingListener).
     try {
       const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-      for (const c of clients) c.postMessage({ type: 'BADGE_CHANGED', count: _badgeCount });
+      for (const c of clients) c.postMessage({
+        type: 'BADGE_CHANGED',
+        count: _badgeCount,
+        require_approval: requireApproval,
+        kind,
+      });
     } catch { /* noop */ }
     await self.registration.showNotification(data.title, options);
   })());

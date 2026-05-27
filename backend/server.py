@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import os
+import re
 import uuid
 import bcrypt
 import jwt
@@ -5546,6 +5547,7 @@ class PushSubscriptionIn(BaseModel):
     endpoint: str
     keys: dict
     user_label: Optional[str] = ""  # admin label for filtering
+    user_agent: Optional[str] = ""  # browser UA — getoond in /admin/notifications
 
 
 @api.get("/push/vapid-public-key")
@@ -5554,19 +5556,28 @@ async def push_vapid_key():
 
 
 @api.post("/push/subscribe")
-async def push_subscribe(body: PushSubscriptionIn, user=Depends(get_current_user)):
-    doc = {
-        "id": new_id(),
+async def push_subscribe(body: PushSubscriptionIn, request: Request, user=Depends(get_current_user)):
+    # User-agent komt uit body (frontend stuurt navigator.userAgent) of als
+    # fallback uit de HTTP header. Wordt later vertaald naar een leesbaar
+    # device-label ("iPhone Safari", "Chrome Desktop") in de UI.
+    ua = (body.user_agent or "").strip() or (request.headers.get("user-agent") or "")
+    now_iso = iso(now_utc())
+    set_doc = {
         "user_id": user["id"],
         "endpoint": body.endpoint,
         "keys": body.keys,
         "user_label": body.user_label or user.get("email", ""),
-        "created_at": iso(now_utc()),
+        "user_agent": ua,
+        "last_seen_at": now_iso,
     }
-    # Upsert by endpoint
+    set_on_insert = {
+        "id": new_id(),
+        "created_at": now_iso,
+    }
+    # Upsert by endpoint — bij update behouden we created_at + id.
     await db.push_subs.update_one(
         {"endpoint": body.endpoint},
-        {"$set": doc},
+        {"$set": set_doc, "$setOnInsert": set_on_insert},
         upsert=True,
     )
     return {"ok": True}
@@ -5577,6 +5588,85 @@ async def push_status(user=Depends(get_current_user)):
     """Hoeveel apparaten heeft deze user geregistreerd?"""
     n = await db.push_subs.count_documents({"user_id": user["id"]})
     return {"devices": n}
+
+
+@api.get("/push/devices")
+async def push_devices(user=Depends(get_current_user)):
+    """Lijst alle gekoppelde apparaten van de huidige gebruiker — getoond
+    in /admin/notifications zodat de admin kan zien welke devices push
+    krijgen en eventueel een oud / verloren apparaat kan loskoppelen."""
+    items = []
+    async for sub in db.push_subs.find({"user_id": user["id"]}, {"_id": 0}).sort("created_at", -1):
+        # id-fallback voor oude documents zonder id-veld.
+        sid = sub.get("id") or sub.get("endpoint", "")[-32:]
+        items.append({
+            "id": sid,
+            "endpoint": sub.get("endpoint", ""),
+            "user_agent": sub.get("user_agent", ""),
+            "created_at": sub.get("created_at"),
+            "last_seen_at": sub.get("last_seen_at") or sub.get("created_at"),
+            "label": _device_label_from_ua(sub.get("user_agent", "")),
+        })
+    return items
+
+
+def _device_label_from_ua(ua: str) -> str:
+    """Vertaal user-agent naar een leesbaar device-label.
+
+    We doen het zelf (geen extra dependency) zodat de UI direct ziet:
+      "iPhone · Safari" / "Android · Chrome" / "Windows · Chrome" / "Mac · Safari"
+    Bij onbekende UA fall-back naar "Apparaat" zodat de admin alsnog
+    iets ziet om te tikken.
+    """
+    if not ua:
+        return "Apparaat"
+    ua_l = ua.lower()
+    # OS
+    if "iphone" in ua_l:
+        os_name = "iPhone"
+    elif "ipad" in ua_l:
+        os_name = "iPad"
+    elif "android" in ua_l:
+        os_name = "Android"
+    elif "windows" in ua_l:
+        os_name = "Windows"
+    elif "mac os x" in ua_l or "macintosh" in ua_l:
+        os_name = "Mac"
+    elif "linux" in ua_l:
+        os_name = "Linux"
+    else:
+        os_name = "Apparaat"
+    # Browser (volgorde belangrijk — Edge/Chrome bevatten "safari" in hun UA)
+    if "edg/" in ua_l or "edge/" in ua_l:
+        br = "Edge"
+    elif "chrome/" in ua_l and "chromium" not in ua_l:
+        br = "Chrome"
+    elif "firefox/" in ua_l:
+        br = "Firefox"
+    elif "safari/" in ua_l:
+        br = "Safari"
+    elif "samsungbrowser" in ua_l:
+        br = "Samsung Internet"
+    else:
+        br = ""
+    return f"{os_name} · {br}".rstrip(" ·") if br else os_name
+
+
+@api.delete("/push/devices/{device_id}")
+async def push_remove_device(device_id: str, user=Depends(get_current_user)):
+    """Verwijder een specifiek device uit de gekoppelde push-apparaten van
+    de huidige user. We accepteren zowel het id-veld als de laatste 32
+    chars van het endpoint (voor oude records zonder id-veld)."""
+    res = await db.push_subs.delete_one({
+        "user_id": user["id"],
+        "$or": [
+            {"id": device_id},
+            {"endpoint": {"$regex": f"{re.escape(device_id)}$"}},
+        ],
+    })
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Apparaat niet gevonden")
+    return {"ok": True}
 
 
 @api.post("/push/unsubscribe")
