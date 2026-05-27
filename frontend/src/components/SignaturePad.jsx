@@ -2,6 +2,7 @@
 // Output: PNG data URL via getDataUrl() (alleen als de handtekening niet leeg is).
 import { useEffect, useRef, useState } from 'react';
 import { Trash2 } from 'lucide-react';
+import { playPenTick } from '../lib/tap-sounds';
 
 export default function SignaturePad({ onChange, height = 180 }) {
   const canvasRef = useRef(null);
@@ -50,6 +51,8 @@ export default function SignaturePad({ onChange, height = 180 }) {
     ctx.stroke();
     lastRef.current = p;
     if (isEmpty) setIsEmpty(false);
+    // Subtiele pen-tikje tijdens tekenen (anti-spam in tap-sounds.js)
+    playPenTick();
   };
   const end = () => {
     drawingRef.current = false;

@@ -8,6 +8,7 @@ import { api, formatError, fmtMoney, MONTHS_NL } from '../../../lib/api';
 import { useAutoRefresh } from '../../../lib/auto-refresh';
 import { SendDialog } from '../../../components/EmailDialog';
 import SignaturePad from '../../../components/SignaturePad';
+import { playApproveConfirm, playErrorBuzz, playSwoosh } from '../../../lib/tap-sounds';
 
 // =====================================================================
 // Helpers
@@ -144,21 +145,26 @@ function ApprovePaymentSheet({ payment, onCancel, onApproved }) {
   const [showReject, setShowReject] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
 
+  // Bottom sheet opent → subtiele swoosh
+  useEffect(() => { playSwoosh(); }, []);
+
   const submit = async () => {
-    if (!hasSig) { setErr('Teken eerst uw handtekening'); return; }
+    if (!hasSig) { setErr('Teken eerst uw handtekening'); playErrorBuzz(); return; }
     setErr(''); setSaving(true);
     try {
       await api.post(`/payments/${payment.id}/approve`, { signature_data_url: sig });
+      playApproveConfirm();
       onApproved();
-    } catch (e) { setErr(formatError(e)); }
+    } catch (e) { setErr(formatError(e)); playErrorBuzz(); }
     finally { setSaving(false); }
   };
   const reject = async () => {
     setErr(''); setSaving(true);
     try {
       await api.post(`/payments/${payment.id}/reject`, { reason: rejectReason });
+      playApproveConfirm();
       onApproved();
-    } catch (e) { setErr(formatError(e)); }
+    } catch (e) { setErr(formatError(e)); playErrorBuzz(); }
     finally { setSaving(false); }
   };
 

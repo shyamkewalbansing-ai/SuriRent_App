@@ -595,6 +595,21 @@ Lint clean. Verified via desktop screenshots (1440×900): élke admin-pagina (Ov
 - ✅ **Toggle UI** in `/admin/notifications` boven het apparaten-blok: groene/grijze switch met Volume2/VolumeX icon + uitleg. Voorkeur in `localStorage.tap_sounds_enabled` (default ON).
 - ✅ Smoke-test bevestigd op /login: AudioContext beschikbaar, PIN-tap registreert correct, geen crashes.
 
+### Session 2026-02-27 — Premium action sounds (swoosh / success / error / approve / pen) ✅
+- ✅ **`lib/tap-sounds.js` uitgebreid** met 5 nieuwe sound-generators (WebAudio, geen audio-files):
+  - `playSwoosh()` — sawtooth filter-sweep 220→660Hz · 220ms (bottom sheets / modals openen)
+  - `playSuccessPing()` — twee oplopende sine tonen B5 → E6 (succesvolle betaling)
+  - `playErrorBuzz()` — twee dalende square tonen G3 → D3 (API errors)
+  - `playApproveConfirm()` — drie oplopende triangle tonen E5 → A5 → E6 (admin approval/reject)
+  - `playPenTick()` — random 2400-3000Hz korte triangle (handtekening tekenen)
+- ✅ **Wiring**:
+  - `ApprovePaymentSheet.submit/reject` → `playApproveConfirm()` op succes, `playErrorBuzz()` bij fout, `playSwoosh()` bij sheet-open
+  - `SignaturePad.move` → `playPenTick()` tijdens tekenen (max 1/60ms anti-spam)
+  - `TenantPayConfirm.submit` → `playSuccessPing()` op gelukte betaling, `playErrorBuzz()` bij fout
+  - `KioskLayout.PaymentConfirm.submit` (inclusief Mope-flow) → `playSuccessPing()` / `playErrorBuzz()`
+  - `ForgotPinSheet` mount → `playSwoosh()`
+- ✅ **Voorbeluister-knoppen** in `/admin/notificaties` onder de "Tik-geluiden" toggle: 5 chips (Tik/Swoosh/Succes/Goedkeuring/Fout) zodat admin de geluiden kan horen voordat ze in actie komen.
+
 ### Session 2026-02-27 — Huurder Kiosk volledig herontworpen (kiosk-look + history + multi-step pay) ✅
 - ✅ **Dashboard look 1:1 zoals operator kiosk**: links "Financieel overzicht" met Maandhuur / Openstaande huur / Servicekosten / Boetes / Internet rows + "Totaal openstaand" footer. Rechts groot Saldo-paneel met Wallet/CheckCircle2 icon en "Volgende"-knop. Onderaan 3 SecondaryTiles (Onderhoud / Gegevens / Contact).
 - ✅ **Betalingsgeschiedenis** toegevoegd via `TenantHistoryView`: fetch `/tenant-portal/payments`, lijst met badges (categorie + methode), datum, kwitantienummer, "Ontvangen door" / "Goedgekeurd door" + per-rij PDF-download knop (blob fetch met tenant_token). Trigger: knop onder "Volgende".

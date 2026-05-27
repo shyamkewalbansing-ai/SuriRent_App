@@ -10,6 +10,7 @@ import {
   QrCode, Smartphone, Clock as ClockIcon, Receipt, Hash, X, Printer,
 } from 'lucide-react';
 import { api, formatError, fmtMoney, MONTHS_NL } from '../../lib/api';
+import { playSuccessPing, playErrorBuzz, playSwoosh } from '../../lib/tap-sounds';
 import {
   detectCompanySlug, fetchBranding, fetchBrandingByHost,
   readCachedBranding, applyBranding, resolveLogoUrl,
@@ -230,6 +231,9 @@ function ForgotPinSheet({ branding, onClose, onSent }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [sent, setSent] = useState(null); // { via: ['email','whatsapp'] }
+
+  // Subtle swoosh when sheet appears
+  useEffect(() => { playSwoosh(); }, []);
 
   const submit = async (e) => {
     e?.preventDefault?.();
@@ -739,9 +743,11 @@ function TenantPayConfirm({ payload, overview, onBack, onPaid }) {
         period_year: payload.period_year || undefined,
         note: payload.note || '',
       });
+      playSuccessPing();
       onPaid();
     } catch (e) {
       setErr(formatError(e, 'Betaling mislukt'));
+      playErrorBuzz();
     } finally { setBusy(false); }
   };
 

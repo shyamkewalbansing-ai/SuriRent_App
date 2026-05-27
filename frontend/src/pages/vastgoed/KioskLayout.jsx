@@ -8,6 +8,7 @@ import {
   Droplets, User, Settings as SettingsIcon, Hash, CheckCircle,
 } from 'lucide-react';
 import { api, formatError, fmtMoney, MONTHS_NL } from '../../lib/api';
+import { playSuccessPing, playErrorBuzz } from '../../lib/tap-sounds';
 import {
   KioskEmployeeBar, KioskEmployeeLoginSheet,
   getKioskEmployee, withKioskEmployee,
@@ -732,8 +733,9 @@ function PaymentConfirm({ payload, overview, onBack, onSuccess }) {
     setLoading(true); setErr('');
     try {
       const { data } = await api.post(withKioskEmployee('/kiosk/payments'), payload);
+      playSuccessPing();
       onSuccess(data);
-    } catch (e) { setErr(formatError(e)); }
+    } catch (e) { setErr(formatError(e)); playErrorBuzz(); }
     finally { setLoading(false); }
   };
 
@@ -775,8 +777,9 @@ function PaymentConfirm({ payload, overview, onBack, onSuccess }) {
           setLoading(true);
           try {
             const { data: pay } = await api.post(withKioskEmployee('/kiosk/payments'), finalPayload);
+            playSuccessPing();
             onSuccess(pay);
-          } catch (e) { setErr(formatError(e)); setLoading(false); }
+          } catch (e) { setErr(formatError(e)); playErrorBuzz(); setLoading(false); }
           return;
         }
       } catch { /* ignore */ }
