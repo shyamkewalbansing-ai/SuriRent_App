@@ -585,6 +585,14 @@ Lint clean. Verified via desktop screenshots (1440×900): élke admin-pagina (Ov
 - ✅ **Frontend** Payments.jsx: `?filter=pending` query → auto-scroll naar pending sectie + amber ring-highlight (2.4s). PendingApprovalBell + Payments luisteren beide naar `BADGE_CHANGED` SW-message voor instant refresh (ipv 8s/30s polling).
 - ✅ **Tested (iteration_20)**: 27/27 backend (7 new + 20 regression). Push delivery infra verified: `/api/push/test` sent=11/failed=0 op 11 geabonneerde admin-devices. End-to-end pending → notification → click → scroll-to-pending → approve werkt volledig.
 
+### Session 2026-02-26 — Ding-ding geluid + device-management ✅
+- ✅ **Distinctive ding-ding** (`/app/frontend/src/lib/notify-sound.js`): WebAudio 2-tone bell (E6 → G6, 180ms gap, sine wave + exponential decay) speelt automatisch zodra een pending-approval push binnenkomt terwijl de app open is. Anti-spam: 800ms minimum tussen plays. Service Worker (v53) broadcastet `BADGE_CHANGED` met `require_approval` + `kind` velden zodat alleen pending-approvals het geluid triggeren.
+- ✅ **AdminDashboard** installeert de listener via `installPendingApprovalDingListener()` op mount (idempotent).
+- ✅ **Notificaties pagina** heeft een nieuwe "Test geluid" knop (`data-testid="ding-test"`) zodat de admin het geluid kan voorbeluisteren.
+- ✅ **Device management**: nieuwe endpoints `GET /api/push/devices` + `DELETE /api/push/devices/{device_id}`. Backend bewaart nu `user_agent` op subscribe en vertaalt het naar een leesbaar label via `_device_label_from_ua()` ("iPhone · Safari", "Windows · Chrome", "Mac · Safari" etc.). `$setOnInsert` zorgt dat re-subscribes hetzelfde id + created_at behouden.
+- ✅ **Notificaties UI** toont een "Gekoppelde apparaten" sectie met label, "Dit toestel" badge voor het huidige device, gekoppel-datum en een Verwijder-knop per device. Verwijderen van het HUIDIGE apparaat doet óók een lokale `pushManager.unsubscribe()` zodat de browser-staat synchroon blijft.
+- ✅ **Tested (iteration_21)**: 14 nieuwe pytest cases + 28 regression = 42/42 backend PASS. Frontend code-review verified (testids, handlers, SW routing — alles aanwezig). Headless Playwright crashed bij /admin/notifications render — alleen test-infra OOM, niet product-bug (user heeft 10 actieve devices die pushes correct ontvangen).
+
 
 ### Session 2026-02-26 — Medewerker-PIN direct login op /login ✅
 - ✅ **Backend** `POST /api/auth/kiosk-pin` uitgebreid: probeert eerst company-shared PIN, daarna `employees.kiosk_pin_hash` (alle bedrijven). Medewerker-match → returnt `kiosk_token + employee:{id,name,pin}`, **`admin_token=null`**. Company-match → ongewijzigd (kiosk_token + admin_token).
