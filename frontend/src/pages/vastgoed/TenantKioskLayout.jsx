@@ -1248,6 +1248,10 @@ export default function TenantKioskLayout() {
 
   // Branded background — gebruik primary color als orange-fallback.
   const primary = branding?.primary_color || '#FF5C00';
+  // Voor de PIN-login en company-picker laten we scrollen toe (de keypad
+  // kan op kleine viewports langer zijn dan het scherm). Voor de authed
+  // kiosk-views willen we exact het volle viewport gebruiken zonder dat
+  // er onderaan oranje leegte overblijft — daarom `overflow: hidden`.
   const wrapper = {
     position: 'fixed', inset: 0,
     background: `linear-gradient(155deg, ${primary} 0%, ${primary} 55%, rgba(0,0,0,0.18) 100%), ${primary}`,
@@ -1256,6 +1260,7 @@ export default function TenantKioskLayout() {
     paddingLeft: 'env(safe-area-inset-left, 0px)',
     paddingRight: 'env(safe-area-inset-right, 0px)',
   };
+  const wrapperLocked = { ...wrapper, overflowY: 'hidden' };
 
   useEffect(() => {
     // document.title wordt centraal beheerd door usePwaManifest()
@@ -1335,13 +1340,13 @@ export default function TenantKioskLayout() {
 
   // --- Authed views ---
   return (
-    <div style={wrapper} className="flex flex-col">
-      <div className="flex-1" style={{ paddingBottom: FOOTER_H + 16 }}>
+    <div style={wrapperLocked} className="flex flex-col">
+      <div className="flex-1 min-h-0 flex flex-col" style={{ paddingBottom: FOOTER_H + 16 }}>
         <AnimatePresence mode="wait">
           <motion.div key={view} variants={slideVariants}
             initial="enter" animate="center" exit="exit"
             transition={{ duration: 0.25 }}
-            className="min-h-full w-full">
+            className="h-full w-full flex flex-col">
             {view === 'dashboard' && (
               <DashboardView overview={overview}
                 onAction={setView}
