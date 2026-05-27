@@ -6,7 +6,8 @@ import {
   Lock, Loader2, LogOut, CreditCard, Wrench, User, Phone,
   CheckCircle2, ChevronRight, Calendar, ArrowLeft, Building2, Delete,
   Home as HomeIcon, Mail, Wallet, FileText, Wifi,
-  HelpCircle, Send, Check,
+  HelpCircle, Send, Check, ArrowRight, Banknote, Droplets, AlertCircle,
+  QrCode, Smartphone, Clock as ClockIcon, Receipt, Hash, X, Printer,
 } from 'lucide-react';
 import { api, formatError, fmtMoney, MONTHS_NL } from '../../lib/api';
 import {
@@ -316,30 +317,31 @@ function ForgotPinSheet({ branding, onClose, onSent }) {
 }
 
 // =====================================================================
-// DASHBOARD — split-screen overzicht (admin-kiosk stijl)
+// DASHBOARD — kiosk-look: financieel overzicht links, grote actie rechts
 // =====================================================================
-function DashboardView({ overview, onAction }) {
+function DashboardView({ overview, onAction, onHistory }) {
   const tenant = overview?.tenant;
   const apartment = overview?.apartment;
   const balance = overview?.balance || {};
   const internet = Number(tenant?.internet_amount || 0);
   const openRent = (balance.balance || 0) > 0 ? balance.balance : 0;
   const totalDue = openRent + internet;
-  const cur = balance.currency || apartment?.currency || 'SRD';
+  const cur = (balance.currency || apartment?.currency || 'SRD').toUpperCase();
   const hasBalance = totalDue > 0;
+
   const items = [
     { key: 'rent', label: 'Maandhuur', value: apartment?.rent_amount || 0, icon: HomeIcon, muted: false },
     ...(openRent > 0 ? [{
       key: 'open', label: 'Openstaande huur', value: openRent, icon: Wallet, highlight: true,
       sub: balance.next_period ? `${MONTHS_NL[balance.next_period.month - 1]} ${balance.next_period.year}` : '',
     }] : []),
-    { key: 'svc', label: 'Servicekosten', value: 0, icon: FileText, muted: true },
-    { key: 'fines', label: 'Boetes', value: 0, icon: FileText, muted: true },
+    { key: 'svc', label: 'Servicekosten', value: 0, icon: Droplets, muted: true },
+    { key: 'fines', label: 'Boetes', value: 0, icon: AlertCircle, muted: true },
     { key: 'internet', label: 'Internet', value: internet, icon: Wifi, muted: internet === 0 },
   ];
 
   return (
-    <div className="min-h-full w-full flex flex-col" data-testid="tk-dashboard"
+    <div className="h-full w-full flex flex-col" data-testid="tk-dashboard"
       style={{ padding: '1.5vh 1.5vw 0' }}>
       <div className="flex items-center justify-between flex-wrap gap-2 px-1 sm:px-2 py-2">
         <div className="text-white">
@@ -350,88 +352,83 @@ function DashboardView({ overview, onAction }) {
       </div>
 
       <div className="flex-1 min-h-0 flex flex-col md:flex-row gap-2 sm:gap-3 pb-3">
-        {/* LEFT — financial overview */}
-        <div className="bg-white rounded-2xl flex-1 md:flex-[3] flex flex-col p-4 sm:p-5 min-w-0 shadow-xl">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-base sm:text-lg font-black text-slate-900">Financieel overzicht</h3>
+        {/* LEFT — Financieel overzicht (kiosk-style) */}
+        <div className="bg-white rounded-2xl flex-1 md:flex-[3] flex flex-col p-3 sm:p-4 min-w-0">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-sm sm:text-base font-bold text-slate-900">Financieel overzicht</h3>
           </div>
           <div className="flex-1 divide-y divide-slate-100">
             {items.map((it) => {
               const Icon = it.icon;
-              const cls = it.highlight ? 'text-[#FF5C00]' : it.muted ? 'text-slate-400' : 'text-slate-900';
+              const klass = it.highlight ? 'text-orange-600' : it.muted ? 'text-slate-400' : 'text-slate-900';
               return (
-                <div key={it.key} className={`flex items-center justify-between py-2.5 px-1 ${cls}`}
+                <div key={it.key} className={`flex items-center justify-between py-2.5 px-1 ${klass}`}
                   data-testid={`tk-fin-${it.key}`}>
                   <div className="flex items-center gap-2.5 min-w-0">
-                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-                      it.highlight ? 'bg-orange-100 text-[#FF5C00]'
+                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${
+                      it.highlight ? 'bg-orange-100 text-orange-500'
                         : it.muted ? 'bg-slate-50 text-slate-300'
                         : 'bg-slate-100 text-slate-500'
                     }`}>
-                      <Icon className="w-4 h-4" />
+                      <Icon className="w-3.5 h-3.5" />
                     </div>
                     <div className="min-w-0">
-                      <p className={`text-sm ${it.highlight ? 'font-black' : 'font-bold'}`}>{it.label}</p>
-                      {it.sub && <p className="text-[10px] mt-0.5 text-slate-500">{it.sub}</p>}
+                      <p className={`text-sm ${it.highlight ? 'font-extrabold' : 'font-semibold'}`}>{it.label}</p>
+                      {it.sub && <p className="text-[10px] mt-0.5">{it.sub}</p>}
                     </div>
                   </div>
-                  <p className={`text-sm sm:text-base ${it.highlight ? 'font-black' : 'font-bold'}`}>{fmtMoney(it.value, cur)}</p>
+                  <p className={`font-bold text-sm sm:text-base ${it.highlight ? 'font-extrabold' : ''}`}>
+                    {fmtMoney(it.value, cur)}
+                  </p>
                 </div>
               );
             })}
           </div>
-          <div className="border-t-2 border-slate-200 mt-2 pt-3 flex items-center justify-between">
-            <p className="font-black text-slate-900 text-sm sm:text-base">Totaal openstaand</p>
-            <p className={`text-xl sm:text-2xl font-black tracking-tight ${hasBalance ? 'text-[#FF5C00]' : 'text-emerald-600'}`}
-              data-testid="tk-total-due">
+          <div className="border-t-2 border-slate-200 mt-2 pt-2 flex items-center justify-between">
+            <p className="font-bold text-slate-900 text-sm sm:text-base">Totaal openstaand</p>
+            <p className="text-lg sm:text-xl font-extrabold text-slate-900" data-testid="tk-total-due">
               {fmtMoney(totalDue, cur)}
             </p>
           </div>
         </div>
 
-        {/* RIGHT — primary CTA + secondary actions */}
-        <div className="md:flex-[2] flex flex-col gap-2 sm:gap-3 min-w-0">
-          <div className={`rounded-2xl flex-1 flex flex-col items-center justify-center text-center p-5 sm:p-7 shadow-xl ${
-            hasBalance ? 'bg-white' : 'bg-gradient-to-br from-emerald-500 to-emerald-600 text-white'
+        {/* RIGHT — Te betalen + Volgende + Geschiedenis (kiosk-style) */}
+        <div className="bg-white rounded-2xl md:flex-[2] flex flex-col items-center justify-center text-center p-5 sm:p-6 min-h-[260px]">
+          <div className={`w-14 h-14 sm:w-16 sm:h-16 rounded-2xl flex items-center justify-center mb-3 ${
+            hasBalance ? 'bg-orange-100' : 'bg-emerald-100'
           }`}>
-            <div className={`w-14 h-14 sm:w-16 sm:h-16 rounded-2xl flex items-center justify-center mb-3 ${
-              hasBalance ? 'bg-orange-100 text-[#FF5C00]' : 'bg-white/20 text-white'
-            }`}>
-              {hasBalance ? <Wallet className="w-7 h-7 sm:w-9 sm:h-9" /> : <CheckCircle2 className="w-9 h-9" />}
-            </div>
-            <p className={`text-[10px] sm:text-xs font-black uppercase tracking-[0.25em] ${
-              hasBalance ? 'text-slate-400' : 'text-white/90'
-            }`}>
-              {hasBalance ? 'Te betalen' : 'Saldo'}
-            </p>
-            <p className={`text-3xl sm:text-4xl font-black tracking-tight mt-1 mb-1 ${
-              hasBalance ? 'text-slate-900' : 'text-white'
-            }`} data-testid="tk-balance">
-              {fmtMoney(totalDue, cur)}
-            </p>
-            <p className={`text-xs sm:text-sm mb-5 ${hasBalance ? 'text-slate-500' : 'text-white/90'}`}>
-              {hasBalance ? 'U heeft een openstaand bedrag.' : 'U bent volledig bij. Bedankt!'}
-            </p>
-            <button onClick={() => onAction('pay')} data-testid="tk-tile-pay"
-              className={`w-full max-w-xs h-12 sm:h-14 rounded-xl font-black text-base sm:text-lg flex items-center justify-center gap-2 transition active:scale-[0.98] ${
-                hasBalance
-                  ? 'bg-gradient-to-r from-[#FF8A3D] to-[#FF5C00] text-white shadow-lg'
-                  : 'bg-white text-emerald-600 shadow-md'
-              }`}>
-              {hasBalance ? 'Betalen' : 'Bekijk facturen'} <ChevronRight className="w-5 h-5" />
-            </button>
+            {hasBalance
+              ? <Wallet className="w-7 h-7 sm:w-9 sm:h-9 text-orange-500" />
+              : <CheckCircle2 className="w-7 h-7 sm:w-9 sm:h-9 text-emerald-500" />}
           </div>
-
-          {/* Secondary action tiles — compact row */}
-          <div className="grid grid-cols-3 gap-2 sm:gap-3">
-            <SecondaryTile icon={Wrench} label="Onderhoud" testId="tk-tile-maintenance"
-              accent="bg-sky-50 text-sky-600" onClick={() => onAction('maintenance')} />
-            <SecondaryTile icon={User} label="Gegevens" testId="tk-tile-me"
-              accent="bg-emerald-50 text-emerald-600" onClick={() => onAction('me')} />
-            <SecondaryTile icon={Phone} label="Contact" testId="tk-tile-contact"
-              accent="bg-violet-50 text-violet-600" onClick={() => onAction('contact')} />
-          </div>
+          <p className="text-xs sm:text-sm font-bold uppercase tracking-widest text-slate-400">
+            {hasBalance ? 'Te betalen' : 'Saldo'}
+          </p>
+          <p className={`text-4xl sm:text-5xl font-extrabold tracking-tight mt-1 mb-1 ${
+            hasBalance ? 'text-slate-900' : 'text-emerald-600'
+          }`} data-testid="tk-balance">{fmtMoney(totalDue, cur)}</p>
+          <p className="text-xs sm:text-sm text-slate-500 mb-5">
+            {hasBalance ? 'U heeft een openstaand bedrag.' : 'U bent volledig bij. Bedankt!'}
+          </p>
+          <button onClick={() => onAction('pay')} data-testid="tk-tile-pay"
+            className="w-full max-w-xs bg-orange-500 hover:bg-orange-600 text-white text-base sm:text-lg font-bold rounded-xl flex items-center justify-center gap-2 transition py-3 sm:py-3.5 active:scale-[0.98]">
+            Volgende <ArrowRight className="w-5 h-5" />
+          </button>
+          <button onClick={onHistory} data-testid="tk-tile-history"
+            className="mt-2 w-full max-w-xs bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold rounded-xl flex items-center justify-center gap-2 py-2.5 text-sm">
+            <ClockIcon className="w-4 h-4" /> Betalingsgeschiedenis
+          </button>
         </div>
+      </div>
+
+      {/* Secondary tiles (kleiner, onderaan) */}
+      <div className="grid grid-cols-3 gap-2 sm:gap-3 pb-3">
+        <SecondaryTile icon={Wrench} label="Onderhoud" testId="tk-tile-maintenance"
+          accent="bg-sky-50 text-sky-600" onClick={() => onAction('maintenance')} />
+        <SecondaryTile icon={User} label="Gegevens" testId="tk-tile-me"
+          accent="bg-emerald-50 text-emerald-600" onClick={() => onAction('me')} />
+        <SecondaryTile icon={Phone} label="Contact" testId="tk-tile-contact"
+          accent="bg-violet-50 text-violet-600" onClick={() => onAction('contact')} />
       </div>
     </div>
   );
@@ -440,104 +437,464 @@ function DashboardView({ overview, onAction }) {
 function SecondaryTile({ icon: Icon, label, accent, onClick, testId }) {
   return (
     <motion.button
-      whileTap={{ scale: 0.97 }} whileHover={{ y: -2 }}
+      whileTap={{ scale: 0.97 }}
       onClick={onClick} data-testid={testId}
-      className="bg-white rounded-2xl p-3 sm:p-4 shadow-md flex flex-col items-center gap-2 active:shadow-sm transition">
-      <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl ${accent} flex items-center justify-center`}>
-        <Icon className="w-5 h-5 sm:w-6 sm:h-6" strokeWidth={2.4} />
+      className="bg-white rounded-2xl py-2.5 sm:py-3 shadow-md flex flex-col items-center gap-1.5 active:shadow-sm transition">
+      <div className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl ${accent} flex items-center justify-center`}>
+        <Icon className="w-4 h-4 sm:w-5 sm:h-5" strokeWidth={2.4} />
       </div>
-      <span className="text-xs sm:text-sm font-black text-slate-900 text-center leading-tight">{label}</span>
+      <span className="text-xs sm:text-sm font-bold text-slate-900 text-center leading-tight">{label}</span>
     </motion.button>
   );
 }
 
 // =====================================================================
-// PAY view — kies factuur
+// PAY SELECT — checklist + custom keypad (kiosk-stijl)
 // =====================================================================
-function PayView({ onBack, onPaid }) {
-  const [invoices, setInvoices] = useState([]);
-  const [busy, setBusy] = useState(true);
-  const [error, setError] = useState('');
-  const [submitting, setSubmitting] = useState(null);
+const PAY_ITEMS_TEMPLATE = [
+  { id: 'huur', label: 'Huur', icon: Banknote, desc: 'Openstaand huurbedrag' },
+  { id: 'servicekosten', label: 'Servicekosten', icon: Droplets, desc: 'Water, stroom en overige' },
+  { id: 'boete', label: 'Boetes', icon: AlertCircle, desc: 'Openstaande boetes' },
+  { id: 'internet', label: 'Internet', icon: Wifi, desc: 'Internetaansluiting' },
+];
 
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      try {
-        const { data } = await api.get('/tenant-portal/invoices');
-        if (!alive) return;
-        setInvoices((data || []).filter((i) => i.status !== 'paid'));
-      } catch (e) { if (alive) setError(formatError(e)); }
-      finally { if (alive) setBusy(false); }
-    })();
-    return () => { alive = false; };
-  }, []);
+function TenantPaySelect({ overview, onBack, onConfirm }) {
+  const { tenant, apartment: apt, balance } = overview;
+  const internet = Number(tenant?.internet_amount || 0);
+  const cur = (balance.currency || apt?.currency || 'SRD').toUpperCase();
+  const fmt = (v) => fmtMoney(v, cur);
+  const openRent = balance.balance > 0 ? balance.balance : 0;
+  const totalDue = openRent + internet;
 
-  const pay = async (inv) => {
-    setSubmitting(inv.id); setError('');
-    try {
-      await api.post('/tenant-portal/payments', {
-        amount: inv.amount,
-        currency: inv.currency,
-        method: 'contant',
-        category: 'huur',
-        period_month: inv.period_month,
-        period_year: inv.period_year,
-        invoice_id: inv.id,
-        note: `Huurder Kiosk — factuur ${inv.invoice_number || ''}`.trim(),
-      });
-      onPaid();
-    } catch (e) {
-      setError(formatError(e));
-    } finally { setSubmitting(null); }
+  const amounts = {
+    huur: openRent > 0 ? openRent : (apt?.rent_amount || 0),
+    servicekosten: 0,
+    boete: 0,
+    internet,
+  };
+
+  const [selected, setSelected] = useState(new Set());
+  const [custom, setCustom] = useState('');
+  const [showMobileKeypad, setShowMobileKeypad] = useState(false);
+
+  const toggle = (id) => {
+    setSelected((cur2) => {
+      const next = new Set(cur2);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+    setCustom('');
+  };
+
+  const isDisabled = (id) => (amounts[id] || 0) <= 0;
+  const enabled = PAY_ITEMS_TEMPLATE.filter((t) => !isDisabled(t.id));
+  const allSelected = enabled.length > 0 && enabled.every((t) => selected.has(t.id));
+  const selectAll = () => {
+    if (allSelected) setSelected(new Set());
+    else setSelected(new Set(enabled.map((t) => t.id)));
+    setCustom('');
+  };
+  const selectedTotal = [...selected].reduce((s, id) => s + (amounts[id] || 0), 0);
+  const hasCustom = custom && parseFloat(custom) > 0;
+  const activeAmount = hasCustom ? parseFloat(custom) : selectedTotal;
+  const canProceed = activeAmount > 0;
+
+  const buildDescription = () => {
+    const labels = [];
+    if (selected.has('huur')) labels.push('Huur');
+    if (selected.has('servicekosten')) labels.push('Servicekosten');
+    if (selected.has('boete')) labels.push('Boetes');
+    if (selected.has('internet')) labels.push('Internet');
+    return labels.join(' + ');
+  };
+
+  const press = (k) => {
+    if (k === 'DEL') setCustom((c) => c.slice(0, -1));
+    else if (k === '.') setCustom((c) => c.includes('.') ? c : c + '.');
+    else setCustom((c) => c + k);
+    setSelected(new Set());
+  };
+
+  const handleNext = () => {
+    if (!canProceed) return;
+    let amount, category, note;
+    if (hasCustom) {
+      amount = parseFloat(custom);
+      category = 'huur';
+      note = `Huurder Kiosk — gedeeltelijke betaling — ${fmt(amount)}`;
+    } else {
+      amount = selectedTotal;
+      category = selected.size === 1 ? [...selected][0] : 'huur';
+      note = `Huurder Kiosk — ${buildDescription()}`;
+    }
+    onConfirm({
+      amount, currency: cur, category, method: 'contant',
+      period_month: category === 'huur' && balance.next_period ? balance.next_period.month : null,
+      period_year: category === 'huur' && balance.next_period ? balance.next_period.year : null,
+      note,
+    });
   };
 
   return (
-    <div className="min-h-full w-full px-4 sm:px-6 py-5 sm:py-8" data-testid="tk-pay">
-      <div className="max-w-3xl mx-auto">
-        <button onClick={onBack} data-testid="tk-pay-back"
-          className="inline-flex items-center gap-1 text-xs font-black uppercase tracking-widest text-white/85 hover:text-white mb-4">
-          <ArrowLeft className="w-3.5 h-3.5" /> Terug
+    <div className="h-full flex flex-col px-3 sm:px-6 pt-2" data-testid="tk-pay-select">
+      <div className="flex items-center justify-between flex-wrap gap-2 py-2">
+        <button onClick={onBack} data-testid="tk-payselect-back"
+          className="flex items-center gap-1.5 text-white font-bold bg-white/20 backdrop-blur-sm rounded-lg px-3 py-1.5 sm:px-4 sm:py-2">
+          <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5" /> <span className="text-xs sm:text-sm">Terug</span>
         </button>
-        <h2 className="text-3xl sm:text-4xl font-black text-white tracking-tight">Betalen</h2>
-        <p className="text-sm text-white/85 mt-1 mb-5">Kies welke factuur u wilt betalen.</p>
+        <span className="text-sm sm:text-base font-semibold text-white">Wat wilt u betalen?</span>
+        <div className="text-right text-white hidden sm:block">
+          <p className="text-xs sm:text-sm font-semibold">{tenant.name}</p>
+          {apt && <p className="text-[10px] sm:text-xs opacity-70">Appt. {apt.number}</p>}
+        </div>
+      </div>
 
-        {busy && <Loader2 className="w-8 h-8 animate-spin text-white mx-auto my-10" />}
-        {error && (
-          <div className="bg-red-500/20 border border-red-300/40 text-white rounded-2xl px-4 py-3 text-sm font-bold mb-3">
-            {error}
-          </div>
-        )}
-        {!busy && invoices.length === 0 && (
-          <div className="bg-white rounded-3xl p-8 text-center shadow-xl">
-            <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto mb-3" />
-            <p className="text-lg font-black text-slate-900">Geen openstaande facturen.</p>
-            <p className="text-sm text-slate-500 mt-1">U bent volledig bij — bedankt!</p>
-          </div>
-        )}
-        <div className="space-y-2.5">
-          {invoices.map((inv) => (
-            <motion.button
-              key={inv.id} onClick={() => pay(inv)} disabled={submitting === inv.id}
-              whileTap={{ scale: 0.99 }}
-              data-testid={`tk-pay-${inv.id}`}
-              className="w-full text-left bg-white rounded-2xl shadow-lg active:shadow-md p-4 flex items-center gap-4 disabled:opacity-50">
-              <div className="w-12 h-12 rounded-xl bg-orange-50 text-[#FF5C00] flex items-center justify-center shrink-0">
-                <Calendar className="w-6 h-6" />
+      <div className="flex-1 flex flex-col md:flex-row gap-2 sm:gap-3 min-h-0 pb-2">
+        {/* LEFT — items checklist */}
+        <div className="bg-white rounded-2xl flex-1 md:flex-[3] flex flex-col min-w-0 p-2 sm:p-3">
+          {enabled.length > 1 && (
+            <button onClick={selectAll} data-testid="tk-pay-select-all"
+              className={`w-full flex items-center justify-between rounded-lg border-2 transition px-2.5 py-2 sm:px-3 sm:py-2.5 mb-1.5 ${
+                allSelected ? 'bg-orange-50 border-orange-400' : 'bg-white border-slate-200 hover:border-orange-300'
+              }`}>
+              <div className="flex items-center gap-2">
+                <div className={`flex items-center justify-center rounded border-2 w-5 h-5 ${allSelected ? 'bg-orange-500 border-orange-500' : 'border-slate-300'}`}>
+                  {allSelected && <Check className="text-white w-3.5 h-3.5" strokeWidth={3} />}
+                </div>
+                <span className="text-sm font-bold text-slate-900">Alles betalen</span>
               </div>
+              <span className="text-sm sm:text-base font-semibold text-orange-600 whitespace-nowrap">
+                {fmt(enabled.reduce((s, t) => s + (amounts[t.id] || 0), 0))}
+              </span>
+            </button>
+          )}
+
+          <div className="flex flex-col gap-1 sm:gap-1.5 flex-1">
+            {PAY_ITEMS_TEMPLATE.map((t) => {
+              const disabled = isDisabled(t.id);
+              const sel = selected.has(t.id);
+              const Icon = t.icon;
+              return (
+                <button key={t.id} disabled={disabled} onClick={() => toggle(t.id)}
+                  data-testid={`tk-pay-type-${t.id}`}
+                  className={`flex items-center justify-between w-full rounded-lg border-2 transition px-2.5 py-2 sm:px-3 sm:py-2.5 ${
+                    disabled ? 'bg-slate-50 border-slate-100 opacity-40 cursor-not-allowed' :
+                    sel ? 'bg-orange-50 border-orange-400' : 'bg-white border-slate-200 hover:border-orange-300'
+                  }`}>
+                  <div className="flex items-center gap-2">
+                    <div className={`flex items-center justify-center rounded border-2 flex-shrink-0 w-5 h-5 ${sel ? 'bg-orange-500 border-orange-500' : 'border-slate-300'}`}>
+                      {sel && <Check className="text-white w-3.5 h-3.5" strokeWidth={3} />}
+                    </div>
+                    <div className={`rounded-lg flex items-center justify-center flex-shrink-0 w-8 h-8 sm:w-9 sm:h-9 ${sel ? 'bg-orange-100' : 'bg-slate-50'}`}>
+                      <Icon className={`w-4 h-4 sm:w-5 sm:h-5 ${sel ? 'text-orange-500' : 'text-slate-400'}`} />
+                    </div>
+                    <span className="text-sm font-bold text-slate-900">{t.label}</span>
+                  </div>
+                  <p className={`text-sm sm:text-base flex-shrink-0 ml-2 whitespace-nowrap font-semibold ${disabled ? 'text-slate-300' : sel ? 'text-orange-600' : 'text-slate-900'}`}>
+                    {fmt(amounts[t.id] || 0)}
+                  </p>
+                </button>
+              );
+            })}
+          </div>
+
+          {selected.size > 0 && (
+            <div className="bg-slate-900 rounded-lg flex items-center justify-between px-3 py-2 sm:py-2.5 mt-1.5">
+              <div className="min-w-0">
+                <p className="text-xs text-slate-400">{selected.size} item{selected.size > 1 ? 's' : ''}</p>
+                <p className="text-xs text-white truncate">{buildDescription()}</p>
+              </div>
+              <p className="text-base sm:text-lg font-bold text-white whitespace-nowrap ml-2">{fmt(selectedTotal)}</p>
+            </div>
+          )}
+
+          <button onClick={handleNext} disabled={!canProceed} data-testid="tk-payment-next-btn"
+            className="w-full bg-orange-500 hover:bg-orange-600 disabled:bg-slate-200 disabled:text-slate-400 text-white rounded-xl flex items-center justify-center gap-2 transition active:scale-[0.98] py-3 sm:py-3.5 mt-1.5 text-sm sm:text-base font-bold">
+            <span>Volgende — {fmt(activeAmount)}</span> <ArrowRight className="w-5 h-5" />
+          </button>
+
+          {/* Mobile keypad toggle */}
+          <div className="md:hidden mt-1.5">
+            {!showMobileKeypad ? (
+              <button onClick={() => setShowMobileKeypad(true)} data-testid="tk-mobile-custom-toggle"
+                className="w-full flex items-center justify-center gap-2 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-500 hover:bg-slate-100 transition">
+                <Hash className="w-4 h-4" /> Ander bedrag invoeren
+              </button>
+            ) : (
+              <div className="bg-white border border-slate-200 rounded-xl p-2.5">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs text-slate-400 font-medium">Ander bedrag ({cur})</span>
+                  <button onClick={() => { setShowMobileKeypad(false); setCustom(''); }} className="text-xs text-slate-400">Sluiten</button>
+                </div>
+                <div className={`border-2 rounded-lg text-center py-2 mb-2 ${hasCustom ? 'bg-orange-50 border-orange-300' : 'bg-slate-50 border-slate-200'}`}>
+                  <span className={`font-mono font-extrabold text-xl ${hasCustom ? 'text-orange-600' : 'text-slate-300'}`}>{cur} {custom || '0.00'}</span>
+                </div>
+                <div className="grid grid-cols-4 gap-1">
+                  {['1','2','3','DEL','4','5','6','.','7','8','9','0'].map((k) => (
+                    <button key={k} onClick={() => press(k)} data-testid={`tk-mobile-key-${k}`}
+                      className={`rounded-lg font-bold transition active:scale-95 h-10 text-base ${
+                        k === 'DEL' ? 'bg-red-50 text-red-500 text-xs' : 'bg-slate-50 text-slate-900 hover:bg-orange-50 hover:text-orange-600 border border-slate-100'
+                      }`}>{k}</button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* RIGHT — Desktop keypad */}
+        <div className="bg-white rounded-2xl hidden md:flex flex-none md:flex-[2] flex-col min-w-0 p-4 sm:p-5">
+          <h4 className="text-sm sm:text-base font-bold text-slate-900 mb-0.5">Bedrag invoeren</h4>
+          <p className="text-xs text-slate-400 mb-3">Totaal openstaand: {fmt(totalDue)}</p>
+          <div className={`border-2 rounded-lg transition px-3 py-3 mb-3 ${hasCustom ? 'bg-orange-50 border-orange-300' : 'bg-slate-50 border-slate-200'}`}>
+            <p className="text-xs text-slate-400 mb-0.5">{cur}</p>
+            <p className={`font-extrabold font-mono text-2xl sm:text-3xl ${hasCustom ? 'text-orange-600' : 'text-slate-900'}`} data-testid="tk-pay-amount-display">
+              {custom || '0.00'}
+            </p>
+          </div>
+          <div className="grid grid-cols-3 flex-1 gap-1.5">
+            {['1','2','3','4','5','6','7','8','9','.','0','DEL'].map((k) => (
+              <button key={k} onClick={() => press(k)} data-testid={`tk-keypad-${k}`}
+                className={`rounded-lg font-bold transition active:scale-95 flex items-center justify-center text-base sm:text-lg ${
+                  k === 'DEL' ? 'bg-slate-100 text-red-500 hover:bg-red-50 border border-slate-100' :
+                  'bg-slate-50 text-slate-900 hover:bg-orange-50 hover:text-orange-600 border border-slate-100'
+                }`}>{k}</button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// =====================================================================
+// PAY METHOD — Contant / Mope
+// =====================================================================
+function TenantPayMethod({ payload, overview, onBack, onConfirm }) {
+  const { tenant, apartment: apt } = overview;
+  const cur = payload.currency || 'SRD';
+  const methods = [
+    { v: 'contant', l: 'Contant', sub: 'Betaal bij de receptie', icon: Banknote, accent: 'emerald' },
+    { v: 'mope', l: 'Mope', sub: 'Scan QR-code', icon: QrCode, accent: 'emerald' },
+    { v: 'uni5pay', l: 'Uni5Pay', sub: 'Scan QR-code', icon: Smartphone, accent: 'red' },
+  ];
+  return (
+    <div className="h-full flex flex-col" style={{ padding: '1.5vh 1.5vw 0' }} data-testid="tk-pay-method">
+      <div className="flex items-center justify-between flex-wrap gap-2 px-1 sm:px-2 py-2">
+        <button onClick={onBack} data-testid="tk-method-back"
+          className="flex items-center gap-1.5 text-white font-bold bg-white/20 backdrop-blur-sm rounded-lg px-3 py-1.5 sm:px-4 sm:py-2">
+          <ArrowLeft className="w-4 h-4" /> <span className="text-xs sm:text-sm">Terug</span>
+        </button>
+        <span className="text-sm sm:text-base font-semibold text-white">
+          Hoe wilt u betalen? <span className="ml-2 opacity-80">{fmtMoney(payload.amount, cur)}</span>
+        </span>
+        <div className="text-right text-white">
+          <p className="text-xs sm:text-sm font-semibold">{tenant.name}</p>
+          {apt && <p className="text-[10px] sm:text-xs opacity-70">Appt. {apt.number}</p>}
+        </div>
+      </div>
+      <div className="flex-1 min-h-0 flex items-center justify-center pb-6 overflow-auto">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 max-w-4xl w-full px-2">
+          {methods.map((m) => {
+            const Icon = m.icon;
+            return (
+              <button key={m.v} onClick={() => onConfirm({ ...payload, method: m.v })}
+                data-testid={`tk-method-${m.v}`}
+                className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-8 flex sm:flex-col items-center sm:justify-center text-left sm:text-center gap-4 sm:gap-0 hover:scale-[1.02] active:scale-[0.98] transition sm:aspect-[3/4] shadow-2xl">
+                <div className={`w-14 h-14 sm:w-20 sm:h-20 rounded-2xl flex items-center justify-center mb-0 sm:mb-4 ${
+                  m.accent === 'emerald' ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'
+                }`}>
+                  <Icon className="w-7 h-7 sm:w-10 sm:h-10" />
+                </div>
+                <div className="sm:text-center">
+                  <p className="text-base sm:text-xl font-extrabold text-slate-900">{m.l}</p>
+                  <p className="text-xs sm:text-sm text-slate-500 mt-0.5">{m.sub}</p>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// =====================================================================
+// PAY CONFIRM — overzicht + Bevestig
+// =====================================================================
+function TenantPayConfirm({ payload, overview, onBack, onPaid }) {
+  const { tenant, apartment: apt } = overview;
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  const submit = async () => {
+    setBusy(true); setErr('');
+    try {
+      await api.post('/tenant-portal/payments', {
+        amount: payload.amount,
+        currency: payload.currency,
+        method: payload.method,
+        category: payload.category,
+        period_month: payload.period_month || undefined,
+        period_year: payload.period_year || undefined,
+        note: payload.note || '',
+      });
+      onPaid();
+    } catch (e) {
+      setErr(formatError(e, 'Betaling mislukt'));
+    } finally { setBusy(false); }
+  };
+
+  const methodLabel = {
+    contant: 'Contant',
+    mope: 'Mope (QR-code)',
+    uni5pay: 'Uni5Pay (QR-code)',
+  }[payload.method] || payload.method;
+
+  return (
+    <div className="h-full flex flex-col px-3 sm:px-6 pt-2 pb-3" data-testid="tk-pay-confirm">
+      <div className="flex items-center justify-between flex-wrap gap-2 py-2">
+        <button onClick={onBack} data-testid="tk-confirm-back" disabled={busy}
+          className="flex items-center gap-1.5 text-white font-bold bg-white/20 backdrop-blur-sm rounded-lg px-3 py-1.5 sm:px-4 sm:py-2 disabled:opacity-50">
+          <ArrowLeft className="w-4 h-4" /> <span className="text-xs sm:text-sm">Terug</span>
+        </button>
+        <span className="text-sm sm:text-base font-semibold text-white">Controleer & bevestig</span>
+        <div className="text-right text-white">
+          <p className="text-xs sm:text-sm font-semibold">{tenant.name}</p>
+          {apt && <p className="text-[10px] sm:text-xs opacity-70">Appt. {apt.number}</p>}
+        </div>
+      </div>
+
+      <div className="flex-1 flex items-center justify-center">
+        <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-5 sm:p-7">
+          <div className="text-center mb-5">
+            <p className="text-xs font-black uppercase tracking-widest text-slate-400">Te betalen</p>
+            <p className="text-4xl sm:text-5xl font-extrabold text-slate-900 mt-1" data-testid="tk-confirm-amount">
+              {fmtMoney(payload.amount, payload.currency)}
+            </p>
+          </div>
+          <div className="space-y-2 mb-5">
+            <ConfirmRow label="Categorie" value={payload.note || payload.category} />
+            <ConfirmRow label="Methode" value={methodLabel} />
+            <ConfirmRow label="Huurder" value={tenant.name} />
+            {apt && <ConfirmRow label="Appartement" value={apt.number} />}
+            {payload.period_month && (
+              <ConfirmRow label="Periode"
+                value={`${MONTHS_NL[payload.period_month - 1]} ${payload.period_year}`} />
+            )}
+          </div>
+          {err && <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-3" data-testid="tk-confirm-error">{err}</p>}
+          <button onClick={submit} disabled={busy} data-testid="tk-confirm-submit"
+            className="w-full h-14 rounded-2xl bg-gradient-to-r from-[#FF8A3D] to-[#FF5C00] text-white font-black text-base shadow-lg active:scale-95 transition disabled:opacity-50 flex items-center justify-center gap-2">
+            {busy ? <Loader2 className="w-5 h-5 animate-spin" /> : <Check className="w-5 h-5" />}
+            Bevestig betaling
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ConfirmRow({ label, value }) {
+  return (
+    <div className="flex items-center justify-between border-b border-slate-100 py-1.5 last:border-0">
+      <span className="text-xs font-black uppercase tracking-widest text-slate-400">{label}</span>
+      <span className="text-sm font-bold text-slate-900 text-right truncate ml-3 capitalize">{value}</span>
+    </div>
+  );
+}
+
+// =====================================================================
+// HISTORY — alle betalingen van de huurder met PDF-download
+// =====================================================================
+function TenantHistoryView({ overview, onBack }) {
+  const [items, setItems] = useState(null);
+  const [err, setErr] = useState('');
+  const apt = overview?.apartment;
+
+  useEffect(() => {
+    api.get('/tenant-portal/payments')
+      .then((r) => setItems(r.data || [])).catch((e) => setErr(formatError(e)));
+  }, []);
+
+  const openPdf = async (paymentId) => {
+    // We hebben tenant_token — gebruik blob-fetch zodat de PDF met de
+    // juiste Authorization-header wordt opgehaald.
+    try {
+      const r = await api.get(`/payments/${paymentId}/pdf`, { responseType: 'blob' });
+      const url = window.URL.createObjectURL(r.data);
+      window.open(url, '_blank');
+      setTimeout(() => window.URL.revokeObjectURL(url), 30_000);
+    } catch (e) { setErr(formatError(e, 'PDF download mislukt')); }
+  };
+
+  return (
+    <div className="h-full flex flex-col px-3 sm:px-6 pt-2 pb-3" data-testid="tk-history">
+      <div className="flex items-center justify-between flex-wrap gap-2 py-2">
+        <button onClick={onBack} data-testid="tk-history-back"
+          className="flex items-center gap-1.5 text-white font-bold bg-white/20 backdrop-blur-sm rounded-lg px-3 py-1.5 sm:px-4 sm:py-2">
+          <ArrowLeft className="w-4 h-4" /> <span className="text-xs sm:text-sm">Terug</span>
+        </button>
+        <span className="text-sm sm:text-base font-semibold text-white">Betalingsgeschiedenis</span>
+        <div className="text-right text-white hidden sm:block">
+          {apt && <p className="text-[10px] sm:text-xs opacity-70">Appt. {apt.number}</p>}
+        </div>
+      </div>
+
+      <div className="flex-1 bg-white rounded-2xl shadow-xl overflow-hidden flex flex-col min-h-0">
+        <div className="px-4 sm:px-6 py-3 border-b border-slate-100 flex items-center gap-3 shrink-0">
+          <div className="w-9 h-9 rounded-lg bg-orange-100 flex items-center justify-center shrink-0">
+            <ClockIcon className="w-4 h-4 text-orange-500" />
+          </div>
+          <div className="min-w-0">
+            <h3 className="text-base font-bold text-slate-900">Mijn betalingen</h3>
+            <p className="text-xs text-slate-500 truncate">
+              {items ? `${items.length} betaling${items.length === 1 ? '' : 'en'}` : 'Laden…'}
+            </p>
+          </div>
+        </div>
+        <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-3"
+          style={{ overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' }}>
+          {err && <p className="text-red-500 text-sm py-4" data-testid="tk-history-error">{err}</p>}
+          {!items && !err && (
+            <div className="py-10 flex items-center justify-center">
+              <Loader2 className="w-7 h-7 animate-spin text-orange-500" />
+            </div>
+          )}
+          {items && items.length === 0 && (
+            <div className="py-10 text-center text-slate-400" data-testid="tk-history-empty">
+              <Receipt className="w-10 h-10 mx-auto mb-2 opacity-50" />
+              <p>Nog geen betalingen.</p>
+            </div>
+          )}
+          {items && items.map((p) => (
+            <div key={p.id} className="py-3 border-b border-slate-100 last:border-0 flex items-start gap-3"
+              data-testid={`tk-history-row-${p.id}`}>
+              <CheckCircle2 className="w-5 h-5 text-emerald-500 mt-0.5 shrink-0" />
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-black text-slate-900 capitalize">
-                  {MONTHS_NL[inv.period_month - 1]} {inv.period_year}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="font-extrabold text-slate-900">{fmtMoney(p.amount, p.currency)}</p>
+                  <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-orange-100 text-orange-700">{p.category}</span>
+                  <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-slate-100 text-slate-600">{p.method}</span>
+                </div>
+                <p className="text-xs text-slate-500 mt-1">
+                  {new Date(p.paid_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' })}
+                  {' · '}{p.receipt_number}
+                  {p.period_month ? ` · ${MONTHS_NL[p.period_month - 1]} ${p.period_year}` : ''}
                 </p>
-                <p className="text-[11px] text-slate-500">{inv.invoice_number || 'Huur'}</p>
+                {(p.received_by || p.approved_by) && (
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    {p.received_by ? <>Ontvangen door <b className="text-slate-600">{p.received_by}</b></> : null}
+                    {p.received_by && p.approved_by && p.received_by !== p.approved_by ? ' · ' : ''}
+                    {p.approved_by && p.approved_by !== p.received_by ? <>Goedgekeurd door <b className="text-slate-600">{p.approved_by}</b></> : null}
+                  </p>
+                )}
               </div>
-              <p className="text-lg sm:text-xl font-black text-slate-900 whitespace-nowrap">
-                {fmtMoney(inv.amount, inv.currency)}
-              </p>
-              {submitting === inv.id
-                ? <Loader2 className="w-5 h-5 animate-spin text-[#FF5C00]" />
-                : <ChevronRight className="w-5 h-5 text-slate-300" />}
-            </motion.button>
+              <button onClick={() => openPdf(p.id)} data-testid={`tk-history-pdf-${p.id}`}
+                className="px-2.5 h-8 rounded-lg bg-orange-500 hover:bg-orange-600 text-white font-bold text-xs flex items-center gap-1 shrink-0">
+                <Printer className="w-3 h-3" /> Afdruk
+              </button>
+            </div>
           ))}
         </div>
       </div>
@@ -550,7 +907,7 @@ function PayView({ onBack, onPaid }) {
 // =====================================================================
 function PaidView({ onContinue }) {
   return (
-    <div className="min-h-full w-full flex items-center justify-center px-5 py-10" data-testid="tk-paid">
+    <div className="h-full w-full flex items-center justify-center px-5 py-10" data-testid="tk-paid">
       <motion.div
         initial={{ scale: 0.7, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
         transition={{ type: 'spring', stiffness: 220, damping: 18 }}
@@ -791,6 +1148,7 @@ export default function TenantKioskLayout() {
   const aptId = searchParams.get('apt');
   const [authed, setAuthed] = useState(() => !!localStorage.getItem(TENANT_TOKEN_KEY));
   const [view, setView] = useState('dashboard');
+  const [payload, setPayload] = useState(null);  // payment-flow draft
   const [overview, setOverview] = useState(null);
   const [loading, setLoading] = useState(false);
   const [prefill, setPrefill] = useState(null);
@@ -984,12 +1342,30 @@ export default function TenantKioskLayout() {
             initial="enter" animate="center" exit="exit"
             transition={{ duration: 0.25 }}
             className="min-h-full w-full">
-            {view === 'dashboard' && <DashboardView overview={overview} onAction={setView} />}
+            {view === 'dashboard' && (
+              <DashboardView overview={overview}
+                onAction={setView}
+                onHistory={() => setView('history')} />
+            )}
             {view === 'pay' && (
-              <PayView onBack={() => setView('dashboard')}
-                onPaid={() => { setView('paid'); loadOverview(); }} />
+              <TenantPaySelect overview={overview}
+                onBack={() => setView('dashboard')}
+                onConfirm={(p) => { setPayload(p); setView('pay-method'); }} />
+            )}
+            {view === 'pay-method' && payload && (
+              <TenantPayMethod payload={payload} overview={overview}
+                onBack={() => setView('pay')}
+                onConfirm={(p) => { setPayload(p); setView('pay-confirm'); }} />
+            )}
+            {view === 'pay-confirm' && payload && (
+              <TenantPayConfirm payload={payload} overview={overview}
+                onBack={() => setView('pay-method')}
+                onPaid={() => { setView('paid'); setPayload(null); loadOverview(); }} />
             )}
             {view === 'paid' && <PaidView onContinue={() => setView('dashboard')} />}
+            {view === 'history' && (
+              <TenantHistoryView overview={overview} onBack={() => setView('dashboard')} />
+            )}
             {view === 'maintenance' && (
               <MaintenanceView onBack={() => setView('dashboard')}
                 onDone={() => setView('dashboard')} />

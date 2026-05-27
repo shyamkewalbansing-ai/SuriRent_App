@@ -1,0 +1,51 @@
+{
+  "summary": "End-to-end testing of the new Tenant Kiosk multi-step pay flow (/c/surirent/kiosk/huurder) that replaces the old auto-pay PayView. All 11 review scenarios PASS on mobile 393x852 + desktop 1440x900. Backend regression: 21 pass + 2 skipped (kiosk + forgot-pin suites). Real 1 SRD payment via contant fully succeeded through select->method->confirm->paid and returned to refreshed dashboard. OLD bug (single-tap auto-pay) is FIXED — no tk-pay-{id} per-invoice button exists; only the multi-step flow.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "scenarios_verified": [
+    {"id": "dashboard_mobile", "expected": "tk-dashboard with Financieel overzicht (Maandhuur/Servicekosten/Boetes/Internet rows) + Totaal openstaand + right card with Saldo/Volgende/Betalingsgeschiedenis + 3 SecondaryTile (Onderhoud/Gegevens/Contact)", "actual": "PASS — all 4 tk-fin-* rows visible (rent, svc, fines, internet), tk-total-due+tk-balance+tk-tile-pay+tk-tile-history all visible. Layout mirrors operator kiosk."},
+    {"id": "dashboard_desktop", "expected": "same layout in 1440x900", "actual": "PASS — left+right card grid with secondary tiles below."},
+    {"id": "pay_select_step1", "expected": "tk-pay-select with all 4 type checklist items + tk-pay-select-all when 2+ enabled + disabled items not clickable", "actual": "PASS — all 4 tk-pay-type-* present; tk-pay-select-all hidden when only 1 enabled item (huur), which matches spec 'visible when 2+ enabled'. Disabled items (amount=0) correctly non-interactive."},
+    {"id": "pay_custom_mobile", "expected": "tk-mobile-custom-toggle visible on mobile; tapping shows tk-mobile-key-* keypad", "actual": "PASS — toggle visible on 393w; keypad keys hidden until tap (verified tk-mobile-key-1 hidden before toggle)."},
+    {"id": "pay_custom_desktop", "expected": "tk-keypad-1..9, ., 0, DEL always visible on desktop", "actual": "PASS — all 12 keys present; mobile custom toggle correctly hidden on desktop."},
+    {"id": "pay_custom_clears_selection", "expected": "Entering custom amount clears selected items", "actual": "PASS — selected huur (7000), pressed keypad-1, confirm showed SRD 1,00 with category 'Gedeeltelijke Betaling' (not Huur)."},
+    {"id": "pay_method_step2", "expected": "tk-pay-method with tk-method-contant/mope/uni5pay + tk-method-back", "actual": "PASS — all 4 visible after tk-payment-next-btn."},
+    {"id": "pay_confirm_step3", "expected": "tk-pay-confirm with amount, category/method/huurder/appartement + tk-confirm-submit + tk-confirm-back", "actual": "PASS — amount SRD 7.000,00 (huur selection) on mobile run; on desktop SRD 1,00 (custom). Methode 'Contant', Huurder 'Bharat Kewalbansing', Appartement 'HUIS 7B' all rendered."},
+    {"id": "pay_paid_step4", "expected": "Successful POST /api/tenant-portal/payments -> tk-paid with green check + Klaar button -> returns to dashboard", "actual": "PASS — desktop run submitted real 1 SRD payment, tk-paid showed 'Betaling gelukt', tk-paid-continue returned to tk-dashboard."},
+    {"id": "history_view", "expected": "tk-history with rows tk-history-row-{id} + tk-history-pdf-{id} + tk-history-back", "actual": "PASS — 186 rows loaded from GET /api/tenant-portal/payments, no empty/error states, back navigation works."},
+    {"id": "back_navigation", "expected": "confirm-back -> method, method-back -> select, payselect-back -> dashboard", "actual": "PASS — all 3 transitions verified, no crashes."},
+    {"id": "old_bug_regression", "expected": "No tk-pay-{id} per-invoice auto-pay button anywhere", "actual": "PASS — searched DOM on dashboard, only tk-tile-pay + tk-tile-history present. Old PayView fully replaced."},
+    {"id": "backend_regression_42_kiosk", "expected": "test_tenant_kiosk.py still passes", "actual": "PASS — 14 passed, 2 skipped (skip is pre-existing, not introduced)."},
+    {"id": "backend_regression_forgot_pin", "expected": "test_tenant_forgot_pin.py 7/7 still pass", "actual": "PASS — 7/7."}
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_tenant_kiosk.py",
+    "/app/backend/tests/test_tenant_forgot_pin.py",
+    "/app/test_reports/pytest/iter24_regression.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "TenantKioskLayout.jsx is now 1384 lines — five sub-views (PinpadLogin, Dashboard, TenantPaySelect, TenantPayMethod, TenantPayConfirm, TenantHistoryView) live in one file. Consider extracting each view into /pages/vastgoed/tenant-kiosk/*.jsx for maintainability; the file exceeds the 700-line guideline.",
+    "TenantPaySelect+TenantPayMethod+TenantPayConfirm largely duplicate the operator-kiosk PaySelect+MethodSelect+PaymentConfirm logic in KioskLayout.jsx — opportunity to extract a shared <PayFlow/> component or shared hooks to avoid drift between tenant and operator flows on future fixes.",
+    "Right card shows 'SALDO' label whether totalDue is >0 or =0. Review spec mentions 'Te betalen/Saldo' switching by state. Currently a static 'SALDO' label with 'U bent volledig bij. Bedankt!' subtitle when zero — works visually but main agent may want to explicitly toggle label text for parity with operator kiosk.",
+    "When totalDue is 0 but apt.rent_amount is 7000 (Bharat case), tapping Volgende pre-selects Huur for 7000 SRD even though backend says nothing is owed. This is documented behaviour ('fallback to rent_amount') but could confuse users — consider showing a confirmation banner 'Geen openstaand bedrag — vooruitbetaling?' when totalDue===0."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "100% (21/21 active tests; 2 unrelated skips for invoice-tenant pairing)",
+    "frontend": "100% (14/14 scenarios across mobile + desktop)"
+  },
+  "test_credentials": "admin@vastgoed.sr / admin123 ; tenant Bharat Kewalbansing PIN 7777 (set via POST /api/auth/tenant-set-pin during this iteration). Company slug 'surirent'.",
+  "seed_data_creation": "1 real payment of SRD 1,00 (contant, 'Gedeeltelijke Betaling') created on Bharat's account during desktop full-flow test. Receipt auto-generated. No other seed/test data added.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Tenant kiosk lives at /c/{slug}/kiosk/huurder (NOT /huurder). PIN login via tk-key-{digit}. Bharat (tenant_id 603a112e-aced-4fd2-bd52-6744fb7756ee) has PIN=7777 set; apartment 'HUIS 7B' with rent 7000 but overview returns totalDue=0 due to fully-paid status. Pay flow testids: tk-pay-select, tk-pay-type-{huur|servicekosten|boete|internet}, tk-pay-select-all, tk-mobile-custom-toggle, tk-mobile-key-{0-9,DEL,.}, tk-keypad-{0-9,DEL,.}, tk-payment-next-btn, tk-pay-method, tk-method-{contant|mope|uni5pay}, tk-method-back, tk-pay-confirm, tk-confirm-amount, tk-confirm-submit, tk-confirm-back, tk-paid, tk-paid-continue, tk-history, tk-history-row-{id}, tk-history-pdf-{id}, tk-history-back, tk-payselect-back. Layout perfectly mirrors operator kiosk KioskLayout.jsx.",
+  "rca of the issue": "N/A — feature validation iteration. Original bug (single-tap auto-pay) is FIXED via the new multi-step flow. All review_request scenarios verified end-to-end with a real payment write."
+}
