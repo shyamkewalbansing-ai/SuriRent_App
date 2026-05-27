@@ -1,0 +1,22 @@
+{
+  "name": "SuriRent Kiosk",
+  "short_name": "Kiosk",
+  "description": "Receptie- en huurders-kiosk voor SuriRent — snelle PIN-toegang en zelfservice.",
+  "start_url": "/kiosk?source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#EAF2FF",
+  "theme_color": "#2563EB",
+  "lang": "nl",
+  "dir": "ltr",
+  "categories": ["business", "productivity"],
+  "id": "/?app=kiosk",
+  "prefer_related_applications": false,
+  "icons": [
+    { "src": "/kiosk-icons/kioskpwa-72.png",  "sizes": "72x72",   "type": "image/png", "purpose": "any" },
+    { "src": "/kiosk-icons/kioskpwa-144.png", "sizes": "144x144", "type": "image/png", "purpose": "any" },
+    { "src": "/kiosk-icons/kioskpwa-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/kiosk-icons/kioskpwa-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

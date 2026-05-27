@@ -197,6 +197,29 @@ export default function Notifications() {
     finally { setLoading(false); }
   };
 
+  // UA-detectie zodat we per browser/OS de juiste deblokkeer-stappen tonen.
+  const browserInfo = (() => {
+    if (typeof navigator === 'undefined') return { os: 'unknown', browser: 'unknown', isStandalone: false };
+    const ua = navigator.userAgent.toLowerCase();
+    let os = 'unknown';
+    if (/iphone|ipad|ipod/.test(ua)) os = 'ios';
+    else if (/android/.test(ua)) os = 'android';
+    else if (/macintosh|mac os/.test(ua)) os = 'macos';
+    else if (/windows/.test(ua)) os = 'windows';
+    let browser = 'unknown';
+    if (/edg\//.test(ua)) browser = 'edge';
+    else if (/chrome\//.test(ua) && !/chromium/.test(ua)) browser = 'chrome';
+    else if (/firefox\//.test(ua)) browser = 'firefox';
+    else if (/safari\//.test(ua)) browser = 'safari';
+    else if (/samsungbrowser/.test(ua)) browser = 'samsung';
+    const isStandalone = (typeof window !== 'undefined') && (
+      window.matchMedia?.('(display-mode: standalone)')?.matches ||
+      window.navigator?.standalone === true
+    );
+    return { os, browser, isStandalone };
+  })();
+  const [showUnblockGuide, setShowUnblockGuide] = useState(false);
+
   return (
     <div data-testid="notifications-page">
       <div className="mb-6">
@@ -302,9 +325,27 @@ export default function Notifications() {
               )}
             </div>
             {permission === 'denied' && (
-              <p className="mt-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2">
-                Browser meldingen zijn geblokkeerd. Klik op het slot-icoon links in de adresbalk en sta meldingen toe.
-              </p>
+              <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-xl" data-testid="permission-blocked-card">
+                <div className="flex items-start gap-3">
+                  <div className="w-9 h-9 rounded-lg bg-amber-200/60 text-amber-700 flex items-center justify-center shrink-0">
+                    <AlertTriangle className="w-5 h-5" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-amber-900">
+                      Meldingen geblokkeerd op dit apparaat
+                    </p>
+                    <p className="text-xs text-amber-800 mt-1">
+                      Eerder hebt u "Niet toestaan" gekozen. Browser-instellingen moet u handmatig
+                      aanpassen — wij kunnen niet opnieuw vragen vanuit de app.
+                    </p>
+                    <button onClick={() => setShowUnblockGuide(true)} data-testid="unblock-guide-open"
+                      className="mt-3 inline-flex items-center gap-1.5 px-3 py-2 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-lg text-xs">
+                      <Shield className="w-3.5 h-3.5" />
+                      Toon instructies voor mijn apparaat
+                    </button>
+                  </div>
+                </div>
+              </div>
             )}
             {subscribed && deviceCount === 0 && (
               <p className="mt-3 text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded-lg p-2">
@@ -466,6 +507,143 @@ export default function Notifications() {
           </div>
         </>
       )}
+
+      {showUnblockGuide && (
+        <UnblockGuideModal info={browserInfo} onClose={() => setShowUnblockGuide(false)} />
+      )}
+    </div>
+  );
+}
+
+// =====================================================================
+// UnblockGuideModal — toont per browser/OS de exacte stappen om meldingen
+// weer toe te staan + een "Ik heb het gedaan" knop die de pagina herlaadt.
+// =====================================================================
+function UnblockGuideModal({ info, onClose }) {
+  // Bouw stap-lijst op basis van OS + browser.
+  const steps = (() => {
+    const { os, browser, isStandalone } = info;
+    // iOS PWA (Add to Home Screen)
+    if (os === 'ios' && isStandalone) {
+      return [
+        'Sluit deze app (swipe omhoog of druk thuisknop)',
+        'Open de Instellingen-app op uw iPhone',
+        'Scroll naar beneden en tik op "Berichtgeving"',
+        'Tik op de SuriRent / Vastgoed app',
+        'Zet "Sta berichtgeving toe" AAN',
+        'Open de app opnieuw vanaf het beginscherm',
+        'Kom terug naar deze pagina en tik op "Klaar — laad opnieuw"',
+      ];
+    }
+    if (os === 'ios') {
+      return [
+        'Tik op het AA-icoon links in de adresbalk (Safari)',
+        'Kies "Website-instellingen"',
+        'Stel "Berichtgeving" in op "Toestaan"',
+        'Of: Instellingen-app → Safari → Geavanceerd → Websitegegevens → zoek deze site → verwijder',
+        'Laad de pagina opnieuw',
+        'Klik op "Klaar — laad opnieuw" hieronder',
+      ];
+    }
+    if (os === 'android') {
+      if (browser === 'chrome' || isStandalone) {
+        return [
+          'Tik op de drie puntjes rechtsboven (menu)',
+          'Kies "Instellingen" → "Site-instellingen"',
+          'Tik op "Meldingen"',
+          'Zoek deze app/site en zet meldingen op "Toestaan"',
+          'Of bij PWA: Instellingen-app → Apps → SuriRent → Meldingen → AAN',
+          'Kom terug en tik op "Klaar — laad opnieuw"',
+        ];
+      }
+      return [
+        'Tik op het slot-icoon links in de adresbalk',
+        'Tik op "Toestemmingen" of "Site-instellingen"',
+        'Zet "Meldingen" op "Toestaan"',
+        'Laad de pagina opnieuw',
+      ];
+    }
+    // Desktop browsers
+    if (browser === 'chrome' || browser === 'edge') {
+      return [
+        'Klik op het slot-icoon links in de adresbalk',
+        'Klik op "Site-instellingen"',
+        'Zoek "Meldingen" en zet het op "Toestaan"',
+        'Sluit het tabblad en open deze pagina opnieuw',
+        'Klik op "Klaar — laad opnieuw" hieronder',
+      ];
+    }
+    if (browser === 'firefox') {
+      return [
+        'Klik op het slot-icoon links in de adresbalk',
+        'Klik op "Toestemmingen wissen voor deze site"',
+        'Laad de pagina opnieuw',
+        'Wanneer gevraagd, klik op "Toestaan"',
+      ];
+    }
+    if (browser === 'safari') {
+      return [
+        'Klik op "Safari" in de menubalk',
+        'Kies "Voorkeuren" → "Websites" → "Meldingen"',
+        'Stel deze website in op "Toestaan"',
+        'Laad de pagina opnieuw',
+      ];
+    }
+    return [
+      'Klik op het slot-/info-icoon links in de adresbalk',
+      'Open de site-instellingen',
+      'Zet "Meldingen" op "Toestaan"',
+      'Laad de pagina opnieuw',
+    ];
+  })();
+  const deviceLabel = (() => {
+    const { os, browser, isStandalone } = info;
+    const osName = { ios: 'iPhone/iPad', android: 'Android', macos: 'Mac', windows: 'Windows', unknown: 'Apparaat' }[os] || 'Apparaat';
+    const brName = { chrome: 'Chrome', edge: 'Edge', firefox: 'Firefox', safari: 'Safari', samsung: 'Samsung Internet', unknown: '' }[browser] || '';
+    if (isStandalone) return `${osName} PWA`;
+    return brName ? `${osName} · ${brName}` : osName;
+  })();
+
+  return (
+    <div className="fixed inset-0 z-[200] bg-black/50 flex items-end sm:items-center justify-center p-0 sm:p-4"
+      data-testid="unblock-guide-modal" onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()}
+        className="w-full sm:max-w-lg bg-white rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl max-h-[90vh] overflow-y-auto"
+        style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 24px), 24px)' }}>
+        <div className="w-12 h-1.5 bg-slate-300 rounded-full mx-auto mb-4 sm:hidden" />
+        <div className="flex items-start gap-3 mb-4">
+          <div className="w-12 h-12 rounded-xl bg-orange-100 text-[#FF5C00] flex items-center justify-center shrink-0">
+            <Shield className="w-6 h-6" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h2 className="text-lg font-black text-slate-900">Meldingen weer toestaan</h2>
+            <p className="text-xs text-slate-500 mt-0.5">Detectie: <span className="font-bold text-slate-700">{deviceLabel}</span></p>
+          </div>
+          <button onClick={onClose} data-testid="unblock-guide-close" className="text-slate-400 hover:text-slate-700 p-1">
+            ✕
+          </button>
+        </div>
+        <ol className="space-y-3 mb-5">
+          {steps.map((s, i) => (
+            <li key={i} className="flex gap-3" data-testid={`unblock-step-${i + 1}`}>
+              <div className="w-7 h-7 rounded-full bg-orange-100 text-[#FF5C00] flex items-center justify-center shrink-0 font-black text-sm">
+                {i + 1}
+              </div>
+              <p className="text-sm text-slate-700 pt-0.5 leading-relaxed">{s}</p>
+            </li>
+          ))}
+        </ol>
+        <div className="flex gap-2">
+          <button onClick={onClose}
+            className="flex-1 px-4 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-sm">
+            Sluiten
+          </button>
+          <button onClick={() => window.location.reload()} data-testid="unblock-guide-reload"
+            className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 bg-[#FF5C00] hover:bg-[#E05200] text-white font-bold rounded-xl text-sm">
+            <RotateCw className="w-4 h-4" /> Klaar — laad opnieuw
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
