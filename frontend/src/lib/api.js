@@ -34,8 +34,10 @@ api.interceptors.request.use((config) => {
 
 // Response-interceptor: bij 401 op een protected endpoint → verwijder de
 // stale token zodat de PWA niet vastloopt in een redirect-loop (zoals
-// op iOS PWA na een verlopen admin_token). De gebruiker komt automatisch
-// terug op /login en kan opnieuw inloggen of zijn PIN intikken.
+// op iOS PWA na een verlopen admin_token). De hard-redirect doen we
+// ALLEEN voor admin-routes; tenant + kiosk + customer pagina's hebben
+// hun eigen lokale login-UI en moeten niet naar /login?stale=1 worden
+// gestuurd (dat is de ADMIN-login route).
 const PUBLIC_401_PATHS = [
   '/auth/login', '/auth/register', '/auth/kiosk-pin',
   '/tenant-portal/login', '/tenant-portal/pin-login',
@@ -47,31 +49,37 @@ api.interceptors.response.use(
       const url = (err.config?.url || '');
       const isPublic = PUBLIC_401_PATHS.some((p) => url.startsWith(p));
       if (!isPublic) {
+        const path = (typeof window !== 'undefined' && window.location?.pathname) || '';
+        const isTenantContext = url.startsWith('/tenant-portal/')
+          || path.includes('/kiosk/huurder')
+          || path.includes('/kiosk/klant')
+          || path.startsWith('/huurder');
+        const isKioskContext = url.startsWith('/kiosk/') || path === '/kiosk' || path.startsWith('/kiosk/');
         try {
-          if (url.startsWith('/tenant-portal/')) {
+          if (isTenantContext) {
             localStorage.removeItem('tenant_token');
-          } else if (url.startsWith('/kiosk/')) {
+            try {
+              sessionStorage.removeItem('tenant_session');
+            } catch { /* ignore */ }
+          } else if (isKioskContext) {
             localStorage.removeItem('kiosk_token');
-            // Employee-sessie meenemen — die hoort bij de kiosk-token.
             try {
               sessionStorage.removeItem('kiosk_emp_id');
               sessionStorage.removeItem('kiosk_emp_name');
               sessionStorage.removeItem('kiosk_emp_pin');
             } catch { /* ignore */ }
           } else {
-            // Admin path 401 → admin_token verlopen.
+            // Admin context — token verlopen of foutief.
             localStorage.removeItem('admin_token');
           }
         } catch { /* ignore */ }
-        // Forceer naar login indien gebruiker niet al op een /login of /onderteken
-        // pagina zit (waar 401 niet relevant is voor UX-redirect).
+        // Hard redirect ALLEEN voor admin-pagina's (/admin/*) en alleen
+        // wanneer we niet al op /login of een tenant/kiosk route zitten.
+        // Tenant/kiosk/customer pagina's tonen zelf hun lokale login-UI.
         try {
-          const path = window.location.pathname || '';
-          const safe = path === '/login' || path.startsWith('/onderteken') || path === '/' ||
-            path.endsWith('/login') || path.endsWith('/c');
-          if (!safe) {
-            // Hard navigate met source=stale zodat /login expliciet weet dat
-            // we van een stale-token-redirect komen (kan UI hints tonen).
+          const isAdminRoute = path.startsWith('/admin');
+          const onLogin = path === '/login' || path.endsWith('/login');
+          if (isAdminRoute && !onLogin) {
             window.location.assign('/login?stale=1');
           }
         } catch { /* ignore */ }
