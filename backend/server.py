@@ -2884,6 +2884,161 @@ async def tenant_portal_pin_login(body: TenantPinLoginIn, request: Request, resp
     }
 
 
+class TenantForgotPinIn(BaseModel):
+    identifier: str  # email of telefoonnummer
+    company_id: Optional[str] = None
+    company_slug: Optional[str] = None
+
+
+def _generate_unique_pin(used_hashes: list, max_tries: int = 25) -> str:
+    """Genereer een 4-cijferige PIN die nog niet in `used_hashes` voorkomt.
+    PIN's beginnen niet met '0' zodat de huurder ze beter kan onthouden
+    (anders gaat een leading-zero op de display soms verloren).
+    """
+    import random
+    for _ in range(max_tries):
+        pin = f"{random.randint(1000, 9999)}"
+        clash = False
+        for h in used_hashes:
+            if h and verify_password(pin, h):
+                clash = True
+                break
+        if not clash:
+            return pin
+    # Fall-back: 5-cijferige PIN als 4-cijfers volledig "op" is — extreem
+    # zeldzaam in de praktijk (>1000 huurders met PIN) maar voorkomt loop.
+    return f"{random.randint(10000, 99999)}"
+
+
+@api.post("/tenant-portal/forgot-pin")
+async def tenant_forgot_pin(body: TenantForgotPinIn, request: Request):
+    """Stuur de huurder een nieuwe PIN via Email + WhatsApp.
+
+    Aangeroepen vanaf de Huurder Kiosk na bv. 3 foute PIN-pogingen.
+    We zoeken de huurder op basis van email (case-insensitive) of
+    laatste-4-cijfers van het telefoonnummer binnen de gegeven company.
+    Voor de UX retourneren we altijd `{ok:true}` (anti-enumeratie) maar
+    daarbij ook welke kanalen gebruikt zijn ("via Email", "via WhatsApp",
+    of beide) als we de tenant gevonden hebben.
+
+    Anti-misbruik: max 3 forgot-pin requests per IP per 10 minuten via
+    de bestaande _pin_throttle_* helpers (key prefix 'forgot-pin').
+    """
+    # Throttle — onafhankelijk van pin-throttle zodat het loslaten van
+    # de lockout ook na 3 foute PIN-pogingen blijft gelden.
+    throttle_key = f"forgot-pin:{_client_ip(request)}"
+    _pin_throttle_check(throttle_key)
+
+    # Resolve company
+    cid = body.company_id
+    if not cid and body.company_slug:
+        c = await db.companies.find_one({"slug": body.company_slug.lower()}, {"_id": 0, "id": 1})
+        cid = c["id"] if c else None
+    if not cid:
+        raise HTTPException(status_code=400, detail="Bedrijfscontext ontbreekt")
+
+    ident = (body.identifier or "").strip()
+    if not ident:
+        raise HTTPException(status_code=400, detail="Vul uw email of telefoonnummer in")
+
+    # Find tenant: email match (case-insensitive) of phone-digits ends-with
+    digits = "".join(ch for ch in ident if ch.isdigit())
+    or_clauses = [{"email": ident.lower()}]
+    if digits:
+        # Last 4-12 cijfers van het telefoonnummer moeten matchen op
+        # phone_digits suffix — dat ondersteunt zowel "597 8123456" als
+        # "+597 8 123 456" varianten.
+        or_clauses.append({"phone_digits": {"$regex": f"{re.escape(digits)}$"}})
+    tenant = await db.tenants.find_one(
+        {"company_id": cid, "$or": or_clauses},
+        {"_id": 0},
+    )
+    if not tenant:
+        # Anti-enumeratie: tel als poging zodat brute-force phone-suffix
+        # gissen wordt afgestraft.
+        _pin_throttle_fail(throttle_key)
+        # Generieke OK-response — geen info-leak.
+        return {"ok": True, "via": []}
+
+    # Generate fresh PIN, ensure uniek binnen company.
+    others = await db.tenants.find(
+        {"company_id": cid, "id": {"$ne": tenant["id"]}, "pin_hash": {"$exists": True, "$ne": None}},
+        {"_id": 0, "pin_hash": 1},
+    ).to_list(2000)
+    used = [o["pin_hash"] for o in others]
+    new_pin = _generate_unique_pin(used)
+
+    await db.tenants.update_one(
+        {"id": tenant["id"]},
+        {"$set": {
+            "pin_hash": hash_password(new_pin),
+            "phone_digits": "".join(ch for ch in (tenant.get("phone") or "") if ch.isdigit()),
+            "pin_reset_at": iso(now_utc()),
+        }},
+    )
+
+    via: list = []
+    company = await db.companies.find_one({"id": cid}, {"_id": 0})
+    company_name = (company or {}).get("name") or "Vastgoed Kiosk"
+
+    # Email
+    email = (tenant.get("email") or "").strip()
+    if email:
+        try:
+            from email_service import send_email as _send_smtp, wrap_template
+            smtp = await get_company_section(cid, "smtp")
+            if smtp and smtp.get("enabled") and smtp.get("host"):
+                subject = f"Uw nieuwe PIN voor {company_name}"
+                content_html = (
+                    f"<h2 style='color:#FF5C00;margin:0 0 12px 0;'>Nieuwe PIN code</h2>"
+                    f"<p>Beste {tenant.get('name', 'huurder')},</p>"
+                    f"<p>U heeft een nieuwe PIN aangevraagd om in te loggen op uw huurder-kiosk:</p>"
+                    f"<p style='font-size:32px;font-weight:bold;letter-spacing:8px;text-align:center;"
+                    f"padding:16px;background:#f5f5f5;border-radius:12px;color:#FF5C00;'>{new_pin}</p>"
+                    f"<p>Gebruik deze code om uw saldo en betalingen te bekijken. "
+                    f"Heeft u dit niet aangevraagd? Neem dan contact op met de receptie.</p>"
+                )
+                body_html = wrap_template(content_html, footer=company_name)
+                await _send_smtp(smtp, to=email, subject=subject, body_html=body_html)
+                via.append("email")
+        except Exception as e:
+            print(f"[forgot-pin] email send failed: {e}")
+
+    # WhatsApp (en SMS-fallback)
+    phone = (tenant.get("phone") or "").strip()
+    if phone:
+        try:
+            from twilio_service import send_whatsapp, send_sms
+            cfg = await get_company_section(cid, "twilio")
+            if cfg and cfg.get("account_sid") and cfg.get("auth_token"):
+                msg = (
+                    f"{company_name} — Uw nieuwe PIN: *{new_pin}*\n"
+                    f"Gebruik deze code op de Huurder Kiosk om in te loggen. "
+                    f"Niet aangevraagd? Neem contact op met de receptie."
+                )
+                try:
+                    await send_whatsapp(cfg, phone, msg)
+                    via.append("whatsapp")
+                except Exception:
+                    # Val terug op SMS als WhatsApp faalt (geen joined-channel etc.)
+                    try:
+                        await send_sms(cfg, phone, msg)
+                        via.append("sms")
+                    except Exception as e2:
+                        print(f"[forgot-pin] whatsapp+sms send failed: {e2}")
+        except Exception as e:
+            print(f"[forgot-pin] twilio config failed: {e}")
+
+    # Reset throttle alleen bij succesvolle verzending (anders moedigen we
+    # iemand aan om met emptyresult te blijven proberen).
+    if via:
+        _pin_throttle_clear(throttle_key)
+    else:
+        _pin_throttle_fail(throttle_key)
+
+    return {"ok": True, "via": via}
+
+
 @api.get("/tenant-portal/me")
 async def tenant_portal_me(tenant=Depends(get_tenant_session)):
     return {

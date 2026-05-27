@@ -6,6 +6,7 @@ import {
   Lock, Loader2, LogOut, CreditCard, Wrench, User, Phone,
   CheckCircle2, ChevronRight, Calendar, ArrowLeft, Building2, Delete,
   Home as HomeIcon, Mail, Wallet, FileText, Wifi,
+  HelpCircle, Send, Check,
 } from 'lucide-react';
 import { api, formatError, fmtMoney, MONTHS_NL } from '../../lib/api';
 import {
@@ -90,6 +91,11 @@ function LoginView({ branding, onLoggedIn, prefill }) {
   const [pin, setPin] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  // Aantal foute pogingen — na 3 tonen we de "Vergeten? Vraag nieuwe PIN" knop
+  // zodat de huurder zelfstandig een nieuwe code kan aanvragen ipv naar de
+  // receptie te moeten bellen.
+  const [failedAttempts, setFailedAttempts] = useState(0);
+  const [showForgotSheet, setShowForgotSheet] = useState(false);
 
   const onDigit = (d) => setPin((p) => (p.length >= PIN_LENGTH ? p : p + d));
   const onBack = () => setPin((p) => p.slice(0, -1));
@@ -114,10 +120,12 @@ function LoginView({ branding, onLoggedIn, prefill }) {
         }
         if (cancelled) return;
         localStorage.setItem(TENANT_TOKEN_KEY, data.token);
+        setFailedAttempts(0);
         onLoggedIn();
       } catch (e) {
         if (!cancelled) {
           setError(formatError(e) || 'Onjuiste PIN');
+          setFailedAttempts((n) => n + 1);
           // Reset het invoerveld na een korte trillende animatie.
           setTimeout(() => { if (!cancelled) setPin(''); }, 350);
         }
@@ -185,6 +193,120 @@ function LoginView({ branding, onLoggedIn, prefill }) {
         {busy && (
           <div className="mt-4 flex items-center gap-2 text-white/90 text-sm">
             <Loader2 className="w-4 h-4 animate-spin" /> Bezig met inloggen…
+          </div>
+        )}
+
+        {/* Na 3 foute pogingen → tonen "Vergeten?" knop. Voorkomt receptie-bellen. */}
+        {failedAttempts >= 3 && !busy && (
+          <motion.button
+            initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+            onClick={() => setShowForgotSheet(true)}
+            data-testid="tk-forgot-pin-btn"
+            className="mt-5 inline-flex items-center gap-2 px-5 py-3 bg-white/15 hover:bg-white/25 active:bg-white/30 backdrop-blur-md text-white font-bold rounded-2xl border border-white/20 text-sm min-h-[48px]">
+            <HelpCircle className="w-4 h-4" />
+            PIN vergeten? Vraag nieuwe code
+          </motion.button>
+        )}
+      </motion.div>
+
+      {showForgotSheet && (
+        <ForgotPinSheet
+          branding={branding}
+          onClose={() => setShowForgotSheet(false)}
+          onSent={() => { setFailedAttempts(0); setError(''); setPin(''); }}
+        />
+      )}
+    </div>
+  );
+}
+
+// =====================================================================
+// FORGOT PIN — bottom sheet om email/telefoonnr in te vullen.
+// Backend stuurt PIN per Email + WhatsApp/SMS.
+// =====================================================================
+function ForgotPinSheet({ branding, onClose, onSent }) {
+  const [identifier, setIdentifier] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [sent, setSent] = useState(null); // { via: ['email','whatsapp'] }
+
+  const submit = async (e) => {
+    e?.preventDefault?.();
+    if (!identifier.trim()) { setError('Vul uw email of telefoon in'); return; }
+    setBusy(true); setError('');
+    try {
+      const payload = { identifier: identifier.trim() };
+      if (branding?.id) payload.company_id = branding.id;
+      else if (branding?.slug) payload.company_slug = branding.slug;
+      const { data } = await api.post('/tenant-portal/forgot-pin', payload);
+      setSent({ via: data?.via || [] });
+      onSent?.();
+    } catch (err) {
+      setError(formatError(err, 'Verzenden mislukt. Probeer opnieuw of bel de receptie.'));
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[100] bg-black/50 backdrop-blur-sm flex items-end sm:items-center justify-center"
+      data-testid="tk-forgot-sheet" onClick={onClose}>
+      <motion.div
+        initial={{ y: 400, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 400 }}
+        transition={{ type: 'spring', damping: 28, stiffness: 280 }}
+        onClick={(e) => e.stopPropagation()}
+        className="w-full sm:max-w-md bg-white rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl"
+        style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 24px), 24px)' }}>
+        <div className="w-12 h-1.5 bg-slate-300 rounded-full mx-auto mb-4 sm:hidden" />
+        {!sent ? (
+          <>
+            <div className="flex items-start gap-3 mb-4">
+              <div className="w-10 h-10 rounded-xl bg-orange-100 text-[#FF5C00] flex items-center justify-center shrink-0">
+                <HelpCircle className="w-5 h-5" />
+              </div>
+              <div className="flex-1">
+                <h2 className="text-lg font-black text-slate-900">PIN vergeten?</h2>
+                <p className="text-sm text-slate-500 mt-0.5">
+                  Vul uw email of telefoonnummer in. We sturen u direct een nieuwe PIN.
+                </p>
+              </div>
+            </div>
+            <form onSubmit={submit} className="space-y-3">
+              <input value={identifier} onChange={(e) => setIdentifier(e.target.value)}
+                autoFocus inputMode="email"
+                placeholder="email@voorbeeld.com of +597 8123456"
+                data-testid="tk-forgot-identifier"
+                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#FF5C00] text-sm" />
+              {error && (
+                <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2" data-testid="tk-forgot-error">{error}</p>
+              )}
+              <div className="flex gap-2 pt-1">
+                <button type="button" onClick={onClose} disabled={busy}
+                  className="flex-1 px-4 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-sm">
+                  Annuleren
+                </button>
+                <button type="submit" disabled={busy || !identifier.trim()}
+                  data-testid="tk-forgot-submit"
+                  className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 bg-[#FF5C00] hover:bg-[#E05200] text-white font-bold rounded-xl text-sm disabled:opacity-50">
+                  {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                  Verstuur PIN
+                </button>
+              </div>
+            </form>
+          </>
+        ) : (
+          <div className="text-center py-2" data-testid="tk-forgot-success">
+            <div className="w-14 h-14 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto mb-3">
+              <Check className="w-7 h-7" strokeWidth={3} />
+            </div>
+            <h2 className="text-lg font-black text-slate-900 mb-1">Verstuurd!</h2>
+            <p className="text-sm text-slate-500 mb-4">
+              {sent.via.length === 0
+                ? 'We controleren uw gegevens. Komt er geen bericht binnen 2 minuten? Neem contact op met de receptie.'
+                : `Uw nieuwe PIN is verstuurd via ${sent.via.map((v) => v === 'email' ? 'Email' : v === 'whatsapp' ? 'WhatsApp' : 'SMS').join(' + ')}.`}
+            </p>
+            <button onClick={onClose} data-testid="tk-forgot-close"
+              className="px-6 py-3 bg-[#FF5C00] hover:bg-[#E05200] text-white font-bold rounded-xl text-sm">
+              Sluiten en PIN intikken
+            </button>
           </div>
         )}
       </motion.div>

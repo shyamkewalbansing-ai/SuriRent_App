@@ -1,0 +1,68 @@
+{
+  "summary": "End-to-end testing of the new 'PIN vergeten?' (Forgot PIN) flow on the Huurder Kiosk. Backend: 7/7 new tests PASS for POST /api/tenant-portal/forgot-pin (missing context 400, missing identifier 400, anti-enumeratie 200/via:[], email lookup invalidates OLD PIN, phone-suffix lookup invalidates OLD PIN, response shape, pin-login regression). Frontend: 7/7 UI scenarios PASS on mobile 393x852 — button hidden initially & after 1/2 fails, appears after exactly 3 wrong PINs, bottom sheet opens, anti-enumeratie unknown-identifier reaches success state, close resets failedAttempts. Prior 4-file regression suite: 40/42 PASS — the 2 errors are pre-existing throttle-bleed from test_employee_pin_login::test_throttle_locks_after_8_bad_attempts polluting the kiosk-pin throttle bucket for the next module (test_push_pending_notification setup). NOT caused by forgot-pin changes.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "/api/auth/kiosk-pin (throttle bleed)",
+        "issue": "test_employee_pin_login.py::test_throttle_locks_after_8_bad_attempts locks the IP for 297s, causing test_push_pending_notification.py::TestKioskPaymentBranching setup to fail with 429 when run in the same pytest session. Pre-existing — not from this iteration. Suggested fix: use a unique IP header per test or run that throttle test last via @pytest.mark.order."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "ForgotPinSheet — empty-input handling",
+        "issues": [
+          "Submit button is correctly disabled when identifier is empty (prevents API call), but pressing Enter in the empty input does NOT surface the 'Vul uw email of telefoon in' error message via tk-forgot-error. The review_request expected the error to appear. Functional safety (no API call) IS preserved. Low priority UX gap — main agent may want to drop the disabled attribute and let the submit handler render the error for clearer feedback, OR remove the now-unreachable validation in submit()."
+        ]
+      }
+    ]
+  },
+  "scenarios_verified": [
+    {"id": "fe_1_initial_hidden", "expected": "tk-forgot-pin-btn HIDDEN before any failed PIN", "actual": "HIDDEN. PASS"},
+    {"id": "fe_2_one_fail_hidden", "expected": "still HIDDEN after 1 wrong PIN", "actual": "HIDDEN. PASS"},
+    {"id": "fe_3_two_fails_hidden", "expected": "still HIDDEN after 2 wrong PINs", "actual": "HIDDEN. PASS"},
+    {"id": "fe_4_three_fails_show", "expected": "VISIBLE after exactly 3 wrong PINs", "actual": "VISIBLE. PASS"},
+    {"id": "fe_5_sheet_opens", "expected": "tk-forgot-sheet + tk-forgot-identifier + tk-forgot-submit", "actual": "All visible. PASS"},
+    {"id": "fe_6_anti_enum_success", "expected": "submit unknown email → tk-forgot-success", "actual": "Success state shown. PASS"},
+    {"id": "fe_7_close_resets", "expected": "close → sheet dismissed + tk-forgot-pin-btn hidden (failedAttempts reset)", "actual": "Both confirmed. PASS"},
+    {"id": "be_1_missing_company", "expected": "400 'Bedrijfscontext ontbreekt'", "actual": "PASS"},
+    {"id": "be_2_missing_identifier", "expected": "400 'Vul uw email of telefoonnummer in'", "actual": "PASS"},
+    {"id": "be_3_unknown_identifier", "expected": "200 {ok:true, via:[]}", "actual": "PASS"},
+    {"id": "be_4_email_invalidates_old_pin", "expected": "old PIN no longer works on /pin-login after forgot-pin", "actual": "PASS (old PIN returns non-200 after reset)"},
+    {"id": "be_5_phone_suffix_lookup", "expected": "last 7 digits of phone matches tenant via phone_digits suffix regex", "actual": "PASS (old PIN invalidated → lookup hit)"},
+    {"id": "be_6_response_shape", "expected": "always {ok:true, via:list}", "actual": "PASS"},
+    {"id": "be_7_pin_login_regression", "expected": "/tenant-portal/pin-login still validates (non-5xx)", "actual": "PASS"}
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_tenant_forgot_pin.py",
+    "/app/test_reports/pytest/iter23_forgot_pin.xml",
+    "/app/test_reports/pytest/iter23_regression.xml"
+  ],
+  "action_items": [
+    "(LOW) Frontend ForgotPinSheet: remove the disabled-on-empty submit OR drop the unreachable empty-string check inside submit() — currently the tk-forgot-error path for empty input is unreachable. Functional safety intact (no API call fires).",
+    "(LOW/PRE-EXISTING) Throttle bleed between test_employee_pin_login.py and test_push_pending_notification.py — add @pytest.mark.order or per-test IP-header isolation so the kiosk-pin 5-minute lockout doesn't poison downstream tests in the same session.",
+    "(INFO) Review claim '4+ requests → 429 after 3 failed' is inaccurate — PIN_MAX_ATTEMPTS=8 (env default), so the IP needs 8 _pin_throttle_fail bumps before locking. The forgot-pin endpoint only bumps on tenant-not-found / send-failure, so a real abuser needs 8 unknown-identifier hits to lock out. Adjust expectation or lower PIN_MAX_ATTEMPTS for forgot-pin specifically if a 3-attempt window is required for this endpoint."
+  ],
+  "critical_code_review_comments": [
+    "GET /api/tenants (TenantOut) intentionally strips pin_reset_at — that's fine, but means there's no admin-side way to observe reset timestamps (e.g., for audit / 'last PIN change' UI). Consider exposing pin_reset_at on TenantOut if such a column is desired in the Beheer tenant list.",
+    "_generate_unique_pin loops O(N) over verify_password (bcrypt) for each candidate — at 25 tries × N tenants this can stall the request when a company has many tenants. Currently OK (N small), but worth a note for larger tenants.",
+    "ForgotPinSheet payload prefers branding.id over branding.slug — make sure the LoginView always receives a branding object with at least slug set; otherwise the request body lacks both company_id and company_slug → 400. The current code path in TenantKioskLayout sets branding via fetchBranding/fetchBrandingByHost, so this is OK in practice."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_tenant_forgot_pin.py (new file — 7 pytest cases)"
+  ],
+  "success_rate": {
+    "backend": "100% (7/7 new) + 95% (40/42 prior regression — 2 pre-existing throttle-bleed errors)",
+    "frontend": "100% (7/7 UI scenarios)"
+  },
+  "test_credentials": "admin@vastgoed.sr / admin123 ; company slug 'surirent'. Used a fresh TEST_forgotpin_<uuid>@example.test tenant per pytest session (created/deleted via /api/tenants + /api/auth/tenant-set-pin) to avoid spamming the real shyam@kewalbansing.net address.",
+  "seed_data_creation": "TEST_ForgotPin tenants are auto-created and cleaned up by the session-scoped fixture in test_tenant_forgot_pin.py — no persistent seed data left behind.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "The forgot-pin backend uses _pin_throttle_fail/clear, sharing _PIN_ATTEMPTS dict with kiosk-pin throttling but under prefix 'forgot-pin:<ip>'. The dummy Twilio config returns 'Twilio is niet ingeschakeld' which is caught — so in this env via=['email'] is realistic only when company SMTP is enabled; otherwise via=[] is still a valid response (tests tolerate both). Frontend test relies on data-testid='tk-forgot-pin-btn' + 'tk-forgot-sheet' + 'tk-forgot-identifier' + 'tk-forgot-submit' + 'tk-forgot-success' + 'tk-forgot-close'. URL: /c/surirent/kiosk/huurder.",
+  "rca of the issue": "N/A — this iteration is feature validation, not bug RCA. All new behaviour matches the review_request spec except the minor empty-input UX gap noted under frontend design_issues."
+}
