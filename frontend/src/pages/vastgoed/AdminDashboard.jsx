@@ -40,6 +40,7 @@ import ApartmentsBell from '../../components/ApartmentsBell';
 import QuickPayButton from '../../components/QuickPayButton';
 import PhotoUpload from '../../components/PhotoUpload';
 import { installPendingApprovalDingListener } from '../../lib/notify-sound';
+import { useForegroundPendingNotify } from '../../lib/foreground-notify';
 
 const BASE_TABS = [
   { id: 'overview', label: 'Overzicht', icon: LayoutDashboard },
@@ -1587,6 +1588,11 @@ export default function AdminDashboard() {
   // Activeer de "ding-ding" sound bij binnenkomende pending-approval pushes.
   // Idempotent — meerdere mounts registreren maar één listener.
   useEffect(() => { installPendingApprovalDingListener(); }, []);
+
+  // Foreground polling voor pending payments — werkt OOK in iOS PWA
+  // Guided Access mode waar system-push geblokkeerd is. Pollt elke 5s,
+  // toast + ding-ding bij elke nieuwe pending betaling.
+  useForegroundPendingNotify({ enabled: true });
 
   // URL → tab sync. Bij paden zoals /admin/invoices, /admin/payments etc.
   // wordt de tab automatisch ingesteld. Belangrijk voor:

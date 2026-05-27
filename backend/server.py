@@ -3644,10 +3644,33 @@ async def list_payments(
 
 @api.get("/payments/pending-count")
 async def payments_pending_count(user=Depends(get_current_user)):
-    """Lichte endpoint voor de bell-badge: alleen telling, geen documenten."""
+    """Lichte endpoint voor de bell-badge: telling + meta van de meest
+    recente pending betaling. Frontend gebruikt het laatste id om te
+    detecteren wanneer er een NIEUWE pending bijgekomen is — daarmee
+    kunnen we ook op iOS Guided Access (waar push-notificaties OS-niveau
+    geblokkeerd zijn) een in-app banner + ding-ding tonen via polling."""
     q = {**scope(user), "status": "pending_approval"}
     n = await db.payments.count_documents(q)
-    return {"count": n}
+    latest = None
+    if n > 0:
+        doc = await db.payments.find_one(
+            q,
+            {"_id": 0, "id": 1, "amount": 1, "currency": 1, "tenant_name": 1,
+             "apartment_number": 1, "received_by": 1, "created_at": 1, "paid_at": 1, "category": 1},
+            sort=[("created_at", -1)],
+        )
+        if doc:
+            latest = {
+                "id": doc.get("id"),
+                "amount": doc.get("amount"),
+                "currency": doc.get("currency"),
+                "tenant_name": doc.get("tenant_name") or "",
+                "apartment_number": doc.get("apartment_number") or "",
+                "received_by": doc.get("received_by") or "",
+                "category": doc.get("category") or "",
+                "created_at": doc.get("created_at") or doc.get("paid_at"),
+            }
+    return {"count": n, "latest": latest}
 
 
 @api.post("/payments/{pid}/approve", response_model=PaymentOut)

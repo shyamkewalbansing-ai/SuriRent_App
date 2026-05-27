@@ -314,6 +314,23 @@ export default function Notifications() {
             )}
           </div>
 
+          <div className="mt-4 bg-amber-50 border border-amber-200 rounded-2xl p-5" data-testid="guided-access-info">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-200/60 text-amber-700 flex items-center justify-center shrink-0">
+                <Shield className="w-5 h-5" />
+              </div>
+              <div className="flex-1">
+                <h3 className="font-black text-amber-900">iPhone PWA + Guided Access</h3>
+                <p className="text-sm text-amber-900/85 mt-1 leading-relaxed">
+                  Apple blokkeert <b>alle</b> system-meldingen tijdens Guided Access — dat geldt voor
+                  élke app, ook native. Goed nieuws: zolang de app open is (en Guided Access houdt 'm letterlijk open),
+                  tonen wij de melding <b>binnen de app</b>: een oranje banner bovenaan + ding-ding-geluid.
+                  Dit werkt instant zonder dat je je telefoon hoeft te ontgrendelen.
+                </p>
+              </div>
+            </div>
+          </div>
+
           <div className="mt-4 bg-white border border-orange-100 rounded-2xl p-6" data-testid="tap-sounds-section">
             <div className="flex items-center gap-3 mb-2">
               <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${tapOn ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-400'}`}>
