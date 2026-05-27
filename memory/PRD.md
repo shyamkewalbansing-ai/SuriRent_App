@@ -585,6 +585,16 @@ Lint clean. Verified via desktop screenshots (1440×900): élke admin-pagina (Ov
 - ✅ **Frontend** Payments.jsx: `?filter=pending` query → auto-scroll naar pending sectie + amber ring-highlight (2.4s). PendingApprovalBell + Payments luisteren beide naar `BADGE_CHANGED` SW-message voor instant refresh (ipv 8s/30s polling).
 - ✅ **Tested (iteration_20)**: 27/27 backend (7 new + 20 regression). Push delivery infra verified: `/api/push/test` sent=11/failed=0 op 11 geabonneerde admin-devices. End-to-end pending → notification → click → scroll-to-pending → approve werkt volledig.
 
+### Session 2026-02-27 — Globale tik-geluiden ✅
+- ✅ **`lib/tap-sounds.js`**: WebAudio-based tik-systeem (geen audio-files nodig). Triangle wave 20-25ms met snelle attack+decay = klassieke "klik". Twee varianten:
+  - `playClickTick()` — 2400Hz voor knoppen/links/checkboxes
+  - `playKeyTick()` — 1800Hz voor text/numeric inputs + keypad
+- ✅ **`installGlobalTapSounds()`**: globale `pointerdown` (capture, passive) listener voor alle interactieve elementen (`button`, `a[href]`, `[role="button"]`, `input[type=checkbox|radio|submit|button]`, `label`, `select`, `[data-tap-sound]`). Globale `keydown` listener voor printable keys + Backspace/Enter/Space op text-inputs en `contentEditable`. Escape: voeg `data-no-tap-sound` toe.
+- ✅ **iOS unlock**: bij eerste touch/pointerdown wordt de AudioContext "geprimed" (`resume()`) zodat iPhone PWA + Safari direct geluid geven. Anti-machinegun: minimaal 25ms tussen ticks (bij snelle keypad-spam).
+- ✅ **App-root integratie**: `useEffect(() => installGlobalTapSounds(), [])` in `App.js`. Werkt direct op kiosk, admin, huurder kiosk, klantenscherm — overal in de app.
+- ✅ **Toggle UI** in `/admin/notifications` boven het apparaten-blok: groene/grijze switch met Volume2/VolumeX icon + uitleg. Voorkeur in `localStorage.tap_sounds_enabled` (default ON).
+- ✅ Smoke-test bevestigd op /login: AudioContext beschikbaar, PIN-tap registreert correct, geen crashes.
+
 ### Session 2026-02-27 — Huurder Kiosk volledig herontworpen (kiosk-look + history + multi-step pay) ✅
 - ✅ **Dashboard look 1:1 zoals operator kiosk**: links "Financieel overzicht" met Maandhuur / Openstaande huur / Servicekosten / Boetes / Internet rows + "Totaal openstaand" footer. Rechts groot Saldo-paneel met Wallet/CheckCircle2 icon en "Volgende"-knop. Onderaan 3 SecondaryTiles (Onderhoud / Gegevens / Contact).
 - ✅ **Betalingsgeschiedenis** toegevoegd via `TenantHistoryView`: fetch `/tenant-portal/payments`, lijst met badges (categorie + methode), datum, kwitantienummer, "Ontvangen door" / "Goedgekeurd door" + per-rij PDF-download knop (blob fetch met tenant_token). Trigger: knop onder "Volgende".

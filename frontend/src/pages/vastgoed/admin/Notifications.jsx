@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Bell, BellOff, Loader2, Check, AlertTriangle, Send, Shield, FileText, RotateCw, Smartphone, Trash2, Volume2 } from 'lucide-react';
+import { Bell, BellOff, Loader2, Check, AlertTriangle, Send, Shield, FileText, RotateCw, Smartphone, Trash2, Volume2, VolumeX } from 'lucide-react';
 import { api, formatError } from '../../../lib/api';
 import { useBadge } from '../../../lib/pwa';
 import { playPendingApprovalDing } from '../../../lib/notify-sound';
+import { isTapSoundsEnabled, setTapSoundsEnabled, playClickTick } from '../../../lib/tap-sounds';
 
 function urlBase64ToUint8Array(base64String) {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
@@ -25,6 +26,14 @@ export default function Notifications() {
   const [vapidKey, setVapidKey] = useState('');
   const [devices, setDevices] = useState([]);
   const [currentEndpoint, setCurrentEndpoint] = useState('');
+  // Tik-geluiden zijn een client-side voorkeur, geen server-state.
+  const [tapOn, setTapOn] = useState(() => isTapSoundsEnabled());
+  const toggleTaps = () => {
+    const next = !tapOn;
+    setTapSoundsEnabled(next);
+    setTapOn(next);
+    if (next) playClickTick();
+  };
 
   // Bij openen van de pagina: clear de app-icon badge — gebruiker heeft
   // alles gezien.
@@ -302,6 +311,34 @@ export default function Notifications() {
                 Klik op <b>Opnieuw registreren</b> om het te herstellen.
               </p>
             )}
+          </div>
+
+          <div className="mt-4 bg-white border border-orange-100 rounded-2xl p-6" data-testid="tap-sounds-section">
+            <div className="flex items-center gap-3 mb-2">
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${tapOn ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-400'}`}>
+                {tapOn ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="font-black text-slate-900">Tik-geluiden</h3>
+                <p className="text-xs text-slate-500">
+                  Kort tik-geluid bij elke knop + toets. Werkt op telefoon (PWA) en desktop.
+                </p>
+              </div>
+              <button onClick={toggleTaps} data-testid="tap-sounds-toggle"
+                role="switch" aria-checked={tapOn}
+                className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors shrink-0 ${
+                  tapOn ? 'bg-emerald-500' : 'bg-slate-300'
+                }`}>
+                <span className={`inline-block h-5 w-5 bg-white rounded-full shadow transform transition ${
+                  tapOn ? 'translate-x-6' : 'translate-x-1'
+                }`} />
+              </button>
+            </div>
+            <p className="text-xs text-slate-500 mt-1 ml-13">
+              {tapOn
+                ? 'Aan — tik op een knop hierboven om te horen.'
+                : 'Uit — de app is volledig stil bij klikken.'}
+            </p>
           </div>
 
           <div className="mt-4 bg-white border border-orange-100 rounded-2xl p-6" data-testid="devices-section">

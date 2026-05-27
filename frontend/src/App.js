@@ -3,6 +3,8 @@ import { AuthProvider, useAuth } from './lib/auth';
 import { useRegisterServiceWorker, InstallPrompt } from './lib/pwa';
 import { usePwaManifest } from './lib/pwa-manifest';
 import { useSheetSwipeToDismiss } from './lib/sheet-swipe';
+import { useEffect } from 'react';
+import { installGlobalTapSounds } from './lib/tap-sounds';
 import RotateNotice from './components/RotateNotice';
 import BrandedShell from './components/BrandedShell';
 import { isMarketingHost, appUrl } from './lib/env';
@@ -125,6 +127,10 @@ export default function App() {
   useRegisterServiceWorker();
   usePwaManifest();
   useSheetSwipeToDismiss();
+  // Globale tik-geluiden voor elke knop + keypad + text-input. Werkt
+  // op iPhone PWA, Android PWA en desktop. Gebruiker kan uitschakelen
+  // via /admin/notifications.
+  useEffect(() => { installGlobalTapSounds(); }, []);
   const mode = isMarketingHost() ? 'marketing' : (appUrl() ? 'app' : 'hybrid');
   return (
     <AuthProvider>
