@@ -235,7 +235,8 @@ def _brand_title(el, title: str, doc_number: str = ""):
         el.append(Spacer(1, 14))
 
 
-def _two_col_block(el, rows: list, label_col_mm: float = 50, gap_after: int = 14):
+def _two_col_block(el, rows: list, label_col_mm: float = 50, gap_after: int = 14,
+                   accent=None):
     """Twee-koloms blok: label links (bold), value rechts.
     `rows` is een lijst van `(label, value)` tuples. Lege values worden geskipped."""
     s = _styles()
@@ -250,6 +251,7 @@ def _two_col_block(el, rows: list, label_col_mm: float = 50, gap_after: int = 14
     if not data:
         return
     total_w = 170 * mm
+    line_color = _hairline_color(accent) if accent is not None else HAIRLINE
     t = Table(data, colWidths=[label_col_mm * mm, total_w - label_col_mm * mm])
     t.setStyle(TableStyle([
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
@@ -257,19 +259,20 @@ def _two_col_block(el, rows: list, label_col_mm: float = 50, gap_after: int = 14
         ("RIGHTPADDING", (0, 0), (-1, -1), 0),
         ("TOPPADDING", (0, 0), (-1, -1), 3),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
-        ("LINEBELOW", (0, 0), (-1, -2), 0.3, HAIRLINE),
+        ("LINEBELOW", (0, 0), (-1, -2), 0.3, line_color),
     ]))
     el.append(t)
     el.append(Spacer(1, gap_after))
 
 
-def _amount_block(el, label: str, amount: float, currency: str = "SRD"):
+def _amount_block(el, label: str, amount: float, currency: str = "SRD", accent=None):
     """Groot bedrag-blok: label links, bedrag groot rechts."""
     s = _styles()
     data = [[
         Paragraph(label.upper(), s["AmountLabel"]),
         Paragraph(_fmt_money(amount, currency), s["AmountValue"]),
     ]]
+    border = _hairline_color(accent) if accent is not None else HAIRLINE
     t = Table(data, colWidths=[100 * mm, 70 * mm])
     t.setStyle(TableStyle([
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
@@ -278,18 +281,33 @@ def _amount_block(el, label: str, amount: float, currency: str = "SRD"):
         ("TOPPADDING", (0, 0), (-1, -1), 10),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
         ("BACKGROUND", (0, 0), (-1, -1), colors.white),
-        ("BOX", (0, 0), (-1, -1), 0.5, HAIRLINE),
+        ("BOX", (0, 0), (-1, -1), 0.5, border),
     ]))
     el.append(t)
     el.append(Spacer(1, 10))
 
 
-def _status_row(el, label: str, value: str, is_paid: bool = False):
-    """Status-rij: label links, status rechts (groen=VOLDAAN, oranje=OPEN)."""
+def _status_row(el, label: str, value: str, is_paid: bool = False, accent=None):
+    """Status-rij: label links, status rechts (groen=VOLDAAN, accent=open).
+
+    `accent` overschrijft de standaard ORANGE voor "openstaand" status zodat
+    de PDF-kleur synchroon loopt met `branding.primary_color` van de company.
+    """
     s = _styles()
+    if is_paid:
+        value_style = s["StatusValue"]
+    elif accent is not None:
+        # Bouw inline style met dynamische accent kleur
+        value_style = ParagraphStyle(
+            name=f"StatusAccent_{id(accent)}", parent=s["Normal"],
+            fontName="Helvetica-Bold", fontSize=12, textColor=accent, alignment=2,
+        )
+    else:
+        value_style = s["StatusOpen"]
+    line_color = _hairline_color(accent) if accent is not None else HAIRLINE
     data = [[
         Paragraph(label.upper(), s["KVLabel"]),
-        Paragraph(value.upper(), s["StatusValue"] if is_paid else s["StatusOpen"]),
+        Paragraph(value.upper(), value_style),
     ]]
     t = Table(data, colWidths=[100 * mm, 70 * mm])
     t.setStyle(TableStyle([
@@ -298,7 +316,7 @@ def _status_row(el, label: str, value: str, is_paid: bool = False):
         ("RIGHTPADDING", (0, 0), (-1, -1), 0),
         ("TOPPADDING", (0, 0), (-1, -1), 6),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
-        ("LINEBELOW", (0, 0), (-1, -1), 0.3, HAIRLINE),
+        ("LINEBELOW", (0, 0), (-1, -1), 0.3, line_color),
     ]))
     el.append(t)
 
@@ -365,7 +383,35 @@ def _verification_footer(el, doc_number: str, company_name: str = "",
     el.append(Paragraph(" · ".join(parts), s["FooterHash"]))
 
 
-# ============== Legacy header (oranje balk) — behouden voor speciale PDFs ==============
+def _accent_color(doc: dict):
+    """Bepaal accentkleur uit doc-dict (`company_primary_color`). Valt terug
+    op brand-oranje (#FF5C00) wanneer niet aanwezig of ongeldig."""
+    raw = (doc or {}).get("company_primary_color") or ""
+    if not raw or not isinstance(raw, str):
+        return ORANGE
+    s = raw.strip().lower()
+    if not s.startswith("#") or len(s) not in (4, 7):
+        return ORANGE
+    try:
+        return colors.HexColor(s)
+    except Exception:
+        return ORANGE
+
+
+def _hairline_color(accent):
+    """Zeer subtiele getinte hairline: 12% accent op witte basis."""
+    try:
+        r, g, b = accent.red, accent.green, accent.blue
+        return colors.Color(
+            r + (1 - r) * 0.88,
+            g + (1 - g) * 0.88,
+            b + (1 - b) * 0.88,
+        )
+    except Exception:
+        return HAIRLINE
+
+
+
 def _header(elements, styles, title, subtitle="", company="SuriRent N.V."):
     elements.append(Paragraph(f"<b>{company}</b>", styles["Body"]))
     elements.append(Paragraph(title, styles["H1Orange"]))
@@ -424,6 +470,7 @@ def receipt_pdf(payment: dict) -> bytes:
     centrale titel, two-col details, groot bedrag, status + signature blok,
     en geverifieerde footer met SHA-256 hash."""
     el = []
+    accent = _accent_color(payment)
     _brand_header(el, payment)
     _brand_title(el, "Kwitantie", payment.get("receipt_number", ""))
 
@@ -440,22 +487,24 @@ def receipt_pdf(payment: dict) -> bytes:
     if period:
         rows.append(("Betaling voor", period))
     rows.append(("Betalingswijze", (payment.get("method") or "").capitalize() or "Contant"))
-    _two_col_block(el, rows, label_col_mm=48, gap_after=14)
+    _two_col_block(el, rows, label_col_mm=48, gap_after=14, accent=accent)
 
     # Ontvangen bedrag — groot blok
     amount = float(payment.get("amount") or 0)
     currency = payment.get("currency") or "SRD"
-    _amount_block(el, "Ontvangen bedrag", amount, currency)
+    _amount_block(el, "Ontvangen bedrag", amount, currency, accent=accent)
     el.append(Spacer(1, 6))
 
     # Status — VOLDAAN of openstaand bedrag
     outstanding_after = float(payment.get("outstanding_after") or 0)
     if outstanding_after <= 0.01:
-        _status_row(el, "Openstaand na betaling", "VOLDAAN", is_paid=True)
-        _status_row(el, "Totaal openstaand", "VOLDAAN", is_paid=True)
+        _status_row(el, "Openstaand na betaling", "VOLDAAN", is_paid=True, accent=accent)
+        _status_row(el, "Totaal openstaand", "VOLDAAN", is_paid=True, accent=accent)
     else:
-        _status_row(el, "Openstaand na betaling", _fmt_money(outstanding_after, currency), is_paid=False)
-        _status_row(el, "Totaal openstaand", _fmt_money(outstanding_after, currency), is_paid=False)
+        _status_row(el, "Openstaand na betaling", _fmt_money(outstanding_after, currency),
+                    is_paid=False, accent=accent)
+        _status_row(el, "Totaal openstaand", _fmt_money(outstanding_after, currency),
+                    is_paid=False, accent=accent)
 
     # Notitie (optioneel — niet in alle kwitanties)
     if payment.get("note"):
@@ -491,6 +540,7 @@ def receipt_pdf(payment: dict) -> bytes:
 def contract_pdf(contract: dict, tenant: dict, apartment: dict) -> bytes:
     s = _styles()
     el = []
+    accent = _accent_color(contract)
     # Bedrijfs-info aanwezig op contract dict (geinjecteerd door server.py)
     _brand_header(el, contract)
     _brand_title(el, "Huurovereenkomst", contract.get("contract_number", ""))
@@ -501,14 +551,14 @@ def contract_pdf(contract: dict, tenant: dict, apartment: dict) -> bytes:
         ("Huurder", tenant.get("name", "")),
         ("Telefoon", tenant.get("phone", "")),
         ("E-mail", tenant.get("email", "")),
-    ], gap_after=10)
+    ], gap_after=10, accent=accent)
 
     # Object
     _two_col_block(el, [
         ("Appartement", apartment.get("number", "")),
         ("Adres", apartment.get("address", "")),
         ("Beschrijving", apartment.get("description") or "—"),
-    ], gap_after=10)
+    ], gap_after=10, accent=accent)
 
     # Voorwaarden
     cur = apartment.get("currency", "SRD")
@@ -518,7 +568,7 @@ def contract_pdf(contract: dict, tenant: dict, apartment: dict) -> bytes:
         ("Startdatum", contract.get("start_date", "")),
         ("Einddatum", contract.get("end_date") or "Onbepaalde tijd"),
         ("Betaaldag", f"{contract.get('payment_day', 1)}e van de maand"),
-    ], gap_after=14)
+    ], gap_after=14, accent=accent)
 
     # Algemene bepalingen
     el.append(Paragraph("ALGEMENE BEPALINGEN", s["SectionHead"]))
@@ -566,6 +616,7 @@ def contract_pdf(contract: dict, tenant: dict, apartment: dict) -> bytes:
 def invoice_pdf(invoice: dict, tenant: dict, apartment: dict, payments: list) -> bytes:
     s = _styles()
     el = []
+    accent = _accent_color(invoice)
     _brand_header(el, invoice)
     _brand_title(el, "Factuur", invoice.get("invoice_number", ""))
 
@@ -579,7 +630,7 @@ def invoice_pdf(invoice: dict, tenant: dict, apartment: dict, payments: list) ->
         ("Huurder", tenant.get("name", "")),
         ("Appartement", apartment.get("number", "")),
         ("Periode", period),
-    ], gap_after=14)
+    ], gap_after=14, accent=accent)
 
     # Specificatie — eenvoudige twee-koloms zonder oranje header
     el.append(Paragraph("SPECIFICATIE", s["SectionHead"]))
@@ -595,7 +646,7 @@ def invoice_pdf(invoice: dict, tenant: dict, apartment: dict, payments: list) ->
         ("RIGHTPADDING", (0, 0), (-1, -1), 0),
         ("TOPPADDING", (0, 0), (-1, -1), 8),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
-        ("LINEBELOW", (0, 0), (-1, -1), 0.4, HAIRLINE),
+        ("LINEBELOW", (0, 0), (-1, -1), 0.4, _hairline_color(accent)),
     ]))
     el.append(t)
     el.append(Spacer(1, 14))
@@ -604,14 +655,14 @@ def invoice_pdf(invoice: dict, tenant: dict, apartment: dict, payments: list) ->
     total = float(invoice.get("amount", 0) or 0)
     paid = sum(float(p.get("amount", 0) or 0) for p in (payments or []))
     due = max(total - paid, 0)
-    _amount_block(el, "Totaal", total, cur)
+    _amount_block(el, "Totaal", total, cur, accent=accent)
     el.append(Spacer(1, 4))
     if paid > 0:
-        _status_row(el, "Reeds betaald", _fmt_money(paid, cur), is_paid=True)
+        _status_row(el, "Reeds betaald", _fmt_money(paid, cur), is_paid=True, accent=accent)
     if due > 0.01:
-        _status_row(el, "Nog te betalen", _fmt_money(due, cur), is_paid=False)
+        _status_row(el, "Nog te betalen", _fmt_money(due, cur), is_paid=False, accent=accent)
     else:
-        _status_row(el, "Status", "VOLDAAN", is_paid=True)
+        _status_row(el, "Status", "VOLDAAN", is_paid=True, accent=accent)
 
     el.append(Spacer(1, 16))
     el.append(Paragraph(
@@ -632,6 +683,7 @@ def invoice_pdf(invoice: dict, tenant: dict, apartment: dict, payments: list) ->
 # ============== Deposit refund PDF ==============
 def deposit_refund_pdf(deposit: dict, tenant: dict, apartment: dict) -> bytes:
     el = []
+    accent = _accent_color(deposit)
     _brand_header(el, deposit)
     nr = (deposit.get("id") or "")[:8].upper()
     _brand_title(el, "Borg restitutie", nr)
@@ -642,12 +694,13 @@ def deposit_refund_pdf(deposit: dict, tenant: dict, apartment: dict) -> bytes:
         ("Appartement", apartment.get("number") or "—"),
         ("Borg ontvangen", _fmt_date_nl(deposit.get("created_at"))),
         ("Borg restitutie", _fmt_date_nl(deposit.get("refunded_at"))),
-    ], gap_after=14)
+    ], gap_after=14, accent=accent)
 
-    _amount_block(el, "Borgbedrag", deposit.get("amount", 0), cur)
+    _amount_block(el, "Borgbedrag", deposit.get("amount", 0), cur, accent=accent)
     if float(deposit.get("deduction", 0) or 0) > 0:
-        _status_row(el, "Aftrek", _fmt_money(deposit.get("deduction", 0), cur), is_paid=False)
-    _amount_block(el, "Terugbetaald", deposit.get("refund_amount", 0), cur)
+        _status_row(el, "Aftrek", _fmt_money(deposit.get("deduction", 0), cur),
+                    is_paid=False, accent=accent)
+    _amount_block(el, "Terugbetaald", deposit.get("refund_amount", 0), cur, accent=accent)
 
     if deposit.get("refund_note"):
         s = _styles()
@@ -675,6 +728,7 @@ def deposit_refund_pdf(deposit: dict, tenant: dict, apartment: dict) -> bytes:
 def payslip_pdf(salary: dict, employee: dict) -> bytes:
     s = _styles()
     el = []
+    accent = _accent_color(salary)
     _brand_header(el, salary)
     period_label = ""
     if salary.get("period_month") and salary.get("period_year"):
@@ -688,7 +742,7 @@ def payslip_pdf(salary: dict, employee: dict) -> bytes:
         ("Functie", employee.get("role") or "—"),
         ("Periode", period_label),
         ("Uitbetaald op", _fmt_date_nl(salary.get("paid_at"))),
-    ], gap_after=14)
+    ], gap_after=14, accent=accent)
 
     el.append(Paragraph("LOONSPECIFICATIE", s["SectionHead"]))
     el.append(Spacer(1, 4))
@@ -699,9 +753,9 @@ def payslip_pdf(salary: dict, employee: dict) -> bytes:
         rows.append(("Voorschotten", "- " + _fmt_money(salary.get("advance", 0), cur)))
     if float(salary.get("deductions", 0) or 0) > 0:
         rows.append(("Inhoudingen", "- " + _fmt_money(salary.get("deductions", 0), cur)))
-    _two_col_block(el, rows, label_col_mm=80, gap_after=6)
+    _two_col_block(el, rows, label_col_mm=80, gap_after=6, accent=accent)
 
-    _amount_block(el, "Netto uitbetaald", salary.get("net", 0), cur)
+    _amount_block(el, "Netto uitbetaald", salary.get("net", 0), cur, accent=accent)
 
     if salary.get("note"):
         el.append(Spacer(1, 10))

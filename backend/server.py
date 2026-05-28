@@ -3548,6 +3548,7 @@ async def _company_brand_info(company_id: Optional[str]) -> dict:
         "company_phone": co.get("contact_phone") or "",
         "company_email": co.get("contact_email") or "",
         "company_logo_bytes": logo_bytes,
+        "company_primary_color": (co.get("branding") or {}).get("primary_color") or "#FF5C00",
         "signature_data": settings.get("signature_data") or "",
     }
 
