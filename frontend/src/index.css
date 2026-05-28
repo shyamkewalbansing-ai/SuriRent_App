@@ -113,13 +113,20 @@ html { scroll-behavior: smooth; }
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
-/* Kiosk fullscreen */
+/* Kiosk fullscreen — gebruikt 100dvh (dynamic viewport height) i.p.v.
+   nested `position: fixed`. Reden: iOS Safari heeft een bekende quirk waarbij
+   `position: fixed; bottom: 0` op een KIND van een ander `position: fixed`
+   element op iPad in PWA-modus ~20px boven de fysieke onderrand wordt
+   gerenderd. Door dit element `position: relative` + `min-height: 100dvh`
+   te maken kunnen children met `position: absolute; bottom: 0` exact aan
+   de onderkant blijven plakken. */
 .kiosk-fullscreen {
-  position: fixed; inset: 0; background: #FF5C00;
+  position: relative;
+  min-height: 100vh;
+  min-height: 100dvh;
+  width: 100%;
+  background: #FF5C00;
   overflow: hidden;
-  /* Respect iPhone notch aan de bovenkant. De onderkant wordt afgedekt door
-     de witte footer-balk (`fixed bottom-0`), dus geen padding-bottom hier —
-     dat zou een oranje strip onder de balk creëren op iPads. */
   padding-top: env(safe-area-inset-top);
   padding-left: env(safe-area-inset-left);
   padding-right: env(safe-area-inset-right);

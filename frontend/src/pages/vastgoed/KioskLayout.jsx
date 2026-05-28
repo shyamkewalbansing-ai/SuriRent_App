@@ -1555,9 +1555,11 @@ export default function KioskLayout() {
         </motion.div>
       </AnimatePresence>
 
-      {/* Desktop floating bottom bar */}
+      {/* Bottom bar — absolute (binnen .kiosk-fullscreen) i.p.v. fixed.
+          Voorkomt iOS quirk waarbij geneste fixed elementen op iPad ~20px
+          boven de fysieke onderrand renderen. */}
       {showDesktopBar && (
-        <div className="hidden md:block fixed bottom-0 left-0 right-0 z-40 bg-white"
+        <div className="hidden md:block absolute bottom-0 left-0 right-0 z-40 bg-white"
           data-testid="kiosk-bottom-bar">
           <div className="flex items-center justify-between px-4 sm:px-6"
             style={{ height: 'clamp(48px, 7vh, 64px)' }}>
