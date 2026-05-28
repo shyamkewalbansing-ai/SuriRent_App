@@ -78,8 +78,8 @@ function groupByTenant(invoices) {
     g.openCount = g.open.length;
     g.overdueCount = g.overdue.length;
     g.upcomingCount = g.upcoming.length;
-    g.totalOpen = g.open.reduce((s, i) => s + Number(i.amount || 0), 0);
-    g.totalOverdue = g.overdue.reduce((s, i) => s + Number(i.amount || 0), 0);
+    g.totalOpen = g.open.reduce((s, i) => s + Number(i.remaining_amount != null ? i.remaining_amount : i.amount || 0), 0);
+    g.totalOverdue = g.overdue.reduce((s, i) => s + Number(i.remaining_amount != null ? i.remaining_amount : i.amount || 0), 0);
     // Severity baseert nu op échte achterstand (niet toekomstige facturen).
     g.severity = g.overdueCount >= 2 ? 'critical' : g.overdueCount === 1 ? 'late' : 'ok';
     g.lastOpen = g.open[g.open.length - 1];
@@ -410,12 +410,9 @@ function TenantRow({ group, expanded, onToggle, onReminder, tenants }) {
                         <span className="text-[10px] text-slate-400 hidden sm:inline">· {inv.invoice_number}</span>
                       </div>
                       <div className="text-right shrink-0 whitespace-nowrap">
-                        <span className="text-slate-700 font-semibold">{fmtMoney(inv.amount, inv.currency)}</span>
-                        {Number(inv.paid_amount) > 0 && (
-                          <p className="text-[10px] text-emerald-600 font-bold">
-                            -{fmtMoney(inv.paid_amount, inv.currency)} betaald · {fmtMoney(inv.remaining_amount, inv.currency)} open
-                          </p>
-                        )}
+                        <span className="text-slate-700 font-semibold">
+                          {fmtMoney(Number(inv.paid_amount) > 0 ? inv.remaining_amount : inv.amount, inv.currency)}
+                        </span>
                       </div>
                       <button
                         onClick={(e) => {
@@ -933,16 +930,9 @@ export default function Invoices() {
                             <span className="text-slate-700 capitalize truncate">
                               {MONTHS_NL[inv.period_month - 1]} {inv.period_year}
                             </span>
-                            <div className="text-right whitespace-nowrap">
-                              <span className="text-slate-700 font-bold">
-                                {inv.currency} {fmtAmountWhole(inv.amount)}
-                              </span>
-                              {Number(inv.paid_amount) > 0 && (
-                                <p className="text-[9px] text-emerald-600 font-bold">
-                                  open {inv.currency} {fmtAmountWhole(inv.remaining_amount)}
-                                </p>
-                              )}
-                            </div>
+                            <span className="text-slate-700 font-bold whitespace-nowrap">
+                              {inv.currency} {fmtAmountWhole(Number(inv.paid_amount) > 0 ? inv.remaining_amount : inv.amount)}
+                            </span>
                           </div>
                         ))}
                       </div>

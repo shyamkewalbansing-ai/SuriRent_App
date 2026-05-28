@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { Loader2, Plus, X, ArrowLeft, Check, Calendar, AlertCircle, CheckCircle2, XCircle, Clock, Trash2 } from 'lucide-react';
+import { Loader2, Plus, X, ArrowLeft, Check, Calendar, AlertCircle, CheckCircle2, XCircle, Clock, Trash2, FileText } from 'lucide-react';
 import { api, formatError, fmtMoney, MONTHS_NL } from '../../../lib/api';
 import { playApproveConfirm, playSwoosh, playErrorBuzz } from '../../../lib/tap-sounds';
 
@@ -380,11 +380,24 @@ function PlanDetail({ planId, onBack }) {
   const [plan, setPlan] = useState(null);
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
+  const [linkedInvoices, setLinkedInvoices] = useState([]);
 
   const load = useCallback(async () => {
     try {
       const { data } = await api.get(`/payment-plans/${planId}`);
       setPlan(data);
+      // Haal de gelinkte facturen op (live paid_amount + remaining_amount)
+      if (data.invoice_ids?.length > 0) {
+        try {
+          const { data: allInvs } = await api.get('/invoices');
+          const linked = allInvs.filter((i) => data.invoice_ids.includes(i.id));
+          // Sorteer oudst-eerst (zelfde FIFO als allocator)
+          linked.sort((a, b) => (a.period_year - b.period_year) || (a.period_month - b.period_month));
+          setLinkedInvoices(linked);
+        } catch { /* ignore — niet kritisch */ }
+      } else {
+        setLinkedInvoices([]);
+      }
     } catch (e) { setErr(formatError(e)); }
   }, [planId]);
 
@@ -444,6 +457,56 @@ function PlanDetail({ planId, onBack }) {
       </div>
 
       {err && <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl p-3 text-sm" data-testid="plan-detail-error">{err}</div>}
+
+      {linkedInvoices.length > 0 && (
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden" data-testid="plan-linked-invoices">
+          <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+            <h2 className="text-sm font-black text-slate-900 uppercase tracking-widest">Gekoppelde facturen</h2>
+            <span className="text-[10px] font-bold text-slate-400">{linkedInvoices.length} factu{linkedInvoices.length === 1 ? 'ur' : 'ren'}</span>
+          </div>
+          <div className="divide-y divide-slate-100">
+            {linkedInvoices.map((inv) => {
+              const paid = Number(inv.paid_amount || 0);
+              const total = Number(inv.amount || 0);
+              const rem = Number(inv.remaining_amount || 0);
+              const pct = total > 0 ? Math.round((paid / total) * 100) : 0;
+              const closed = (inv.status || '').toLowerCase() === 'paid';
+              return (
+                <div key={inv.id} className="px-4 py-3" data-testid={`plan-linked-inv-${inv.id}`}>
+                  <div className="flex items-center gap-3">
+                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                      closed ? 'bg-emerald-100 text-emerald-600' : 'bg-orange-100 text-orange-600'
+                    }`}>
+                      {closed ? <CheckCircle2 className="w-4 h-4" /> : <FileText className="w-4 h-4" />}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-bold text-slate-900 text-sm truncate">
+                        {inv.invoice_number}
+                        <span className="ml-2 text-xs font-normal text-slate-500 capitalize">
+                          {MONTHS_NL[(inv.period_month || 1) - 1]} {inv.period_year}
+                        </span>
+                      </p>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        {fmtMoney(paid, inv.currency)} van {fmtMoney(total, inv.currency)} betaald
+                      </p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className={`text-base font-black ${closed ? 'text-emerald-600' : 'text-slate-900'}`}>
+                        {closed ? 'Voldaan' : fmtMoney(rem, inv.currency)}
+                      </p>
+                      {!closed && <p className="text-[10px] text-slate-400">nog open</p>}
+                    </div>
+                  </div>
+                  <div className="mt-2 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                    <div className={`h-full ${closed ? 'bg-emerald-500' : 'bg-[#FF5C00]'}`}
+                      style={{ width: `${Math.min(100, pct)}%` }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
         <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
