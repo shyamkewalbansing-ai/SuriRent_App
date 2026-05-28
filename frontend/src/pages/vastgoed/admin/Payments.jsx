@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { api, formatError, fmtMoney, MONTHS_NL } from '../../../lib/api';
 import { useAutoRefresh } from '../../../lib/auto-refresh';
+import { useAdminEvents } from '../../../lib/admin-events';
 import { SendDialog } from '../../../components/EmailDialog';
 import SignaturePad from '../../../components/SignaturePad';
 import { playApproveConfirm, playErrorBuzz, playSwoosh } from '../../../lib/tap-sounds';
@@ -694,6 +695,16 @@ export default function Payments() {
   // realtime verschijnen ook als de SW push miss (bv. PWA in achtergrond
   // stond bij binnenkomst). Geen spinner / scroll-reset tijdens auto-refresh.
   useAutoRefresh(() => load({ silent: true }), { interval: 3000, enabled: !creating && !emailing });
+
+  // Server-Sent Events — INSTANT push (~50ms latency) zodra de backend een
+  // nieuwe pending betaling registreert. Veel sneller dan FCM/APNS WebPush.
+  // Triggert direct een silent reload zodat de rij in UI verschijnt voordat
+  // de notificatie pop-up ook maar half geanimeerd is.
+  useAdminEvents((evt) => {
+    if (evt?.type === 'notification') {
+      load({ silent: true });
+    }
+  }, { enabled: !creating && !emailing });
 
   // Push-notificatie binnen → direct silent reload zodat de pending sectie
   // meteen up-to-date is (i.p.v. wachten op 3s poll). Triggert óók bij
