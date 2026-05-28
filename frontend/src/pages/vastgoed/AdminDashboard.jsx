@@ -98,7 +98,7 @@ function Sidebar({ active, onChange, onLogout, user, tabs, badgeCount }) {
       {/* HEADER — logo + naam, vaste hoogte */}
       <div className="px-5 pt-6 pb-5 flex items-center gap-3 border-b border-slate-100">
         <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#FF8A3D] to-[#C74600] p-1.5 shadow-[0_8px_18px_-6px_rgba(255,92,0,0.45)] shrink-0">
-          <img src="/kiosk-icons/kiosk-512.png" alt="SuriRent" className="w-full h-full object-contain" />
+          <img src="/kiosk-icons/mark-white.png" alt="SuriRent" className="w-full h-full object-contain" />
         </div>
         <div className="min-w-0">
           <p className="text-base font-black tracking-tight leading-tight">
@@ -222,7 +222,7 @@ function MobileTopLogo({ user, activeCompany }) {
       data-testid="mobile-top-logo">
       <div className="px-4 md:px-8 py-3 md:py-4 landscape:py-1.5 flex items-center gap-3.5 md:gap-4 landscape:gap-2 max-w-4xl md:mx-auto md:w-full">
         <div className="w-14 h-14 md:w-14 md:h-14 landscape:w-9 landscape:h-9 rounded-2xl landscape:rounded-xl bg-gradient-to-br from-[#FF8A3D] to-[#C74600] p-2 md:p-2 landscape:p-1 shadow-[0_6px_14px_-4px_rgba(255,92,0,0.45)] shrink-0">
-          <img src="/kiosk-icons/kiosk-512.png" alt="SuriRent" className="w-full h-full object-contain" />
+          <img src="/kiosk-icons/mark-white.png" alt="SuriRent" className="w-full h-full object-contain" />
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-xl md:text-2xl landscape:text-sm font-black tracking-tight leading-tight truncate text-slate-900" data-testid="mobile-top-name">
@@ -261,7 +261,7 @@ function MobileSheet({ open, onClose, active, onChange, onLogout, user, tabs, ac
         {/* HEADER — company name + Live + Kiosk-shortcut + close */}
         <div className="px-5 md:px-6 pt-2 pb-3 md:pb-4 flex items-center gap-3 md:gap-4">
           <div className="w-11 h-11 md:w-14 md:h-14 rounded-2xl bg-gradient-to-br from-[#FF8A3D] to-[#C74600] p-1.5 md:p-2 shadow-md shrink-0">
-            <img src="/kiosk-icons/kiosk-512.png" alt="SuriRent" className="w-full h-full object-contain" />
+            <img src="/kiosk-icons/mark-white.png" alt="SuriRent" className="w-full h-full object-contain" />
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 min-w-0">

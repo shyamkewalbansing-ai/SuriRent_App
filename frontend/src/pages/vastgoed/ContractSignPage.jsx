@@ -80,7 +80,7 @@ export default function ContractSignPage() {
       <div className="max-w-2xl mx-auto">
         <div className="flex items-center gap-3 mb-6">
           <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#FF8A3D] to-[#C74600] flex items-center justify-center p-2 shadow-lg">
-            <img src="/kiosk-icons/kiosk-512.png" alt="SuriRent" className="w-full h-full object-contain" />
+            <img src="/kiosk-icons/mark-white.png" alt="SuriRent" className="w-full h-full object-contain" />
           </div>
           <div>
             <p className="text-lg font-black text-slate-900">{contract.landlord || 'SuriRent N.V.'}</p>
