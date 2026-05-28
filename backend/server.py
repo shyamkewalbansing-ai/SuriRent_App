@@ -2156,16 +2156,38 @@ def _billing_summary(c: dict) -> dict:
 
 @api.get("/companies", response_model=List[CompanyOut])
 async def list_companies(user=Depends(require_role("superadmin"))):
+    """Lijst alle bedrijven (superadmin). N+1 queries elimineren via 3
+    parallelle aggregaties die counts per company_id in één query halen,
+    daarna joinen we lokaal. Voorheen: 1 + 3×N queries → nu altijd 4."""
     docs = await db.companies.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    if not docs:
+        return []
+    company_ids = [c["id"] for c in docs]
+    # Parallel: 3 aggregaties (apartments, tenants, users) gefiltered op de
+    # exacte company_ids zodat MongoDB de bestaande indexes kan gebruiken.
+    pipeline = lambda: [
+        {"$match": {"company_id": {"$in": company_ids}}},
+        {"$group": {"_id": "$company_id", "count": {"$sum": 1}}},
+    ]
+    apt_agg, ten_agg, usr_agg = await asyncio.gather(
+        db.apartments.aggregate(pipeline()).to_list(None),
+        db.tenants.aggregate(pipeline()).to_list(None),
+        db.users.aggregate(pipeline()).to_list(None),
+    )
+    apt_counts = {d["_id"]: d["count"] for d in apt_agg}
+    ten_counts = {d["_id"]: d["count"] for d in ten_agg}
+    usr_counts = {d["_id"]: d["count"] for d in usr_agg}
     out = []
     for c in docs:
-        apt_count = await db.apartments.count_documents({"company_id": c["id"]})
-        tenant_count = await db.tenants.count_documents({"company_id": c["id"]})
-        admin_count = await db.users.count_documents({"company_id": c["id"]})
+        cid = c["id"]
         out.append({
             **c,
             **_billing_summary(c),
-            "stats": {"apartments": apt_count, "tenants": tenant_count, "admins": admin_count},
+            "stats": {
+                "apartments": apt_counts.get(cid, 0),
+                "tenants": ten_counts.get(cid, 0),
+                "admins": usr_counts.get(cid, 0),
+            },
         })
     return out
 
@@ -3102,7 +3124,7 @@ async def tenant_portal_overview(tenant=Depends(get_tenant_session)):
 @api.get("/tenant-portal/payments")
 async def tenant_portal_payments(tenant=Depends(get_tenant_session)):
     docs = await db.payments.find({"tenant_id": tenant["id"]}, {"_id": 0}).sort("paid_at", -1).to_list(200)
-    return [await _enrich_payment(d) for d in docs]
+    return await _enrich_payments_bulk(docs)
 
 
 @api.get("/tenant-portal/contracts")
@@ -3634,6 +3656,93 @@ async def _enrich_payment(p: dict) -> dict:
             **company_info}
 
 
+async def _enrich_payments_bulk(payments: list[dict]) -> list[dict]:
+    """Bulk-versie van _enrich_payment voor lijst-endpoints. Reduceert
+    queries van O(N) per payment naar O(1) constante batch-fetches.
+
+    Voorheen: 200 payments × 4-6 queries = 800-1200 DB calls.
+    Nu: 4 batch-queries + 1 brand-lookup per unieke company. Voor één
+    bedrijf met 200 betalingen: ~5 queries totaal.
+    """
+    if not payments:
+        return []
+    tenant_ids = {p["tenant_id"] for p in payments if p.get("tenant_id")}
+    apt_ids = {p["apartment_id"] for p in payments if p.get("apartment_id")}
+    company_ids = {p["company_id"] for p in payments if p.get("company_id")}
+
+    # Parallel: tenants + apartments + companies
+    tenants_task = db.tenants.find(
+        {"id": {"$in": list(tenant_ids)}}, {"_id": 0, "id": 1, "name": 1}
+    ).to_list(None) if tenant_ids else asyncio.sleep(0, result=[])
+    apartments_task = db.apartments.find(
+        {"id": {"$in": list(apt_ids)}}, {"_id": 0, "id": 1, "number": 1, "location_id": 1}
+    ).to_list(None) if apt_ids else asyncio.sleep(0, result=[])
+    tenants, apartments = await asyncio.gather(tenants_task, apartments_task)
+    tenant_by_id = {t["id"]: t for t in tenants}
+    apt_by_id = {a["id"]: a for a in apartments}
+
+    # Locations — alleen voor de apartments die er een hebben
+    loc_ids = {a.get("location_id") for a in apartments if a.get("location_id")}
+    locs = await db.locations.find(
+        {"id": {"$in": list(loc_ids)}}, {"_id": 0, "id": 1, "name": 1}
+    ).to_list(None) if loc_ids else []
+    loc_by_id = {l["id"]: l for l in locs}
+
+    # Brand info per company — éénmaal per unieke company gecached.
+    # We strippen `company_logo_bytes` (binary PNG) zodat FastAPI's JSON
+    # encoder niet faalt op de bytes; logo wordt enkel gebruikt in PDF
+    # generatie, niet in lijst-endpoints.
+    brand_cache = {}
+    for cid in company_ids:
+        b = await _company_brand_info(cid)
+        if b:
+            b = {k: v for k, v in b.items() if k != "company_logo_bytes"}
+        brand_cache[cid] = b
+
+    # Outstanding-per-tenant: groepeer alle openstaande facturen per
+    # (tenant_id, currency) zodat we sommen kunnen pre-rekenen.
+    outstanding_by_tenant_cur: dict[tuple[str, str], float] = {}
+    if tenant_ids:
+        async for inv in db.invoices.find(
+            {"tenant_id": {"$in": list(tenant_ids)},
+             "status": {"$nin": ["paid", "cancelled"]}},
+            {"_id": 0, "id": 1, "tenant_id": 1, "currency": 1,
+             "amount": 1, "paid_amount": 1},
+        ):
+            tid = inv.get("tenant_id")
+            cur = inv.get("currency") or "SRD"
+            inv_amt = float(inv.get("amount") or 0)
+            paid = inv.get("paid_amount")
+            if paid is None:
+                # Fallback wanneer paid_amount niet gemigreerd is — alleen
+                # voor deze ene factuur, niet voor alle.
+                paid = await _invoice_currently_paid(inv["id"])
+            outstanding_by_tenant_cur[(tid, cur)] = (
+                outstanding_by_tenant_cur.get((tid, cur), 0.0)
+                + max(0.0, inv_amt - float(paid or 0))
+            )
+
+    # Bouw de output
+    out = []
+    for p in payments:
+        tid = p.get("tenant_id")
+        aid = p.get("apartment_id")
+        cid = p.get("company_id")
+        t = tenant_by_id.get(tid) if tid else None
+        a = apt_by_id.get(aid) if aid else None
+        loc = loc_by_id.get(a.get("location_id")) if a and a.get("location_id") else None
+        cur = p.get("currency") or "SRD"
+        out.append({
+            **p,
+            "tenant_name": t.get("name") if t else None,
+            "apartment_number": a.get("number") if a else None,
+            "location_name": loc.get("name") if loc else None,
+            "outstanding_after": round(outstanding_by_tenant_cur.get((tid, cur), 0.0), 2),
+            **(brand_cache.get(cid) or {}),
+        })
+    return out
+
+
 async def _invoice_currently_paid(invoice_id: str) -> float:
     """Som van alle approved payments die aan deze factuur gelinkt zijn.
     Wordt gebruikt voor fallback wanneer `paid_amount` nog niet gemigreerd is."""
@@ -3827,7 +3936,7 @@ async def list_payments(
         # Default sluit pending uit zodat totalen kloppen.
         q["status"] = {"$ne": "pending_approval"}
     docs = await db.payments.find(q, {"_id": 0}).sort("paid_at", -1).to_list(limit)
-    return [await _enrich_payment(d) for d in docs]
+    return await _enrich_payments_bulk(docs)
 
 
 @api.get("/payments/pending-count")
@@ -4838,7 +4947,7 @@ async def kiosk_tenant_payments(tenant_id: str, _session=Depends(get_kiosk_sessi
     docs = await db.payments.find(
         {"tenant_id": tenant_id, **kiosk_scope(_session)}, {"_id": 0}
     ).sort("paid_at", -1).to_list(50)
-    return [await _enrich_payment(d) for d in docs]
+    return await _enrich_payments_bulk(docs)
 
 
 @api.get("/kiosk/receipts/{payment_id}")
