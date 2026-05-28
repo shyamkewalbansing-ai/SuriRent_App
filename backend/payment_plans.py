@@ -312,6 +312,10 @@ def _build_pay_core(db, helpers):
     iso = helpers["iso"]
     now_utc = helpers["now_utc"]
     next_receipt_number = helpers["next_receipt_number"]
+    # Optioneel: allocator-callback om termijnbetaling op de gelinkte
+    # facturen toe te passen. Server.py geeft `_allocate_payment_to_invoices`
+    # door bij init zodat partial-betalingen ook hier de factuur bijwerken.
+    allocate_to_invoices = helpers.get("allocate_to_invoices")
 
     def _round2(x): return round(float(x) + 1e-9, 2)
 
@@ -436,6 +440,16 @@ def _build_pay_core(db, helpers):
         )
 
         if status == "approved":
+            # Termijnbetaling alloceren op de gelinkte facturen (FIFO).
+            if allocate_to_invoices and plan.get("invoice_ids"):
+                try:
+                    await allocate_to_invoices(
+                        plan.get("invoice_ids") or [], amt,
+                        payment_id=payment_doc["id"], paid_at=now_iso,
+                        method=method, receipt_number=receipt,
+                    )
+                except Exception as e:  # noqa: BLE001
+                    print(f"[plan] allocate-to-invoices failed: {e}")
             remaining_pending = await db.payment_plan_installments.count_documents(
                 {"plan_id": plan["id"], "status": {"$in": ["pending"]}}
             )

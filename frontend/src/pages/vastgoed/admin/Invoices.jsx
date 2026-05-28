@@ -409,7 +409,14 @@ function TenantRow({ group, expanded, onToggle, onReminder, tenants }) {
                         )}
                         <span className="text-[10px] text-slate-400 hidden sm:inline">· {inv.invoice_number}</span>
                       </div>
-                      <span className="text-slate-700 font-semibold whitespace-nowrap">{fmtMoney(inv.amount, inv.currency)}</span>
+                      <div className="text-right shrink-0 whitespace-nowrap">
+                        <span className="text-slate-700 font-semibold">{fmtMoney(inv.amount, inv.currency)}</span>
+                        {Number(inv.paid_amount) > 0 && (
+                          <p className="text-[10px] text-emerald-600 font-bold">
+                            -{fmtMoney(inv.paid_amount, inv.currency)} betaald · {fmtMoney(inv.remaining_amount, inv.currency)} open
+                          </p>
+                        )}
+                      </div>
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -926,9 +933,16 @@ export default function Invoices() {
                             <span className="text-slate-700 capitalize truncate">
                               {MONTHS_NL[inv.period_month - 1]} {inv.period_year}
                             </span>
-                            <span className="text-slate-700 font-bold whitespace-nowrap">
-                              {inv.currency} {fmtAmountWhole(inv.amount)}
-                            </span>
+                            <div className="text-right whitespace-nowrap">
+                              <span className="text-slate-700 font-bold">
+                                {inv.currency} {fmtAmountWhole(inv.amount)}
+                              </span>
+                              {Number(inv.paid_amount) > 0 && (
+                                <p className="text-[9px] text-emerald-600 font-bold">
+                                  open {inv.currency} {fmtAmountWhole(inv.remaining_amount)}
+                                </p>
+                              )}
+                            </div>
                           </div>
                         ))}
                       </div>

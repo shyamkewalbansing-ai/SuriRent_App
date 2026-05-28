@@ -3536,6 +3536,103 @@ async def _enrich_payment(p: dict) -> dict:
     return {**p, "tenant_name": tenant_name, "apartment_number": apt_number, "location_name": location_name}
 
 
+async def _invoice_currently_paid(invoice_id: str) -> float:
+    """Som van alle approved payments die aan deze factuur gelinkt zijn.
+    Wordt gebruikt voor fallback wanneer `paid_amount` nog niet gemigreerd is."""
+    total = 0.0
+    async for p in db.payments.find(
+        {"invoice_id": invoice_id, "status": "approved"}, {"_id": 0, "amount": 1},
+    ):
+        try:
+            total += float(p.get("amount") or 0)
+        except Exception:
+            pass
+    return round(total + 1e-9, 2)
+
+
+async def _apply_payment_to_invoice(invoice_id: str, amount: float,
+                                    payment_id: Optional[str] = None,
+                                    paid_at: Optional[str] = None,
+                                    method: Optional[str] = None,
+                                    receipt_number: Optional[str] = None) -> dict:
+    """Past `amount` toe op factuur:
+       • paid_amount += amount (cumulatief — meerdere partial-payments mogelijk)
+       • status → 'paid' wanneer paid_amount >= 95% van het factuurbedrag
+       Retourneert de bijgewerkte factuur (of {} bij ontbreken).
+    """
+    inv = await db.invoices.find_one({"id": invoice_id}, {"_id": 0})
+    if not inv:
+        return {}
+    inv_amt = float(inv.get("amount") or 0)
+    # Migratie-fallback: als paid_amount nog niet bestaat, bereken uit payments.
+    if inv.get("paid_amount") is None:
+        existing = await _invoice_currently_paid(invoice_id)
+        # Trek de huidige payment_id ervan af als die al meegerekend wordt
+        # — anders dubbel-tellen we. Het payment doc staat al in DB op moment
+        # van aanroep van deze helper, dus we subtraheren `amount` (de delta).
+        base = max(0.0, existing - float(amount or 0))
+        await db.invoices.update_one(
+            {"id": invoice_id}, {"$set": {"paid_amount": round(base, 2)}}
+        )
+        inv["paid_amount"] = round(base, 2)
+    new_paid = round(float(inv.get("paid_amount") or 0) + float(amount or 0), 2)
+    update = {"paid_amount": new_paid}
+    if payment_id:
+        update["payment_id"] = payment_id
+    if method:
+        update["paid_method"] = method
+    if receipt_number:
+        update["receipt_number"] = receipt_number
+    if inv_amt <= 0 or new_paid >= inv_amt * 0.95:
+        update["status"] = "paid"
+        update["paid_at"] = paid_at or iso(now_utc())
+    await db.invoices.update_one({"id": invoice_id}, {"$set": update})
+    inv.update(update)
+    return inv
+
+
+async def _allocate_payment_to_invoices(
+    invoice_ids: List[str], amount: float, payment_id: Optional[str],
+    paid_at: Optional[str] = None, method: Optional[str] = None,
+    receipt_number: Optional[str] = None,
+) -> float:
+    """FIFO-allocatie: verdeel `amount` over de opgegeven facturen
+    (oudst eerst, oude facturen krijgen voorrang). Stopt zodra het bedrag
+    op is. Retourneert het werkelijk gealloceerde bedrag."""
+    if not invoice_ids or amount <= 0:
+        return 0.0
+    # Haal facturen op + sorteer oudst-eerst (period_year, period_month, created_at)
+    invs: list = []
+    async for inv in db.invoices.find({"id": {"$in": invoice_ids}}, {"_id": 0}):
+        invs.append(inv)
+    invs.sort(key=lambda x: (
+        x.get("period_year", 0), x.get("period_month", 0), x.get("created_at") or "",
+    ))
+    remaining = float(amount)
+    allocated = 0.0
+    for inv in invs:
+        if remaining <= 0:
+            break
+        inv_amt = float(inv.get("amount") or 0)
+        # Bepaal hoeveel deze factuur nog open heeft.
+        if inv.get("paid_amount") is None:
+            existing = await _invoice_currently_paid(inv["id"])
+        else:
+            existing = float(inv.get("paid_amount") or 0)
+        open_amt = max(0.0, round(inv_amt - existing, 2))
+        if open_amt <= 0:
+            continue
+        chunk = round(min(remaining, open_amt), 2)
+        await _apply_payment_to_invoice(
+            inv["id"], chunk, payment_id=payment_id, paid_at=paid_at,
+            method=method, receipt_number=receipt_number,
+        )
+        remaining = round(remaining - chunk, 2)
+        allocated = round(allocated + chunk, 2)
+    return allocated
+
+
+
 async def _create_payment_doc(body: PaymentIn, company_id: Optional[str] = None,
                               approved_by: Optional[str] = None,
                               status: str = "approved",
@@ -3603,20 +3700,13 @@ async def _create_payment_doc(body: PaymentIn, company_id: Optional[str] = None,
     # bij goedkeuring alsnog de invoice-koppeling via /payments/{id}/approve.
     if matched_invoice and status == "approved":
         try:
-            tot_paid = float(body.amount or 0)
-            inv_amt = float(matched_invoice.get("amount", 0))
-            should_close = inv_amt <= 0 or tot_paid >= inv_amt * 0.95
-            update_set = {
-                "payment_id": doc["id"],
-                "receipt_number": receipt_no,
-                "paid_method": body.method,
-            }
-            if should_close:
-                update_set["status"] = "paid"
-                update_set["paid_at"] = paid_at
-            await db.invoices.update_one({"id": matched_invoice["id"]}, {"$set": update_set})
+            await _apply_payment_to_invoice(
+                matched_invoice["id"], float(body.amount or 0),
+                payment_id=doc["id"], paid_at=paid_at,
+                method=body.method, receipt_number=receipt_no,
+            )
         except Exception as e:
-            print(f"[payments] invoice auto-close failed: {e}")
+            print(f"[payments] invoice apply failed: {e}")
     return doc
 
 
@@ -3728,22 +3818,46 @@ async def approve_payment(pid: str, body: PaymentApproveIn, user=Depends(require
     if matched_invoice:
         update["invoice_id"] = matched_invoice["id"]
         update["invoice_number"] = matched_invoice.get("invoice_number")
-        # Sluit factuur als bedrag voldoende is.
         try:
-            tot_paid = float(p.get("amount") or 0)
-            inv_amt = float(matched_invoice.get("amount", 0))
-            should_close = inv_amt <= 0 or tot_paid >= inv_amt * 0.95
-            inv_update = {
-                "payment_id": p["id"],
-                "receipt_number": p.get("receipt_number"),
-                "paid_method": p.get("method"),
-            }
-            if should_close:
-                inv_update["status"] = "paid"
-                inv_update["paid_at"] = approved_at
-            await db.invoices.update_one({"id": matched_invoice["id"]}, {"$set": inv_update})
+            await _apply_payment_to_invoice(
+                matched_invoice["id"], float(p.get("amount") or 0),
+                payment_id=p["id"], paid_at=approved_at,
+                method=p.get("method"), receipt_number=p.get("receipt_number"),
+            )
         except Exception as e:
-            print(f"[payments.approve] invoice close failed: {e}")
+            print(f"[payments.approve] invoice apply failed: {e}")
+    # Goedkeuring van een betalingsregeling-termijn (kiosk-flow met
+    # pending_approval): alloceer alsnog op de gelinkte facturen + mark de
+    # bijbehorende installment als 'paid'.
+    plan_id = (p.get("metadata") or {}).get("plan_id") if isinstance(p.get("metadata"), dict) else None
+    inst_seq = (p.get("metadata") or {}).get("installment_seq") if isinstance(p.get("metadata"), dict) else None
+    if plan_id and p.get("category") == "betalingsregeling":
+        try:
+            plan = await db.payment_plans.find_one({"id": plan_id}, {"_id": 0})
+            if plan and (plan.get("invoice_ids") or []):
+                await _allocate_payment_to_invoices(
+                    plan["invoice_ids"], float(p.get("amount") or 0),
+                    payment_id=p["id"], paid_at=approved_at,
+                    method=p.get("method"), receipt_number=p.get("receipt_number"),
+                )
+            # Markeer installment als paid (was 'pending_payment')
+            if inst_seq is not None:
+                await db.payment_plan_installments.update_one(
+                    {"plan_id": plan_id, "sequence": inst_seq},
+                    {"$set": {"status": "paid"}},
+                )
+            # Plan-completion check
+            if plan:
+                remaining_pending = await db.payment_plan_installments.count_documents(
+                    {"plan_id": plan_id, "status": {"$in": ["pending", "pending_payment"]}}
+                )
+                if remaining_pending == 0:
+                    await db.payment_plans.update_one(
+                        {"id": plan_id},
+                        {"$set": {"status": "completed", "completed_at": approved_at}},
+                    )
+        except Exception as e:  # noqa: BLE001
+            print(f"[payments.approve] plan allocation failed: {e}")
     await db.payments.update_one({"id": pid}, {"$set": update})
     p.update(update)
     return await _enrich_payment(p)
@@ -3762,6 +3876,18 @@ async def reject_payment(pid: str, body: PaymentRejectIn, user=Depends(require_r
     update = {"status": "rejected", "rejected_reason": (body.reason or "").strip(),
               "approved_at": iso(now_utc()),
               "approved_by_user_id": user.get("id") or user.get("sub")}
+    # Revert pending plan-installment to 'pending' zodat huurder/kiosk
+    # 'm opnieuw kan betalen.
+    plan_id = (p.get("metadata") or {}).get("plan_id") if isinstance(p.get("metadata"), dict) else None
+    inst_seq = (p.get("metadata") or {}).get("installment_seq") if isinstance(p.get("metadata"), dict) else None
+    if plan_id and inst_seq is not None and p.get("category") == "betalingsregeling":
+        try:
+            await db.payment_plan_installments.update_one(
+                {"plan_id": plan_id, "sequence": inst_seq, "status": "pending_payment"},
+                {"$set": {"status": "pending", "paid_at": None, "payment_id": None}},
+            )
+        except Exception as e:  # noqa: BLE001
+            print(f"[payments.reject] plan revert failed: {e}")
     await db.payments.update_one({"id": pid}, {"$set": update})
     p.update(update)
     return await _enrich_payment(p)
@@ -5056,6 +5182,8 @@ class InvoiceOut(BaseModel):
     apartment_number: Optional[str] = None
     location_name: Optional[str] = None
     amount: float
+    paid_amount: float = 0
+    remaining_amount: float = 0
     currency: str
     period_month: int
     period_year: int
@@ -5081,9 +5209,21 @@ async def _enrich_invoice(i: dict) -> dict:
             )
             if loc:
                 location_name = loc.get("name")
+    # paid_amount / remaining_amount — fallback uit payments wanneer veld ontbreekt.
+    paid_amount = i.get("paid_amount")
+    if paid_amount is None:
+        try:
+            paid_amount = await _invoice_currently_paid(i["id"])
+        except Exception:
+            paid_amount = 0.0
+    paid_amount = round(float(paid_amount or 0), 2)
+    inv_amt = round(float(i.get("amount") or 0), 2)
+    remaining = round(max(0.0, inv_amt - paid_amount), 2)
     return {**i, "tenant_name": t["name"] if t else None,
             "apartment_number": a["number"] if a else None,
-            "location_name": location_name}
+            "location_name": location_name,
+            "paid_amount": paid_amount,
+            "remaining_amount": remaining}
 
 
 @api.get("/invoices", response_model=List[InvoiceOut])
@@ -6673,6 +6813,7 @@ _pp_helpers = {
     "get_current_user": get_current_user,
     "require_role": require_role,
     "next_receipt_number": _next_receipt_number,
+    "allocate_to_invoices": _allocate_payment_to_invoices,
 }
 _payment_plans_router = _make_payment_plans_router(db, _pp_helpers)
 # We voegen de router toe aan de hoofd `app` via /api prefix omdat
