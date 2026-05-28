@@ -3922,11 +3922,11 @@ async def approve_payment(pid: str, body: PaymentApproveIn, user=Depends(require
                         {"$set": {"status": "completed", "completed_at": approved_at}},
                     )
             # WhatsApp/SMS bevestiging — ook bij admin-approval van kiosk-pending.
+            # FIRE-AND-FORGET: Twilio + SMTP + PDF render kunnen 5-10s duren;
+            # de admin UI moet NIET wachten daarop. Background task stuurt
+            # de notificatie nadat de response al uit is.
             if inst_seq is not None:
-                try:
-                    await _notify_tenant_installment_paid(plan_id, inst_seq)
-                except Exception as e:  # noqa: BLE001
-                    print(f"[approve] notify-tenant fail: {e}")
+                asyncio.create_task(_notify_tenant_installment_paid(plan_id, inst_seq))
         except Exception as e:  # noqa: BLE001
             print(f"[payments.approve] plan allocation failed: {e}")
     await db.payments.update_one({"id": pid}, {"$set": update})
@@ -7018,13 +7018,15 @@ async def _notify_tenant_installment_paid(plan_id: str, seq: int) -> None:
                     {link_block}
                 """
                 # Genereer PDF bijlage van de kwitantie zelf (compact, ~10 KB).
+                # ReportLab is synchroon en kan 1-3s duren bij branding/logo —
+                # draai het in een threadpool om het event loop niet te blokkeren.
                 attachments = None
                 if payment_id:
                     try:
                         payment_doc = await db.payments.find_one({"id": payment_id}, {"_id": 0})
                         if payment_doc:
                             enriched = await _enrich_payment(payment_doc)
-                            pdf_bytes = receipt_pdf(enriched)
+                            pdf_bytes = await asyncio.to_thread(receipt_pdf, enriched)
                             attachments = [(f"kwitantie-{enriched.get('receipt_number','')}.pdf", pdf_bytes, "application/pdf")]
                     except Exception as e:  # noqa: BLE001
                         print(f"[plan-notify] pdf-attach fail: {e}")
