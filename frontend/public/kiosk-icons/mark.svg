@@ -1,17 +1,26 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!--
+    Transparant huis-mark (gebruikt currentColor) — geometrie identiek aan logo.svg
+    zodat header-icoon en PWA-icoon perfect overeenkomen. Chimney eindigt op y=240
+    en valt achter het dak zodat er geen "poot" onder uitsteekt.
+  -->
   <g fill="currentColor">
-    <rect x="158" y="120" width="54" height="200" />
-    <polygon points="256,124 124,316 388,316" />
-    <rect x="84" y="306" width="344" height="20" rx="4" />
+    <!-- Chimney: achter dak -->
+    <rect x="156" y="120" width="52" height="120" />
+    <!-- Dak -->
+    <polygon points="256,124 84,306 428,306" />
+    <!-- Eave -->
+    <rect x="84" y="306" width="344" height="20" rx="2" />
+    <!-- Muur met deur-uitsparing -->
     <path d="
-      M 118 330
-      L 394 330
-      L 394 466
-      L 294 466
-      L 294 374
-      L 218 374
-      L 218 466
-      L 118 466
+      M 140 326
+      L 372 326
+      L 372 466
+      L 296 466
+      L 296 386
+      L 216 386
+      L 216 466
+      L 140 466
       Z
     " />
   </g>

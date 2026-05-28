@@ -692,3 +692,16 @@ Lint clean. Verified via desktop screenshots (1440×900): élke admin-pagina (Ov
 - ✅ **Achtergrond-loop voor herinneringen**: `_installment_reminder_loop` draait elke 30 min en stuurt 1× per dag (09:00-10:00 lokaal) WhatsApp/Email naar huurders met achterstallige termijnen. Tracking via `payment_plan_reminders` collectie. Configurabel via `DISABLE_INSTALLMENT_REMINDERS=1`.
 - ✅ **Refactor van payment_plans.py**: shared `_build_pay_core(db, helpers)` exporteert `enrich_plan`, `pay_installment_for`, `list_plans_for_tenant` helpers — admin endpoint én tenant + kiosk endpoints in server.py delen dezelfde logica.
 - ✅ **Tested (iteration_26)**: 12/12 backend tests PASS. Frontend admin list/detail/sheet flows + morning briefing modal visueel geverifieerd. Race-condition gefixt met setTimeout vertraging in useMorningBriefing.
+
+
+### Session 2026-02-28 — Huis-logo Rollout afgerond ✅
+- ✅ **Nieuw logo design**: Wit huis met schoorsteen, driehoekig dak, en deur op oranje rounded-square achtergrond (gebruikersgeschetste sketch). SVG bron: `/app/frontend/public/kiosk-icons/logo.svg` (volle achtergrond) + `mark.svg` (transparant, gebruikt `currentColor` voor header tinting).
+- ✅ **Geometrie-fix**: Schoorsteen valt achter het dak (h=120 i.p.v. doorlopend), eindigt op y=240 zodat er geen "poot" onder het dak uitsteekt.
+- ✅ **Alle PWA iconen herrenderd** via `/tmp/render_icons.py` (cairosvg + Pillow):
+  - kiosk-{72,144,192,512}.png, beheer-*.png, huurder-*.png, klant-*.png, kioskpwa-*.png
+  - mark-{white,orange,dark}.png voor header gebruik
+  - kiosk-favicon.ico (multi-resolution 16-256)
+  - /app-icon.png voor og:image
+- ✅ **iOS splash screens** (20 stuks): iPhone 8/X/XR/13/15-Pro/15-ProMax + iPad/iPad-Pro-11/iPad-Pro-12 in zowel portrait als landscape — alle gegenereerd met gecentreerd huis-icoon op vlak oranje (#FF5C00).
+- ✅ **Service Worker CACHE_VERSION** gebumpt v55 → v56 in `/app/frontend/public/sw.js` zodat browsers de nieuwe iconen ophalen.
+- ✅ **UI Headers geverifieerd**: `mark-white.png` wordt gebruikt in `pwa.jsx`, `AdminDashboard.jsx` (3 plekken), `ContractSignPage.jsx`. Screenshot toont nette weergave op `/vastgoed/admin/login` — top-left header icoon + centrale Kiosk welkomstkaart tonen beide het correcte huis-logo.
