@@ -316,6 +316,7 @@ def _build_pay_core(db, helpers):
     # facturen toe te passen. Server.py geeft `_allocate_payment_to_invoices`
     # door bij init zodat partial-betalingen ook hier de factuur bijwerken.
     allocate_to_invoices = helpers.get("allocate_to_invoices")
+    notify_tenant_paid = helpers.get("notify_tenant_paid")
 
     def _round2(x): return round(float(x) + 1e-9, 2)
 
@@ -458,6 +459,12 @@ def _build_pay_core(db, helpers):
                     {"id": plan["id"]},
                     {"$set": {"status": "completed", "completed_at": now_iso}},
                 )
+            # WhatsApp/SMS bevestiging naar huurder (alleen approved).
+            if notify_tenant_paid:
+                try:
+                    await notify_tenant_paid(plan["id"], seq)
+                except Exception as e:  # noqa: BLE001
+                    print(f"[plan-core] notify-tenant fail: {e}")
 
         p = await db.payment_plans.find_one({"id": plan["id"]}, {"_id": 0})
         return await enrich_plan(p)

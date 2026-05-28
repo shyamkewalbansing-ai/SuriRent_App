@@ -3856,6 +3856,12 @@ async def approve_payment(pid: str, body: PaymentApproveIn, user=Depends(require
                         {"id": plan_id},
                         {"$set": {"status": "completed", "completed_at": approved_at}},
                     )
+            # WhatsApp/SMS bevestiging — ook bij admin-approval van kiosk-pending.
+            if inst_seq is not None:
+                try:
+                    await _notify_tenant_installment_paid(plan_id, inst_seq)
+                except Exception as e:  # noqa: BLE001
+                    print(f"[approve] notify-tenant fail: {e}")
         except Exception as e:  # noqa: BLE001
             print(f"[payments.approve] plan allocation failed: {e}")
     await db.payments.update_one({"id": pid}, {"$set": update})
@@ -6825,6 +6831,94 @@ async def morning_briefing(user=Depends(require_role("admin"))):
 
 app.include_router(api)
 
+async def _notify_tenant_installment_paid(plan_id: str, seq: int) -> None:
+    """Stuur een korte WhatsApp/SMS bevestiging naar de huurder na een
+    succesvolle termijn-betaling. Faalt stilzwijgend wanneer Twilio niet
+    is ingeschakeld of er geen telefoonnummer is."""
+    try:
+        plan = await db.payment_plans.find_one({"id": plan_id}, {"_id": 0})
+        if not plan:
+            return
+        tenant = await db.tenants.find_one(
+            {"id": plan["tenant_id"]}, {"_id": 0, "name": 1, "phone": 1, "email": 1}
+        ) or {}
+        phone = (tenant.get("phone") or "").strip()
+        cid = plan.get("company_id")
+        cfg = await get_company_section(cid, "twilio") if cid else {}
+        cur = plan.get("currency", "SRD")
+        inst = await db.payment_plan_installments.find_one(
+            {"plan_id": plan_id, "sequence": seq}, {"_id": 0}
+        )
+        if not inst:
+            return
+        total_inst = await db.payment_plan_installments.count_documents(
+            {"plan_id": plan_id, "status": {"$ne": "cancelled"}}
+        )
+        paid_inst = await db.payment_plan_installments.count_documents(
+            {"plan_id": plan_id, "status": "paid"}
+        )
+        next_inst = await db.payment_plan_installments.find_one(
+            {"plan_id": plan_id, "status": "pending"}, {"_id": 0},
+            sort=[("sequence", 1)],
+        )
+        remaining = total_inst - paid_inst
+        amount = float(inst.get("amount") or 0)
+        if paid_inst >= total_inst:
+            body = (
+                f"Bedankt {tenant.get('name', 'huurder')}!\n\n"
+                f"Termijn {seq}/{total_inst} betaald ({cur} {amount:.2f}).\n\n"
+                f"*Uw betalingsregeling is volledig voldaan.* "
+                f"Hartelijk dank voor de tijdige betaling!\n\n— SuriRent"
+            )
+        else:
+            nl = ""
+            if next_inst and next_inst.get("due_date"):
+                try:
+                    y, m, d = next_inst["due_date"].split("-")
+                    nl = f"\nVolgende vervaldatum: {d}-{m}-{y}"
+                except Exception:
+                    nl = f"\nVolgende vervaldatum: {next_inst['due_date']}"
+            body = (
+                f"Bedankt {tenant.get('name', 'huurder')}!\n\n"
+                f"Termijn {seq}/{total_inst} betaald ({cur} {amount:.2f}).\n"
+                f"Nog *{remaining}* termijn{'en' if remaining != 1 else ''} te gaan.{nl}\n\n"
+                f"— SuriRent"
+            )
+        if cfg.get("enabled") and phone:
+            try:
+                from twilio_service import send_whatsapp
+                await send_whatsapp(cfg, phone, body)
+            except Exception as e:  # noqa: BLE001
+                print(f"[plan-notify] twilio fail: {e}")
+        # Optionele email
+        email = (tenant.get("email") or "").strip()
+        smtp = await get_company_section(cid, "smtp") if cid else {}
+        if smtp.get("enabled") and email:
+            try:
+                from email_service import send_email, wrap_template
+                next_line = ""
+                if paid_inst < total_inst and next_inst:
+                    next_line = f"<p>Nog <b>{remaining}</b> termijn(en) te gaan, volgende vervaldatum {next_inst.get('due_date','')}.</p>"
+                elif paid_inst >= total_inst:
+                    next_line = "<p><b>Uw betalingsregeling is volledig voldaan.</b></p>"
+                content = f"""
+                    <h1>Termijn {seq}/{total_inst} ontvangen</h1>
+                    <p>Beste {tenant.get('name', 'huurder')},<br />
+                    Bedankt voor uw betaling van <b>{cur} {amount:.2f}</b>.</p>
+                    {next_line}
+                """
+                await send_email(
+                    smtp, email,
+                    f"Termijn {seq}/{total_inst} ontvangen — Betalingsregeling",
+                    wrap_template(content),
+                )
+            except Exception as e:  # noqa: BLE001
+                print(f"[plan-notify] smtp fail: {e}")
+    except Exception as e:  # noqa: BLE001
+        print(f"[plan-notify] outer fail: {e}")
+
+
+
 # --- Payment Plans (Betalingsregeling) router ---
 # Apart bestand zodat server.py niet nog verder uitdijt. We injecteren de
 # helpers expliciet zodat er geen circular import nodig is.
@@ -6840,6 +6934,7 @@ _pp_helpers = {
     "require_role": require_role,
     "next_receipt_number": _next_receipt_number,
     "allocate_to_invoices": _allocate_payment_to_invoices,
+    "notify_tenant_paid": _notify_tenant_installment_paid,
 }
 _payment_plans_router = _make_payment_plans_router(db, _pp_helpers)
 # We voegen de router toe aan de hoofd `app` via /api prefix omdat
