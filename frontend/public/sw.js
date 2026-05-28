@@ -6,7 +6,7 @@
  * - Bypass /api/* (always go to network)
  * - Push notifications + click handler
  */
-const CACHE_VERSION = 'surirent-v62';
+const CACHE_VERSION = 'surirent-v63';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 
@@ -181,16 +181,20 @@ self.addEventListener('push', (event) => {
       { action: 'open', title: 'Bekijk' },
       { action: 'dismiss', title: 'Sluiten' },
     ],
-    // Unique tag per payment_id zodat meerdere pending notificaties NIET
-    // elkaar overschrijven (de "kiosk-medewerker registreert 3 betalingen
-    // achter elkaar" use-case moet 3 banners tonen, niet 1).
-    tag: requireApproval && data.data?.payment_id
+    // Unique tag per payment_id zodat meerdere notificaties van dezelfde
+    // soort NIET elkaar overschrijven. Voorheen had alleen pending-approval
+    // een unique tag; gewone betalingen deelden allemaal `surirent-payment`
+    // waardoor iOS Safari ze één voor één verving en de admin het idee kreeg
+    // dat ze niet aankomen. Nu: élke push met payment_id krijgt eigen tag.
+    tag: data.data?.payment_id
       ? `surirent-${kind}-${data.data.payment_id}`
-      : `surirent-${kind}`,
+      : `surirent-${kind}-${Date.now()}`,
     renotify: true,
     // Pending approval blijft staan tot admin het bekeken heeft —
-    // overdue ook (was al zo).
-    requireInteraction: kind === 'overdue' || requireApproval,
+    // overdue ook. Reguliere betalingen op iOS PWA blijven nu ook
+    // requireInteraction zodat ze in het Notification Center zichtbaar
+    // blijven i.p.v. na 5s te verdwijnen.
+    requireInteraction: kind === 'overdue' || requireApproval || kind === 'payment',
     silent: false,
     timestamp: Date.now(),
   };

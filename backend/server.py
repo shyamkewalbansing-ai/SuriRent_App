@@ -23,6 +23,7 @@ from contextlib import asynccontextmanager
 import io
 import base64
 import secrets
+import asyncio
 
 from pdf_gen import (
     receipt_pdf, contract_pdf, invoice_pdf, deposit_refund_pdf, payslip_pdf,
@@ -5948,36 +5949,50 @@ VAPID_PUBLIC_KEY = os.environ.get("VAPID_PUBLIC_KEY", "")
 
 
 async def _notify_company_admins(company_id: str, title: str, body: str, data: dict | None = None) -> int:
-    """Stuur een push naar ALLE admins van een bepaalde company.
+    """Stuur een push naar ALLE admins/owners/boekhouders van een bepaalde
+    company. Push-dispatch gebeurt PARALLEL via asyncio.to_thread zodat het
+    backend-antwoord nooit blokkeert op trage WebPush-endpoints.
 
     Wordt gebruikt voor automatische meldingen zoals:
       • nieuwe kiosk-betaling
       • achterstand-alert
       • nieuwe factuur
+      • goedkeuring nodig
 
     Verlopen subs worden direct opgeschoond. Faalt nooit hard — return
     aantal succesvol verzonden.
     """
     if not company_id:
         return 0
-    # Vind alle admin/owner users van deze company
+    # Vind alle admin/owner/boekhouder users van deze company. Boekhouders
+    # hebben dezelfde betalingsverwerkings-rechten als admins (geen approval
+    # nodig) dus krijgen ook real-time meldingen.
     admin_ids = []
     async for u in db.users.find(
-        {"company_id": company_id, "role": {"$in": ["admin", "owner"]}},
+        {"company_id": company_id, "role": {"$in": ["admin", "owner", "boekhouder"]}},
         {"_id": 0, "id": 1},
     ):
         admin_ids.append(u["id"])
     if not admin_ids:
         return 0
-    sent = 0
+    # Verzamel alle subscriptions eerst (1 DB-call), dispatch dan parallel
+    subs = []
     async for sub in db.push_subs.find({"user_id": {"$in": admin_ids}}, {"_id": 0}):
+        subs.append(sub)
+    if not subs:
+        return 0
+
+    async def _send_one(sub):
         info = {"endpoint": sub["endpoint"], "keys": sub["keys"]}
-        ok = send_push(info, title, body, data or {})
-        if ok:
-            sent += 1
-        else:
+        # pywebpush is blocking sync — run in threadpool zodat we niet
+        # andere subs blokkeren tijdens 1 trage push.
+        ok = await asyncio.to_thread(send_push, info, title, body, data or {})
+        if not ok:
             await db.push_subs.delete_one({"endpoint": sub["endpoint"]})
-    return sent
+        return ok
+
+    results = await asyncio.gather(*[_send_one(s) for s in subs], return_exceptions=True)
+    return sum(1 for r in results if r is True)
 
 
 class PushSubscriptionIn(BaseModel):
