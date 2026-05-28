@@ -333,6 +333,35 @@ function DashboardView({ overview, onAction, onHistory }) {
   const cur = (balance.currency || apartment?.currency || 'SRD').toUpperCase();
   const hasBalance = totalDue > 0;
 
+  // Per-factuur breakdown — toont elke openstaande factuur met paid+remaining,
+  // én een "Via betalingsregeling"-label als de factuur in een actief plan zit.
+  const [invoices, setInvoices] = useState([]);
+  const [planInvoiceIds, setPlanInvoiceIds] = useState(new Set());
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [invRes, planRes] = await Promise.all([
+          api.get('/tenant-portal/invoices'),
+          api.get('/tenant-portal/payment-plans').catch(() => ({ data: [] })),
+        ]);
+        if (cancelled) return;
+        setInvoices(invRes.data || []);
+        const ids = new Set();
+        for (const p of planRes.data || []) {
+          if (p.status === 'active') {
+            for (const iid of p.invoice_ids || []) ids.add(iid);
+          }
+        }
+        setPlanInvoiceIds(ids);
+      } catch { /* stilzwijgend */ }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+  const partialOrOpen = (invoices || []).filter(
+    (i) => (i.status || '').toLowerCase() !== 'paid' && Number(i.remaining_amount ?? i.amount) > 0,
+  ).sort((a, b) => (a.period_year - b.period_year) || (a.period_month - b.period_month));
+
   const items = [
     { key: 'rent', label: 'Maandhuur', value: apartment?.rent_amount || 0, icon: HomeIcon, muted: false },
     ...(openRent > 0 ? [{
@@ -394,6 +423,43 @@ function DashboardView({ overview, onAction, onHistory }) {
               {fmtMoney(totalDue, cur)}
             </p>
           </div>
+          {partialOrOpen.length > 0 && (
+            <div className="mt-3 pt-3 border-t border-slate-100" data-testid="tk-invoice-breakdown">
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1.5">
+                Per factuur
+              </p>
+              <div className="space-y-1 max-h-32 overflow-y-auto pr-1">
+                {partialOrOpen.map((inv) => {
+                  const paid = Number(inv.paid_amount || 0);
+                  const rem = Number(inv.remaining_amount ?? inv.amount);
+                  const isPlan = planInvoiceIds.has(inv.id);
+                  return (
+                    <div key={inv.id} className="flex items-center justify-between gap-2 text-xs"
+                      data-testid={`tk-inv-${inv.id}`}>
+                      <div className="min-w-0 flex-1">
+                        <p className="font-semibold text-slate-800 truncate capitalize">
+                          {MONTHS_NL[(inv.period_month || 1) - 1]} {inv.period_year}
+                          {isPlan && (
+                            <span className="ml-1.5 inline-block text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider bg-orange-100 text-orange-700">
+                              Via regeling
+                            </span>
+                          )}
+                        </p>
+                        {paid > 0 && (
+                          <p className="text-[10px] text-emerald-600 font-bold">
+                            {fmtMoney(paid, inv.currency || cur)} al betaald
+                          </p>
+                        )}
+                      </div>
+                      <p className="font-bold text-slate-900 whitespace-nowrap">
+                        nog {fmtMoney(rem, inv.currency || cur)}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* RIGHT — Te betalen + Volgende + Geschiedenis (kiosk-style) */}

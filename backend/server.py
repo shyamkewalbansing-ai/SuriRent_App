@@ -5173,6 +5173,13 @@ class InvoiceCreate(BaseModel):
     period_year: int
 
 
+class InvoicePlanRef(BaseModel):
+    id: str
+    status: str
+    total_installments: int
+    paid_installments: int
+
+
 class InvoiceOut(BaseModel):
     id: str
     invoice_number: str
@@ -5193,6 +5200,7 @@ class InvoiceOut(BaseModel):
     payment_id: Optional[str] = None
     receipt_number: Optional[str] = None
     paid_method: Optional[str] = None
+    plans: List[InvoicePlanRef] = []
 
 
 async def _enrich_invoice(i: dict) -> dict:
@@ -5219,11 +5227,29 @@ async def _enrich_invoice(i: dict) -> dict:
     paid_amount = round(float(paid_amount or 0), 2)
     inv_amt = round(float(i.get("amount") or 0), 2)
     remaining = round(max(0.0, inv_amt - paid_amount), 2)
+    # Gelinkte betalingsregelingen — toon active + voltooide plannen.
+    plans = []
+    async for plan in db.payment_plans.find(
+        {"invoice_ids": i["id"], "status": {"$in": ["active", "completed"]}}, {"_id": 0}
+    ):
+        total_inst = await db.payment_plan_installments.count_documents(
+            {"plan_id": plan["id"]}
+        )
+        paid_inst = await db.payment_plan_installments.count_documents(
+            {"plan_id": plan["id"], "status": "paid"}
+        )
+        plans.append({
+            "id": plan["id"],
+            "status": plan.get("status", "active"),
+            "total_installments": int(total_inst),
+            "paid_installments": int(paid_inst),
+        })
     return {**i, "tenant_name": t["name"] if t else None,
             "apartment_number": a["number"] if a else None,
             "location_name": location_name,
             "paid_amount": paid_amount,
-            "remaining_amount": remaining}
+            "remaining_amount": remaining,
+            "plans": plans}
 
 
 @api.get("/invoices", response_model=List[InvoiceOut])

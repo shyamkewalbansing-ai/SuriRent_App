@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Plus, X, Check, Loader2, FileText, Wand2, Mail, Search,
   SlidersHorizontal, CalendarDays, CheckCircle2, Info, ChevronRight,
-  ChevronDown, MessageCircle, Send, SkipForward, Users,
+  ChevronDown, MessageCircle, Send, SkipForward, Users, Calendar,
 } from 'lucide-react';
 import { api, formatError, fmtMoney, MONTHS_NL } from '../../../lib/api';
 import { useAutoRefresh } from '../../../lib/auto-refresh';
@@ -407,6 +407,24 @@ function TenantRow({ group, expanded, onToggle, onReminder, tenants }) {
                         {!isOverdue && (
                           <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 uppercase tracking-wider">Komt nog</span>
                         )}
+                        {(inv.plans || []).map((pl) => {
+                          const isDone = pl.status === 'completed' || pl.paid_installments >= pl.total_installments;
+                          return (
+                            <button key={pl.id} type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                try { window.dispatchEvent(new CustomEvent('go-tab', { detail: 'payment_plans' })); } catch { /* noop */ }
+                              }}
+                              data-testid={`invoice-plan-badge-${inv.id}-${pl.id}`}
+                              title="Bekijk betalingsregeling"
+                              className={`inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider transition hover:scale-105 ${
+                                isDone ? 'bg-emerald-100 text-emerald-700' : 'bg-orange-100 text-orange-700'
+                              }`}>
+                              <Calendar className="w-2.5 h-2.5" />
+                              Regeling {pl.paid_installments}/{pl.total_installments}
+                            </button>
+                          );
+                        })}
                         <span className="text-[10px] text-slate-400 hidden sm:inline">· {inv.invoice_number}</span>
                       </div>
                       <div className="text-right shrink-0 whitespace-nowrap">
