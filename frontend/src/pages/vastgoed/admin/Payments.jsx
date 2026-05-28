@@ -690,22 +690,35 @@ export default function Payments() {
     window.addEventListener('quick-pay-open', onOpen);
     return () => window.removeEventListener('quick-pay-open', onOpen);
   }, []);
-  // Stille polling — geen spinner / scroll-reset tijdens auto-refresh.
-  useAutoRefresh(() => load({ silent: true }), { interval: 8000, enabled: !creating && !emailing });
+  // Stille polling — snel (3s) zodat nieuwe pending betalingen vrijwel
+  // realtime verschijnen ook als de SW push miss (bv. PWA in achtergrond
+  // stond bij binnenkomst). Geen spinner / scroll-reset tijdens auto-refresh.
+  useAutoRefresh(() => load({ silent: true }), { interval: 3000, enabled: !creating && !emailing });
 
   // Push-notificatie binnen → direct silent reload zodat de pending sectie
-  // meteen up-to-date is (i.p.v. wachten op 8s poll).
+  // meteen up-to-date is (i.p.v. wachten op 3s poll). Triggert óók bij
+  // window focus (zelfs zonder push) — perfect voor "PWA terug op de
+  // voorgrond" scenario.
   useEffect(() => {
+    const refresh = () => load({ silent: true });
     const onSwMsg = (ev) => {
-      if (ev?.data?.type === 'BADGE_CHANGED') load({ silent: true });
+      const t = ev?.data?.type;
+      if (t === 'BADGE_CHANGED' || t === 'SW_ACTIVATED') refresh();
     };
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.addEventListener('message', onSwMsg);
     }
+    // Extra: dispatch ook bij elke focus/visibilitychange als safety net
+    const onFocus = () => refresh();
+    const onVis = () => { if (document.visibilityState === 'visible') refresh(); };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVis);
     return () => {
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.removeEventListener('message', onSwMsg);
       }
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVis);
     };
   }, [load]);
 

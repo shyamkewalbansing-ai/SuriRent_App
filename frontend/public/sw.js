@@ -6,7 +6,7 @@
  * - Bypass /api/* (always go to network)
  * - Push notifications + click handler
  */
-const CACHE_VERSION = 'surirent-v65';
+const CACHE_VERSION = 'surirent-v66';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 
@@ -214,23 +214,28 @@ self.addEventListener('push', (event) => {
     timestamp: Date.now(),
   };
   event.waitUntil((async () => {
-    await _loadBadge();
-    _badgeCount += inc;
-    await _saveBadge();
-    await _setAppBadge(_badgeCount);
-    // Vertel evt. open tabs zodat React de badge ook in-app kan tonen
-    // EN — bij pending-approval — een distinctive "ding-ding" kan spelen
-    // (zie src/lib/notify-sound.js installPendingApprovalDingListener).
+    // STAP 1 — Direct alle open tabs informeren zodat React-componenten
+    // (Payments lijst, badge, etc.) PARALLEL met de notificatie hun
+    // data kunnen verversen. Vroeger gebeurde dit pas NA de notificatie
+    // → user zag de melding maar de "Wacht op goedkeuring" rij kwam pas
+    // bij de volgende 8s poll.
     try {
       const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
       for (const c of clients) c.postMessage({
         type: 'BADGE_CHANGED',
-        count: _badgeCount,
+        count: _badgeCount + inc,  // pre-verhoogde count zodat React direct correcte waarde ziet
         require_approval: requireApproval,
         kind,
+        data: data.data || {},
       });
     } catch { /* noop */ }
+    // STAP 2 — Toon de notificatie (snelste pad naar het scherm)
     await self.registration.showNotification(data.title, options);
+    // STAP 3 — Persist badge state (mag traag — gebeurt na de UI update)
+    await _loadBadge();
+    _badgeCount += inc;
+    await _saveBadge();
+    await _setAppBadge(_badgeCount);
   })());
 });
 
