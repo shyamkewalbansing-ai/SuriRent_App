@@ -3516,6 +3516,28 @@ async def _next_receipt_number() -> str:
     return f"KW{year}-{seq:05d}"
 
 
+async def _company_brand_info(company_id: Optional[str]) -> dict:
+    """Geef bedrijfs-branding info voor PDF headers (name, address, phone,
+    email, signature_data). Lege dict bij geen company_id."""
+    if not company_id:
+        return {}
+    co = await db.companies.find_one(
+        {"id": company_id},
+        {"_id": 0, "name": 1, "contact_email": 1, "contact_phone": 1, "address": 1},
+    ) or {}
+    settings = await db.company_settings.find_one(
+        {"company_id": company_id}, {"_id": 0, "signature_data": 1},
+    ) or {}
+    return {
+        "company_name": co.get("name") or "",
+        "company_address": co.get("address") or "",
+        "company_phone": co.get("contact_phone") or "",
+        "company_email": co.get("contact_email") or "",
+        "signature_data": settings.get("signature_data") or "",
+    }
+
+
+
 async def _enrich_payment(p: dict) -> dict:
     tenant_name = None
     apt_number = None
@@ -3533,7 +3555,52 @@ async def _enrich_payment(p: dict) -> dict:
                 loc = await db.locations.find_one({"id": a["location_id"]}, {"_id": 0, "name": 1})
                 if loc:
                     location_name = loc.get("name")
-    return {**p, "tenant_name": tenant_name, "apartment_number": apt_number, "location_name": location_name}
+    # Bedrijfsinfo voor de PDF-header (branding-look uit voorbeeld).
+    company_info = {}
+    if p.get("company_id"):
+        co = await db.companies.find_one(
+            {"id": p["company_id"]},
+            {"_id": 0, "name": 1, "contact_email": 1, "contact_phone": 1,
+             "address": 1, "branding": 1},
+        ) or {}
+        company_info = {
+            "company_name": co.get("name") or "",
+            "company_address": co.get("address") or "",
+            "company_phone": co.get("contact_phone") or "",
+            "company_email": co.get("contact_email") or "",
+            "company_logo_url": (co.get("branding") or {}).get("logo_url") or "",
+        }
+        # Optionele opgeslagen handtekening voor de admin/operator.
+        try:
+            settings = await db.company_settings.find_one(
+                {"company_id": p["company_id"]},
+                {"_id": 0, "signature_url": 1, "signature_data": 1},
+            ) or {}
+            company_info["signature_data"] = settings.get("signature_data") or ""
+        except Exception:
+            company_info["signature_data"] = ""
+    # Openstaand na deze betaling — som van remaining_amount over alle
+    # niet-betaalde facturen van deze huurder, in dezelfde currency.
+    outstanding_after = 0.0
+    if p.get("tenant_id"):
+        try:
+            cur = p.get("currency") or "SRD"
+            async for inv in db.invoices.find(
+                {"tenant_id": p["tenant_id"], "currency": cur,
+                 "status": {"$nin": ["paid", "cancelled"]}},
+                {"_id": 0, "amount": 1, "paid_amount": 1, "id": 1},
+            ):
+                inv_amt = float(inv.get("amount") or 0)
+                paid = inv.get("paid_amount")
+                if paid is None:
+                    paid = await _invoice_currently_paid(inv["id"])
+                outstanding_after += max(0.0, inv_amt - float(paid or 0))
+        except Exception:
+            pass
+    return {**p, "tenant_name": tenant_name, "apartment_number": apt_number,
+            "location_name": location_name,
+            "outstanding_after": round(outstanding_after, 2),
+            **company_info}
 
 
 async def _invoice_currently_paid(invoice_id: str) -> float:
@@ -5122,6 +5189,7 @@ async def contract_pdf_admin(contract_id: str):
         raise HTTPException(status_code=404, detail="Contract niet gevonden")
     t = await db.tenants.find_one({"id": c["tenant_id"]}, {"_id": 0}) or {}
     a = await db.apartments.find_one({"id": c["apartment_id"]}, {"_id": 0}) or {}
+    c = {**c, **(await _company_brand_info(c.get("company_id")))}
     pdf = contract_pdf(c, t, a)
     return _pdf_response(pdf, f"contract-{c['contract_number']}.pdf")
 
@@ -5368,6 +5436,7 @@ async def invoice_pdf_endpoint(invoice_id: str):
         "period_month": inv["period_month"],
         "period_year": inv["period_year"],
     }, {"_id": 0}).to_list(50)
+    inv = {**inv, **(await _company_brand_info(inv.get("company_id")))}
     pdf = invoice_pdf(inv, t, a, payments)
     return _pdf_response(pdf, f"factuur-{inv['invoice_number']}.pdf")
 
@@ -5575,6 +5644,7 @@ async def salary_pdf_endpoint(sid: str):
     if not s:
         raise HTTPException(status_code=404, detail="Loonstrook niet gevonden")
     e = await db.employees.find_one({"id": s["employee_id"]}, {"_id": 0}) or {}
+    s = {**s, **(await _company_brand_info(s.get("company_id")))}
     pdf = payslip_pdf(s, e)
     return _pdf_response(pdf, f"loonstrook-{e.get('name','employee')}-{s['period_year']}-{s['period_month']:02d}.pdf")
 
@@ -5686,6 +5756,7 @@ async def deposit_refund_pdf_endpoint(did: str):
     t = await db.tenants.find_one({"id": d["tenant_id"]}, {"_id": 0}) or {}
     apt_id = t.get("apartment_id")
     a = await db.apartments.find_one({"id": apt_id}, {"_id": 0}) if apt_id else {}
+    d = {**d, **(await _company_brand_info(d.get("company_id")))}
     pdf = deposit_refund_pdf(d, t, a or {})
     return _pdf_response(pdf, f"borg-restitutie-{d['id'][:8]}.pdf")
 
@@ -6362,6 +6433,7 @@ async def email_invoice(invoice_id: str, body: EmailSendIn, user=Depends(get_cur
         "tenant_id": inv["tenant_id"], "category": "huur",
         "period_month": inv["period_month"], "period_year": inv["period_year"],
     }, {"_id": 0}).to_list(50)
+    inv = {**inv, **(await _company_brand_info(inv.get("company_id")))}
     pdf_bytes = invoice_pdf(inv, tenant, apt, payments)
     extra_note = f"<p>{body.message}</p>" if body.message else ""
     months_nl = ["januari", "februari", "maart", "april", "mei", "juni",
@@ -6399,6 +6471,7 @@ async def email_contract(contract_id: str, body: EmailSendIn, user=Depends(get_c
     to = (body.to or tenant.get("email") or "").strip()
     if not to:
         raise HTTPException(status_code=400, detail="Geen ontvanger — vul een e-mailadres in of zet er een bij de huurder")
+    c = {**c, **(await _company_brand_info(c.get("company_id")))}
     pdf_bytes = contract_pdf(c, tenant, apt)
     extra_note = f"<p>{body.message}</p>" if body.message else ""
     # If contract is unsigned, include a signing link.

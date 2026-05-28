@@ -1,34 +1,116 @@
-"""PDF generation helpers using ReportLab."""
+"""PDF generation helpers using ReportLab.
+
+Brand-styled met grijze pagina-achtergrond, prominente titel, twee-koloms
+detail-blokken, groot bedrag-blok en geverifieerde footer met SHA-256 hash —
+gebaseerd op de SuriRent voorbeeld-kwitantie (KW2026-00019). Alle PDFs
+(kwitantie, factuur, contract, borg-restitutie, loonstrook) gebruiken
+dezelfde visuele taal.
+"""
 import io
+import hashlib
+import base64
 from datetime import datetime
 from reportlab.lib.pagesizes import A4, A6
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import mm
 from reportlab.platypus import (
-    SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
+    SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak, Image,
 )
 
-ORANGE = colors.HexColor("#FF5C00")
+# Palet — bewust beperkt: zwarte tekst + lichte grijze achtergrond.
+ORANGE = colors.HexColor("#FF5C00")           # Behouden voor accenten/sticky knoppen
 DARK = colors.HexColor("#1a1a1a")
 MUTED = colors.HexColor("#6b7280")
 LIGHT = colors.HexColor("#f5f5f5")
+PAGE_BG = colors.HexColor("#F8F8F8")           # Lichte grijze pagina-achtergrond
+HAIRLINE = colors.HexColor("#E5E5E5")
+SUCCESS = colors.HexColor("#16a34a")           # "VOLDAAN" status groen
+
+MONTHS_NL = ["januari", "februari", "maart", "april", "mei", "juni",
+             "juli", "augustus", "september", "oktober", "november", "december"]
 
 
 def _styles():
     base = getSampleStyleSheet()
     base.add(ParagraphStyle(
-        name="H1Orange", parent=base["Heading1"],
-        fontSize=22, textColor=DARK, spaceAfter=4, leading=26,
+        name="BrandName", parent=base["Normal"],
+        fontName="Helvetica-Bold", fontSize=10, textColor=DARK,
+        leading=12, spaceAfter=2,
     ))
     base.add(ParagraphStyle(
-        name="Sub", parent=base["Normal"],
-        fontSize=9, textColor=MUTED, spaceAfter=12,
+        name="BrandContact", parent=base["Normal"],
+        fontName="Helvetica", fontSize=7.5, textColor=MUTED,
+        leading=9, spaceAfter=1,
     ))
     base.add(ParagraphStyle(
-        name="SectionHead", parent=base["Heading3"],
-        fontSize=10, textColor=ORANGE, spaceAfter=6,
-        textTransform="uppercase", fontName="Helvetica-Bold",
+        name="DocTitle", parent=base["Normal"],
+        fontName="Helvetica-Bold", fontSize=26, textColor=DARK,
+        leading=30, alignment=1, spaceBefore=4, spaceAfter=2,
+    ))
+    base.add(ParagraphStyle(
+        name="DocNumber", parent=base["Normal"],
+        fontName="Helvetica-Bold", fontSize=10, textColor=MUTED,
+        leading=12, alignment=1, spaceAfter=18,
+    ))
+    base.add(ParagraphStyle(
+        name="SectionHead", parent=base["Normal"],
+        fontName="Helvetica-Bold", fontSize=9, textColor=DARK,
+        leading=12, spaceAfter=4,
+    ))
+    base.add(ParagraphStyle(
+        name="KVLabel", parent=base["Normal"],
+        fontName="Helvetica-Bold", fontSize=9, textColor=DARK,
+        leading=12, spaceAfter=0,
+    ))
+    base.add(ParagraphStyle(
+        name="KVValue", parent=base["Normal"],
+        fontName="Helvetica", fontSize=9, textColor=DARK,
+        leading=12, spaceAfter=0,
+    ))
+    base.add(ParagraphStyle(
+        name="AmountLabel", parent=base["Normal"],
+        fontName="Helvetica-Bold", fontSize=10, textColor=DARK,
+    ))
+    base.add(ParagraphStyle(
+        name="AmountValue", parent=base["Normal"],
+        fontName="Helvetica-Bold", fontSize=18, textColor=DARK,
+        alignment=2,  # right
+    ))
+    base.add(ParagraphStyle(
+        name="StatusValue", parent=base["Normal"],
+        fontName="Helvetica-Bold", fontSize=12, textColor=SUCCESS,
+        alignment=2,
+    ))
+    base.add(ParagraphStyle(
+        name="StatusOpen", parent=base["Normal"],
+        fontName="Helvetica-Bold", fontSize=12, textColor=ORANGE,
+        alignment=2,
+    ))
+    base.add(ParagraphStyle(
+        name="ApprovalLabel", parent=base["Normal"],
+        fontName="Helvetica-Bold", fontSize=8.5, textColor=MUTED,
+        leading=11, spaceAfter=2,
+    ))
+    base.add(ParagraphStyle(
+        name="ApprovalValue", parent=base["Normal"],
+        fontName="Helvetica", fontSize=10, textColor=DARK,
+        leading=13, spaceAfter=0,
+    ))
+    base.add(ParagraphStyle(
+        name="Footer", parent=base["Normal"],
+        fontName="Helvetica", fontSize=7, textColor=MUTED,
+        leading=9, alignment=1,
+    ))
+    base.add(ParagraphStyle(
+        name="FooterVerify", parent=base["Normal"],
+        fontName="Helvetica-Bold", fontSize=7.5, textColor=SUCCESS,
+        leading=10, alignment=1,
+    ))
+    base.add(ParagraphStyle(
+        name="FooterHash", parent=base["Normal"],
+        fontName="Helvetica", fontSize=6.5, textColor=MUTED,
+        leading=8, alignment=1,
     ))
     base.add(ParagraphStyle(
         name="Body", parent=base["Normal"], fontSize=10, leading=14,
@@ -36,9 +118,221 @@ def _styles():
     base.add(ParagraphStyle(
         name="Small", parent=base["Normal"], fontSize=8, textColor=MUTED,
     ))
+    base.add(ParagraphStyle(
+        name="Sub", parent=base["Normal"],
+        fontSize=9, textColor=MUTED, spaceAfter=12,
+    ))
+    base.add(ParagraphStyle(
+        name="H1Orange", parent=base["Heading1"],
+        fontSize=22, textColor=DARK, spaceAfter=4, leading=26,
+    ))
     return base
 
 
+def _doc_hash(doc_number: str, *parts) -> str:
+    """SHA-256 over receipt/factuur/contract nummer + extra payload — getoond
+    in de footer als bewijs van authenticiteit. Niet kritisch beveiligd
+    (printbare PDF is geen tamper-proof) maar wel een sterke visuele indicator."""
+    raw = " | ".join([str(doc_number or "")] + [str(p or "") for p in parts])
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest().upper()
+
+
+def _fmt_money(amount: float, currency: str = "SRD") -> str:
+    """Format `3000.0` → `SRD 3,000.00` (Engelse notatie zoals in voorbeeld)."""
+    try:
+        return f"{currency} {float(amount):,.2f}"
+    except Exception:
+        return f"{currency} {amount}"
+
+
+def _fmt_date_nl(iso_str: str) -> str:
+    """`2026-05-13T...` → `13 mei 2026`."""
+    if not iso_str:
+        return ""
+    try:
+        dt = datetime.fromisoformat(str(iso_str).replace("Z", "+00:00"))
+        return f"{dt.day} {MONTHS_NL[dt.month - 1]} {dt.year}"
+    except Exception:
+        return str(iso_str)[:10]
+
+
+def _bg_canvas(canvas, doc):
+    """Tekent de lichte grijze pagina-achtergrond — wordt aangeroepen door
+    SimpleDocTemplate voor elke pagina via onFirstPage/onLaterPages."""
+    canvas.saveState()
+    canvas.setFillColor(PAGE_BG)
+    canvas.rect(0, 0, doc.pagesize[0], doc.pagesize[1], fill=1, stroke=0)
+    canvas.restoreState()
+
+
+def _brand_header(el, payment_or_doc: dict):
+    """Linksboven: bedrijfsnaam (bold) + adres + contact (tel/wa/email).
+
+    `payment_or_doc` mag een enriched payment/invoice/contract dict zijn met
+    company_name / company_address / company_phone / company_email velden.
+    """
+    s = _styles()
+    name = payment_or_doc.get("company_name") or "SuriRent N.V."
+    address = payment_or_doc.get("company_address") or ""
+    phone = payment_or_doc.get("company_phone") or ""
+    email = payment_or_doc.get("company_email") or ""
+    parts = []
+    if phone:
+        parts.append(f"Tel: {phone}")
+        parts.append(f"WhatsApp: {phone}")
+    if email:
+        parts.append(email)
+    contact = " | ".join(parts) if parts else ""
+
+    el.append(Paragraph(name.upper(), s["BrandName"]))
+    if address:
+        el.append(Paragraph(address, s["BrandContact"]))
+    if contact:
+        el.append(Paragraph(contact, s["BrandContact"]))
+    el.append(Spacer(1, 14))
+
+
+def _brand_title(el, title: str, doc_number: str = ""):
+    """Grote gecentreerde titel + kleinere documentnummer eronder."""
+    s = _styles()
+    el.append(Paragraph(title.upper(), s["DocTitle"]))
+    if doc_number:
+        el.append(Paragraph(doc_number, s["DocNumber"]))
+    else:
+        el.append(Spacer(1, 14))
+
+
+def _two_col_block(el, rows: list, label_col_mm: float = 50, gap_after: int = 14):
+    """Twee-koloms blok: label links (bold), value rechts.
+    `rows` is een lijst van `(label, value)` tuples. Lege values worden geskipped."""
+    s = _styles()
+    data = []
+    for k, v in rows:
+        if v in (None, "", "—"):
+            continue
+        data.append([
+            Paragraph(str(k).upper(), s["KVLabel"]),
+            Paragraph(str(v), s["KVValue"]),
+        ])
+    if not data:
+        return
+    total_w = 170 * mm
+    t = Table(data, colWidths=[label_col_mm * mm, total_w - label_col_mm * mm])
+    t.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 0),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+        ("TOPPADDING", (0, 0), (-1, -1), 3),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+        ("LINEBELOW", (0, 0), (-1, -2), 0.3, HAIRLINE),
+    ]))
+    el.append(t)
+    el.append(Spacer(1, gap_after))
+
+
+def _amount_block(el, label: str, amount: float, currency: str = "SRD"):
+    """Groot bedrag-blok: label links, bedrag groot rechts."""
+    s = _styles()
+    data = [[
+        Paragraph(label.upper(), s["AmountLabel"]),
+        Paragraph(_fmt_money(amount, currency), s["AmountValue"]),
+    ]]
+    t = Table(data, colWidths=[100 * mm, 70 * mm])
+    t.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 12),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 12),
+        ("TOPPADDING", (0, 0), (-1, -1), 10),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
+        ("BACKGROUND", (0, 0), (-1, -1), colors.white),
+        ("BOX", (0, 0), (-1, -1), 0.5, HAIRLINE),
+    ]))
+    el.append(t)
+    el.append(Spacer(1, 10))
+
+
+def _status_row(el, label: str, value: str, is_paid: bool = False):
+    """Status-rij: label links, status rechts (groen=VOLDAAN, oranje=OPEN)."""
+    s = _styles()
+    data = [[
+        Paragraph(label.upper(), s["KVLabel"]),
+        Paragraph(value.upper(), s["StatusValue"] if is_paid else s["StatusOpen"]),
+    ]]
+    t = Table(data, colWidths=[100 * mm, 70 * mm])
+    t.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 0),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+        ("TOPPADDING", (0, 0), (-1, -1), 6),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+        ("LINEBELOW", (0, 0), (-1, -1), 0.3, HAIRLINE),
+    ]))
+    el.append(t)
+
+
+def _signature_block(el, received_by: str = "", approved_by: str = "",
+                     company_name: str = "", signature_data: str = ""):
+    """Twee-koloms signature blok onderaan vóór de footer.
+
+    Links: 'ONTVANGEN DOOR' + naam (+ rol indien aanwezig)
+    Rechts: 'GOEDGEKEURD DOOR {bedrijf}' + (optioneel) ingesloten signature image
+    """
+    s = _styles()
+    el.append(Spacer(1, 18))
+    left_parts = []
+    left_parts.append(Paragraph("ONTVANGEN DOOR", s["ApprovalLabel"]))
+    left_parts.append(Paragraph(received_by or "—", s["ApprovalValue"]))
+    # Signature placeholder (links): handtekeningvak
+    left_parts.append(Spacer(1, 14))
+    left_parts.append(Paragraph("_" * 28, s["ApprovalValue"]))
+    left_parts.append(Paragraph("Handtekening huurder", s["Small"]))
+
+    right_parts = []
+    label = f"GOEDGEKEURD DOOR {company_name.upper()}" if company_name else "GOEDGEKEURD DOOR"
+    right_parts.append(Paragraph(label, s["ApprovalLabel"]))
+    if approved_by:
+        right_parts.append(Paragraph(approved_by, s["ApprovalValue"]))
+    # Probeer een ingesloten signature image te renderen (base64 data URL).
+    sig_img = None
+    if signature_data and isinstance(signature_data, str):
+        try:
+            raw = signature_data.split(",", 1)[1] if "," in signature_data else signature_data
+            img_bytes = base64.b64decode(raw)
+            sig_img = Image(io.BytesIO(img_bytes), width=60 * mm, height=20 * mm)
+        except Exception:
+            sig_img = None
+    if sig_img:
+        right_parts.append(Spacer(1, 4))
+        right_parts.append(sig_img)
+    else:
+        right_parts.append(Spacer(1, 14))
+        right_parts.append(Paragraph("_" * 28, s["ApprovalValue"]))
+    right_parts.append(Paragraph("Handtekening / Stempel", s["Small"]))
+
+    data = [[left_parts, right_parts]]
+    t = Table(data, colWidths=[85 * mm, 85 * mm])
+    t.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 0),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+    ]))
+    el.append(t)
+
+
+def _verification_footer(el, doc_number: str, company_name: str = "",
+                         company_address: str = "", *hash_payload):
+    """Bottom verification line + SHA-256 + bedrijfs-regel."""
+    s = _styles()
+    el.append(Spacer(1, 24))
+    el.append(Paragraph("✓ GEVERIFIEERD ORIGINEEL · AUTHENTIEK DOCUMENT", s["FooterVerify"]))
+    h = _doc_hash(doc_number, *hash_payload)
+    short_hash = f"{h[:16]} … {h[-4:]}"
+    el.append(Paragraph(f"Document-hash (SHA-256): {short_hash}", s["FooterHash"]))
+    parts = [p for p in [company_name, company_address, doc_number] if p]
+    el.append(Paragraph(" · ".join(parts), s["FooterHash"]))
+
+
+# ============== Legacy header (oranje balk) — behouden voor speciale PDFs ==============
 def _header(elements, styles, title, subtitle="", company="SuriRent N.V."):
     elements.append(Paragraph(f"<b>{company}</b>", styles["Body"]))
     elements.append(Paragraph(title, styles["H1Orange"]))
@@ -66,12 +360,16 @@ def _kv_table(rows):
     return t
 
 
-def _build(doc_elements):
+def _build(doc_elements, *, with_bg: bool = True):
+    """Bouwt A4 PDF met optionele grijze pagina-achtergrond."""
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=A4,
         leftMargin=20 * mm, rightMargin=20 * mm,
         topMargin=20 * mm, bottomMargin=20 * mm)
-    doc.build(doc_elements)
+    if with_bg:
+        doc.build(doc_elements, onFirstPage=_bg_canvas, onLaterPages=_bg_canvas)
+    else:
+        doc.build(doc_elements)
     buf.seek(0)
     return buf.getvalue()
 
@@ -87,42 +385,72 @@ def _build_a6(doc_elements):
     return buf.getvalue()
 
 
-# ============== Receipt PDF ==============
+# ============== Receipt PDF (KWITANTIE-look) ==============
 def receipt_pdf(payment: dict) -> bytes:
-    s = _styles()
+    """Genereert de gestilte SuriRent kwitantie met grijze achtergrond,
+    centrale titel, two-col details, groot bedrag, status + signature blok,
+    en geverifieerde footer met SHA-256 hash."""
     el = []
-    _header(el, s, "Kwitantie", f"Nr. {payment['receipt_number']}")
-    el.append(Paragraph("Betaling ontvangen", s["SectionHead"]))
-    el.append(Spacer(1, 4))
+    _brand_header(el, payment)
+    _brand_title(el, "Kwitantie", payment.get("receipt_number", ""))
+
     period = ""
     if payment.get("period_month") and payment.get("period_year"):
-        months = ["januari", "februari", "maart", "april", "mei", "juni", "juli", "augustus", "september", "oktober", "november", "december"]
-        period = f"{months[payment['period_month'] - 1]} {payment['period_year']}"
+        period = f"{MONTHS_NL[payment['period_month'] - 1]} {payment['period_year']}"
+
     rows = [
-        ("Kwitantienummer", payment["receipt_number"]),
-        ("Datum", datetime.fromisoformat(payment["paid_at"].replace("Z", "+00:00")).strftime("%d-%m-%Y %H:%M")),
+        ("Datum", _fmt_date_nl(payment.get("paid_at"))),
         ("Huurder", payment.get("tenant_name", "")),
-        ("Appartement", payment.get("apartment_number", "—")),
-        ("Categorie", payment.get("category", "").capitalize()),
-        ("Periode", period),
-        ("Betaalwijze", payment.get("method", "").capitalize()),
+        ("Appartement", payment.get("apartment_number") or "—"),
+        ("Type betaling", (payment.get("category") or "").capitalize() or "Huurbetaling"),
     ]
-    # Medewerker prominent boven het bedrag — geeft de huurder direct
-    # zekerheid wie hem heeft geholpen (handig bij eventuele klachten).
-    if payment.get("received_by"):
-        rows.append(("Ontvangen door", payment["received_by"]))
-    rows.append(("Bedrag", f"{payment['currency']} {payment['amount']:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")))
-    if payment.get("approved_by") and payment.get("approved_by") != payment.get("received_by"):
-        rows.append(("Goedgekeurd door", payment["approved_by"]))
-    el.append(_kv_table(rows))
-    el.append(Spacer(1, 16))
+    if period:
+        rows.append(("Betaling voor", period))
+    rows.append(("Betalingswijze", (payment.get("method") or "").capitalize() or "Contant"))
+    _two_col_block(el, rows, label_col_mm=48, gap_after=14)
+
+    # Ontvangen bedrag — groot blok
+    amount = float(payment.get("amount") or 0)
+    currency = payment.get("currency") or "SRD"
+    _amount_block(el, "Ontvangen bedrag", amount, currency)
+    el.append(Spacer(1, 6))
+
+    # Status — VOLDAAN of openstaand bedrag
+    outstanding_after = float(payment.get("outstanding_after") or 0)
+    if outstanding_after <= 0.01:
+        _status_row(el, "Openstaand na betaling", "VOLDAAN", is_paid=True)
+        _status_row(el, "Totaal openstaand", "VOLDAAN", is_paid=True)
+    else:
+        _status_row(el, "Openstaand na betaling", _fmt_money(outstanding_after, currency), is_paid=False)
+        _status_row(el, "Totaal openstaand", _fmt_money(outstanding_after, currency), is_paid=False)
+
+    # Notitie (optioneel — niet in alle kwitanties)
     if payment.get("note"):
-        el.append(Paragraph("<b>Notitie:</b> " + payment["note"], s["Body"]))
-        el.append(Spacer(1, 12))
-    el.append(Paragraph("Dit is een officiële kwitantie. Bewaar deze voor uw administratie.", s["Small"]))
-    el.append(Spacer(1, 30))
-    el.append(Paragraph("___________________________", s["Body"]))
-    el.append(Paragraph("Handtekening / Stempel", s["Small"]))
+        s = _styles()
+        el.append(Spacer(1, 10))
+        el.append(Paragraph(f"<b>Notitie:</b> {payment['note']}", s["Body"]))
+
+    # Signature blok
+    received = payment.get("received_by") or ""
+    if received and payment.get("kiosk_employee_name"):
+        received = f"{payment['kiosk_employee_name']}  ·  KIOSK MEDEWERKER"
+    approved = payment.get("approved_by") or payment.get("company_name") or ""
+    _signature_block(
+        el,
+        received_by=received or payment.get("tenant_name") or "",
+        approved_by=approved,
+        company_name=payment.get("company_name") or "",
+        signature_data=payment.get("signature_data") or "",
+    )
+
+    # Geverifieerde footer
+    _verification_footer(
+        el,
+        payment.get("receipt_number", ""),
+        payment.get("company_name") or "",
+        payment.get("company_address") or "",
+        amount, currency, payment.get("tenant_id", ""),
+    )
     return _build(el)
 
 
@@ -130,32 +458,37 @@ def receipt_pdf(payment: dict) -> bytes:
 def contract_pdf(contract: dict, tenant: dict, apartment: dict) -> bytes:
     s = _styles()
     el = []
-    _header(el, s, "Huurovereenkomst", f"Nr. {contract.get('contract_number', '')}")
-    el.append(Paragraph("Partijen", s["SectionHead"]))
-    el.append(_kv_table([
-        ("Verhuurder", contract.get("landlord", "SuriRent N.V.")),
+    # Bedrijfs-info aanwezig op contract dict (geinjecteerd door server.py)
+    _brand_header(el, contract)
+    _brand_title(el, "Huurovereenkomst", contract.get("contract_number", ""))
+
+    # Partijen
+    _two_col_block(el, [
+        ("Verhuurder", contract.get("landlord") or contract.get("company_name") or ""),
         ("Huurder", tenant.get("name", "")),
         ("Telefoon", tenant.get("phone", "")),
         ("E-mail", tenant.get("email", "")),
-    ]))
-    el.append(Spacer(1, 14))
-    el.append(Paragraph("Object", s["SectionHead"]))
-    el.append(_kv_table([
+    ], gap_after=10)
+
+    # Object
+    _two_col_block(el, [
         ("Appartement", apartment.get("number", "")),
         ("Adres", apartment.get("address", "")),
-        ("Beschrijving", apartment.get("description", "—")),
-    ]))
-    el.append(Spacer(1, 14))
-    el.append(Paragraph("Voorwaarden", s["SectionHead"]))
-    el.append(_kv_table([
-        ("Maandhuur", f"{apartment.get('currency','SRD')} {apartment.get('rent_amount',0):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")),
-        ("Borg", f"{contract.get('deposit_amount',0):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".") + f" {apartment.get('currency','SRD')}"),
+        ("Beschrijving", apartment.get("description") or "—"),
+    ], gap_after=10)
+
+    # Voorwaarden
+    cur = apartment.get("currency", "SRD")
+    _two_col_block(el, [
+        ("Maandhuur", _fmt_money(apartment.get("rent_amount", 0), cur)),
+        ("Borg", _fmt_money(contract.get("deposit_amount", 0), cur)),
         ("Startdatum", contract.get("start_date", "")),
-        ("Einddatum", contract.get("end_date", "Onbepaalde tijd")),
+        ("Einddatum", contract.get("end_date") or "Onbepaalde tijd"),
         ("Betaaldag", f"{contract.get('payment_day', 1)}e van de maand"),
-    ]))
-    el.append(Spacer(1, 14))
-    el.append(Paragraph("Algemene bepalingen", s["SectionHead"]))
+    ], gap_after=14)
+
+    # Algemene bepalingen
+    el.append(Paragraph("ALGEMENE BEPALINGEN", s["SectionHead"]))
     el.append(Paragraph(
         contract.get("terms",
             "1. Huurder verklaart het gehuurde in goede staat te ontvangen.<br/>"
@@ -166,21 +499,33 @@ def contract_pdf(contract: dict, tenant: dict, apartment: dict) -> bytes:
         ),
         s["Body"]
     ))
-    el.append(Spacer(1, 24))
 
-    # Signature block
+    # Signature
     signed = contract.get("signed_at")
+    received = ""
     if signed:
-        el.append(Paragraph("<b>Digitaal ondertekend</b>", s["Body"]))
-        el.append(_kv_table([
-            ("Ondertekend door", contract.get("signed_by", tenant.get("name", ""))),
-            ("Datum", datetime.fromisoformat(signed.replace("Z", "+00:00")).strftime("%d-%m-%Y %H:%M")),
-            ("IP-adres", contract.get("signed_ip", "—")),
-        ]))
+        try:
+            dt = datetime.fromisoformat(signed.replace("Z", "+00:00"))
+            received = f"{contract.get('signed_by', tenant.get('name', ''))} · {dt.strftime('%d-%m-%Y %H:%M')}"
+        except Exception:
+            received = contract.get("signed_by", tenant.get("name", ""))
     else:
-        el.append(Paragraph("Handtekening huurder:", s["Body"]))
-        el.append(Spacer(1, 20))
-        el.append(Paragraph("___________________________", s["Body"]))
+        received = tenant.get("name", "")
+    _signature_block(
+        el,
+        received_by=received,
+        approved_by=contract.get("company_name") or "",
+        company_name=contract.get("company_name") or "",
+        signature_data=contract.get("signature_data") or "",
+    )
+
+    _verification_footer(
+        el,
+        contract.get("contract_number", ""),
+        contract.get("company_name") or "",
+        contract.get("company_address") or "",
+        tenant.get("id", ""), apartment.get("id", ""),
+    )
     return _build(el)
 
 
@@ -188,72 +533,108 @@ def contract_pdf(contract: dict, tenant: dict, apartment: dict) -> bytes:
 def invoice_pdf(invoice: dict, tenant: dict, apartment: dict, payments: list) -> bytes:
     s = _styles()
     el = []
-    _header(el, s, "Factuur", f"Nr. {invoice.get('invoice_number','')}")
-    el.append(_kv_table([
-        ("Factuurdatum", invoice.get("created_at", "")),
+    _brand_header(el, invoice)
+    _brand_title(el, "Factuur", invoice.get("invoice_number", ""))
+
+    cur = apartment.get("currency", invoice.get("currency", "SRD"))
+    period = ""
+    if invoice.get("period_month") and invoice.get("period_year"):
+        period = f"{MONTHS_NL[invoice['period_month'] - 1]} {invoice['period_year']}"
+
+    _two_col_block(el, [
+        ("Factuurdatum", _fmt_date_nl(invoice.get("created_at"))),
         ("Huurder", tenant.get("name", "")),
         ("Appartement", apartment.get("number", "")),
-        ("Periode", f"{invoice.get('period_month','')}/{invoice.get('period_year','')}"),
-    ]))
-    el.append(Spacer(1, 14))
-    el.append(Paragraph("Specificatie", s["SectionHead"]))
-    data = [["Omschrijving", "Bedrag"]]
-    data.append([
-        f"Maandhuur appartement {apartment.get('number','')}",
-        f"{apartment.get('currency','SRD')} {invoice.get('amount',0):,.2f}".replace(",", "X").replace(".", ",").replace("X", "."),
-    ])
-    t = Table(data, colWidths=[120 * mm, 50 * mm])
+        ("Periode", period),
+    ], gap_after=14)
+
+    # Specificatie — eenvoudige twee-koloms zonder oranje header
+    el.append(Paragraph("SPECIFICATIE", s["SectionHead"]))
+    el.append(Spacer(1, 4))
+    spec_data = [[
+        Paragraph(f"Maandhuur appartement {apartment.get('number', '')}", s["Body"]),
+        Paragraph(_fmt_money(invoice.get("amount", 0), cur), s["AmountValue"]),
+    ]]
+    t = Table(spec_data, colWidths=[120 * mm, 50 * mm])
     t.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, 0), ORANGE),
-        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-        ("ALIGN", (1, 0), (1, -1), "RIGHT"),
-        ("LINEBELOW", (0, 0), (-1, -1), 0.5, MUTED),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 0),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 0),
         ("TOPPADDING", (0, 0), (-1, -1), 8),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
-        ("LEFTPADDING", (0, 0), (-1, -1), 10),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 10),
+        ("LINEBELOW", (0, 0), (-1, -1), 0.4, HAIRLINE),
     ]))
     el.append(t)
-    el.append(Spacer(1, 16))
-    # Totals
-    total = invoice.get("amount", 0)
-    paid = sum(p.get("amount", 0) for p in payments)
+    el.append(Spacer(1, 14))
+
+    # Totalen
+    total = float(invoice.get("amount", 0) or 0)
+    paid = sum(float(p.get("amount", 0) or 0) for p in (payments or []))
     due = max(total - paid, 0)
-    el.append(_kv_table([
-        ("Totaal", f"{apartment.get('currency','SRD')} {total:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")),
-        ("Reeds betaald", f"{apartment.get('currency','SRD')} {paid:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")),
-        ("Te betalen", f"{apartment.get('currency','SRD')} {due:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")),
-    ]))
-    el.append(Spacer(1, 20))
+    _amount_block(el, "Totaal", total, cur)
+    el.append(Spacer(1, 4))
+    if paid > 0:
+        _status_row(el, "Reeds betaald", _fmt_money(paid, cur), is_paid=True)
+    if due > 0.01:
+        _status_row(el, "Nog te betalen", _fmt_money(due, cur), is_paid=False)
+    else:
+        _status_row(el, "Status", "VOLDAAN", is_paid=True)
+
+    el.append(Spacer(1, 16))
     el.append(Paragraph(
         "Gelieve dit bedrag binnen 14 dagen te voldoen via de kiosk of bankoverschrijving.",
         s["Small"]
     ))
+
+    _verification_footer(
+        el,
+        invoice.get("invoice_number", ""),
+        invoice.get("company_name") or "",
+        invoice.get("company_address") or "",
+        total, cur, tenant.get("id", ""),
+    )
     return _build(el)
 
 
 # ============== Deposit refund PDF ==============
 def deposit_refund_pdf(deposit: dict, tenant: dict, apartment: dict) -> bytes:
-    s = _styles()
     el = []
-    _header(el, s, "Borg restitutie", f"Nr. {deposit.get('id','')[:8].upper()}")
-    el.append(_kv_table([
+    _brand_header(el, deposit)
+    nr = (deposit.get("id") or "")[:8].upper()
+    _brand_title(el, "Borg restitutie", nr)
+
+    cur = deposit.get("currency", "SRD")
+    _two_col_block(el, [
         ("Huurder", tenant.get("name", "")),
-        ("Appartement", apartment.get("number", "—")),
-        ("Borg ontvangen", deposit.get("created_at", "")),
-        ("Borg restitutie", deposit.get("refunded_at", "")),
-        ("Borgbedrag", f"{deposit.get('currency','SRD')} {deposit.get('amount',0):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")),
-        ("Aftrek", f"{deposit.get('currency','SRD')} {deposit.get('deduction',0):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")),
-        ("Terugbetaald", f"{deposit.get('currency','SRD')} {deposit.get('refund_amount',0):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")),
-    ]))
+        ("Appartement", apartment.get("number") or "—"),
+        ("Borg ontvangen", _fmt_date_nl(deposit.get("created_at"))),
+        ("Borg restitutie", _fmt_date_nl(deposit.get("refunded_at"))),
+    ], gap_after=14)
+
+    _amount_block(el, "Borgbedrag", deposit.get("amount", 0), cur)
+    if float(deposit.get("deduction", 0) or 0) > 0:
+        _status_row(el, "Aftrek", _fmt_money(deposit.get("deduction", 0), cur), is_paid=False)
+    _amount_block(el, "Terugbetaald", deposit.get("refund_amount", 0), cur)
+
     if deposit.get("refund_note"):
+        s = _styles()
         el.append(Spacer(1, 12))
-        el.append(Paragraph("<b>Toelichting aftrek</b>", s["SectionHead"]))
+        el.append(Paragraph("TOELICHTING AFTREK", s["SectionHead"]))
         el.append(Paragraph(deposit["refund_note"], s["Body"]))
-    el.append(Spacer(1, 24))
-    el.append(Paragraph("___________________________", s["Body"]))
-    el.append(Paragraph("Handtekening voor ontvangst", s["Small"]))
+
+    _signature_block(
+        el,
+        received_by=tenant.get("name", ""),
+        approved_by=deposit.get("company_name") or "",
+        company_name=deposit.get("company_name") or "",
+        signature_data=deposit.get("signature_data") or "",
+    )
+    _verification_footer(
+        el, f"BORG-{nr}",
+        deposit.get("company_name") or "",
+        deposit.get("company_address") or "",
+        deposit.get("refund_amount", 0), cur, tenant.get("id", ""),
+    )
     return _build(el)
 
 
@@ -261,47 +642,51 @@ def deposit_refund_pdf(deposit: dict, tenant: dict, apartment: dict) -> bytes:
 def payslip_pdf(salary: dict, employee: dict) -> bytes:
     s = _styles()
     el = []
-    months = ["januari", "februari", "maart", "april", "mei", "juni", "juli", "augustus", "september", "oktober", "november", "december"]
+    _brand_header(el, salary)
     period_label = ""
     if salary.get("period_month") and salary.get("period_year"):
-        period_label = f"{months[salary['period_month'] - 1]} {salary['period_year']}"
-    _header(el, s, "Loonstrook", period_label)
-    el.append(_kv_table([
-        ("Werknemer", employee.get("name", "")),
-        ("Functie", employee.get("role", "—")),
-        ("Periode", period_label),
-        ("Uitbetaald op", salary.get("paid_at", "")),
-    ]))
-    el.append(Spacer(1, 14))
-    el.append(Paragraph("Loonspecificatie", s["SectionHead"]))
-    data = [["Omschrijving", "Bedrag"]]
+        period_label = f"{MONTHS_NL[salary['period_month'] - 1]} {salary['period_year']}"
+    nr = f"LS-{salary.get('id','')[:8].upper()}" if salary.get("id") else "LS"
+    _brand_title(el, "Loonstrook", nr)
+
     cur = salary.get("currency", "SRD")
-    rows = [
-        ("Bruto salaris", salary.get("gross", 0)),
-        ("Voorschotten", -salary.get("advance", 0)),
-        ("Inhoudingen", -salary.get("deductions", 0)),
-    ]
-    for label, amt in rows:
-        data.append([label, f"{cur} {amt:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")])
-    data.append(["Netto uitbetaald", f"{cur} {salary.get('net',0):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")])
-    t = Table(data, colWidths=[120 * mm, 50 * mm])
-    t.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, 0), ORANGE),
-        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-        ("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold"),
-        ("BACKGROUND", (0, -1), (-1, -1), LIGHT),
-        ("ALIGN", (1, 0), (1, -1), "RIGHT"),
-        ("LINEBELOW", (0, 0), (-1, -1), 0.5, MUTED),
-        ("TOPPADDING", (0, 0), (-1, -1), 8),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
-        ("LEFTPADDING", (0, 0), (-1, -1), 10),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 10),
-    ]))
-    el.append(t)
+    _two_col_block(el, [
+        ("Werknemer", employee.get("name", "")),
+        ("Functie", employee.get("role") or "—"),
+        ("Periode", period_label),
+        ("Uitbetaald op", _fmt_date_nl(salary.get("paid_at"))),
+    ], gap_after=14)
+
+    el.append(Paragraph("LOONSPECIFICATIE", s["SectionHead"]))
+    el.append(Spacer(1, 4))
+    rows = []
+    if salary.get("gross") is not None:
+        rows.append(("Bruto salaris", _fmt_money(salary.get("gross", 0), cur)))
+    if float(salary.get("advance", 0) or 0) > 0:
+        rows.append(("Voorschotten", "- " + _fmt_money(salary.get("advance", 0), cur)))
+    if float(salary.get("deductions", 0) or 0) > 0:
+        rows.append(("Inhoudingen", "- " + _fmt_money(salary.get("deductions", 0), cur)))
+    _two_col_block(el, rows, label_col_mm=80, gap_after=6)
+
+    _amount_block(el, "Netto uitbetaald", salary.get("net", 0), cur)
+
     if salary.get("note"):
-        el.append(Spacer(1, 12))
-        el.append(Paragraph("<b>Notitie:</b> " + salary["note"], s["Body"]))
+        el.append(Spacer(1, 10))
+        el.append(Paragraph(f"<b>Notitie:</b> {salary['note']}", s["Body"]))
+
+    _signature_block(
+        el,
+        received_by=employee.get("name", ""),
+        approved_by=salary.get("company_name") or "",
+        company_name=salary.get("company_name") or "",
+        signature_data=salary.get("signature_data") or "",
+    )
+    _verification_footer(
+        el, nr,
+        salary.get("company_name") or "",
+        salary.get("company_address") or "",
+        salary.get("net", 0), cur, employee.get("id", ""),
+    )
     return _build(el)
 
 
