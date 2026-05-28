@@ -1557,34 +1557,34 @@ export default function KioskLayout() {
 
       {/* Desktop floating bottom bar */}
       {showDesktopBar && (
-        <div className="hidden md:flex fixed bottom-0 left-0 right-0 z-40 bg-white items-center justify-between px-4 sm:px-6"
-          style={{
-            minHeight: 'clamp(48px, 7vh, 64px)',
-            paddingBottom: 'env(safe-area-inset-bottom, 0px)',
-          }}
+        <div className="hidden md:block fixed bottom-0 left-0 right-0 z-40 bg-white"
+          style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
           data-testid="kiosk-bottom-bar">
-          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-            <div className="rounded-lg bg-orange-500 flex items-center justify-center w-9 h-9 shrink-0">
-              <Building2 className="w-5 h-5 text-white" />
-            </div>
-            <span className="text-sm sm:text-base font-bold text-slate-800 truncate" data-testid="kiosk-footer-company">
-              {company?.name || 'Kiosk'}
-            </span>
-          </div>
-          <div className="flex items-center gap-2 sm:gap-4">
-            {/* Medewerker-bar alleen voor niet-admin gebruikers; admin/boekhouder
-                tikt direct via legacy flow zonder PIN-sessie. */}
-            {!hasAdminAccess && <KioskEmployeeBar onLoginClick={() => setShowEmpLogin(true)} />}
-            {apartment && step !== 'select' && (
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-slate-400 font-medium hidden sm:inline">{apartment.tenant_name}</span>
-                <span className="text-sm font-bold text-slate-800">Appt. {apartment.number}</span>
+          <div className="flex items-center justify-between px-4 sm:px-6"
+            style={{ height: 'clamp(48px, 7vh, 64px)' }}>
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+              <div className="rounded-lg bg-orange-500 flex items-center justify-center w-9 h-9 shrink-0">
+                <Building2 className="w-5 h-5 text-white" />
               </div>
-            )}
-            <button onClick={adminMode} data-testid="kiosk-admin-btn-desktop"
-              className={`bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-lg px-5 py-2 text-sm ${hasAdminAccess ? '' : 'hidden'}`}>Beheerder</button>
-            <button onClick={exit} data-testid="kiosk-lock-btn-desktop"
-              className="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-lg px-5 py-2 text-sm">Uit</button>
+              <span className="text-sm sm:text-base font-bold text-slate-800 truncate" data-testid="kiosk-footer-company">
+                {company?.name || 'Kiosk'}
+              </span>
+            </div>
+            <div className="flex items-center gap-2 sm:gap-4">
+              {/* Medewerker-bar alleen voor niet-admin gebruikers; admin/boekhouder
+                  tikt direct via legacy flow zonder PIN-sessie. */}
+              {!hasAdminAccess && <KioskEmployeeBar onLoginClick={() => setShowEmpLogin(true)} />}
+              {apartment && step !== 'select' && (
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-slate-400 font-medium hidden sm:inline">{apartment.tenant_name}</span>
+                  <span className="text-sm font-bold text-slate-800">Appt. {apartment.number}</span>
+                </div>
+              )}
+              <button onClick={adminMode} data-testid="kiosk-admin-btn-desktop"
+                className={`bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-lg px-5 py-2 text-sm ${hasAdminAccess ? '' : 'hidden'}`}>Beheerder</button>
+              <button onClick={exit} data-testid="kiosk-lock-btn-desktop"
+                className="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-lg px-5 py-2 text-sm">Uit</button>
+            </div>
           </div>
         </div>
       )}
