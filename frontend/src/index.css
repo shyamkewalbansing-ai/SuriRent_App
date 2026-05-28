@@ -77,6 +77,16 @@ body.kiosk-mode { background-color: #FF5C00; }
   .mobile-safe-top { padding-top: env(safe-area-inset-top, 0px); }
 }
 
+/* Kiosk-content scroll padding: reserveert ruimte voor de witte onderbalk
+   (clamp 48-64px) + iOS home-indicator safe-area zodat content nooit
+   onder de balk doorschuift. Op mobiel (< md) is er geen vaste balk, dus
+   alleen safe-area is voldoende via .mobile-safe-bottom hierboven. */
+@media (min-width: 768px) {
+  .kiosk-content-scroll {
+    padding-bottom: calc(clamp(48px, 7vh, 64px) + env(safe-area-inset-bottom, 0px) + 16px);
+  }
+}
+
 /* Hide mobile chrome (top header + bottom tab bar) whenever an admin modal
    is open so the modal-backdrop covers literally everything underneath.
    Targets the white-glass modal pattern AND the older dark variants for
