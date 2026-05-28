@@ -1,16 +1,18 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <!-- SuriRent S monogram — transparent voor gekleurde containers -->
-  <path d="
-    M 312 96
-    L 200 96
-    C 144 96, 144 256, 200 256
-    L 312 256
-    C 368 256, 368 416, 312 416
-    L 200 416
-  "
-  fill="none"
-  stroke="currentColor"
-  stroke-width="52"
-  stroke-linecap="round"
-  stroke-linejoin="round" />
+  <g fill="currentColor">
+    <rect x="158" y="120" width="54" height="200" />
+    <polygon points="256,124 124,316 388,316" />
+    <rect x="84" y="306" width="344" height="20" rx="4" />
+    <path d="
+      M 118 330
+      L 394 330
+      L 394 466
+      L 294 466
+      L 294 374
+      L 218 374
+      L 218 466
+      L 118 466
+      Z
+    " />
+  </g>
 </svg>
