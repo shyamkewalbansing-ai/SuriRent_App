@@ -78,12 +78,13 @@ body.kiosk-mode { background-color: #FF5C00; }
 }
 
 /* Kiosk-content scroll padding: reserveert ruimte voor de witte onderbalk
-   (clamp 48-64px) + iOS home-indicator safe-area zodat content nooit
-   onder de balk doorschuift. Op mobiel (< md) is er geen vaste balk, dus
+   (clamp 48-64px) + 16px buffer zodat content nooit onder de balk doorschuift.
+   Geen safe-area hier — de balk dekt de onderrand af incl. eventuele
+   iOS home-indicator zone. Op mobiel (< md) is er geen vaste balk, dus
    alleen safe-area is voldoende via .mobile-safe-bottom hierboven. */
 @media (min-width: 768px) {
   .kiosk-content-scroll {
-    padding-bottom: calc(clamp(48px, 7vh, 64px) + env(safe-area-inset-bottom, 0px) + 16px);
+    padding-bottom: calc(clamp(48px, 7vh, 64px) + 16px);
   }
 }
 
@@ -116,9 +117,10 @@ html { scroll-behavior: smooth; }
 .kiosk-fullscreen {
   position: fixed; inset: 0; background: #FF5C00;
   overflow: hidden;
-  /* Respect iPhone notch / iPad home indicator inside kiosk too. */
+  /* Respect iPhone notch aan de bovenkant. De onderkant wordt afgedekt door
+     de witte footer-balk (`fixed bottom-0`), dus geen padding-bottom hier —
+     dat zou een oranje strip onder de balk creëren op iPads. */
   padding-top: env(safe-area-inset-top);
-  padding-bottom: env(safe-area-inset-bottom);
   padding-left: env(safe-area-inset-left);
   padding-right: env(safe-area-inset-right);
 }

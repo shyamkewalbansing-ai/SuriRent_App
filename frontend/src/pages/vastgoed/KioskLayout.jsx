@@ -1558,7 +1558,6 @@ export default function KioskLayout() {
       {/* Desktop floating bottom bar */}
       {showDesktopBar && (
         <div className="hidden md:block fixed bottom-0 left-0 right-0 z-40 bg-white"
-          style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
           data-testid="kiosk-bottom-bar">
           <div className="flex items-center justify-between px-4 sm:px-6"
             style={{ height: 'clamp(48px, 7vh, 64px)' }}>
