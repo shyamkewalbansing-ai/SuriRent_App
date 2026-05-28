@@ -2165,10 +2165,11 @@ async def list_companies(user=Depends(require_role("superadmin"))):
     company_ids = [c["id"] for c in docs]
     # Parallel: 3 aggregaties (apartments, tenants, users) gefiltered op de
     # exacte company_ids zodat MongoDB de bestaande indexes kan gebruiken.
-    pipeline = lambda: [
-        {"$match": {"company_id": {"$in": company_ids}}},
-        {"$group": {"_id": "$company_id", "count": {"$sum": 1}}},
-    ]
+    def pipeline():
+        return [
+            {"$match": {"company_id": {"$in": company_ids}}},
+            {"$group": {"_id": "$company_id", "count": {"$sum": 1}}},
+        ]
     apt_agg, ten_agg, usr_agg = await asyncio.gather(
         db.apartments.aggregate(pipeline()).to_list(None),
         db.tenants.aggregate(pipeline()).to_list(None),
@@ -2950,10 +2951,13 @@ def _generate_unique_pin(used_hashes: list, max_tries: int = 25) -> str:
     """Genereer een 4-cijferige PIN die nog niet in `used_hashes` voorkomt.
     PIN's beginnen niet met '0' zodat de huurder ze beter kan onthouden
     (anders gaat een leading-zero op de display soms verloren).
+
+    Gebruikt `secrets.randbelow` (cryptografisch sterke RNG) i.p.v. `random`
+    zodat de PIN niet voorspelbaar is — relevant omdat het de enige
+    authenticatie van een huurder is op de Kiosk.
     """
-    import random
     for _ in range(max_tries):
-        pin = f"{random.randint(1000, 9999)}"
+        pin = f"{1000 + secrets.randbelow(9000)}"
         clash = False
         for h in used_hashes:
             if h and verify_password(pin, h):
@@ -2963,7 +2967,7 @@ def _generate_unique_pin(used_hashes: list, max_tries: int = 25) -> str:
             return pin
     # Fall-back: 5-cijferige PIN als 4-cijfers volledig "op" is — extreem
     # zeldzaam in de praktijk (>1000 huurders met PIN) maar voorkomt loop.
-    return f"{random.randint(10000, 99999)}"
+    return f"{10000 + secrets.randbelow(90000)}"
 
 
 @api.post("/tenant-portal/forgot-pin")
@@ -3686,7 +3690,7 @@ async def _enrich_payments_bulk(payments: list[dict]) -> list[dict]:
     locs = await db.locations.find(
         {"id": {"$in": list(loc_ids)}}, {"_id": 0, "id": 1, "name": 1}
     ).to_list(None) if loc_ids else []
-    loc_by_id = {l["id"]: l for l in locs}
+    loc_by_id = {loc["id"]: loc for loc in locs}
 
     # Brand info per company — éénmaal per unieke company gecached.
     # We strippen `company_logo_bytes` (binary PNG) zodat FastAPI's JSON
