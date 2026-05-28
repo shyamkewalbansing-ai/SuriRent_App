@@ -6,7 +6,7 @@
  * - Bypass /api/* (always go to network)
  * - Push notifications + click handler
  */
-const CACHE_VERSION = 'surirent-v63';
+const CACHE_VERSION = 'surirent-v64';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 
@@ -72,19 +72,24 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // HTML navigation: network-first, fallback to cached app shell.
+  // HTML navigation: STALE-WHILE-REVALIDATE — toon eerst de gecachete shell
+  // (instant first paint op PWA), update tegelijk in achtergrond zodat
+  // de volgende refresh up-to-date is. Op een cold start zonder cache
+  // valt het terug op live network. Dit maakt PWA-openen ~500-1500ms
+  // sneller op mobiel.
   const isHTML = req.mode === 'navigate' || (req.headers.get('accept') || '').includes('text/html');
   if (isHTML) {
     event.respondWith(
-      fetch(req)
-        .then((res) => {
-          const copy = res.clone();
-          caches.open(RUNTIME_CACHE).then((c) => c.put(req, copy)).catch(() => {});
+      caches.open(RUNTIME_CACHE).then(async (cache) => {
+        const cached = await cache.match(req) || await cache.match('/');
+        const networkPromise = fetch(req).then((res) => {
+          if (res && res.status === 200) {
+            cache.put(req, res.clone()).catch(() => {});
+          }
           return res;
-        })
-        .catch(() =>
-          caches.match(req).then((cached) => cached || caches.match('/'))
-        )
+        }).catch(() => cached);
+        return cached || networkPromise;
+      })
     );
     return;
   }

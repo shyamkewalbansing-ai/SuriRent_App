@@ -368,12 +368,38 @@ TENANT_SCOPED_COLLECTIONS = [
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # ---------- Indexes ----------
+    # Hot-path indexes voor snelle queries op alle collecties die de
+    # app gebruikt. Worden bij elke startup idempotent gegarandeerd.
     await db.users.create_index("email", unique=True)
+    await db.users.create_index([("company_id", 1), ("role", 1)])
     await db.apartments.create_index("number")
+    await db.apartments.create_index("company_id")
     await db.tenants.create_index("name")
+    await db.tenants.create_index([("company_id", 1), ("apartment_id", 1)])
+    await db.tenants.create_index("company_id")
     await db.payments.create_index("paid_at")
     await db.payments.create_index("receipt_number", unique=True)
+    await db.payments.create_index([("company_id", 1), ("paid_at", -1)])
+    await db.payments.create_index([("tenant_id", 1), ("paid_at", -1)])
+    await db.payments.create_index([("company_id", 1), ("status", 1)])
+    await db.payments.create_index("invoice_id")
+    await db.payments.create_index("id")
+    await db.invoices.create_index([("company_id", 1), ("status", 1)])
+    await db.invoices.create_index([("tenant_id", 1), ("period_year", 1), ("period_month", 1)])
+    await db.invoices.create_index("id")
     await db.companies.create_index("slug", unique=True)
+    await db.push_subs.create_index("user_id")
+    await db.push_subs.create_index("endpoint", unique=True)
+    await db.employees.create_index([("company_id", 1), ("active", 1), ("app_role", 1)])
+    await db.kiosk_pins.create_index("company_id", unique=True)
+    await db.payment_plans.create_index([("company_id", 1), ("status", 1)])
+    await db.payment_plans.create_index([("tenant_id", 1), ("status", 1)])
+    await db.payment_plan_installments.create_index([("plan_id", 1), ("sequence", 1)], unique=True)
+    await db.payment_plan_installments.create_index([("plan_id", 1), ("status", 1)])
+    await db.contracts.create_index("id")
+    await db.contracts.create_index("company_id")
+    await db.notifications.create_index([("user_id", 1), ("created_at", -1)])
 
     # --- Seed default company ---
     default = await db.companies.find_one({"slug": DEFAULT_COMPANY_SLUG})

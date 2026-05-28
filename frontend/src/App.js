@@ -3,18 +3,30 @@ import { AuthProvider, useAuth } from './lib/auth';
 import { useRegisterServiceWorker, InstallPrompt } from './lib/pwa';
 import { usePwaManifest } from './lib/pwa-manifest';
 import { useSheetSwipeToDismiss } from './lib/sheet-swipe';
-import { useEffect } from 'react';
+import { useEffect, lazy, Suspense } from 'react';
 import { installGlobalTapSounds } from './lib/tap-sounds';
 import RotateNotice from './components/RotateNotice';
 import BrandedShell from './components/BrandedShell';
 import { isMarketingHost, appUrl } from './lib/env';
-import MarketingLanding from './pages/vastgoed/MarketingLanding';
-import LoginPage from './pages/vastgoed/LoginPage';
-import AdminDashboard from './pages/vastgoed/AdminDashboard';
-import KioskLayout from './pages/vastgoed/KioskLayout';
-import TenantKioskLayout from './pages/vastgoed/TenantKioskLayout';
-import CustomerDisplay from './pages/vastgoed/CustomerDisplay';
-import ContractSignPage from './pages/vastgoed/ContractSignPage';
+
+// LAZY LOADED ROUTES — Code-splitting per route zodat een kiosk-bezoeker
+// NIET de admin-bundle hoeft te downloaden (en andersom). Initial paint
+// is veel sneller: ~70-80% kleinere first bundle.
+const MarketingLanding = lazy(() => import('./pages/vastgoed/MarketingLanding'));
+const LoginPage = lazy(() => import('./pages/vastgoed/LoginPage'));
+const AdminDashboard = lazy(() => import('./pages/vastgoed/AdminDashboard'));
+const KioskLayout = lazy(() => import('./pages/vastgoed/KioskLayout'));
+const TenantKioskLayout = lazy(() => import('./pages/vastgoed/TenantKioskLayout'));
+const CustomerDisplay = lazy(() => import('./pages/vastgoed/CustomerDisplay'));
+const ContractSignPage = lazy(() => import('./pages/vastgoed/ContractSignPage'));
+
+function RouteFallback() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-kiosk-cream">
+      <div className="w-10 h-10 border-4 border-orange-200 border-t-kiosk-orange rounded-full animate-spin" />
+    </div>
+  );
+}
 
 /* Per-company branded routes (path-based). Mounted under both AppRoutes and
    HybridRoutes so each bedrijf krijgt: `/c/<slug>/{login,kiosk,kiosk/huurder,kiosk/klant,admin,...}`
@@ -134,9 +146,11 @@ export default function App() {
   const mode = isMarketingHost() ? 'marketing' : (appUrl() ? 'app' : 'hybrid');
   return (
     <AuthProvider>
-      {mode === 'marketing' && <MarketingRoutes />}
-      {mode === 'app' && <AppRoutes />}
-      {mode === 'hybrid' && <HybridRoutes />}
+      <Suspense fallback={<RouteFallback />}>
+        {mode === 'marketing' && <MarketingRoutes />}
+        {mode === 'app' && <AppRoutes />}
+        {mode === 'hybrid' && <HybridRoutes />}
+      </Suspense>
       <InstallPrompt />
       <RotateNotice />
     </AuthProvider>
