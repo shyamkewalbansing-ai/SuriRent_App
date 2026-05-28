@@ -6,7 +6,7 @@
  * - Bypass /api/* (always go to network)
  * - Push notifications + click handler
  */
-const CACHE_VERSION = 'surirent-v64';
+const CACHE_VERSION = 'surirent-v65';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 
@@ -38,15 +38,25 @@ self.addEventListener('message', (event) => {
 });
 
 self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(
-        keys
-          .filter((k) => !k.startsWith(CACHE_VERSION))
-          .map((k) => caches.delete(k))
-      )
-    ).then(() => self.clients.claim())
-  );
+  event.waitUntil((async () => {
+    // Verwijder ALLE oude caches (zowel static als runtime van vorige versies).
+    // Belangrijk: bij een nieuwe build krijgen chunks nieuwe hashed namen.
+    // Als we de runtime cache van een vorige versie behouden, blijft een
+    // oude bundle.js daarin staan die naar niet-meer-bestaande chunks vraagt
+    // → "Script error" / ChunkLoadError. Door alles van vorige versie te
+    // wissen forceren we een schone reload bij elke version bump.
+    const keys = await caches.keys();
+    await Promise.all(
+      keys.filter((k) => !k.startsWith(CACHE_VERSION) && k !== 'surirent-state').map((k) => caches.delete(k))
+    );
+    await self.clients.claim();
+    // Vertel alle open tabs dat ze 1x mogen herladen om de nieuwe chunks
+    // te pakken — zonder dat de gebruiker zelf hoeft te refreshen.
+    try {
+      const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+      for (const c of clients) c.postMessage({ type: 'SW_ACTIVATED', version: CACHE_VERSION });
+    } catch { /* noop */ }
+  })());
 });
 
 self.addEventListener('fetch', (event) => {

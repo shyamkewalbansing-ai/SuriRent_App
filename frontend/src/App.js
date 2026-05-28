@@ -12,13 +12,40 @@ import { isMarketingHost, appUrl } from './lib/env';
 // LAZY LOADED ROUTES — Code-splitting per route zodat een kiosk-bezoeker
 // NIET de admin-bundle hoeft te downloaden (en andersom). Initial paint
 // is veel sneller: ~70-80% kleinere first bundle.
-const MarketingLanding = lazy(() => import('./pages/vastgoed/MarketingLanding'));
-const LoginPage = lazy(() => import('./pages/vastgoed/LoginPage'));
-const AdminDashboard = lazy(() => import('./pages/vastgoed/AdminDashboard'));
-const KioskLayout = lazy(() => import('./pages/vastgoed/KioskLayout'));
-const TenantKioskLayout = lazy(() => import('./pages/vastgoed/TenantKioskLayout'));
-const CustomerDisplay = lazy(() => import('./pages/vastgoed/CustomerDisplay'));
-const ContractSignPage = lazy(() => import('./pages/vastgoed/ContractSignPage'));
+//
+// Auto-recovery: als een chunk faalt (typisch na een SW-update waarbij oude
+// hashed chunks vervangen zijn), herladen we 1x automatisch met een
+// sessionStorage-flag zodat we geen reload-loop creëren.
+function lazyWithRetry(importFn) {
+  return lazy(async () => {
+    try {
+      return await importFn();
+    } catch (err) {
+      const RELOAD_KEY = 'sr_chunk_reload_attempted';
+      const already = sessionStorage.getItem(RELOAD_KEY);
+      if (!already) {
+        sessionStorage.setItem(RELOAD_KEY, String(Date.now()));
+        window.location.reload();
+        // Return een lege component terwijl de reload begint
+        return { default: () => null };
+      }
+      // Eén reload heeft niet geholpen — toon expliciete error
+      throw err;
+    }
+  });
+}
+// Clear de retry-flag bij elke succesvolle volledige load (na 5s zonder error).
+if (typeof window !== 'undefined') {
+  setTimeout(() => { try { sessionStorage.removeItem('sr_chunk_reload_attempted'); } catch {} }, 5000);
+}
+
+const MarketingLanding = lazyWithRetry(() => import('./pages/vastgoed/MarketingLanding'));
+const LoginPage = lazyWithRetry(() => import('./pages/vastgoed/LoginPage'));
+const AdminDashboard = lazyWithRetry(() => import('./pages/vastgoed/AdminDashboard'));
+const KioskLayout = lazyWithRetry(() => import('./pages/vastgoed/KioskLayout'));
+const TenantKioskLayout = lazyWithRetry(() => import('./pages/vastgoed/TenantKioskLayout'));
+const CustomerDisplay = lazyWithRetry(() => import('./pages/vastgoed/CustomerDisplay'));
+const ContractSignPage = lazyWithRetry(() => import('./pages/vastgoed/ContractSignPage'));
 
 function RouteFallback() {
   return (
