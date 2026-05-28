@@ -4838,13 +4838,14 @@ async def kiosk_whatsapp_receipt(payment_id: str, _session=Depends(get_kiosk_ses
         return {"sent": False, "reason": "no_tenant_phone"}
 
     pdf_link = _public_url(f"/api/payments/{payment_id}/pdf")
+    image_link = _public_url(f"/api/payments/{payment_id}/image")
     msg = (
         f"Hallo {tenant.get('name', 'huurder')},\n\n"
         f"Uw betaling is succesvol verwerkt.\n"
         f"Kwitantie: {p_enriched['receipt_number']}\n"
         f"Bedrag: {p_enriched['currency']} {p_enriched['amount']:.2f}\n"
         f"Methode: {p_enriched.get('method', '')}\n\n"
-        f"PDF kwitantie: {pdf_link}"
+        f"📄 Kwitantie PDF: {pdf_link}"
     )
 
     # Probeer WhatsApp eerst (als geconfigureerd), val terug op SMS.
@@ -4853,7 +4854,8 @@ async def kiosk_whatsapp_receipt(payment_id: str, _session=Depends(get_kiosk_ses
 
     if has_wa:
         try:
-            await send_whatsapp(cfg, to, msg)
+            # JPG kwitantie als inline media-bijlage — toont preview in chat.
+            await send_whatsapp(cfg, to, msg, media_url=image_link)
             return {"sent": True, "channel": "whatsapp", "to": to}
         except TwilioError as e:
             print(f"[kiosk-twilio] whatsapp failed payment={payment_id} err={e}")
@@ -6483,10 +6485,19 @@ async def message_payment_receipt(payment_id: str, body: MessageSendIn, user=Dep
         f"• Bedrag: {p['currency']} {p['amount']:.2f}\n"
         f"• Datum: {p.get('paid_at', '')[:10]}\n"
         f"• Methode: {p.get('method', '')}\n\n"
-        f"PDF kwitantie: {_public_url(f'/api/payments/{payment_id}/pdf')}\n\n"
+        f"📄 Kwitantie PDF: {_public_url(f'/api/payments/{payment_id}/pdf')}\n\n"
         f"— SuriRent"
     )
-    await _twilio_send(cfg, body.channel, to, msg)
+    # Voor WhatsApp: stuur JPG kwitantie als media-bijlage (inline preview).
+    if body.channel == "whatsapp":
+        try:
+            from twilio_service import send_whatsapp as _swa
+            await _swa(cfg, to, msg, media_url=_public_url(f"/api/payments/{payment_id}/image"))
+        except Exception as e:  # noqa: BLE001
+            print(f"[message-payment] whatsapp media fail, fallback text: {e}")
+            await _twilio_send(cfg, body.channel, to, msg)
+    else:
+        await _twilio_send(cfg, body.channel, to, msg)
     return {"ok": True, "sent_to": to, "channel": body.channel}
 
 
