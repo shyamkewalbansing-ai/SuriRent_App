@@ -22,14 +22,17 @@ export function useMorningBriefing({ enabled = true } = {}) {
     const h = new Date().getHours();
     if (h < 6 || h > 12) return;
     let cancelled = false;
-    (async () => {
+    // Vertraag de fetch + open met 1.2s zodat het dashboard volledig
+    // interactief is voordat de modal verschijnt — voorkomt race-condities
+    // met sidebar tab clicks direct na inloggen.
+    const timer = setTimeout(async () => {
       try {
         const { data } = await api.get('/admin/morning-briefing');
         if (cancelled) return;
         setBriefing(data);
       } catch { /* stilzwijgend */ }
-    })();
-    return () => { cancelled = true; };
+    }, 1200);
+    return () => { cancelled = true; clearTimeout(timer); };
   }, [enabled]);
 
   const dismiss = () => {

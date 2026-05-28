@@ -6675,11 +6675,9 @@ _pp_helpers = {
     "next_receipt_number": _next_receipt_number,
 }
 _payment_plans_router = _make_payment_plans_router(db, _pp_helpers)
-api.include_router(_payment_plans_router)
-# Re-mount api met de toegevoegde router. include_router op `api` (sub-router)
-# zou normaal genoeg zijn maar omdat `app.include_router(api)` hierboven al
-# is uitgevoerd, voegen we de plan-routes direct toe op de app met dezelfde
-# /api prefix.
+# We voegen de router toe aan de hoofd `app` via /api prefix omdat
+# `api.include_router(_payment_plans_router)` na `app.include_router(api)`
+# niet meer alle endpoints registreert (sub-router al gemount).
 app.include_router(_payment_plans_router, prefix="/api")
 
 # Shared core voor tenant + kiosk installment-betaling

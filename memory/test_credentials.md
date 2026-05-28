@@ -29,7 +29,8 @@ Endpoints:
 ## Tenant Portal
 - Login URL: `/huurder`
 - Dashboard URL: `/huurder/portaal`
-- Test tenant (Company A): `Jan de Vries` (email `jan@example.sr`, phone `+597 8001234`, PIN `5678`)
+- Test tenant (Company A): `Bharat Kewalbansing` (email `shyam@kewalbansing.net`, PIN `4242`)
+- Note: Jan de Vries seed is not always present in fresh DBs — use Bharat for tenant-kiosk flows.
 - Login accepteert email of telefoon (volledig string OF alleen cijfers) — case-insensitive voor email.
 
 ## Kiosk Medewerker PIN (Approval Workflow + Direct Login)

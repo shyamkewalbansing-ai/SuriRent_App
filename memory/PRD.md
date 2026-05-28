@@ -677,3 +677,18 @@ Lint clean. Verified via desktop screenshots (1440×900): élke admin-pagina (Ov
 
 
 - ✅ **Bottom-nav FAB curved indent**: iOS-stijl holle boog rond de + knop. Een `#F7F8FA` (page-bg) gekleurde cirkel-puck (60×60 mobile, 80×80 tablet) absolute-positioned achter de FAB doorbreekt de witte nav-top → simuleert een uitgesneden boog waar de FAB "doorheen steekt". FAB iets groter (w-10→w-12), ring matcht nu page-bg ipv wit, shadow iets sterker voor diepte.
+
+
+### Session 2026-02-28 — Betalingsregeling & Morning Briefing afgerond ✅
+- ✅ **Admin UI**: Tab `Betalingsregelingen` (`payment_plans`) volledig aangesloten in `AdminDashboard.jsx` — Calendar icon + PaymentPlans component imports gefixt, render-conditie toegevoegd.
+- ✅ **Morning Briefing**: `useMorningBriefing()` hook fetcht `/api/admin/morning-briefing` + opent automatisch een modal 06:00-12:00 lokale tijd, 1×/dag (LS_KEY tracking). Vertraging van 1.2s voorkomt race-condities met sidebar clicks na inloggen.
+- ✅ **Tenant Kiosk integratie**: `TenantPaySelect` toont actieve betalingsregeling-termijnen als extra rijen onder een 'Betalingsregeling' divider — selecteerbaar in dezelfde lijst als Huur/Internet. `TenantPayConfirm.submit` itereert plan_items via nieuw endpoint en plain_items via klassieke /tenant-portal/payments.
+- ✅ **Operator Kiosk integratie**: `PaySelect` + `PaymentConfirm` (Cash + Mope flow) ondersteunen plan_items. Plain amount vs. plan amount gescheiden in payload zodat /kiosk/payments alleen plain items boekt en plan items via /kiosk/payment-plans endpoints (pending_approval indien employee_id meegegeven).
+- ✅ **Nieuwe backend endpoints**:
+  - `GET /api/tenant-portal/payment-plans` (tenant auth) — lijst actieve regelingen huurder
+  - `POST /api/tenant-portal/payment-plans/{plan_id}/installments/{seq}/pay` — huurder betaalt zelf
+  - `GET /api/kiosk/tenants/{tenant_id}/payment-plans` (kiosk auth) — operator haalt regelingen op
+  - `POST /api/kiosk/payment-plans/{plan_id}/installments/{seq}/pay` — operator betaalt termijn (optioneel pending_approval met employee PIN)
+- ✅ **Achtergrond-loop voor herinneringen**: `_installment_reminder_loop` draait elke 30 min en stuurt 1× per dag (09:00-10:00 lokaal) WhatsApp/Email naar huurders met achterstallige termijnen. Tracking via `payment_plan_reminders` collectie. Configurabel via `DISABLE_INSTALLMENT_REMINDERS=1`.
+- ✅ **Refactor van payment_plans.py**: shared `_build_pay_core(db, helpers)` exporteert `enrich_plan`, `pay_installment_for`, `list_plans_for_tenant` helpers — admin endpoint én tenant + kiosk endpoints in server.py delen dezelfde logica.
+- ✅ **Tested (iteration_26)**: 12/12 backend tests PASS. Frontend admin list/detail/sheet flows + morning briefing modal visueel geverifieerd. Race-condition gefixt met setTimeout vertraging in useMorningBriefing.
