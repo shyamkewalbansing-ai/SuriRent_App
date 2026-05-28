@@ -6599,4 +6599,84 @@ async def manual_run_trial_reminders(user=Depends(require_role("superadmin"))):
     return {"ok": True}
 
 
+@api.get("/admin/morning-briefing")
+async def morning_briefing(user=Depends(require_role("admin"))):
+    """Lichte dagbriefing voor /admin: aantal overdue invoices (>7 dgn),
+    bedrag-totaal per valuta, nieuwe pendings vandaag, nieuwe betalingen
+    vandaag. Frontend toont éénmalig per dag een banner (08:00-12:00).
+    """
+    cid = company_id_of(user)
+    today = now_utc().date()
+    week_ago = (now_utc() - timedelta(days=7)).date()
+    midnight = datetime.combine(today, datetime.min.time(), tzinfo=timezone.utc)
+
+    # Overdue invoices > 7 days behind (status=open, created_at < 7 dagen geleden)
+    overdue_q = {"company_id": cid, "status": {"$in": ["open", "overdue"]}}
+    overdue_invoices = await db.invoices.find(overdue_q, {"_id": 0}).to_list(2000)
+    overdue_filtered = []
+    overdue_total_by_currency: dict = {}
+    for inv in overdue_invoices:
+        try:
+            cat = inv.get("created_at") or ""
+            cat_d = datetime.fromisoformat(cat.replace("Z", "+00:00")).date() if cat else None
+        except Exception:
+            cat_d = None
+        if cat_d and cat_d <= week_ago:
+            overdue_filtered.append(inv)
+            cur = (inv.get("currency") or "SRD").upper()
+            overdue_total_by_currency[cur] = overdue_total_by_currency.get(cur, 0.0) + float(inv.get("amount", 0))
+
+    # Overdue payment-plan termijnen
+    overdue_installments = 0
+    today_iso = today.isoformat()
+    async for inst in db.payment_plan_installments.find(
+        {"company_id": cid, "status": "pending", "due_date": {"$lt": today_iso}},
+        {"_id": 0, "id": 1},
+    ):
+        overdue_installments += 1
+
+    # Pending approvals + payments since midnight
+    new_pending = await db.payments.count_documents(
+        {"company_id": cid, "status": "pending_approval", "paid_at": {"$gte": iso(midnight)}}
+    )
+    new_payments = await db.payments.count_documents(
+        {"company_id": cid, "status": "approved", "paid_at": {"$gte": iso(midnight)}}
+    )
+
+    # Unieke huurders met achterstand
+    unique_tenants = len({inv.get("tenant_id") for inv in overdue_filtered if inv.get("tenant_id")})
+
+    return {
+        "date": today_iso,
+        "overdue_invoice_count": len(overdue_filtered),
+        "overdue_tenant_count": unique_tenants,
+        "overdue_total_by_currency": {k: round(v, 2) for k, v in overdue_total_by_currency.items()},
+        "overdue_installment_count": overdue_installments,
+        "new_pending_today": new_pending,
+        "new_payments_today": new_payments,
+    }
+
+
 app.include_router(api)
+
+# --- Payment Plans (Betalingsregeling) router ---
+# Apart bestand zodat server.py niet nog verder uitdijt. We injecteren de
+# helpers expliciet zodat er geen circular import nodig is.
+from payment_plans import make_router as _make_payment_plans_router  # noqa: E402
+
+_payment_plans_router = _make_payment_plans_router(db, {
+    "new_id": new_id,
+    "iso": iso,
+    "now_utc": now_utc,
+    "scope": scope,
+    "company_id_of": company_id_of,
+    "get_current_user": get_current_user,
+    "require_role": require_role,
+    "next_receipt_number": _next_receipt_number,
+})
+api.include_router(_payment_plans_router)
+# Re-mount api met de toegevoegde router. include_router op `api` (sub-router)
+# zou normaal genoeg zijn maar omdat `app.include_router(api)` hierboven al
+# is uitgevoerd, voegen we de plan-routes direct toe op de app met dezelfde
+# /api prefix.
+app.include_router(_payment_plans_router, prefix="/api")

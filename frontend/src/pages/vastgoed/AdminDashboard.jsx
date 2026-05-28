@@ -41,6 +41,8 @@ import QuickPayButton from '../../components/QuickPayButton';
 import PhotoUpload from '../../components/PhotoUpload';
 import { installPendingApprovalDingListener } from '../../lib/notify-sound';
 import { useForegroundPendingNotify } from '../../lib/foreground-notify';
+import { useMorningBriefing } from '../../lib/morning-briefing';
+import MorningBriefingModal from '../../components/MorningBriefingModal';
 
 const BASE_TABS = [
   { id: 'overview', label: 'Overzicht', icon: LayoutDashboard },
@@ -50,6 +52,7 @@ const BASE_TABS = [
   { id: 'contracts', label: 'Contracten', icon: FileSignature },
   { id: 'payments', label: 'Betalingen', icon: Receipt },
   { id: 'invoices', label: 'Facturen', icon: FileText },
+  { id: 'payment_plans', label: 'Betalingsregelingen', icon: Calendar },
   { id: 'deposits', label: 'Borg', icon: ShieldCheck },
   { id: 'maintenance', label: 'Onderhoud', icon: Wrench },
   { id: 'kasgeld', label: 'Kasgeld', icon: Wallet },
@@ -74,7 +77,7 @@ function getTabsFor(user) {
 // duidelijke labels zodat de zijbalk niet als één lange lijst voelt.
 const SIDEBAR_GROUPS = {
   hoofd: { label: 'Hoofd', ids: ['overview', 'locations', 'apartments', 'tenants', 'contracts'] },
-  geld: { label: 'Financieel', ids: ['payments', 'invoices', 'deposits', 'kasgeld'] },
+  geld: { label: 'Financieel', ids: ['payments', 'invoices', 'payment_plans', 'deposits', 'kasgeld'] },
   ops: { label: 'Operaties', ids: ['maintenance', 'employees', 'notifications'] },
   account: { label: 'Account', ids: ['mijn_abonnement', 'branding', 'settings'] },
 };
@@ -1594,6 +1597,10 @@ export default function AdminDashboard() {
   // toast + ding-ding bij elke nieuwe pending betaling.
   useForegroundPendingNotify({ enabled: true });
 
+  // Dagelijkse briefing — toont 1× per dag tussen 06:00-12:00 een modal
+  // met overdue overzicht + nieuwe activiteit van vandaag.
+  const { briefing, dismiss: dismissBriefing } = useMorningBriefing({ enabled: true });
+
   // URL → tab sync. Bij paden zoals /admin/invoices, /admin/payments etc.
   // wordt de tab automatisch ingesteld. Belangrijk voor:
   //  • Notification click handlers in de service worker (sw.js navigeert
@@ -1676,6 +1683,6 @@ export default function AdminDashboard() {
       <MobileSheet open={drawerOpen} onClose={() => setDrawerOpen(false)}
         active={tab} onChange={handleSetTab} onLogout={doLogout}
         user={user} tabs={sheetTabs} activeCompany={activeCompany} badgeCount={badgeCount} />
-    </div>
+      <MorningBriefingModal briefing={briefing} onClose={dismissBriefing} />    </div>
   );
 }
