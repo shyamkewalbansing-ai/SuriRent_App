@@ -1,0 +1,45 @@
+{
+  "summary": "Iteration 26 — Tested Betalingsregeling (Payment Plans) backend + Morning Briefing endpoint + Admin UI. 12/12 backend tests pass. Admin UI list/detail/sheet flows verified visually. Morning Briefing modal auto-pops with correct shape.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "Admin sidebar -> Betalingsregelingen tab",
+        "issue": "On first dashboard load, clicking sidebar 'tab-payment_plans' updates the sidebar highlighted item but main content remains on Overzicht. This appears to be caused by the MorningBriefingModal opening shortly after admin login and intercepting/racing with the click. Direct URL navigation /admin/payment_plans works perfectly. Workaround: dismiss the briefing modal first or use direct navigation. Suggest: ensure modal does not interfere with click target while opening, or stop click propagation correctly. Severity: low (UX glitch).",
+        "affected_selectors": ["[data-testid='tab-payment_plans']", "MorningBriefingModal"]
+      }
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_payment_plans_and_briefing.py",
+    "/app/test_reports/pytest/iter26_payment_plans.xml"
+  ],
+  "action_items": [
+    "Investigate the click race condition between MorningBriefingModal opening and sidebar tab click (only impacts first interaction after login)."
+  ],
+  "critical_code_review_comments": [
+    "AdminDashboard.jsx is 1691 lines — exceeds 700-line guideline. Suggest splitting Sidebar, MobileTabBar, MobileSheet, and individual tab content imports into smaller modules.",
+    "payment_plans.py exports a router and is included into both `api.include_router(_payment_plans_router)` AND `app.include_router(_payment_plans_router, prefix='/api')` in server.py — needs verification this doesn't create duplicate route registrations.",
+    "Morning briefing endpoint correctly serializes — verified shape with all 7 keys present (date, overdue_invoice_count, overdue_tenant_count, overdue_total_by_currency, overdue_installment_count, new_pending_today, new_payments_today).",
+    "Kiosk pay correctly enforces employee_pin (401 on wrong PIN) and creates pending_approval Payment doc with category='betalingsregeling'.",
+    "Tenant portal pay correctly creates approved Payment doc immediately (self-service)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_payment_plans_and_briefing.py"
+  ],
+  "success_rate": {
+    "backend": "100% (12/12)",
+    "frontend": "90% (Admin list/detail/sheet/morning briefing modal all verified; sidebar tab navigation has cosmetic race with MorningBriefingModal; tenant kiosk pay flow not visually tested due to extra company-code login step but backend endpoints fully covered)"
+  },
+  "test_credentials": "Admin: admin@vastgoed.sr / admin123 (company surirent). Tenant: Bharat Kewalbansing PIN reset to 4242 (was unset; iteration_24 credentials stale). Kiosk: PIN 1234. Employee Maria K. PIN 9999. NOTE: /app/memory/test_credentials.md says Jan de Vries PIN 5678 but Jan does not exist in current DB — only Bharat & Rayshree.",
+  "seed_data_creation": "Created 3 TEST_iter26 plans (auto-cancelled at end of run via cleanup test). Reset Bharat tenant PIN to 4242 via /api/auth/tenant-set-pin. Final state preserved one plan visible in admin UI (1/3 paid, SRD 4666.67 remaining).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend endpoints for payment-plans are stable. Tenant portal credentials updated: use Bharat Kewalbansing PIN 4242 (or shyam@kewalbansing.net). Jan de Vries does NOT exist in current DB. For tenant-kiosk visual testing, you must first enter company code 'surirent' on /huurder before PIN login. MorningBriefingModal will auto-popup at first admin login between 06:00-12:00 local time — dismiss it before interacting with sidebar.",
+  "rca_of_sidebar_race": "MorningBriefingModal triggers via useMorningBriefing() hook which fetches /api/admin/morning-briefing and shows the modal slightly after dashboard mount. If a user (or test) clicks a sidebar tab during this open animation window, the click may be partially captured but tab state may not propagate to the main content render. Direct URL navigation bypasses this since the tab is set from location.pathname before modal mount. Mitigation: either delay MorningBriefingModal mount by ~1s, or use a proper Dialog component with `modal=true` that prevents background interaction cleanly. Confirmed-not-blocking for normal user workflow as the modal has a clear 'Begrepen' dismiss button."
+}

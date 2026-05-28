@@ -480,6 +480,34 @@ function TenantPaySelect({ overview, onBack, onConfirm }) {
   const [selected, setSelected] = useState(new Set());
   const [custom, setCustom] = useState('');
   const [showMobileKeypad, setShowMobileKeypad] = useState(false);
+  // Actieve betalingsregeling-termijnen — opgehaald bij mount. Lijst van
+  // {planId, planCurrency, seq, due_date, amount, label}.
+  const [planInstallments, setPlanInstallments] = useState([]);
+
+  useEffect(() => {
+    api.get('/tenant-portal/payment-plans')
+      .then((r) => {
+        const out = [];
+        for (const p of r.data || []) {
+          for (const inst of p.installments || []) {
+            if (inst.status !== 'pending') continue;
+            out.push({
+              planId: p.id,
+              planCurrency: p.currency || cur,
+              seq: inst.sequence,
+              due_date: inst.due_date,
+              amount: Number(inst.amount || 0),
+            });
+          }
+        }
+        // Sorteer: vervaldatum oplopend
+        out.sort((a, b) => (a.due_date || '').localeCompare(b.due_date || ''));
+        setPlanInstallments(out);
+      })
+      .catch(() => setPlanInstallments([]));
+  }, [cur]);
+
+  const planItemKey = (it) => `plan:${it.planId}:${it.seq}`;
 
   const toggle = (id) => {
     setSelected((cur2) => {
@@ -492,13 +520,24 @@ function TenantPaySelect({ overview, onBack, onConfirm }) {
 
   const isDisabled = (id) => (amounts[id] || 0) <= 0;
   const enabled = PAY_ITEMS_TEMPLATE.filter((t) => !isDisabled(t.id));
-  const allSelected = enabled.length > 0 && enabled.every((t) => selected.has(t.id));
+  const allSelectableKeys = [
+    ...enabled.map((t) => t.id),
+    ...planInstallments.map(planItemKey),
+  ];
+  const allSelected = allSelectableKeys.length > 0
+    && allSelectableKeys.every((k) => selected.has(k));
   const selectAll = () => {
     if (allSelected) setSelected(new Set());
-    else setSelected(new Set(enabled.map((t) => t.id)));
+    else setSelected(new Set(allSelectableKeys));
     setCustom('');
   };
-  const selectedTotal = [...selected].reduce((s, id) => s + (amounts[id] || 0), 0);
+  const selectedPlanItems = [...selected].filter((k) => k.startsWith('plan:'))
+    .map((k) => planInstallments.find((x) => planItemKey(x) === k))
+    .filter(Boolean);
+  const selectedPlainItems = [...selected].filter((k) => !k.startsWith('plan:'));
+  const selectedPlanTotal = selectedPlanItems.reduce((s, x) => s + x.amount, 0);
+  const selectedPlainTotal = selectedPlainItems.reduce((s, id) => s + (amounts[id] || 0), 0);
+  const selectedTotal = selectedPlainTotal + selectedPlanTotal;
   const hasCustom = custom && parseFloat(custom) > 0;
   const activeAmount = hasCustom ? parseFloat(custom) : selectedTotal;
   const canProceed = activeAmount > 0;
@@ -509,6 +548,9 @@ function TenantPaySelect({ overview, onBack, onConfirm }) {
     if (selected.has('servicekosten')) labels.push('Servicekosten');
     if (selected.has('boete')) labels.push('Boetes');
     if (selected.has('internet')) labels.push('Internet');
+    if (selectedPlanItems.length > 0) {
+      labels.push(`Regeling (${selectedPlanItems.length}× termijn)`);
+    }
     return labels.join(' + ');
   };
 
@@ -521,21 +563,34 @@ function TenantPaySelect({ overview, onBack, onConfirm }) {
 
   const handleNext = () => {
     if (!canProceed) return;
-    let amount, category, note;
     if (hasCustom) {
-      amount = parseFloat(custom);
-      category = 'huur';
-      note = `Huurder Kiosk — gedeeltelijke betaling — ${fmt(amount)}`;
-    } else {
-      amount = selectedTotal;
-      category = selected.size === 1 ? [...selected][0] : 'huur';
-      note = `Huurder Kiosk — ${buildDescription()}`;
+      // Bij vrij bedrag — geen plan items mogelijk; route via normale flow.
+      onConfirm({
+        amount: parseFloat(custom), currency: cur, category: 'huur', method: 'contant',
+        note: `Huurder Kiosk — gedeeltelijke betaling — ${fmt(parseFloat(custom))}`,
+        plan_items: [],
+        plain_items: [{ category: 'huur', amount: parseFloat(custom) }],
+      });
+      return;
     }
+    const plainItems = selectedPlainItems.map((id) => ({
+      category: id,
+      amount: amounts[id] || 0,
+      period_month: id === 'huur' && balance.next_period ? balance.next_period.month : null,
+      period_year: id === 'huur' && balance.next_period ? balance.next_period.year : null,
+    }));
+    const planItems = selectedPlanItems.map((x) => ({
+      plan_id: x.planId, seq: x.seq, amount: x.amount, due_date: x.due_date,
+    }));
     onConfirm({
-      amount, currency: cur, category, method: 'contant',
-      period_month: category === 'huur' && balance.next_period ? balance.next_period.month : null,
-      period_year: category === 'huur' && balance.next_period ? balance.next_period.year : null,
-      note,
+      amount: selectedTotal, currency: cur,
+      category: plainItems[0]?.category || 'betalingsregeling',
+      method: 'contant',
+      period_month: plainItems[0]?.period_month || null,
+      period_year: plainItems[0]?.period_year || null,
+      note: `Huurder Kiosk — ${buildDescription()}`,
+      plain_items: plainItems,
+      plan_items: planItems,
     });
   };
 
@@ -556,7 +611,7 @@ function TenantPaySelect({ overview, onBack, onConfirm }) {
       <div className="flex-1 flex flex-col md:flex-row gap-2 sm:gap-3 min-h-0 pb-2">
         {/* LEFT — items checklist */}
         <div className="bg-white rounded-2xl flex-1 md:flex-[3] flex flex-col min-w-0 p-2 sm:p-3">
-          {enabled.length > 1 && (
+          {(enabled.length > 1 || planInstallments.length > 0) && (
             <button onClick={selectAll} data-testid="tk-pay-select-all"
               className={`w-full flex items-center justify-between rounded-lg border-2 transition px-2.5 py-2 sm:px-3 sm:py-2.5 mb-1.5 ${
                 allSelected ? 'bg-orange-50 border-orange-400' : 'bg-white border-slate-200 hover:border-orange-300'
@@ -568,7 +623,8 @@ function TenantPaySelect({ overview, onBack, onConfirm }) {
                 <span className="text-sm font-bold text-slate-900">Alles betalen</span>
               </div>
               <span className="text-sm sm:text-base font-semibold text-orange-600 whitespace-nowrap">
-                {fmt(enabled.reduce((s, t) => s + (amounts[t.id] || 0), 0))}
+                {fmt(enabled.reduce((s, t) => s + (amounts[t.id] || 0), 0)
+                  + planInstallments.reduce((s, p) => s + p.amount, 0))}
               </span>
             </button>
           )}
@@ -596,6 +652,53 @@ function TenantPaySelect({ overview, onBack, onConfirm }) {
                   </div>
                   <p className={`text-sm sm:text-base flex-shrink-0 ml-2 whitespace-nowrap font-semibold ${disabled ? 'text-slate-300' : sel ? 'text-orange-600' : 'text-slate-900'}`}>
                     {fmt(amounts[t.id] || 0)}
+                  </p>
+                </button>
+              );
+            })}
+            {planInstallments.length > 0 && (
+              <div className="flex items-center gap-2 mt-1 mb-0.5 px-1">
+                <div className="h-px flex-1 bg-slate-200" />
+                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                  Betalingsregeling
+                </span>
+                <div className="h-px flex-1 bg-slate-200" />
+              </div>
+            )}
+            {planInstallments.map((it) => {
+              const today = new Date().toISOString().slice(0, 10);
+              const isOverdue = (it.due_date || '') < today;
+              const key = planItemKey(it);
+              const sel = selected.has(key);
+              return (
+                <button key={key} onClick={() => toggle(key)}
+                  data-testid={`tk-pay-plan-${it.planId}-${it.seq}`}
+                  className={`flex items-center justify-between w-full rounded-lg border-2 transition px-2.5 py-2 sm:px-3 sm:py-2.5 ${
+                    sel ? 'bg-orange-50 border-orange-400' : 'bg-white border-slate-200 hover:border-orange-300'
+                  }`}>
+                  <div className="flex items-center gap-2">
+                    <div className={`flex items-center justify-center rounded border-2 flex-shrink-0 w-5 h-5 ${sel ? 'bg-orange-500 border-orange-500' : 'border-slate-300'}`}>
+                      {sel && <Check className="text-white w-3.5 h-3.5" strokeWidth={3} />}
+                    </div>
+                    <div className={`rounded-lg flex items-center justify-center flex-shrink-0 w-8 h-8 sm:w-9 sm:h-9 ${
+                      isOverdue ? 'bg-red-100' : sel ? 'bg-orange-100' : 'bg-slate-50'
+                    }`}>
+                      <Calendar className={`w-4 h-4 ${
+                        isOverdue ? 'text-red-500' : sel ? 'text-orange-500' : 'text-slate-400'
+                      }`} />
+                    </div>
+                    <div className="text-left min-w-0">
+                      <p className="text-sm font-bold text-slate-900">
+                        Termijn {it.seq}
+                        {isOverdue && <span className="ml-1 text-[10px] uppercase tracking-widest text-red-600">achterstallig</span>}
+                      </p>
+                      <p className="text-[10px] text-slate-500">Vervalt {it.due_date}</p>
+                    </div>
+                  </div>
+                  <p className={`text-sm sm:text-base font-semibold whitespace-nowrap ml-2 ${
+                    sel ? 'text-orange-600' : 'text-slate-900'
+                  }`}>
+                    {fmt(it.amount)}
                   </p>
                 </button>
               );
@@ -734,15 +837,41 @@ function TenantPayConfirm({ payload, overview, onBack, onPaid }) {
   const submit = async () => {
     setBusy(true); setErr('');
     try {
-      await api.post('/tenant-portal/payments', {
-        amount: payload.amount,
-        currency: payload.currency,
-        method: payload.method,
-        category: payload.category,
-        period_month: payload.period_month || undefined,
-        period_year: payload.period_year || undefined,
-        note: payload.note || '',
-      });
+      // Mixed checkout: plan_items via /payment-plans/.../pay, plain via
+      // /tenant-portal/payments. Eén klantenscherm-actie, meerdere API calls.
+      const planItems = payload.plan_items || [];
+      const plainItems = payload.plain_items || [];
+      for (const pi of planItems) {
+        await api.post(`/tenant-portal/payment-plans/${pi.plan_id}/installments/${pi.seq}/pay`, {
+          method: payload.method,
+          amount: pi.amount,
+          note: `Huurder Kiosk — termijn ${pi.seq}`,
+        });
+      }
+      if (plainItems.length > 0) {
+        for (const it of plainItems) {
+          await api.post('/tenant-portal/payments', {
+            amount: it.amount,
+            currency: payload.currency,
+            method: payload.method,
+            category: it.category,
+            period_month: it.period_month || undefined,
+            period_year: it.period_year || undefined,
+            note: payload.note || '',
+          });
+        }
+      } else if (planItems.length === 0) {
+        // Legacy fallback (geen items doorgegeven — gebruik klassieke flow).
+        await api.post('/tenant-portal/payments', {
+          amount: payload.amount,
+          currency: payload.currency,
+          method: payload.method,
+          category: payload.category,
+          period_month: payload.period_month || undefined,
+          period_year: payload.period_year || undefined,
+          note: payload.note || '',
+        });
+      }
       playSuccessPing();
       onPaid();
     } catch (e) {

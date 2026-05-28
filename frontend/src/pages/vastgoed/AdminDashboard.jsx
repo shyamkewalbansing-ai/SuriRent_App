@@ -9,7 +9,7 @@ import {
   FileText, ShieldCheck, Wrench, FileSignature, Bell, Briefcase, Mail,
   Zap, Power, Menu, MoreHorizontal, MapPin, Crown, Paintbrush, Palette,
   Gauge, Activity, Clock as ClockIcon, Monitor, QrCode, Printer,
-  ReceiptText, UsersRound, Building,
+  ReceiptText, UsersRound, Building, Calendar,
 } from 'lucide-react';
 import { api, formatError, fmtMoney, MONTHS_NL, openAuthedPdf } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
@@ -22,6 +22,7 @@ import Deposits from './admin/Deposits';
 import Maintenance from './admin/Maintenance';
 import Kasgeld from './admin/Kasgeld';
 import Notifications from './admin/Notifications';
+import PaymentPlans from './admin/PaymentPlans';
 import Companies from './admin/Companies';
 import SettingsPage from './admin/Settings';
 import Locations from './admin/Locations';
@@ -1669,6 +1670,7 @@ export default function AdminDashboard() {
           {tab === 'contracts' && <Contracts />}
           {tab === 'payments' && <Payments />}
           {tab === 'invoices' && <Invoices />}
+          {tab === 'payment_plans' && <PaymentPlans />}
           {tab === 'deposits' && <Deposits />}
           {tab === 'maintenance' && <Maintenance />}
           {tab === 'kasgeld' && <Kasgeld />}

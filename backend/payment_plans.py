@@ -35,7 +35,6 @@ def make_router(db, helpers):
     company_id_of = helpers["company_id_of"]
     get_current_user = helpers["get_current_user"]
     require_role = helpers["require_role"]
-    next_receipt_number = helpers["next_receipt_number"]
 
     router = APIRouter(prefix="/payment-plans", tags=["payment-plans"])
 
@@ -283,68 +282,183 @@ def make_router(db, helpers):
         p = await db.payment_plans.find_one({"id": plan_id}, {"_id": 0})
         return await _enrich_plan(p)
 
+    # Stand-alone core (gedeeld met tenant-portal & kiosk via server.py)
+    core = _build_pay_core(db, helpers)
+    _enrich_plan = core["enrich_plan"]  # noqa: F811 — vervangt lokaal _enrich_plan
+
     @router.post("/{plan_id}/installments/{seq}/pay", response_model=PlanOut)
     async def pay_installment(plan_id: str, seq: int, body: PaidIn,
                               user=Depends(require_role("admin"))):
-        cid = company_id_of(user)
         plan = await db.payment_plans.find_one({"id": plan_id, **scope(user)}, {"_id": 0})
         if not plan:
             raise HTTPException(status_code=404, detail="Regeling niet gevonden")
+        return await core["pay_installment_for"](
+            plan, seq,
+            method=body.method, amount=body.amount, note=body.note or "",
+            received_by=user.get("name") or "",
+            approved_by_label=user.get("name") or "",
+            status="approved",
+        )
+
+    return router
+
+
+def _build_pay_core(db, helpers):
+    """Stand-alone helper builder — returned by `make_payment_plan_helpers`
+    zodat server.py een gedeelde core kan hergebruiken voor tenant-portal en
+    kiosk endpoints zonder dat we de admin-route deps verstoren.
+    """
+    new_id = helpers["new_id"]
+    iso = helpers["iso"]
+    now_utc = helpers["now_utc"]
+    next_receipt_number = helpers["next_receipt_number"]
+
+    def _round2(x): return round(float(x) + 1e-9, 2)
+
+    async def enrich_plan(plan: dict) -> dict:
+        tenant_name = plan.get("tenant_name") or ""
+        apt_number = ""
+        t = await db.tenants.find_one(
+            {"id": plan.get("tenant_id")}, {"_id": 0, "name": 1, "apartment_id": 1}
+        ) if plan.get("tenant_id") else None
+        if t:
+            tenant_name = tenant_name or (t.get("name") or "")
+            if t.get("apartment_id"):
+                a = await db.apartments.find_one({"id": t["apartment_id"]}, {"_id": 0, "number": 1})
+                if a:
+                    apt_number = a.get("number") or ""
+        installments = []
+        async for inst in db.payment_plan_installments.find(
+            {"plan_id": plan["id"]}, {"_id": 0}
+        ).sort("sequence", 1):
+            installments.append({
+                "sequence": inst.get("sequence"),
+                "due_date": inst.get("due_date"),
+                "amount": _round2(inst.get("amount", 0)),
+                "status": inst.get("status", "pending"),
+                "paid_at": inst.get("paid_at"),
+                "payment_id": inst.get("payment_id"),
+            })
+        paid_amount = sum(i["amount"] for i in installments if i["status"] == "paid")
+        remaining = _round2(plan.get("total_amount", 0) - paid_amount)
+        today = now_utc().date().isoformat()
+        next_due, next_due_amt, overdue_count = None, None, 0
+        for i in installments:
+            if i["status"] != "pending":
+                continue
+            if i["due_date"] < today:
+                overdue_count += 1
+            if next_due is None:
+                next_due = i["due_date"]
+                next_due_amt = i["amount"]
+        return {
+            "id": plan["id"],
+            "tenant_id": plan["tenant_id"],
+            "tenant_name": tenant_name,
+            "apartment_number": apt_number,
+            "invoice_ids": plan.get("invoice_ids") or [],
+            "total_amount": _round2(plan.get("total_amount", 0)),
+            "paid_amount": _round2(paid_amount),
+            "remaining_amount": remaining,
+            "currency": plan.get("currency", "SRD"),
+            "status": plan.get("status", "active"),
+            "notes": plan.get("notes") or "",
+            "created_at": plan.get("created_at"),
+            "completed_at": plan.get("completed_at"),
+            "cancelled_at": plan.get("cancelled_at"),
+            "installments": installments,
+            "next_due_date": next_due,
+            "next_due_amount": next_due_amt,
+            "overdue_count": overdue_count,
+        }
+
+    async def pay_installment_for(
+        plan: dict, seq: int,
+        *, method: str = "contant", amount=None, note: str = "",
+        received_by: str = "", approved_by_label: str = "",
+        status: str = "approved", kiosk_employee_id=None, kiosk_employee_name=None,
+    ) -> dict:
         if plan.get("status") != "active":
+            from fastapi import HTTPException
             raise HTTPException(status_code=400, detail="Regeling is niet actief")
         inst = await db.payment_plan_installments.find_one(
-            {"plan_id": plan_id, "sequence": seq}, {"_id": 0}
+            {"plan_id": plan["id"], "sequence": seq}, {"_id": 0}
         )
         if not inst:
+            from fastapi import HTTPException
             raise HTTPException(status_code=404, detail="Termijn niet gevonden")
         if inst.get("status") == "paid":
+            from fastapi import HTTPException
             raise HTTPException(status_code=400, detail="Termijn is al betaald")
 
-        amount = _round2(body.amount if body.amount is not None else inst["amount"])
+        amt = _round2(amount if amount is not None else inst["amount"])
         receipt = await next_receipt_number()
+        cid = plan.get("company_id")
         company = await db.companies.find_one({"id": cid}, {"_id": 0, "name": 1}) or {}
+        tenant = await db.tenants.find_one(
+            {"id": plan["tenant_id"]}, {"_id": 0, "name": 1, "apartment_id": 1}
+        ) or {}
         now_iso = iso(now_utc())
-        # Maak een Payment doc — direct approved (admin doet dit zelf).
-        tenant = await db.tenants.find_one({"id": plan["tenant_id"]}, {"_id": 0, "name": 1, "apartment_id": 1})
         payment_doc = {
             "id": new_id(),
             "company_id": cid,
             "tenant_id": plan["tenant_id"],
-            "apartment_id": (tenant or {}).get("apartment_id"),
-            "amount": amount,
+            "apartment_id": tenant.get("apartment_id"),
+            "amount": amt,
             "currency": plan.get("currency", "SRD"),
             "category": "betalingsregeling",
-            "method": body.method,
-            "status": "approved",
+            "method": method,
+            "status": status,  # approved by default; kiosk-pending-flow can pass 'pending_approval'
             "paid_at": now_iso,
             "receipt_number": receipt,
-            "note": (body.note or "") + f" — Betalingsregeling termijn {seq}/{plan.get('id')[:8]}",
-            "approved_by": company.get("name") or "Beheerder",
-            "received_by": user.get("name") or "",
+            "note": (note or "") + f" — Betalingsregeling termijn {seq}/{plan['id'][:8]}",
+            "approved_by": approved_by_label or company.get("name") or "Beheerder",
+            "received_by": received_by or tenant.get("name") or "",
+            "kiosk_employee_id": kiosk_employee_id,
+            "kiosk_employee_name": kiosk_employee_name,
             "metadata": {
-                "plan_id": plan_id,
+                "plan_id": plan["id"],
                 "installment_seq": seq,
             },
         }
         await db.payments.insert_one({**payment_doc})
 
-        # Markeer termijn als paid + koppel payment_id
+        # Only mark as paid when status is approved. For pending_approval we
+        # still mark it as paid because the installment is tied to the
+        # specific payment_id — admin's approval/decline will update both.
         await db.payment_plan_installments.update_one(
-            {"plan_id": plan_id, "sequence": seq},
-            {"$set": {"status": "paid", "paid_at": now_iso, "payment_id": payment_doc["id"]}},
+            {"plan_id": plan["id"], "sequence": seq},
+            {"$set": {
+                "status": "paid" if status == "approved" else "pending_payment",
+                "paid_at": now_iso,
+                "payment_id": payment_doc["id"],
+            }},
         )
 
-        # Is plan klaar?
-        remaining_pending = await db.payment_plan_installments.count_documents(
-            {"plan_id": plan_id, "status": {"$in": ["pending"]}}
-        )
-        if remaining_pending == 0:
-            await db.payment_plans.update_one(
-                {"id": plan_id},
-                {"$set": {"status": "completed", "completed_at": now_iso}},
+        if status == "approved":
+            remaining_pending = await db.payment_plan_installments.count_documents(
+                {"plan_id": plan["id"], "status": {"$in": ["pending"]}}
             )
+            if remaining_pending == 0:
+                await db.payment_plans.update_one(
+                    {"id": plan["id"]},
+                    {"$set": {"status": "completed", "completed_at": now_iso}},
+                )
 
-        p = await db.payment_plans.find_one({"id": plan_id}, {"_id": 0})
-        return await _enrich_plan(p)
+        p = await db.payment_plans.find_one({"id": plan["id"]}, {"_id": 0})
+        return await enrich_plan(p)
 
-    return router
+    async def list_plans_for_tenant(tenant_id: str, company_id: str, status: str = "active"):
+        q = {"tenant_id": tenant_id, "company_id": company_id}
+        if status and status != "all":
+            q["status"] = status
+        out = []
+        async for p in db.payment_plans.find(q, {"_id": 0}).sort("created_at", -1):
+            out.append(await enrich_plan(p))
+        return out
+
+    return {
+        "enrich_plan": enrich_plan,
+        "pay_installment_for": pay_installment_for,
+        "list_plans_for_tenant": list_plans_for_tenant,
+    }

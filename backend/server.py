@@ -6662,9 +6662,9 @@ app.include_router(api)
 # --- Payment Plans (Betalingsregeling) router ---
 # Apart bestand zodat server.py niet nog verder uitdijt. We injecteren de
 # helpers expliciet zodat er geen circular import nodig is.
-from payment_plans import make_router as _make_payment_plans_router  # noqa: E402
+from payment_plans import make_router as _make_payment_plans_router, _build_pay_core as _build_plan_pay_core  # noqa: E402
 
-_payment_plans_router = _make_payment_plans_router(db, {
+_pp_helpers = {
     "new_id": new_id,
     "iso": iso,
     "now_utc": now_utc,
@@ -6673,10 +6673,259 @@ _payment_plans_router = _make_payment_plans_router(db, {
     "get_current_user": get_current_user,
     "require_role": require_role,
     "next_receipt_number": _next_receipt_number,
-})
+}
+_payment_plans_router = _make_payment_plans_router(db, _pp_helpers)
 api.include_router(_payment_plans_router)
 # Re-mount api met de toegevoegde router. include_router op `api` (sub-router)
 # zou normaal genoeg zijn maar omdat `app.include_router(api)` hierboven al
 # is uitgevoerd, voegen we de plan-routes direct toe op de app met dezelfde
 # /api prefix.
 app.include_router(_payment_plans_router, prefix="/api")
+
+# Shared core voor tenant + kiosk installment-betaling
+_plan_core = _build_plan_pay_core(db, _pp_helpers)
+
+
+# ---------- Tenant Kiosk — Betalingsregelingen ----------
+@app.get("/api/tenant-portal/payment-plans")
+async def tenant_portal_payment_plans(tenant=Depends(get_tenant_session)):
+    """Lijst van actieve betalingsregelingen voor de ingelogde huurder."""
+    return await _plan_core["list_plans_for_tenant"](
+        tenant["id"], tenant.get("company_id"), status="active",
+    )
+
+
+class _TenantPayInstallmentIn(BaseModel):
+    method: Literal["contant", "mope", "uni5pay"] = "contant"
+    note: Optional[str] = ""
+    amount: Optional[float] = None
+
+
+@app.post("/api/tenant-portal/payment-plans/{plan_id}/installments/{seq}/pay")
+async def tenant_portal_pay_installment(
+    plan_id: str, seq: int, body: _TenantPayInstallmentIn,
+    tenant=Depends(get_tenant_session),
+):
+    """Huurder betaalt zelf een termijn vanuit zijn Tenant Kiosk."""
+    plan = await db.payment_plans.find_one(
+        {"id": plan_id, "tenant_id": tenant["id"], "company_id": tenant.get("company_id")},
+        {"_id": 0},
+    )
+    if not plan:
+        raise HTTPException(status_code=404, detail="Regeling niet gevonden")
+    out = await _plan_core["pay_installment_for"](
+        plan, seq,
+        method=body.method, amount=body.amount, note=body.note or "",
+        received_by=tenant.get("name") or "Huurder Kiosk",
+        approved_by_label=tenant.get("name") or "Huurder Kiosk",
+        status="approved",
+    )
+    # Notify admins (zelfde flow als bij /tenant-portal/payments)
+    try:
+        await _notify_company_admins(
+            tenant.get("company_id"),
+            f"Termijnbetaling regeling — {plan.get('currency', '')} {float(body.amount or 0):,.2f}",
+            f"{tenant.get('name')} betaalde termijn {seq} via Huurder Kiosk",
+            {"kind": "payment", "url": "/admin/payment_plans", "badge_inc": 1},
+        )
+    except Exception as e:  # noqa: BLE001
+        print(f"[push] tenant pay-installment notify failed: {e}")
+    return out
+
+
+# ---------- Operator Kiosk — Betalingsregelingen ----------
+@app.get("/api/kiosk/tenants/{tenant_id}/payment-plans")
+async def kiosk_tenant_payment_plans(tenant_id: str, _session=Depends(get_kiosk_session)):
+    """Operator Kiosk haalt actieve regelingen op voor de huurder die nu
+    aan de balie staat. Filter op company_id van de kiosk-sessie."""
+    cid = _session.get("company_id")
+    return await _plan_core["list_plans_for_tenant"](tenant_id, cid, status="active")
+
+
+class _KioskPayInstallmentIn(BaseModel):
+    method: Literal["contant", "mope", "uni5pay"] = "contant"
+    note: Optional[str] = ""
+    amount: Optional[float] = None
+    employee_id: Optional[str] = None
+    employee_pin: Optional[str] = None
+
+
+@app.post("/api/kiosk/payment-plans/{plan_id}/installments/{seq}/pay")
+async def kiosk_pay_installment(
+    plan_id: str, seq: int, body: _KioskPayInstallmentIn,
+    _session=Depends(get_kiosk_session),
+):
+    """Operator Kiosk medewerker int een termijn voor een huurder.
+    Indien een `employee_id` + `employee_pin` is meegegeven → pending_approval
+    zodat de admin later moet goedkeuren (zelfde patroon als kiosk_create_payment)."""
+    cid = _session.get("company_id")
+    plan = await db.payment_plans.find_one(
+        {"id": plan_id, "company_id": cid}, {"_id": 0}
+    )
+    if not plan:
+        raise HTTPException(status_code=404, detail="Regeling niet gevonden")
+
+    kiosk_emp_id, kiosk_emp_name, status = None, None, "approved"
+    if body.employee_id:
+        emp = await db.employees.find_one(
+            {"id": body.employee_id, "company_id": cid, "active": True, "app_role": "kiosk"},
+            {"_id": 0},
+        )
+        if not emp:
+            raise HTTPException(status_code=404, detail="Kiosk-medewerker niet gevonden")
+        if not emp.get("kiosk_pin_hash") or not verify_password(
+            (body.employee_pin or "").strip(), emp["kiosk_pin_hash"],
+        ):
+            raise HTTPException(status_code=401, detail="Ongeldige PIN")
+        kiosk_emp_id, kiosk_emp_name = emp["id"], emp.get("name", "")
+        status = "pending_approval"
+
+    out = await _plan_core["pay_installment_for"](
+        plan, seq,
+        method=body.method, amount=body.amount, note=body.note or "",
+        received_by=kiosk_emp_name or "Operator Kiosk",
+        approved_by_label=kiosk_emp_name or "Operator Kiosk",
+        status=status,
+        kiosk_employee_id=kiosk_emp_id,
+        kiosk_employee_name=kiosk_emp_name,
+    )
+    # Notify admins (alleen bij pending_approval, anders is het al approved
+    # en zien admins het wel in de feed).
+    try:
+        if status == "pending_approval":
+            await _notify_company_admins(
+                cid,
+                "Termijnbetaling wacht op goedkeuring",
+                f"{kiosk_emp_name or 'Kiosk'} ontving termijn {seq} voor {plan.get('tenant_name', 'huurder')}",
+                {"kind": "approval", "url": "/admin/payments", "badge_inc": 1},
+            )
+    except Exception as e:  # noqa: BLE001
+        print(f"[push] kiosk pay-installment notify failed: {e}")
+    return out
+
+
+# ---------- Background — Achterstallige termijnen WhatsApp/Email ----------
+async def _send_overdue_installment_reminders():
+    """1x per dag per huurder: stuur een herinnering voor achterstallige
+    termijnen van betalingsregelingen. Tracking via plan.last_inst_reminder
+    zodat we niet spammen.
+    """
+    today_key = now_utc().strftime("%Y-%m-%d")
+    today_iso = now_utc().date().isoformat()
+    # Eerste: groeperen per tenant_id
+    pipeline = [
+        {"$match": {"status": "pending", "due_date": {"$lt": today_iso}}},
+        {"$lookup": {
+            "from": "payment_plans", "localField": "plan_id",
+            "foreignField": "id", "as": "plan",
+        }},
+        {"$unwind": "$plan"},
+        {"$match": {"plan.status": "active"}},
+        {"$group": {
+            "_id": {"tenant_id": "$plan.tenant_id", "company_id": "$plan.company_id"},
+            "currency": {"$first": "$plan.currency"},
+            "plan_ids": {"$addToSet": "$plan.id"},
+            "overdue_count": {"$sum": 1},
+            "overdue_total": {"$sum": "$amount"},
+            "earliest_due": {"$min": "$due_date"},
+        }},
+    ]
+    async for grp in db.payment_plan_installments.aggregate(pipeline):
+        tenant_id = grp["_id"]["tenant_id"]
+        cid = grp["_id"]["company_id"]
+        if not tenant_id or not cid:
+            continue
+        # Check we have not reminded today voor deze tenant
+        ldoc = await db.payment_plan_reminders.find_one(
+            {"tenant_id": tenant_id, "company_id": cid}, {"_id": 0}
+        ) or {}
+        if ldoc.get("last_sent") == today_key:
+            continue
+        tenant = await db.tenants.find_one({"id": tenant_id}, {"_id": 0}) or {}
+        if not tenant:
+            continue
+
+        cur = grp.get("currency") or "SRD"
+        total = float(grp.get("overdue_total") or 0)
+        n = int(grp.get("overdue_count") or 0)
+        earliest = grp.get("earliest_due") or ""
+
+        # WhatsApp / SMS via twilio
+        twilio_cfg = await get_company_section(cid, "twilio")
+        if twilio_cfg.get("enabled") and (tenant.get("phone") or "").strip():
+            msg = (
+                f"Hallo {tenant.get('name', 'huurder')},\n\n"
+                f"Vriendelijke herinnering — u heeft {n} achterstallige "
+                f"termijn{'en' if n > 1 else ''} in uw betalingsregeling.\n\n"
+                f"Totaal achterstallig: *{cur} {total:.2f}*\n"
+                f"Eerst-vervallen: {earliest}\n\n"
+                f"Gelieve zo spoedig mogelijk te voldoen via onze kiosk of betaalapp.\n\n— SuriRent"
+            )
+            try:
+                await _twilio_send(twilio_cfg, "whatsapp", tenant["phone"], msg)
+            except Exception as e:  # noqa: BLE001
+                print(f"[reminder] twilio installment fail: {e}")
+
+        # Email via smtp
+        smtp_cfg = await get_company_section(cid, "smtp")
+        if smtp_cfg.get("enabled") and (tenant.get("email") or "").strip():
+            try:
+                from email_service import send_email, wrap_template
+                content = f"""
+                    <h1>Achterstallige termijn(en)</h1>
+                    <p>Beste {tenant.get('name', 'huurder')},<br />
+                    U heeft <b>{n}</b> achterstallige termijn{'en' if n > 1 else ''}
+                    in uw lopende betalingsregeling.</p>
+                    <p><b>Totaal achterstallig:</b> {cur} {total:.2f}<br />
+                    <b>Eerst-vervallen:</b> {earliest}</p>
+                    <p>Gelieve zo spoedig mogelijk te voldoen via onze kiosk of betaalapp.</p>
+                """
+                await send_email(smtp_cfg, tenant["email"],
+                                 "Achterstallige termijn(en) — betalingsregeling",
+                                 wrap_template(content))
+            except Exception as e:  # noqa: BLE001
+                print(f"[reminder] smtp installment fail: {e}")
+
+        await db.payment_plan_reminders.update_one(
+            {"tenant_id": tenant_id, "company_id": cid},
+            {"$set": {
+                "tenant_id": tenant_id,
+                "company_id": cid,
+                "last_sent": today_key,
+                "last_sent_at": iso(now_utc()),
+                "overdue_count": n,
+            }},
+            upsert=True,
+        )
+
+
+async def _installment_reminder_loop():
+    """Achtergrond-loop: probeert elke 30 min, maar stuurt alleen tussen 09:00
+    en 10:00 lokale tijd (UTC-3 Suriname) — max 1× per huurder per dag.
+    """
+    import asyncio as _aio
+    while True:
+        try:
+            hour_local = (now_utc().hour - 3) % 24
+            if 9 <= hour_local < 10:
+                await _send_overdue_installment_reminders()
+        except Exception as e:  # noqa: BLE001
+            print(f"[reminder] installment loop fail: {e}")
+        await _aio.sleep(30 * 60)
+
+
+@api.post("/superadmin/run-installment-reminders")
+async def manual_run_installment_reminders(user=Depends(require_role("superadmin"))):
+    """Manueel triggeren — handig om de cron-flow te testen."""
+    await _send_overdue_installment_reminders()
+    return {"ok": True}
+
+
+# Start de loop ná app-init zodat de event-loop al draait.
+import asyncio as _aio_outer  # noqa: E402
+
+@app.on_event("startup")
+async def _start_installment_reminder_loop():
+    if os.environ.get("DISABLE_INSTALLMENT_REMINDERS") == "1":
+        return
+    _aio_outer.create_task(_installment_reminder_loop())
