@@ -23,7 +23,7 @@
 
   <rect width="512" height="512" rx="112" fill="#FF6A1F" />
 
-  <g filter="url(#softShadow)" transform="translate(256 256) scale(1.2) translate(-256 -256)">
+  <g filter="url(#softShadow)" transform="translate(256 256) scale(1.2) translate(-256 -293)">
     <!-- Chimney: achter dak, eindigt boven roof slope om "leg" te voorkomen -->
     <rect x="156" y="120" width="52" height="120" fill="white" />
 

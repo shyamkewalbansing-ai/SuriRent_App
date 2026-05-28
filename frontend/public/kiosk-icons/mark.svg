@@ -4,7 +4,7 @@
     zodat header-icoon en PWA-icoon perfect overeenkomen. Chimney eindigt op y=240
     en valt achter het dak zodat er geen "poot" onder uitsteekt.
   -->
-  <g fill="currentColor" transform="translate(256 256) scale(1.2) translate(-256 -256)">
+  <g fill="currentColor" transform="translate(256 256) scale(1.2) translate(-256 -293)">
     <!-- Chimney: achter dak -->
     <rect x="156" y="120" width="52" height="120" />
     <!-- Dak -->
