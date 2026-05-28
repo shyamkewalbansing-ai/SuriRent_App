@@ -6863,12 +6863,17 @@ async def _notify_tenant_installment_paid(plan_id: str, seq: int) -> None:
         )
         remaining = total_inst - paid_inst
         amount = float(inst.get("amount") or 0)
+        # Bouw publieke kwitantie-links — Twilio WhatsApp toont een JPG inline
+        # als media bijlage; PDF-link komt in de tekst voor download/print.
+        payment_id = inst.get("payment_id")
+        receipt_image_url = _public_url(f"/api/payments/{payment_id}/image") if payment_id else None
+        receipt_pdf_url = _public_url(f"/api/payments/{payment_id}/pdf") if payment_id else None
         if paid_inst >= total_inst:
             body = (
                 f"Bedankt {tenant.get('name', 'huurder')}!\n\n"
                 f"Termijn {seq}/{total_inst} betaald ({cur} {amount:.2f}).\n\n"
                 f"*Uw betalingsregeling is volledig voldaan.* "
-                f"Hartelijk dank voor de tijdige betaling!\n\n— SuriRent"
+                f"Hartelijk dank voor de tijdige betaling!\n\n"
             )
         else:
             nl = ""
@@ -6882,15 +6887,17 @@ async def _notify_tenant_installment_paid(plan_id: str, seq: int) -> None:
                 f"Bedankt {tenant.get('name', 'huurder')}!\n\n"
                 f"Termijn {seq}/{total_inst} betaald ({cur} {amount:.2f}).\n"
                 f"Nog *{remaining}* termijn{'en' if remaining != 1 else ''} te gaan.{nl}\n\n"
-                f"— SuriRent"
             )
+        if receipt_pdf_url:
+            body += f"📄 Kwitantie PDF: {receipt_pdf_url}\n\n"
+        body += "— SuriRent"
         if cfg.get("enabled") and phone:
             try:
                 from twilio_service import send_whatsapp
-                await send_whatsapp(cfg, phone, body)
+                await send_whatsapp(cfg, phone, body, media_url=receipt_image_url)
             except Exception as e:  # noqa: BLE001
                 print(f"[plan-notify] twilio fail: {e}")
-        # Optionele email
+        # Optionele email — met PDF kwitantie als bijlage indien beschikbaar.
         email = (tenant.get("email") or "").strip()
         smtp = await get_company_section(cid, "smtp") if cid else {}
         if smtp.get("enabled") and email:
@@ -6901,16 +6908,35 @@ async def _notify_tenant_installment_paid(plan_id: str, seq: int) -> None:
                     next_line = f"<p>Nog <b>{remaining}</b> termijn(en) te gaan, volgende vervaldatum {next_inst.get('due_date','')}.</p>"
                 elif paid_inst >= total_inst:
                     next_line = "<p><b>Uw betalingsregeling is volledig voldaan.</b></p>"
+                link_block = (
+                    f'<p style="margin:18px 0;"><a href="{receipt_pdf_url}" '
+                    f'style="background:#FF5C00;color:#fff;padding:10px 16px;border-radius:8px;'
+                    f'text-decoration:none;font-weight:bold;display:inline-block;">'
+                    f'📄 Download kwitantie</a></p>'
+                ) if receipt_pdf_url else ""
                 content = f"""
                     <h1>Termijn {seq}/{total_inst} ontvangen</h1>
                     <p>Beste {tenant.get('name', 'huurder')},<br />
                     Bedankt voor uw betaling van <b>{cur} {amount:.2f}</b>.</p>
                     {next_line}
+                    {link_block}
                 """
+                # Genereer PDF bijlage van de kwitantie zelf (compact, ~10 KB).
+                attachments = None
+                if payment_id:
+                    try:
+                        payment_doc = await db.payments.find_one({"id": payment_id}, {"_id": 0})
+                        if payment_doc:
+                            enriched = await _enrich_payment(payment_doc)
+                            pdf_bytes = receipt_pdf(enriched)
+                            attachments = [(f"kwitantie-{enriched.get('receipt_number','')}.pdf", pdf_bytes, "application/pdf")]
+                    except Exception as e:  # noqa: BLE001
+                        print(f"[plan-notify] pdf-attach fail: {e}")
                 await send_email(
                     smtp, email,
                     f"Termijn {seq}/{total_inst} ontvangen — Betalingsregeling",
                     wrap_template(content),
+                    attachments=attachments,
                 )
             except Exception as e:  # noqa: BLE001
                 print(f"[plan-notify] smtp fail: {e}")
