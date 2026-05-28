@@ -3518,21 +3518,36 @@ async def _next_receipt_number() -> str:
 
 async def _company_brand_info(company_id: Optional[str]) -> dict:
     """Geef bedrijfs-branding info voor PDF headers (name, address, phone,
-    email, signature_data). Lege dict bij geen company_id."""
+    email, logo_bytes, signature_data). Lege dict bij geen company_id."""
     if not company_id:
         return {}
     co = await db.companies.find_one(
         {"id": company_id},
-        {"_id": 0, "name": 1, "contact_email": 1, "contact_phone": 1, "address": 1},
+        {"_id": 0, "name": 1, "contact_email": 1, "contact_phone": 1,
+         "address": 1, "branding": 1},
     ) or {}
     settings = await db.company_settings.find_one(
         {"company_id": company_id}, {"_id": 0, "signature_data": 1},
     ) or {}
+    # Logo bytes ophalen via asset_id uit branding.logo_url
+    logo_bytes = None
+    logo_url = (co.get("branding") or {}).get("logo_url") or ""
+    if logo_url:
+        try:
+            # logo_url is meestal "/api/landing/asset/<id>"
+            asset_id = logo_url.rsplit("/", 1)[-1]
+            if asset_id:
+                doc = await db.landing_assets.find_one({"id": asset_id}, {"_id": 0, "data_b64": 1})
+                if doc and doc.get("data_b64"):
+                    logo_bytes = base64.b64decode(doc["data_b64"])
+        except Exception:
+            logo_bytes = None
     return {
         "company_name": co.get("name") or "",
         "company_address": co.get("address") or "",
         "company_phone": co.get("contact_phone") or "",
         "company_email": co.get("contact_email") or "",
+        "company_logo_bytes": logo_bytes,
         "signature_data": settings.get("signature_data") or "",
     }
 
@@ -3558,27 +3573,8 @@ async def _enrich_payment(p: dict) -> dict:
     # Bedrijfsinfo voor de PDF-header (branding-look uit voorbeeld).
     company_info = {}
     if p.get("company_id"):
-        co = await db.companies.find_one(
-            {"id": p["company_id"]},
-            {"_id": 0, "name": 1, "contact_email": 1, "contact_phone": 1,
-             "address": 1, "branding": 1},
-        ) or {}
-        company_info = {
-            "company_name": co.get("name") or "",
-            "company_address": co.get("address") or "",
-            "company_phone": co.get("contact_phone") or "",
-            "company_email": co.get("contact_email") or "",
-            "company_logo_url": (co.get("branding") or {}).get("logo_url") or "",
-        }
-        # Optionele opgeslagen handtekening voor de admin/operator.
-        try:
-            settings = await db.company_settings.find_one(
-                {"company_id": p["company_id"]},
-                {"_id": 0, "signature_url": 1, "signature_data": 1},
-            ) or {}
-            company_info["signature_data"] = settings.get("signature_data") or ""
-        except Exception:
-            company_info["signature_data"] = ""
+        brand = await _company_brand_info(p["company_id"])
+        company_info = brand
     # Openstaand na deze betaling — som van remaining_amount over alle
     # niet-betaalde facturen van deze huurder, in dezelfde currency.
     outstanding_after = 0.0

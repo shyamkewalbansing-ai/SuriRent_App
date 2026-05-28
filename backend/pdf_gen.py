@@ -167,9 +167,10 @@ def _bg_canvas(canvas, doc):
 
 def _brand_header(el, payment_or_doc: dict):
     """Linksboven: bedrijfsnaam (bold) + adres + contact (tel/wa/email).
+    Optioneel: bedrijfslogo links naast de naam.
 
-    `payment_or_doc` mag een enriched payment/invoice/contract dict zijn met
-    company_name / company_address / company_phone / company_email velden.
+    `payment_or_doc` mag een enriched dict zijn met company_name /
+    company_address / company_phone / company_email / company_logo_bytes velden.
     """
     s = _styles()
     name = payment_or_doc.get("company_name") or "SuriRent N.V."
@@ -184,11 +185,43 @@ def _brand_header(el, payment_or_doc: dict):
         parts.append(email)
     contact = " | ".join(parts) if parts else ""
 
-    el.append(Paragraph(name.upper(), s["BrandName"]))
+    # Tekstblok
+    text_parts = [Paragraph(name.upper(), s["BrandName"])]
     if address:
-        el.append(Paragraph(address, s["BrandContact"]))
+        text_parts.append(Paragraph(address, s["BrandContact"]))
     if contact:
-        el.append(Paragraph(contact, s["BrandContact"]))
+        text_parts.append(Paragraph(contact, s["BrandContact"]))
+
+    # Logo links indien beschikbaar (gerenderd op max 22mm × 22mm)
+    logo_bytes = payment_or_doc.get("company_logo_bytes")
+    if logo_bytes:
+        try:
+            from reportlab.lib.utils import ImageReader
+            reader = ImageReader(io.BytesIO(logo_bytes))
+            iw, ih = reader.getSize()
+            max_h = 22 * mm
+            max_w = 28 * mm
+            # Schaal om binnen max_w x max_h te passen.
+            scale = min(max_w / iw, max_h / ih)
+            w = iw * scale
+            h = ih * scale
+            logo = Image(io.BytesIO(logo_bytes), width=w, height=h)
+            t = Table([[logo, text_parts]], colWidths=[max_w + 4 * mm, 170 * mm - max_w - 4 * mm])
+            t.setStyle(TableStyle([
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                ("TOPPADDING", (0, 0), (-1, -1), 0),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+            ]))
+            el.append(t)
+            el.append(Spacer(1, 14))
+            return
+        except Exception:
+            pass  # fallback naar text-only header
+
+    for p in text_parts:
+        el.append(p)
     el.append(Spacer(1, 14))
 
 
