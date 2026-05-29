@@ -8,6 +8,7 @@ import {
   Home as HomeIcon, Mail, Wallet, FileText, Wifi,
   HelpCircle, Send, Check, ArrowRight, Banknote, Droplets, AlertCircle,
   QrCode, Smartphone, Clock as ClockIcon, Receipt, Hash, X, Printer,
+  Landmark, FileUp,
 } from 'lucide-react';
 import { api, formatError, fmtMoney, MONTHS_NL } from '../../lib/api';
 import { playSuccessPing, playErrorBuzz, playSwoosh } from '../../lib/tap-sounds';
@@ -966,13 +967,13 @@ function TenantPaySelect({ overview, onBack, onConfirm }) {
 }
 
 // =====================================================================
-// PAY METHOD — Contant / Mope
+// PAY METHOD — Bankoverschrijving / Mope / Uni5Pay
 // =====================================================================
 function TenantPayMethod({ payload, overview, onBack, onConfirm }) {
   const { tenant, apartment: apt } = overview;
   const cur = payload.currency || 'SRD';
   const methods = [
-    { v: 'contant', l: 'Contant', sub: 'Betaal bij de receptie', icon: Banknote, accent: 'emerald' },
+    { v: 'bank', l: 'Bankoverschrijving', sub: 'Upload bankafschrift', icon: Landmark, accent: 'sky' },
     { v: 'mope', l: 'Mope', sub: 'Scan QR-code', icon: QrCode, accent: 'emerald' },
     { v: 'uni5pay', l: 'Uni5Pay', sub: 'Scan QR-code', icon: Smartphone, accent: 'red' },
   ];
@@ -1000,7 +1001,9 @@ function TenantPayMethod({ payload, overview, onBack, onConfirm }) {
                 data-testid={`tk-method-${m.v}`}
                 className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-8 flex sm:flex-col items-center sm:justify-center text-left sm:text-center gap-4 sm:gap-0 hover:scale-[1.02] active:scale-[0.98] transition sm:aspect-[3/4] shadow-2xl">
                 <div className={`w-14 h-14 sm:w-20 sm:h-20 rounded-2xl flex items-center justify-center mb-0 sm:mb-4 ${
-                  m.accent === 'emerald' ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'
+                  m.accent === 'emerald' ? 'bg-emerald-100 text-emerald-600'
+                    : m.accent === 'sky' ? 'bg-sky-100 text-sky-600'
+                    : 'bg-red-100 text-red-600'
                 }`}>
                   <Icon className="w-7 h-7 sm:w-10 sm:h-10" />
                 </div>
@@ -1018,6 +1021,171 @@ function TenantPayMethod({ payload, overview, onBack, onConfirm }) {
 }
 
 // =====================================================================
+// PAY BANK — kies land + upload bankafschrift (verplicht)
+// =====================================================================
+function TenantPayBank({ payload, overview, branding, onBack, onConfirm }) {
+  const { tenant, apartment: apt } = overview;
+  const cur = payload.currency || 'SRD';
+  const [country, setCountry] = useState(payload.bank_country || '');
+  const [stmt, setStmt] = useState(null); // {id, url, filename, size}
+  const [uploading, setUploading] = useState(false);
+  const [err, setErr] = useState('');
+  const fileRef = useRef(null);
+
+  // Branding heeft bank_account_sr en bank_account_nl velden
+  const bankSR = branding?.bank_account_sr || '';
+  const bankNL = branding?.bank_account_nl || '';
+  const activeBank = country === 'SR' ? bankSR : country === 'NL' ? bankNL : '';
+
+  const onPick = async (file) => {
+    setErr('');
+    if (!file) return;
+    const ALLOWED = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+    if (!ALLOWED.includes(file.type)) {
+      setErr('Alleen PDF, JPG of PNG bestanden toegestaan.');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setErr('Bestand mag maximaal 5 MB zijn.');
+      return;
+    }
+    setUploading(true);
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      const { data } = await api.post('/tenant-portal/bank-statement-upload', form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      setStmt({ id: data.id, url: data.url, filename: file.name, size: file.size });
+    } catch (e) {
+      setErr(formatError(e, 'Upload mislukt'));
+    } finally { setUploading(false); }
+  };
+
+  const canContinue = country && stmt?.id;
+  const proceed = () => {
+    if (!canContinue) return;
+    onConfirm({
+      ...payload,
+      bank_country: country,
+      bank_statement_id: stmt.id,
+      bank_statement_filename: stmt.filename,
+    });
+  };
+
+  return (
+    <div className="min-h-full w-full px-3 sm:px-6 py-3 sm:py-6" data-testid="tk-pay-bank">
+      <div className="max-w-2xl mx-auto">
+        <div className="flex items-center justify-between flex-wrap gap-2 py-2">
+          <button onClick={onBack} data-testid="tk-bank-back"
+            className="flex items-center gap-1.5 text-white font-bold bg-white/20 backdrop-blur-sm rounded-lg px-3 py-1.5">
+            <ArrowLeft className="w-4 h-4" /> <span className="text-xs sm:text-sm">Terug</span>
+          </button>
+          <span className="text-sm sm:text-base font-semibold text-white">
+            Bankoverschrijving · {fmtMoney(payload.amount, cur)}
+          </span>
+        </div>
+        <p className="text-xs text-white/85 mb-3 mt-1">{tenant.name}{apt ? ` — Appt. ${apt.number}` : ''}</p>
+
+        {/* STAP 1 — Land selectie */}
+        <div className="bg-white rounded-3xl shadow-xl p-4 sm:p-5 mb-3">
+          <p className="text-[11px] font-black uppercase tracking-widest text-slate-500 mb-2">
+            1. Vanuit welk land betaalt u?
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            <button onClick={() => setCountry('SR')} data-testid="tk-bank-country-sr"
+              className={`p-3 rounded-2xl border-2 transition text-left ${
+                country === 'SR' ? 'border-orange-500 bg-orange-50' : 'border-slate-200 hover:border-slate-300'
+              }`}>
+              <div className="text-2xl mb-1">🇸🇷</div>
+              <div className="text-sm font-extrabold text-slate-900">Suriname</div>
+              <div className="text-[10px] text-slate-500">SRD bank</div>
+            </button>
+            <button onClick={() => setCountry('NL')} data-testid="tk-bank-country-nl"
+              className={`p-3 rounded-2xl border-2 transition text-left ${
+                country === 'NL' ? 'border-orange-500 bg-orange-50' : 'border-slate-200 hover:border-slate-300'
+              }`}>
+              <div className="text-2xl mb-1">🇳🇱</div>
+              <div className="text-sm font-extrabold text-slate-900">Nederland</div>
+              <div className="text-[10px] text-slate-500">EUR bank (IBAN)</div>
+            </button>
+          </div>
+          {country && (
+            <div className="mt-3 p-3 rounded-xl bg-slate-50 border border-slate-200" data-testid="tk-bank-info">
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">
+                Maak over naar:
+              </p>
+              {activeBank ? (
+                <p className="text-sm font-bold text-slate-900 break-all leading-snug">{activeBank}</p>
+              ) : (
+                <p className="text-xs text-amber-700 font-semibold">
+                  Bedrijf heeft nog geen rekening voor {country === 'SR' ? 'Suriname' : 'Nederland'} ingesteld. Neem contact op met de beheerder.
+                </p>
+              )}
+              <p className="text-[10px] text-slate-500 mt-1.5">
+                Vermeld bij uw overschrijving: <strong>{tenant.name}{apt ? ` — Huis ${apt.number}` : ''}</strong>
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* STAP 2 — Bankafschrift uploaden */}
+        <div className="bg-white rounded-3xl shadow-xl p-4 sm:p-5 mb-3">
+          <p className="text-[11px] font-black uppercase tracking-widest text-slate-500 mb-2">
+            2. Upload bankafschrift (verplicht)
+          </p>
+          <p className="text-[11px] text-slate-500 mb-3">
+            PDF, JPG of PNG · max 5 MB. Maak een screenshot of foto van de gelukte overschrijving.
+          </p>
+          {stmt ? (
+            <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-emerald-50 border border-emerald-200"
+              data-testid="tk-bank-stmt-uploaded">
+              <div className="flex items-center gap-2 min-w-0">
+                <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-sm font-bold text-emerald-800 truncate">{stmt.filename}</p>
+                  <p className="text-[10px] text-emerald-700">{Math.round(stmt.size / 1024)} KB · geüpload</p>
+                </div>
+              </div>
+              <button onClick={() => { setStmt(null); if (fileRef.current) fileRef.current.value = ''; }}
+                data-testid="tk-bank-stmt-remove"
+                className="text-xs font-bold text-rose-600 hover:underline flex-shrink-0">
+                Verwijderen
+              </button>
+            </div>
+          ) : (
+            <label className="block">
+              <span className={`block w-full p-4 rounded-xl border-2 border-dashed transition cursor-pointer text-center ${
+                uploading ? 'border-slate-200 bg-slate-50' : 'border-orange-300 hover:border-orange-500 hover:bg-orange-50'
+              }`}>
+                {uploading
+                  ? <Loader2 className="w-5 h-5 animate-spin mx-auto text-slate-500" />
+                  : <FileUp className="w-6 h-6 mx-auto text-orange-500 mb-1" />}
+                <p className="text-sm font-bold text-slate-900">{uploading ? 'Bezig met uploaden…' : 'Klik om bestand te kiezen'}</p>
+                <p className="text-[10px] text-slate-500 mt-0.5">PDF, JPG of PNG (max 5 MB)</p>
+              </span>
+              <input ref={fileRef} type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/*"
+                className="hidden" data-testid="tk-bank-stmt-file"
+                onChange={(e) => onPick(e.target.files?.[0])} disabled={uploading} />
+            </label>
+          )}
+          {err && <p className="text-xs font-bold text-rose-600 mt-2">{err}</p>}
+        </div>
+
+        {/* CONTINUE */}
+        <button onClick={proceed} disabled={!canContinue}
+          data-testid="tk-bank-continue"
+          className="w-full h-14 rounded-2xl bg-gradient-to-r from-[#FF8A3D] to-[#FF5C00] text-white font-black text-base shadow-md active:scale-95 transition disabled:opacity-50 disabled:cursor-not-allowed">
+          Verder naar bevestiging <ArrowRight className="w-5 h-5 inline ml-1" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+
+
+// =====================================================================
 // PAY CONFIRM — overzicht + Bevestig
 // =====================================================================
 function TenantPayConfirm({ payload, overview, onBack, onPaid }) {
@@ -1030,6 +1198,11 @@ function TenantPayConfirm({ payload, overview, onBack, onPaid }) {
     try {
       // Mixed checkout: plan_items via /payment-plans/.../pay, plain via
       // /tenant-portal/payments. Eén klantenscherm-actie, meerdere API calls.
+      const isBank = payload.method === 'bank';
+      const bankExtras = isBank ? {
+        bank_country: payload.bank_country,
+        bank_statement_id: payload.bank_statement_id,
+      } : {};
       const planItems = payload.plan_items || [];
       const plainItems = payload.plain_items || [];
       for (const pi of planItems) {
@@ -1037,6 +1210,7 @@ function TenantPayConfirm({ payload, overview, onBack, onPaid }) {
           method: payload.method,
           amount: pi.amount,
           note: `Huurder Kiosk — termijn ${pi.seq}`,
+          ...bankExtras,
         });
       }
       if (plainItems.length > 0) {
@@ -1049,6 +1223,7 @@ function TenantPayConfirm({ payload, overview, onBack, onPaid }) {
             period_month: it.period_month || undefined,
             period_year: it.period_year || undefined,
             note: payload.note || '',
+            ...bankExtras,
           });
         }
       } else if (planItems.length === 0) {
@@ -1061,6 +1236,7 @@ function TenantPayConfirm({ payload, overview, onBack, onPaid }) {
           period_month: payload.period_month || undefined,
           period_year: payload.period_year || undefined,
           note: payload.note || '',
+          ...bankExtras,
         });
       }
       playSuccessPing();
@@ -1073,6 +1249,7 @@ function TenantPayConfirm({ payload, overview, onBack, onPaid }) {
 
   const methodLabel = {
     contant: 'Contant',
+    bank: 'Bankoverschrijving',
     mope: 'Mope (QR-code)',
     uni5pay: 'Uni5Pay (QR-code)',
   }[payload.method] || payload.method;
@@ -1108,12 +1285,27 @@ function TenantPayConfirm({ payload, overview, onBack, onPaid }) {
               <ConfirmRow label="Periode"
                 value={`${MONTHS_NL[payload.period_month - 1]} ${payload.period_year}`} />
             )}
+            {payload.method === 'bank' && (
+              <>
+                <ConfirmRow label="Land"
+                  value={payload.bank_country === 'SR' ? '🇸🇷 Suriname' : '🇳🇱 Nederland'} />
+                <ConfirmRow label="Bankafschrift"
+                  value={payload.bank_statement_filename || 'Geüpload'} />
+              </>
+            )}
           </div>
+          {payload.method === 'bank' && (
+            <div className="mb-3 p-3 rounded-xl bg-amber-50 border border-amber-200" data-testid="tk-bank-warning">
+              <p className="text-xs font-bold text-amber-800 leading-snug">
+                ⏳ Uw betaling wordt pas goedgekeurd zodra het bedrag op onze rekening staat. U krijgt bericht via de app of e-mail.
+              </p>
+            </div>
+          )}
           {err && <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-3" data-testid="tk-confirm-error">{err}</p>}
           <button onClick={submit} disabled={busy} data-testid="tk-confirm-submit"
             className="w-full h-14 rounded-2xl bg-gradient-to-r from-[#FF8A3D] to-[#FF5C00] text-white font-black text-base shadow-lg active:scale-95 transition disabled:opacity-50 flex items-center justify-center gap-2">
             {busy ? <Loader2 className="w-5 h-5 animate-spin" /> : <Check className="w-5 h-5" />}
-            Bevestig betaling
+            {payload.method === 'bank' ? 'Verstuur ter goedkeuring' : 'Bevestig betaling'}
           </button>
         </div>
       </div>
@@ -1726,11 +1918,20 @@ export default function TenantKioskLayout() {
             {view === 'pay-method' && payload && (
               <TenantPayMethod payload={payload} overview={overview}
                 onBack={() => setView('pay')}
+                onConfirm={(p) => {
+                  setPayload(p);
+                  // Bankoverschrijving heeft een extra stap: land kiezen + afschrift uploaden
+                  setView(p.method === 'bank' ? 'pay-bank' : 'pay-confirm');
+                }} />
+            )}
+            {view === 'pay-bank' && payload && (
+              <TenantPayBank payload={payload} overview={overview} branding={branding}
+                onBack={() => setView('pay-method')}
                 onConfirm={(p) => { setPayload(p); setView('pay-confirm'); }} />
             )}
             {view === 'pay-confirm' && payload && (
               <TenantPayConfirm payload={payload} overview={overview}
-                onBack={() => setView('pay-method')}
+                onBack={() => setView(payload.method === 'bank' ? 'pay-bank' : 'pay-method')}
                 onPaid={() => { setView('paid'); setPayload(null); loadOverview(); }} />
             )}
             {view === 'paid' && <PaidView onContinue={() => setView('dashboard')} />}

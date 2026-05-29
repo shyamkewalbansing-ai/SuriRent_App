@@ -349,6 +349,12 @@ class PaymentOut(BaseModel):
     approved_by_user_id: Optional[str] = None
     signature_data_url: Optional[str] = None  # base64 PNG van handtekening
     rejected_reason: Optional[str] = None
+    # Bankoverschrijving-velden (alleen aanwezig als method=="bank")
+    bank_country: Optional[str] = None  # "SR" of "NL"
+    bank_statement_id: Optional[str] = None
+    bank_statement_filename: Optional[str] = None
+    bank_statement_size: Optional[int] = None
+    bank_statement_content_type: Optional[str] = None
 
 
 class PaymentApproveIn(BaseModel):
@@ -1866,6 +1872,8 @@ def _company_branding_response(c: dict) -> dict:
         "contact_email": c.get("contact_email") or "",
         "contact_phone": c.get("contact_phone") or "",
         "address": c.get("address") or "",
+        "bank_account_sr": c.get("bank_account_sr") or "",
+        "bank_account_nl": c.get("bank_account_nl") or "",
     }
 
 
@@ -1963,6 +1971,8 @@ class CompanyProfileIn(BaseModel):
     contact_email: Optional[str] = None
     contact_phone: Optional[str] = None
     address: Optional[str] = None
+    bank_account_sr: Optional[str] = None
+    bank_account_nl: Optional[str] = None
 
 
 @api.put("/companies/me/profile")
@@ -1970,8 +1980,8 @@ async def put_my_company_profile(
     body: CompanyProfileIn, user=Depends(require_role("admin"))
 ):
     """Admins kunnen hun eigen bedrijfsgegevens bewerken: bedrijfsnaam,
-    contact-email, telefoon en adres. Slug en plan/billing blijven
-    superadmin-only."""
+    contact-email, telefoon, adres en bankrekeningen (SR + NL). Slug en
+    plan/billing blijven superadmin-only."""
     cid = company_id_of(user)
     if not cid:
         raise HTTPException(status_code=400, detail="Geen actief bedrijf")
@@ -1987,6 +1997,10 @@ async def put_my_company_profile(
         update["contact_phone"] = body.contact_phone.strip()[:60]
     if body.address is not None:
         update["address"] = body.address.strip()[:300]
+    if body.bank_account_sr is not None:
+        update["bank_account_sr"] = body.bank_account_sr.strip()[:200]
+    if body.bank_account_nl is not None:
+        update["bank_account_nl"] = body.bank_account_nl.strip()[:200]
     if not update:
         raise HTTPException(status_code=400, detail="Geen velden om bij te werken")
     update["updated_at"] = iso(now_utc())
@@ -3308,6 +3322,57 @@ class TenantPaymentIn(BaseModel):
     period_year: Optional[int] = None
     note: Optional[str] = ""
     invoice_id: Optional[str] = None
+    # Bankoverschrijving-velden (alleen relevant als method == "bank")
+    bank_country: Optional[Literal["SR", "NL"]] = None
+    bank_statement_id: Optional[str] = None  # asset-id van geüpload afschrift
+
+
+@api.post("/tenant-portal/bank-statement-upload")
+async def tenant_bank_statement_upload(
+    file: UploadFile = File(...), tenant=Depends(get_tenant_session)
+):
+    """Huurder upload bankafschrift (PDF/JPG/PNG, max 5 MB) als bewijs van
+    bankoverschrijving. Asset wordt opgeslagen in `bank_statements` collectie
+    (separate van landing_assets om eenvoudiger te scopen per company).
+
+    Returns: {id, url} — id wordt meegestuurd in de payment payload.
+    """
+    raw = await file.read()
+    if len(raw) > MAX_LANDING_ASSET_BYTES:
+        raise HTTPException(status_code=413, detail="Bestand groter dan 5 MB.")
+    ctype = (file.content_type or "").lower()
+    allowed = ("image/jpeg", "image/jpg", "image/png", "image/webp", "application/pdf")
+    if not any(ctype.startswith(a) or ctype == a for a in allowed):
+        raise HTTPException(status_code=400, detail="Alleen PDF, JPG of PNG toegestaan.")
+    asset_id = new_id()
+    await db.bank_statements.insert_one({
+        "id": asset_id,
+        "filename": file.filename or f"afschrift-{asset_id}",
+        "content_type": ctype,
+        "data_b64": base64.b64encode(raw).decode("ascii"),
+        "size": len(raw),
+        "tenant_id": tenant["id"],
+        "company_id": tenant.get("company_id"),
+        "uploaded_at": iso(now_utc()),
+    })
+    return {"id": asset_id, "url": f"/api/bank-statements/{asset_id}", "size": len(raw)}
+
+
+@api.get("/bank-statements/{asset_id}")
+async def get_bank_statement(asset_id: str, user=Depends(get_current_user)):
+    """Admin/owner/boekhouder kan bankafschrift inzien. Tenant-scoped via
+    company_id zodat huurder van bedrijf A geen afschriften van B ziet."""
+    cid = company_id_of(user)
+    doc = await db.bank_statements.find_one(
+        {"id": asset_id, **({"company_id": cid} if cid else {})}, {"_id": 0}
+    )
+    if not doc:
+        raise HTTPException(status_code=404, detail="Bankafschrift niet gevonden")
+    try:
+        data = base64.b64decode(doc["data_b64"])
+    except Exception:
+        raise HTTPException(status_code=500, detail="Bankafschrift corrupt")
+    return Response(content=data, media_type=doc.get("content_type", "application/octet-stream"))
 
 
 @api.get("/tenant-portal/invoices")
@@ -3321,8 +3386,31 @@ async def tenant_portal_invoices(tenant=Depends(get_tenant_session)):
 
 @api.post("/tenant-portal/payments", response_model=PaymentOut)
 async def tenant_portal_create_payment(body: TenantPaymentIn, tenant=Depends(get_tenant_session)):
-    """Huurder registreert zelf een betaling via de Kiosk."""
-    # Map naar PaymentIn vorm zodat we de bestaande helper kunnen hergebruiken.
+    """Huurder registreert zelf een betaling via de Kiosk.
+
+    Bankoverschrijving-flow:
+      • method == "bank" → status = "pending_approval"
+      • bank_statement_id is verplicht (geüpload via /bank-statement-upload)
+      • bank_country (SR/NL) wordt opgeslagen voor admin overzicht
+      • Factuur blijft open tot admin op /payments/{id}/approve klikt
+    """
+    is_bank = body.method == "bank"
+    if is_bank:
+        if not body.bank_statement_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Bankafschrift is verplicht bij bankoverschrijving.",
+            )
+        # Verifieer dat het bankafschrift bestaat en bij deze tenant hoort
+        stmt = await db.bank_statements.find_one(
+            {"id": body.bank_statement_id, "tenant_id": tenant["id"]},
+            {"_id": 0, "id": 1, "filename": 1, "size": 1, "content_type": 1},
+        )
+        if not stmt:
+            raise HTTPException(status_code=404, detail="Bankafschrift niet gevonden")
+        if not body.bank_country:
+            raise HTTPException(status_code=400, detail="Geef aan vanuit welk land u betaalt.")
+
     if body.invoice_id:
         inv = await db.invoices.find_one(
             {"id": body.invoice_id, "tenant_id": tenant["id"]}, {"_id": 0}
@@ -3346,17 +3434,43 @@ async def tenant_portal_create_payment(body: TenantPaymentIn, tenant=Depends(get
         note=body.note or "",
         received_by=tenant.get("name") or "Huurder Kiosk",
     )
+    payment_status = "pending_approval" if is_bank else "approved"
     doc = await _create_payment_doc(
-        pin, company_id=tenant.get("company_id"), approved_by=tenant.get("name") or "Huurder Kiosk"
+        pin, company_id=tenant.get("company_id"),
+        approved_by=tenant.get("name") or "Huurder Kiosk",
+        status=payment_status,
     )
+    # Voeg bankoverschrijving-metadata toe aan het payment document
+    if is_bank:
+        await db.payments.update_one(
+            {"id": doc["id"]},
+            {"$set": {
+                "bank_country": body.bank_country,
+                "bank_statement_id": body.bank_statement_id,
+                "bank_statement_filename": stmt.get("filename"),
+                "bank_statement_size": stmt.get("size"),
+                "bank_statement_content_type": stmt.get("content_type"),
+                "submitted_at": iso(now_utc()),
+            }},
+        )
+        doc["bank_country"] = body.bank_country
+        doc["bank_statement_id"] = body.bank_statement_id
+        doc["bank_statement_filename"] = stmt.get("filename")
     enriched = await _enrich_payment(doc)
     # Notify admins of the company about the self-service payment.
     try:
+        if is_bank:
+            country_label = "Suriname" if body.bank_country == "SR" else "Nederland"
+            title = f"Bankoverschrijving wacht op goedkeuring · {enriched.get('currency', '')} {float(enriched.get('amount', 0)):,.2f}"
+            body_msg = f"{enriched.get('tenant_name') or tenant.get('name')} ({country_label}) — controleer bankafschrift"
+            kind = "payment_pending"
+        else:
+            title = f"Huurder-betaling {enriched.get('currency', '')} {float(enriched.get('amount', 0)):,.2f}"
+            body_msg = f"{enriched.get('tenant_name') or tenant.get('name')} via Huurder Kiosk"
+            kind = "payment"
         await _notify_company_admins(
-            tenant.get("company_id"),
-            f"Huurder-betaling {enriched.get('currency', '')} {float(enriched.get('amount', 0)):,.2f}",
-            f"{enriched.get('tenant_name') or tenant.get('name')} via Huurder Kiosk",
-            {"kind": "payment", "url": "/admin/payments", "payment_id": enriched.get("id"), "badge_inc": 1},
+            tenant.get("company_id"), title, body_msg,
+            {"kind": kind, "url": "/admin/payments", "payment_id": enriched.get("id"), "badge_inc": 1},
         )
     except Exception as e:
         print(f"[push] tenant-portal payment notify failed: {e}")

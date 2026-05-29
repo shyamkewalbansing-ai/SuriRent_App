@@ -187,6 +187,37 @@ function ApprovePaymentSheet({ payment, onCancel, onApproved }) {
           <DetailRow label="Bedrag" value={<span className="font-bold text-slate-900">{payment.currency} {fmtAmountWhole(payment.amount)}</span>} />
           <DetailRow label="Methode" value={METHOD_LABELS[payment.method] || payment.method} />
           <DetailRow label="Ontvangen door" value={payment.kiosk_employee_name || '—'} />
+          {payment.method === 'bank' && (
+            <>
+              <DetailRow label="Land"
+                value={<span className="font-bold">{payment.bank_country === 'SR' ? '🇸🇷 Suriname' : payment.bank_country === 'NL' ? '🇳🇱 Nederland' : '—'}</span>} />
+              {payment.bank_statement_id && (
+                <div className="pt-1">
+                  <a href={`${process.env.REACT_APP_BACKEND_URL}/api/bank-statements/${payment.bank_statement_id}`}
+                    target="_blank" rel="noreferrer"
+                    data-testid="approve-stmt-download"
+                    onClick={async (e) => {
+                      // Auth header is required — fallback: download via fetch with token
+                      e.preventDefault();
+                      try {
+                        const tk = localStorage.getItem('admin_token') || localStorage.getItem('kiosk_token');
+                        const res = await fetch(`${process.env.REACT_APP_BACKEND_URL}/api/bank-statements/${payment.bank_statement_id}`, {
+                          headers: { Authorization: `Bearer ${tk}` },
+                        });
+                        if (!res.ok) throw new Error('Download mislukt');
+                        const blob = await res.blob();
+                        const url = URL.createObjectURL(blob);
+                        window.open(url, '_blank');
+                        setTimeout(() => URL.revokeObjectURL(url), 60000);
+                      } catch (er) { alert(er.message || 'Bankafschrift kon niet geopend worden'); }
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-sky-50 border border-sky-200 text-sky-700 font-bold text-xs hover:bg-sky-100">
+                    📎 {payment.bank_statement_filename || 'Bankafschrift'} bekijken
+                  </a>
+                </div>
+              )}
+            </>
+          )}
         </div>
         {!showReject ? (
           <>
