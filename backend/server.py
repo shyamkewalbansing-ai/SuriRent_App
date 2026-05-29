@@ -5628,7 +5628,128 @@ class GenerateMonthIn(BaseModel):
     period_year: int
 
 
-@api.post("/invoices/generate-month")
+@api.post("/invoices/repair-overpaid")
+async def repair_overpaid_invoices(
+    apply: bool = Query(False, description="false=dry-run, true=apply fixes"),
+    user=Depends(get_current_user),
+):
+    """Migratie-endpoint: vindt facturen waar paid_amount > amount (door de
+    oude overflow-bug) en herverdeelt het overschot FIFO naar volgende
+    openstaande facturen van dezelfde huurder. Default = dry-run.
+
+    Veiligheidsregels:
+      • Alleen admin/owner van de eigen company.
+      • Dry-run is default — geen wijziging in DB tenzij apply=true.
+      • Returns een lijst met alle correcties die uitgevoerd zijn/zouden worden.
+    """
+    cid = company_id_of(user)
+    if not cid:
+        raise HTTPException(status_code=400, detail="Geen actief bedrijf geselecteerd")
+    if user.get("role") not in ("admin", "owner", "superadmin"):
+        raise HTTPException(status_code=403, detail="Alleen admin of owner mag repareren")
+
+    repairs = []
+    total_overflow = 0.0
+    # Zoek facturen waar paid_amount > amount (overshoot)
+    overpaid: list = []
+    async for inv in db.invoices.find(
+        {"company_id": cid, "$expr": {"$gt": ["$paid_amount", "$amount"]}},
+        {"_id": 0},
+    ):
+        overpaid.append(inv)
+
+    for inv in overpaid:
+        amt = float(inv.get("amount") or 0)
+        paid = float(inv.get("paid_amount") or 0)
+        overflow = round(paid - amt, 2)
+        if overflow <= 0:
+            continue
+        total_overflow += overflow
+        tenant_id = inv["tenant_id"]
+        cur = inv.get("currency") or "SRD"
+        # Andere openstaande facturen van dezelfde huurder/currency, oudst eerst
+        other_invs: list = []
+        async for o in db.invoices.find(
+            {"company_id": cid, "tenant_id": tenant_id, "currency": cur,
+             "id": {"$ne": inv["id"]},
+             "status": {"$nin": ["paid", "cancelled"]}},
+            {"_id": 0, "id": 1, "amount": 1, "paid_amount": 1,
+             "period_month": 1, "period_year": 1, "invoice_number": 1},
+        ).sort([("period_year", 1), ("period_month", 1)]):
+            other_invs.append(o)
+
+        allocations = []
+        remaining = overflow
+        for o in other_invs:
+            if remaining <= 0:
+                break
+            o_amt = float(o.get("amount") or 0)
+            o_paid = float(o.get("paid_amount") or 0)
+            o_open = max(0.0, round(o_amt - o_paid, 2))
+            if o_open <= 0:
+                continue
+            chunk = round(min(remaining, o_open), 2)
+            allocations.append({
+                "invoice_id": o["id"],
+                "invoice_number": o.get("invoice_number"),
+                "period": f"{o.get('period_month')}/{o.get('period_year')}",
+                "applied": chunk,
+            })
+            remaining = round(remaining - chunk, 2)
+        leftover_credit = round(remaining, 2)
+
+        repairs.append({
+            "invoice_id": inv["id"],
+            "invoice_number": inv.get("invoice_number"),
+            "period": f"{inv.get('period_month')}/{inv.get('period_year')}",
+            "tenant_id": tenant_id,
+            "amount": amt,
+            "was_paid_amount": paid,
+            "overflow": overflow,
+            "redistributed_to": allocations,
+            "leftover_credit": leftover_credit,
+        })
+
+        if apply:
+            # 1) Corrigeer de overshoot-factuur: paid_amount = amount
+            await db.invoices.update_one(
+                {"id": inv["id"]},
+                {"$set": {"paid_amount": amt, "status": "paid"}},
+            )
+            # 2) Pas allocations toe op andere facturen
+            for a in allocations:
+                target_inv = await db.invoices.find_one({"id": a["invoice_id"]}, {"_id": 0})
+                new_paid = round(float(target_inv.get("paid_amount") or 0) + a["applied"], 2)
+                new_status = "paid" if new_paid >= float(target_inv.get("amount") or 0) else "open"
+                await db.invoices.update_one(
+                    {"id": a["invoice_id"]},
+                    {"$set": {"paid_amount": new_paid, "status": new_status}},
+                )
+            # 3) Resterend overschot → bewaar als krediet op de origineel-betaling
+            #    (zoek de meest recente approved payment van deze huurder op deze factuur)
+            if leftover_credit > 0:
+                pay = await db.payments.find_one(
+                    {"tenant_id": tenant_id, "invoice_id": inv["id"], "status": "approved"},
+                    {"_id": 0, "id": 1},
+                    sort=[("paid_at", -1)],
+                )
+                if pay:
+                    await db.payments.update_one(
+                        {"id": pay["id"]},
+                        {"$set": {"credit_remaining": leftover_credit,
+                                  "credit_origin": "migration_repair"}},
+                    )
+
+    return {
+        "dry_run": not apply,
+        "invoices_inspected": len(overpaid),
+        "invoices_repaired": len(repairs),
+        "total_overflow_redistributed": round(total_overflow, 2),
+        "repairs": repairs,
+    }
+
+
+
 async def generate_month_invoices(body: GenerateMonthIn, user=Depends(get_current_user)):
     """Generate invoice for every occupied apartment for the period."""
     cid = company_id_of(user)
