@@ -3911,11 +3911,47 @@ async def _create_payment_doc(body: PaymentIn, company_id: Optional[str] = None,
     # bij goedkeuring alsnog de invoice-koppeling via /payments/{id}/approve.
     if matched_invoice and status == "approved":
         try:
-            await _apply_payment_to_invoice(
-                matched_invoice["id"], float(body.amount or 0),
-                payment_id=doc["id"], paid_at=paid_at,
-                method=body.method, receipt_number=receipt_no,
-            )
+            # Bereken hoeveel deze specifieke factuur nog open heeft. Als de
+            # betaling MEER is dan het openstaande bedrag van deze factuur,
+            # past de "overflow" automatisch toe op andere openstaande
+            # facturen van dezelfde huurder (oudst eerst, FIFO). Voorheen
+            # ging de overflow verloren: 15.000 op een 10.000 factuur
+            # sloot factuur 1 maar liet factuur 2 (april) ongewijzigd op
+            # 10.000 staan. Nu: 10.000 → factuur 1 (paid), 5.000 → factuur 2.
+            inv_amt = float(matched_invoice.get("amount") or 0)
+            already_paid = matched_invoice.get("paid_amount")
+            if already_paid is None:
+                already_paid = await _invoice_currently_paid(matched_invoice["id"])
+            open_on_matched = max(0.0, round(inv_amt - float(already_paid or 0), 2))
+            pay_amt = float(body.amount or 0)
+            primary_chunk = min(pay_amt, open_on_matched) if open_on_matched > 0 else pay_amt
+            overflow = round(pay_amt - primary_chunk, 2)
+            # Pas primary chunk toe op de gematchte factuur
+            if primary_chunk > 0:
+                await _apply_payment_to_invoice(
+                    matched_invoice["id"], primary_chunk,
+                    payment_id=doc["id"], paid_at=paid_at,
+                    method=body.method, receipt_number=receipt_no,
+                )
+            # Overflow FIFO-alloceren over andere openstaande facturen
+            # (zelfde tenant + currency, niet de matched factuur)
+            if overflow > 0:
+                other_inv_ids = []
+                async for inv in db.invoices.find(
+                    {"tenant_id": body.tenant_id,
+                     "currency": body.currency,
+                     "status": {"$nin": ["paid", "cancelled"]},
+                     "id": {"$ne": matched_invoice["id"]},
+                     **({"company_id": company_id} if company_id else {})},
+                    {"_id": 0, "id": 1},
+                ).sort([("period_year", 1), ("period_month", 1)]):
+                    other_inv_ids.append(inv["id"])
+                if other_inv_ids:
+                    await _allocate_payment_to_invoices(
+                        other_inv_ids, overflow,
+                        payment_id=doc["id"], paid_at=paid_at,
+                        method=body.method, receipt_number=receipt_no,
+                    )
         except Exception as e:
             print(f"[payments] invoice apply failed: {e}")
     return doc
@@ -4030,11 +4066,40 @@ async def approve_payment(pid: str, body: PaymentApproveIn, user=Depends(require
         update["invoice_id"] = matched_invoice["id"]
         update["invoice_number"] = matched_invoice.get("invoice_number")
         try:
-            await _apply_payment_to_invoice(
-                matched_invoice["id"], float(p.get("amount") or 0),
-                payment_id=p["id"], paid_at=approved_at,
-                method=p.get("method"), receipt_number=p.get("receipt_number"),
-            )
+            # Zelfde overflow-allocatie logica als bij _create_payment_doc:
+            # als de betaling > openstaand op deze factuur, schuif het
+            # overschot door naar oudere openstaande facturen FIFO.
+            inv_amt_a = float(matched_invoice.get("amount") or 0)
+            already_paid_a = matched_invoice.get("paid_amount")
+            if already_paid_a is None:
+                already_paid_a = await _invoice_currently_paid(matched_invoice["id"])
+            open_on_matched_a = max(0.0, round(inv_amt_a - float(already_paid_a or 0), 2))
+            pay_amt_a = float(p.get("amount") or 0)
+            primary_chunk_a = min(pay_amt_a, open_on_matched_a) if open_on_matched_a > 0 else pay_amt_a
+            overflow_a = round(pay_amt_a - primary_chunk_a, 2)
+            if primary_chunk_a > 0:
+                await _apply_payment_to_invoice(
+                    matched_invoice["id"], primary_chunk_a,
+                    payment_id=p["id"], paid_at=approved_at,
+                    method=p.get("method"), receipt_number=p.get("receipt_number"),
+                )
+            if overflow_a > 0:
+                other_inv_ids_a = []
+                async for inv in db.invoices.find(
+                    {"tenant_id": p["tenant_id"],
+                     "currency": p.get("currency") or "SRD",
+                     "status": {"$nin": ["paid", "cancelled"]},
+                     "id": {"$ne": matched_invoice["id"]},
+                     **({"company_id": p.get("company_id")} if p.get("company_id") else {})},
+                    {"_id": 0, "id": 1},
+                ).sort([("period_year", 1), ("period_month", 1)]):
+                    other_inv_ids_a.append(inv["id"])
+                if other_inv_ids_a:
+                    await _allocate_payment_to_invoices(
+                        other_inv_ids_a, overflow_a,
+                        payment_id=p["id"], paid_at=approved_at,
+                        method=p.get("method"), receipt_number=p.get("receipt_number"),
+                    )
         except Exception as e:
             print(f"[payments.approve] invoice apply failed: {e}")
     # Goedkeuring van een betalingsregeling-termijn (kiosk-flow met
