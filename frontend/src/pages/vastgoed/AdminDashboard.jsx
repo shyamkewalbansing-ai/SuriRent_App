@@ -32,6 +32,7 @@ import LandingEditor from './admin/LandingEditor';
 import Branding from './admin/Branding';
 import BusinessInfo from './admin/BusinessInfo';
 import SetupWizard from './admin/SetupWizard';
+import SetupWizardSheet from './admin/SetupWizardSheet';
 import MyUrlCard from '../../components/MyUrlCard';
 import MijnAbonnement from './admin/MijnAbonnement';
 import TrialBanner from '../../components/TrialBanner';
@@ -1653,6 +1654,10 @@ export default function AdminDashboard() {
   const sheetTabs = tabs.filter((t) => t.id !== 'overview');
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [settingsSection, setSettingsSection] = useState(null);
+  // Auto-open Setup Wizard als bottom-sheet / modal voor nieuwe bedrijven.
+  // Activatie: setup-status laat zien dat <2 van de 5 stappen klaar zijn EN
+  // de admin heeft de wizard nog niet bewust gesloten voor dit bedrijf.
+  const [wizardOpen, setWizardOpen] = useState(false);
   const navigate = useBrandedNavigate();
   const location = useLocation();
   const { count: badgeCount } = useBadge();
@@ -1714,6 +1719,32 @@ export default function AdminDashboard() {
       || document.querySelector('meta[name="theme-color"]');
     if (meta) meta.setAttribute('content', '#ffffff');
   }, []);
+
+  // Auto-open de Setup Wizard sheet voor nieuwe bedrijven. Draait alleen
+  // voor gewone admins (niet superadmin) en alleen wanneer de admin de
+  // wizard nog niet eerder bewust gesloten heeft voor dit bedrijf.
+  useEffect(() => {
+    if (!user || user.role === 'superadmin') return;
+    const cid = user.company_id;
+    if (!cid) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const dismissedKey = `setup_wizard_dismissed_${cid}`;
+        if (localStorage.getItem(dismissedKey) === '1') return;
+        const { data } = await api.get('/companies/me/setup-status');
+        // Open de wizard alleen als de basis-setup nog niet (vrijwel) klaar is.
+        // 2 of meer van de 5 stappen klaar → admin heeft al actief data toegevoegd.
+        const completed = data?.completed ?? 0;
+        if (cancelled) return;
+        if (completed < 2) {
+          setWizardOpen(true);
+        }
+      } catch { /* network hiccup — laat wizard met rust */ }
+    })();
+    return () => { cancelled = true; };
+  }, [user]);
+
   const doLogout = async () => { await logout(); navigate('/login'); };
 
   return (
@@ -1760,6 +1791,12 @@ export default function AdminDashboard() {
       <MobileSheet open={drawerOpen} onClose={() => setDrawerOpen(false)}
         active={tab} onChange={handleSetTab} onLogout={doLogout}
         user={user} tabs={sheetTabs} activeCompany={activeCompany} badgeCount={badgeCount} />
-      <MorningBriefingModal briefing={briefing} onClose={dismissBriefing} />    </div>
+      <MorningBriefingModal briefing={briefing} onClose={dismissBriefing} />
+      <SetupWizardSheet
+        open={wizardOpen}
+        onClose={() => setWizardOpen(false)}
+        companyId={user?.company_id}
+      />
+    </div>
   );
 }

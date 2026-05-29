@@ -1,5 +1,13 @@
 # Vastgoed Kiosk - PRD
 
+## Session 2026-02-26 — Setup Wizard auto-open als Sheet/Modal ✅
+- **Nieuw component**: `/app/frontend/src/pages/vastgoed/admin/SetupWizardSheet.jsx` — wrapper rond bestaande `SetupWizard`. Op desktop een gecentreerde modal (max-w-5xl), op mobiel een bottom-sheet die slide-up van onderaan met pull-handle. Sluit-knop linksboven en "Later voltooien" footer op mobiel.
+- **AdminDashboard.jsx** uitgebreid met `wizardOpen` state + auto-detect useEffect. Bij login GET `/api/companies/me/setup-status`: als `completed < 2` (basis-setup nog niet begonnen) EN `localStorage.setup_wizard_dismissed_<company_id>` is niet '1' → wizard auto-opent. Sluiten zet de dismiss-flag → blijft daarna gesloten tot admin de "Setup Wizard" tab handmatig opent.
+- **Niet voor superadmin** (alleen voor gewone admin-rol).
+- Geverifieerd via Playwright: registratie → /admin → wizard auto-opent (desktop centered modal én mobile bottom-sheet 390px viewport). Close-knop → sheet weg + localStorage flag gezet. Reload → wizard blijft gesloten. Bestaande `Setup Wizard` tab in zijbalk werkt onveranderd.
+
+
+
 ## Session 2026-02-26 — Short branded URLs + subdomain feature verwijderd ✅
 - **Branded URL gewijzigd van `/c/<slug>/...` → `/<slug>/...`** (zonder `/c/`-prefix). Bv. `surirent.sr/surirent` i.p.v. `surirent.sr/c/surirent`. Legacy `/c/<slug>/...` URLs blijven werken (oude QR-codes, welkomstmails).
 - **Reserved slugs server-side afgedwongen** (`RESERVED_SLUGS` constant): `admin`, `login`, `kiosk`, `huurder`, `onderteken`, `c`, `api`, `health`, `static`, etc. Superadmin POST/PUT `/api/companies` weigert reserved slugs met 400. Auto-suffix in self-serve registratie (auto-generated slug die per ongeluk reserved is → `-bedrijf` suffix).
