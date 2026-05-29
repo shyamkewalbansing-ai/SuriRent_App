@@ -44,11 +44,11 @@ export default function Notifications() {
     try {
       const { data } = await api.get('/push/status');
       setDeviceCount(data.devices || 0);
-    } catch { /* noop */ }
+    } catch (e) { console.warn('[Notifications] push status:', e); }
     try {
       const { data } = await api.get('/push/devices');
       setDevices(Array.isArray(data) ? data : []);
-    } catch { /* noop */ }
+    } catch (e) { console.warn('[Notifications] push devices:', e); }
   }, []);
 
   useEffect(() => {
@@ -187,7 +187,7 @@ export default function Notifications() {
           const reg = await navigator.serviceWorker.getRegistration();
           const sub = reg && (await reg.pushManager.getSubscription());
           if (sub) await sub.unsubscribe();
-        } catch { /* ignore */ }
+        } catch (e) { console.warn('[Notifications] unsubscribe:', e); }
         setSubscribed(false);
         setCurrentEndpoint('');
       }

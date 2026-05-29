@@ -394,7 +394,7 @@ function PlanDetail({ planId, onBack }) {
           // Sorteer oudst-eerst (zelfde FIFO als allocator)
           linked.sort((a, b) => (a.period_year - b.period_year) || (a.period_month - b.period_month));
           setLinkedInvoices(linked);
-        } catch { /* ignore — niet kritisch */ }
+        } catch (e) { console.warn('[PaymentPlans] linked invoices fetch:', e); }
       } else {
         setLinkedInvoices([]);
       }
