@@ -1146,7 +1146,7 @@ def luxury_plate_pdf(*, tenant_name: str, apartment_number: str,
     # Goud-kleur die overeenkomt met de template (gesampled uit de afbeelding)
     GOLD = (212, 174, 92)
     GOLD_LIGHT = (232, 199, 102)
-    PLATE_BLACK = (28, 26, 24)  # zwart van de plaat zelf (iets warmer dan #000)
+    PLATE_BLACK = (14, 13, 10)  # warm-zwart, exact gesampled uit template
 
     # Helper om TTF te laden (Liberation Sans Bold lijkt visueel op Helvetica)
     def font_at(size: int):
@@ -1158,13 +1158,29 @@ def luxury_plate_pdf(*, tenant_name: str, apartment_number: str,
                 return ImageFont.truetype(fp, size)
         return ImageFont.load_default()
 
+    # Helper om een dynamisch gebied schoon te maken door een schoon "leeg"
+    # stuk van de plaat te kopiëren. Vermijdt zichtbare flat-black rechthoeken.
+    def clear_region(x0, y0, x1, y1, source_y=480):
+        """Kopieer een horizontale strook plaat-zwart over het regio."""
+        from PIL import Image as _PILImage
+        # Source: een dunne horizontale strook van een leeg deel van de plaat,
+        # rond y=source_y, breedte uit het zelfde gebied + tile horizontaal.
+        h = y1 - y0
+        w = x1 - x0
+        # Pak een SOURCE strook van zelfde breedte, op een Y zonder tekst
+        src = img.crop((x0, source_y - h // 2, x1, source_y + h - h // 2))
+        # Als source te smal/scheef is, fall back op flat zwart
+        if src.size != (w, h):
+            src = _PILImage.new("RGB", (w, h), PLATE_BLACK)
+        img.paste(src, (x0, y0))
+
     # 2) BEDRIJFSNAAM — overschrijf "Gopi" tekst.
     # Template-coördinaten van "Gopi" big text: ongeveer x=465..870 y=195..420
     # We maskeren dat gebied met plaat-zwart en zetten de echte bedrijfsnaam.
     company_name_clean = (company_name or "").strip() or "Bedrijf"
-    # Mask box voor de oude "Gopi" tekst
+    # Mask box voor de oude "Gopi" tekst — kopieer schone plaat-strook
     mask_x0, mask_y0, mask_x1, mask_y1 = 460, 175, 1080, 415
-    draw.rectangle([mask_x0, mask_y0, mask_x1, mask_y1], fill=PLATE_BLACK)
+    clear_region(mask_x0, mask_y0, mask_x1, mask_y1, source_y=510)
     # Bepaal font-grootte zodat het in de breedte past
     target_height = 200
     cn_size = 200
@@ -1189,15 +1205,15 @@ def luxury_plate_pdf(*, tenant_name: str, apartment_number: str,
     # 3) QR-CODE — overlay een nieuwe TRANSPARANTE QR over het bestaande gebied
     # QR area in template (incl. gouden rand): x=1115..1395 y=140..440
     qr_x0, qr_y0, qr_x1, qr_y1 = 1115, 140, 1400, 440
-    # Mask het oude QR-gebied met de plaat-achtergrond zodat de oude QR weg is.
+    # Mask het oude QR-gebied met een schone plaat-strook zodat de oude QR weg is.
     # We laten de gouden frame-rand intact door alleen het binnenste gebied
-    # te overschrijven (5px marge).
+    # te overschrijven (14px marge).
     inner = 14
-    draw.rectangle(
-        [qr_x0 + inner, qr_y0 + inner, qr_x1 - inner, qr_y1 - inner],
-        fill=PLATE_BLACK,
+    clear_region(
+        qr_x0 + inner, qr_y0 + inner, qr_x1 - inner, qr_y1 - inner,
+        source_y=510,
     )
-    # Nieuwe transparante QR (goud op zwart, zoals de referentie)
+    # Nieuwe transparante QR (goud op plaat-zwart, naadloos met achtergrond)
     qr_box_size = qr_x1 - qr_x0 - 2 * inner  # ~257px
     qr = qrcode.QRCode(box_size=10, border=0, error_correction=qrcode.constants.ERROR_CORRECT_H)
     qr.add_data(kiosk_url)
@@ -1214,9 +1230,9 @@ def luxury_plate_pdf(*, tenant_name: str, apartment_number: str,
     elif upper.startswith("APPARTEMENT "):
         apt_clean = apt_clean[12:].strip()
     headline = f"HUIS {apt_clean}".upper()
-    # Mask het "HUIS 7B" gebied (zwarte vlak waar HUIS-tekst staat)
+    # Mask het "HUIS 7B" gebied met een schoon stuk plaat-zwart
     huis_x0, huis_y0, huis_x1, huis_y1 = 240, 640, 1280, 820
-    draw.rectangle([huis_x0, huis_y0, huis_x1, huis_y1], fill=PLATE_BLACK)
+    clear_region(huis_x0, huis_y0, huis_x1, huis_y1, source_y=510)
     # Auto-fit font
     huis_size = 170
     while huis_size > 80:
@@ -1234,9 +1250,9 @@ def luxury_plate_pdf(*, tenant_name: str, apartment_number: str,
     hy = huis_y0 + ((huis_y1 - huis_y0) - hh) // 2 - bbox[1]
     draw.text((hx, hy), headline, fill=GOLD, font=huis_font)
 
-    # 5) ADRES — overschrijf "Kewalbansingweg 7 B" lijn
+    # 5) ADRES — overschrijf "Kewalbansingweg 7 B" lijn met schoon plaat-zwart
     addr_x0, addr_y0, addr_x1, addr_y1 = 240, 840, 1280, 920
-    draw.rectangle([addr_x0, addr_y0, addr_x1, addr_y1], fill=PLATE_BLACK)
+    clear_region(addr_x0, addr_y0, addr_x1, addr_y1, source_y=510)
     if address:
         addr_text = address
         addr_size = 56
