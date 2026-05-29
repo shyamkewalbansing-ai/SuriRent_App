@@ -63,6 +63,7 @@ function MobileHeaderButtons({ onAdmin, onExit }) {
 // Apartment select (with optional inline location picker when ≥2 locations)
 // =====================================================================
 function ApartmentSelect({ onSelect, onAdmin, onExit }) {
+  const navigate = useBrandedNavigate();
   const [apartments, setApartments] = useState([]);
   const [locations, setLocations] = useState([]);
   const [selectedLocationId, setSelectedLocationId] = useState(null);
@@ -76,9 +77,22 @@ function ApartmentSelect({ onSelect, onAdmin, onExit }) {
     ]).then(([aRes, lRes]) => {
       setApartments(aRes.data);
       setLocations((lRes.data || []).filter((l) => l.id !== '_none'));
-    }).catch((e) => setError(formatError(e)))
-      .finally(() => setLoading(false));
-  }, []);
+    }).catch((e) => {
+      // 401 = token ongeldig / verlopen → wis token en stuur terug naar
+      // PIN-login. Voorheen bleef de melding "Ongeldig kiosk token" inline
+      // staan en kon de gebruiker niet verder.
+      const status = e?.response?.status;
+      if (status === 401) {
+        try {
+          localStorage.removeItem('kiosk_token');
+          localStorage.removeItem('kiosk_company');
+        } catch { /* noop */ }
+        navigate('/login?target=kiosk', { replace: true });
+        return;
+      }
+      setError(formatError(e));
+    }).finally(() => setLoading(false));
+  }, [navigate]);
 
   const unassignedCount = useMemo(
     () => apartments.filter((a) => !a.location_id && a.status === 'occupied').length,
