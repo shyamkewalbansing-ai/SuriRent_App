@@ -496,7 +496,7 @@ function DashboardView({ overview, onAction, onHistory }) {
   ];
 
   return (
-    <div className="h-full w-full flex flex-col" data-testid="tk-dashboard"
+    <div className="w-full flex flex-col md:h-full" data-testid="tk-dashboard"
       style={{ padding: '1.5vh 1.5vw 0', minHeight: '100%' }}>
       <div className="flex items-center justify-between flex-wrap gap-2 px-1 sm:px-2 py-2">
         <div className="text-white">
@@ -506,7 +506,10 @@ function DashboardView({ overview, onAction, onHistory }) {
         <p className="text-xs sm:text-sm font-semibold text-white/90 hidden sm:block">Welkom — kies een actie</p>
       </div>
 
-      <div className="flex-1 min-h-0 flex flex-col md:flex-row gap-2 sm:gap-3 pb-3">
+      {/* Op desktop: flex-1 fill. Op mobile: natuurlijke hoogte zodat de
+          twee panels achter elkaar stapelen zonder de secundaire tegels te
+          overlappen. */}
+      <div className="md:flex-1 md:min-h-0 flex flex-col md:flex-row gap-2 sm:gap-3 pb-3">
         {/* LEFT — Financieel overzicht (kiosk-style) */}
         <div className="bg-white rounded-2xl flex-none md:flex-[3] flex flex-col p-3 sm:p-4 min-w-0">
           <div className="flex items-center justify-between mb-2">
@@ -517,10 +520,10 @@ function DashboardView({ overview, onAction, onHistory }) {
               const Icon = it.icon;
               const klass = it.highlight ? 'text-orange-600' : it.muted ? 'text-slate-400' : 'text-slate-900';
               return (
-                <div key={it.key} className={`flex items-center justify-between py-2.5 px-1 ${klass}`}
+                <div key={it.key} className={`flex items-center justify-between py-1.5 sm:py-2.5 px-1 ${klass}`}
                   data-testid={`tk-fin-${it.key}`}>
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${
+                  <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
+                    <div className={`w-6 h-6 sm:w-7 sm:h-7 rounded-lg flex items-center justify-center ${
                       it.highlight ? 'bg-orange-100 text-orange-500'
                         : it.muted ? 'bg-slate-50 text-slate-300'
                         : 'bg-slate-100 text-slate-500'
@@ -528,11 +531,11 @@ function DashboardView({ overview, onAction, onHistory }) {
                       <Icon className="w-3.5 h-3.5" />
                     </div>
                     <div className="min-w-0">
-                      <p className={`text-sm ${it.highlight ? 'font-extrabold' : 'font-semibold'}`}>{it.label}</p>
+                      <p className={`text-xs sm:text-sm ${it.highlight ? 'font-extrabold' : 'font-semibold'}`}>{it.label}</p>
                       {it.sub && <p className="text-[10px] mt-0.5">{it.sub}</p>}
                     </div>
                   </div>
-                  <p className={`font-bold text-sm sm:text-base ${it.highlight ? 'font-extrabold' : ''}`}>
+                  <p className={`font-bold text-xs sm:text-base ${it.highlight ? 'font-extrabold' : ''}`}>
                     {fmtMoney(it.value, cur)}
                   </p>
                 </div>
@@ -585,30 +588,30 @@ function DashboardView({ overview, onAction, onHistory }) {
         </div>
 
         {/* RIGHT — Te betalen + Volgende + Geschiedenis (kiosk-style) */}
-        <div className="bg-white rounded-2xl flex-none md:flex-[2] flex flex-col items-center justify-center text-center p-5 sm:p-6 min-h-[260px]">
-          <div className={`w-14 h-14 sm:w-16 sm:h-16 rounded-2xl flex items-center justify-center mb-3 ${
+        <div className="bg-white rounded-2xl flex-none md:flex-[2] flex flex-col items-center justify-center text-center p-3 sm:p-6 md:min-h-[260px]">
+          <div className={`w-10 h-10 sm:w-16 sm:h-16 rounded-2xl flex items-center justify-center mb-1.5 sm:mb-3 ${
             hasBalance ? 'bg-orange-100' : 'bg-emerald-100'
           }`}>
             {hasBalance
-              ? <Wallet className="w-7 h-7 sm:w-9 sm:h-9 text-orange-500" />
-              : <CheckCircle2 className="w-7 h-7 sm:w-9 sm:h-9 text-emerald-500" />}
+              ? <Wallet className="w-5 h-5 sm:w-9 sm:h-9 text-orange-500" />
+              : <CheckCircle2 className="w-5 h-5 sm:w-9 sm:h-9 text-emerald-500" />}
           </div>
-          <p className="text-xs sm:text-sm font-bold uppercase tracking-widest text-slate-400">
+          <p className="text-[10px] sm:text-sm font-bold uppercase tracking-widest text-slate-400">
             {hasBalance ? 'Te betalen' : 'Saldo'}
           </p>
-          <p className={`text-4xl sm:text-5xl font-extrabold tracking-tight mt-1 mb-1 ${
+          <p className={`text-2xl sm:text-5xl font-extrabold tracking-tight mt-0.5 sm:mt-1 mb-0.5 sm:mb-1 ${
             hasBalance ? 'text-slate-900' : 'text-emerald-600'
           }`} data-testid="tk-balance">{fmtMoney(totalDue, cur)}</p>
-          <p className="text-xs sm:text-sm text-slate-500 mb-5">
+          <p className="text-[11px] sm:text-sm text-slate-500 mb-3 sm:mb-5">
             {hasBalance ? 'U heeft een openstaand bedrag.' : 'U bent volledig bij. Bedankt!'}
           </p>
           <button onClick={() => onAction('pay')} data-testid="tk-tile-pay"
-            className="w-full max-w-xs bg-orange-500 hover:bg-orange-600 text-white text-base sm:text-lg font-bold rounded-xl flex items-center justify-center gap-2 transition py-3 sm:py-3.5 active:scale-[0.98]">
-            Volgende <ArrowRight className="w-5 h-5" />
+            className="w-full max-w-xs bg-orange-500 hover:bg-orange-600 text-white text-sm sm:text-lg font-bold rounded-xl flex items-center justify-center gap-2 transition py-2.5 sm:py-3.5 active:scale-[0.98]">
+            Volgende <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5" />
           </button>
           <button onClick={onHistory} data-testid="tk-tile-history"
-            className="mt-2 w-full max-w-xs bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold rounded-xl flex items-center justify-center gap-2 py-2.5 text-sm">
-            <ClockIcon className="w-4 h-4" /> Betalingsgeschiedenis
+            className="mt-1.5 sm:mt-2 w-full max-w-xs bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold rounded-xl flex items-center justify-center gap-2 py-2 sm:py-2.5 text-xs sm:text-sm">
+            <ClockIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> Betalingsgeschiedenis
           </button>
         </div>
       </div>
@@ -631,11 +634,11 @@ function SecondaryTile({ icon: Icon, label, accent, onClick, testId }) {
     <motion.button
       whileTap={{ scale: 0.97 }}
       onClick={onClick} data-testid={testId}
-      className="bg-white rounded-2xl py-2.5 sm:py-3 shadow-md flex flex-col items-center gap-1.5 active:shadow-sm transition">
-      <div className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl ${accent} flex items-center justify-center`}>
-        <Icon className="w-4 h-4 sm:w-5 sm:h-5" strokeWidth={2.4} />
+      className="bg-white rounded-2xl py-1.5 sm:py-3 shadow-md flex flex-col items-center gap-1 sm:gap-1.5 active:shadow-sm transition">
+      <div className={`w-7 h-7 sm:w-10 sm:h-10 rounded-xl ${accent} flex items-center justify-center`}>
+        <Icon className="w-3.5 h-3.5 sm:w-5 sm:h-5" strokeWidth={2.4} />
       </div>
-      <span className="text-xs sm:text-sm font-bold text-slate-900 text-center leading-tight">{label}</span>
+      <span className="text-[10px] sm:text-sm font-bold text-slate-900 text-center leading-tight">{label}</span>
     </motion.button>
   );
 }
@@ -1704,12 +1707,12 @@ export default function TenantKioskLayout() {
   // --- Authed views ---
   return (
     <div style={wrapperLocked} className="flex flex-col">
-      <div className="flex-1 min-h-0 flex flex-col" style={{ paddingBottom: FOOTER_H + 16 }}>
+      <div className="flex-1 min-h-0 flex flex-col" style={{ paddingBottom: FOOTER_H + 24 }}>
         <AnimatePresence mode="wait">
           <motion.div key={view} variants={slideVariants}
             initial="enter" animate="center" exit="exit"
             transition={{ duration: 0.25 }}
-            className="h-full w-full flex flex-col">
+            className="w-full flex flex-col md:h-full">
             {view === 'dashboard' && (
               <DashboardView overview={overview}
                 onAction={setView}
