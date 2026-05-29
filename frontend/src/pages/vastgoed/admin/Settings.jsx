@@ -332,8 +332,11 @@ function KioskPinForm() {
 }
 
 // ============== Main ==============
-export default function SettingsPage() {
-  const [section, setSection] = useState('smtp');
+export default function SettingsPage({ initialSection }) {
+  const [section, setSection] = useState(initialSection || 'smtp');
+  useEffect(() => {
+    if (initialSection) setSection(initialSection);
+  }, [initialSection]);
   const [settings, setSettings] = useState(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');

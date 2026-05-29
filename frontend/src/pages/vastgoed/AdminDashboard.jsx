@@ -1652,6 +1652,7 @@ export default function AdminDashboard() {
   // in het "+"-menu opduikt. Desktop sidebar laat hem wel staan.
   const sheetTabs = tabs.filter((t) => t.id !== 'overview');
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [settingsSection, setSettingsSection] = useState(null);
   const navigate = useBrandedNavigate();
   const location = useLocation();
   const { count: badgeCount } = useBadge();
@@ -1729,7 +1730,12 @@ export default function AdminDashboard() {
           {tab === 'subscriptions' && <Subscriptions />}
           {tab === 'saas_settings' && <SaasSettings />}
           {tab === 'landing_editor' && <LandingEditor />}
-          {tab === 'setup_wizard' && <SetupWizard />}
+          {tab === 'setup_wizard' && (
+            <SetupWizard onJumpToSettings={(section) => {
+              setSettingsSection(section);
+              setTab('settings');
+            }} />
+          )}
           {tab === 'business_info' && <BusinessInfo />}
           {tab === 'branding' && <Branding />}
           {tab === 'overview' && <Overview />}
@@ -1746,7 +1752,7 @@ export default function AdminDashboard() {
           {tab === 'employees' && <Employees />}
           {tab === 'notifications' && <Notifications />}
           {tab === 'mijn_abonnement' && <MijnAbonnement />}
-          {tab === 'settings' && <SettingsPage />}
+          {tab === 'settings' && <SettingsPage initialSection={settingsSection} />}
         </main>
       </div>
       <MobileTabBar active={tab} onChange={handleSetTab} tabs={tabs} user={user}

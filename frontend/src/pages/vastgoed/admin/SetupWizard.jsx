@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   Building2, Landmark, Smartphone, Home, User, CheckCircle2, ArrowRight, ArrowLeft,
   Loader2, Mail, Phone, MapPin, Sparkles, AlertCircle, Check, PartyPopper,
+  MessageCircle, CreditCard, Zap, Globe, KeySquare, FileText, Settings as SettingsIcon,
 } from 'lucide-react';
 import { api, formatError } from '../../../lib/api';
 
@@ -11,9 +12,21 @@ const STEPS = [
   { id: 'wallet', label: 'Mobile wallet', icon: Smartphone, color: 'violet' },
   { id: 'apartment', label: 'Appartement', icon: Home, color: 'orange' },
   { id: 'tenant', label: 'Huurder', icon: User, color: 'rose' },
+  { id: 'integrations', label: 'Integraties', icon: SettingsIcon, color: 'slate' },
 ];
 
-export default function SetupWizard() {
+const INTEGRATIONS = [
+  { id: 'smtp', label: 'E-mail (SMTP)', icon: Mail, desc: 'Verstuur kwitanties en facturen via je eigen SMTP server.' },
+  { id: 'twilio', label: 'WhatsApp & SMS', icon: MessageCircle, desc: 'Twilio integratie voor WhatsApp- en SMS-meldingen.' },
+  { id: 'mope', label: 'Mope betalingen', icon: CreditCard, desc: 'Online betalingen via Mope (Suriname).' },
+  { id: 'uni5pay', label: 'Uni5Pay betalingen', icon: CreditCard, desc: 'Online betalingen via Uni5Pay.' },
+  { id: 'shelly', label: 'Shelly elektriciteit', icon: Zap, desc: 'Smart breakers per appartement (Shelly Cloud).' },
+  { id: 'invoicing', label: 'Facturen automatisering', icon: FileText, desc: 'Automatische maand-facturen na grace periode.' },
+  { id: 'domain', label: 'Eigen domein', icon: Globe, desc: 'Koppel een eigen domein aan dit bedrijf.' },
+  { id: 'kiosk', label: 'Kiosk PIN', icon: KeySquare, desc: 'Stel de 4-cijferige toegangs-PIN voor de Kiosk in.' },
+];
+
+export default function SetupWizard({ onJumpToSettings }) {
   const [status, setStatus] = useState(null);
   const [idx, setIdx] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -130,7 +143,12 @@ export default function SetupWizard() {
   const completed = status?.completed || 0;
   const total = status?.total || STEPS.length;
   const percent = status?.percent || 0;
-  const stepDone = (id) => (status?.steps || []).find((s) => s.id === id)?.done;
+  const stepDone = (id) => {
+    // Integraties is een informatieve stap (optioneel) — toon altijd als "klaar"
+    // zodat het wizard-paneel niet onnodig oranje is.
+    if (id === 'integrations') return true;
+    return (status?.steps || []).find((s) => s.id === id)?.done;
+  };
 
   return (
     <div className="max-w-3xl mx-auto space-y-4" data-testid="setup-wizard">
@@ -202,6 +220,9 @@ export default function SetupWizard() {
         {currentStep.id === 'tenant' && (
           <StepTenant tenant={tenant} setTenant={setTenant} apts={apts} status={status} />
         )}
+        {currentStep.id === 'integrations' && (
+          <StepIntegrations onJumpToSettings={onJumpToSettings} />
+        )}
 
         {/* Navigation */}
         <div className="flex items-center justify-between mt-6 pt-4 border-t border-slate-100">
@@ -225,6 +246,12 @@ export default function SetupWizard() {
               className="flex items-center gap-1.5 px-5 h-11 rounded-xl bg-gradient-to-r from-[#FF8A3D] to-[#FF5C00] text-white font-black shadow-md active:scale-95 transition disabled:opacity-50">
               {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Aanmaken & afronden'}
               {!saving && <ArrowRight className="w-4 h-4" />}
+            </button>
+          )}
+          {currentStep.id === 'integrations' && (
+            <button onClick={nextStep} data-testid="wizard-int-finish"
+              className="flex items-center gap-1.5 px-5 h-11 rounded-xl bg-slate-900 text-white font-black shadow-md active:scale-95 transition">
+              Klaar <Check className="w-4 h-4" />
             </button>
           )}
           {['profile', 'bank', 'wallet'].includes(currentStep.id) && (
@@ -401,6 +428,50 @@ function StepTenant({ tenant, setTenant, apts, status }) {
           ))}
         </select>
       </label>
+    </div>
+  );
+}
+
+
+
+function StepIntegrations({ onJumpToSettings }) {
+  return (
+    <div className="space-y-3" data-testid="wizard-integrations">
+      <div className="mb-2">
+        <h3 className="text-lg font-extrabold text-slate-900 flex items-center gap-2">
+          <SettingsIcon className="w-5 h-5" /> Integraties (optioneel)
+        </h3>
+        <p className="text-xs text-slate-500">
+          Configureer extra integraties zoals e-mail, WhatsApp/SMS, Shelly smart breakers en meer. Klik op een tegel om direct die instelling te openen.
+        </p>
+      </div>
+      <div className="grid sm:grid-cols-2 gap-2">
+        {INTEGRATIONS.map((it) => {
+          const Icon = it.icon;
+          return (
+            <button key={it.id} type="button"
+              onClick={() => onJumpToSettings && onJumpToSettings(it.id)}
+              data-testid={`wizard-int-${it.id}`}
+              className="text-left p-3 rounded-2xl border-2 border-slate-200 hover:border-slate-900 hover:bg-slate-50 transition active:scale-[0.98]">
+              <div className="flex items-start gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-slate-100 flex items-center justify-center flex-shrink-0">
+                  <Icon className="w-4.5 h-4.5 text-slate-700" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-extrabold text-slate-900">{it.label}</p>
+                    <ArrowRight className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">{it.desc}</p>
+                </div>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+      <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800">
+        💡 Deze integraties zijn allemaal optioneel. Het platform werkt prima zonder, maar ze voegen handige automatisering toe.
+      </div>
     </div>
   );
 }
