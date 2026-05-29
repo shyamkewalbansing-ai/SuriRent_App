@@ -30,6 +30,7 @@ import Subscriptions from './admin/Subscriptions';
 import SaasSettings from './admin/SaasSettings';
 import LandingEditor from './admin/LandingEditor';
 import Branding from './admin/Branding';
+import BusinessInfo from './admin/BusinessInfo';
 import MyUrlCard from '../../components/MyUrlCard';
 import MijnAbonnement from './admin/MijnAbonnement';
 import TrialBanner from '../../components/TrialBanner';
@@ -60,6 +61,7 @@ const BASE_TABS = [
   { id: 'employees', label: 'Werknemers', icon: Users },
   { id: 'notifications', label: 'Notificaties', icon: Bell },
   { id: 'mijn_abonnement', label: 'Mijn Abonnement', icon: Crown },
+  { id: 'business_info', label: 'Bedrijfsgegevens', icon: Briefcase },
   { id: 'branding', label: 'Branding', icon: Palette },
   { id: 'settings', label: 'Instellingen', icon: KeySquare },
 ];
@@ -80,7 +82,7 @@ const SIDEBAR_GROUPS = {
   hoofd: { label: 'Hoofd', ids: ['overview', 'locations', 'apartments', 'tenants', 'contracts'] },
   geld: { label: 'Financieel', ids: ['payments', 'invoices', 'payment_plans', 'deposits', 'kasgeld'] },
   ops: { label: 'Operaties', ids: ['maintenance', 'employees', 'notifications'] },
-  account: { label: 'Account', ids: ['mijn_abonnement', 'branding', 'settings'] },
+  account: { label: 'Account', ids: ['mijn_abonnement', 'business_info', 'branding', 'settings'] },
 };
 function groupTabs(tabs) {
   const byId = Object.fromEntries(tabs.map((t) => [t.id, t]));
@@ -1725,6 +1727,7 @@ export default function AdminDashboard() {
           {tab === 'subscriptions' && <Subscriptions />}
           {tab === 'saas_settings' && <SaasSettings />}
           {tab === 'landing_editor' && <LandingEditor />}
+          {tab === 'business_info' && <BusinessInfo />}
           {tab === 'branding' && <Branding />}
           {tab === 'overview' && <Overview />}
           {tab === 'locations' && <Locations />}

@@ -97,28 +97,18 @@ export default function Branding() {
   const save = async () => {
     setSaving(true); setErr(''); setMsg('');
     try {
-      // 1) Save branding (logo/colors/app_name/tagline)
+      // Branding-only: logo / kleur / app_name / tagline. Bedrijfsgegevens
+      // (naam, contact, bank, wallets) worden onder Account → Bedrijfsgegevens
+      // beheerd zodat het visueel duidelijk gescheiden is.
       const { data } = await api.put('/companies/me/branding', {
         app_name: b.app_name || '',
         primary_color: b.primary_color || '',
         logo_url: b.logo_url || '',
         tagline: b.tagline || '',
       });
-      // 2) Save bedrijfsgegevens (name/email/phone/address/banks/wallets)
-      const { data: prof } = await api.put('/companies/me/profile', {
-        name: b.name || '',
-        contact_email: b.contact_email || '',
-        contact_phone: b.contact_phone || '',
-        address: b.address || '',
-        bank_account_sr: b.bank_account_sr || '',
-        bank_account_nl: b.bank_account_nl || '',
-        mope_account: b.mope_account || '',
-        uni5pay_account: b.uni5pay_account || '',
-      });
-      const merged = { ...data, ...prof };
-      setB(merged);
-      applyBranding(merged);
-      setMsg('Opgeslagen! Bedrijfsgegevens en branding zijn direct actief.');
+      setB((prev) => ({ ...prev, ...data }));
+      applyBranding(data);
+      setMsg('Branding opgeslagen.');
       setTimeout(() => setMsg(''), 4000);
     } catch (e) { setErr(formatError(e)); }
     finally { setSaving(false); }
@@ -164,99 +154,11 @@ export default function Branding() {
       <div className="grid md:grid-cols-2 gap-4">
         {/* LEFT: form */}
         <div className="space-y-3">
-          <div className="bg-white border border-slate-200 rounded-2xl p-4">
-            <h3 className="text-sm font-extrabold text-slate-900 mb-3 flex items-center gap-2">
-              <Building2 className="w-4 h-4" /> Bedrijfsgegevens
-            </h3>
-            <label className="block mb-3">
-              <span className="block text-xs font-bold text-slate-700 mb-1">Bedrijfsnaam</span>
-              <input type="text" value={b.name || ''} onChange={(e) => upd('name', e.target.value)}
-                placeholder="bv. SuriRent N.V."
-                data-testid="company-name-input"
-                className="w-full h-10 px-3 border-2 border-slate-200 rounded-lg text-sm focus:border-slate-900 focus:outline-none" />
-              <p className="text-[11px] text-slate-400 mt-1">Verschijnt op kwitanties, contracten en de gouden QR-plaquette.</p>
-            </label>
-            <label className="block mb-3">
-              <span className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1.5">
-                <Mail className="w-3.5 h-3.5" /> Contact e-mail
-              </span>
-              <input type="email" value={b.contact_email || ''} onChange={(e) => upd('contact_email', e.target.value)}
-                placeholder="info@bedrijf.sr"
-                data-testid="company-email-input"
-                className="w-full h-10 px-3 border-2 border-slate-200 rounded-lg text-sm focus:border-slate-900 focus:outline-none" />
-            </label>
-            <label className="block mb-3">
-              <span className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1.5">
-                <Phone className="w-3.5 h-3.5" /> Telefoonnummer
-              </span>
-              <input type="tel" value={b.contact_phone || ''} onChange={(e) => upd('contact_phone', e.target.value)}
-                placeholder="+597 ..."
-                data-testid="company-phone-input"
-                className="w-full h-10 px-3 border-2 border-slate-200 rounded-lg text-sm focus:border-slate-900 focus:outline-none" />
-            </label>
-            <label className="block">
-              <span className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1.5">
-                <MapPin className="w-3.5 h-3.5" /> Adres
-              </span>
-              <input type="text" value={b.address || ''} onChange={(e) => upd('address', e.target.value)}
-                placeholder="Straat 123, Paramaribo"
-                data-testid="company-address-input"
-                className="w-full h-10 px-3 border-2 border-slate-200 rounded-lg text-sm focus:border-slate-900 focus:outline-none" />
-            </label>
-          </div>
-
-          <div className="bg-white border border-slate-200 rounded-2xl p-4">
-            <h3 className="text-sm font-extrabold text-slate-900 mb-3 flex items-center gap-2">
-              <Landmark className="w-4 h-4" /> Bankrekeningen voor huurders
-            </h3>
-            <p className="text-[11px] text-slate-500 mb-3 leading-relaxed">
-              Huurders kiezen bij bankoverschrijving uit welk land ze betalen. De juiste rekening wordt dan automatisch getoond.
+          <div className="bg-sky-50 border border-sky-200 rounded-2xl p-3">
+            <p className="text-xs text-sky-800 leading-relaxed">
+              <strong>Tip:</strong> Bedrijfsnaam, contact en bankrekeningen kun je
+              nu beheren onder <strong>Account → Bedrijfsgegevens</strong>.
             </p>
-            <label className="block mb-3">
-              <span className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1.5">
-                🇸🇷 Suriname
-              </span>
-              <input type="text" value={b.bank_account_sr || ''} onChange={(e) => upd('bank_account_sr', e.target.value)}
-                placeholder="bv. DSB Bank — 12.34.56.789 (Bedrijfsnaam)"
-                data-testid="company-bank-sr-input"
-                className="w-full h-10 px-3 border-2 border-slate-200 rounded-lg text-sm focus:border-slate-900 focus:outline-none" />
-              <p className="text-[10px] text-slate-400 mt-0.5">Bank + rekeningnummer + tenaamstelling</p>
-            </label>
-            <label className="block">
-              <span className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1.5">
-                🇳🇱 Nederland
-              </span>
-              <input type="text" value={b.bank_account_nl || ''} onChange={(e) => upd('bank_account_nl', e.target.value)}
-                placeholder="bv. NL12RABO0123456789 (Bedrijfsnaam)"
-                data-testid="company-bank-nl-input"
-                className="w-full h-10 px-3 border-2 border-slate-200 rounded-lg text-sm focus:border-slate-900 focus:outline-none" />
-              <p className="text-[10px] text-slate-400 mt-0.5">IBAN + tenaamstelling</p>
-            </label>
-          </div>
-
-          <div className="bg-white border border-slate-200 rounded-2xl p-4">
-            <h3 className="text-sm font-extrabold text-slate-900 mb-3 flex items-center gap-2">
-              📱 Mobile wallets voor huurders
-            </h3>
-            <p className="text-[11px] text-slate-500 mb-3 leading-relaxed">
-              Huurders scannen een QR-code in hun Mope of Uni5Pay app, betalen, en uploaden een schermafdruk als bewijs.
-            </p>
-            <label className="block mb-3">
-              <span className="block text-xs font-bold text-slate-700 mb-1">Mope rekening</span>
-              <input type="text" value={b.mope_account || ''} onChange={(e) => upd('mope_account', e.target.value)}
-                placeholder="bv. Mope ID of telefoonnummer +597 ..."
-                data-testid="company-mope-input"
-                className="w-full h-10 px-3 border-2 border-slate-200 rounded-lg text-sm focus:border-slate-900 focus:outline-none" />
-              <p className="text-[10px] text-slate-400 mt-0.5">Mope ID, merchant-code of telefoonnummer waarmee huurders kunnen betalen</p>
-            </label>
-            <label className="block">
-              <span className="block text-xs font-bold text-slate-700 mb-1">Uni5Pay rekening</span>
-              <input type="text" value={b.uni5pay_account || ''} onChange={(e) => upd('uni5pay_account', e.target.value)}
-                placeholder="bv. Uni5Pay ID of merchant code"
-                data-testid="company-uni5pay-input"
-                className="w-full h-10 px-3 border-2 border-slate-200 rounded-lg text-sm focus:border-slate-900 focus:outline-none" />
-              <p className="text-[10px] text-slate-400 mt-0.5">Uni5Pay ID of merchant-code</p>
-            </label>
           </div>
 
           <div className="bg-white border border-slate-200 rounded-2xl p-4">
