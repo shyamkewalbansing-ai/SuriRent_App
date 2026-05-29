@@ -1372,12 +1372,13 @@ async def _nano_banana_edit_plate(template_bytes: bytes, *, company_name: str,
         f"3. Replace the large bottom heading (currently 'HUIS 7B') with: '{huis_label}'\n"
         f"4. Replace the address line with pin icon (currently 'Kewalbansingweg 7 B') with: "
         f"'{address_clean or 'Adres niet ingevuld'}'\n"
-        "5. CRITICAL: Remove the existing QR code pattern entirely. Where the QR "
-        "code currently is, render only the polished gold rectangular frame with "
-        "a COMPLETELY FLAT SOLID BLACK INTERIOR (same warm-black as the plaque "
-        "background). Do NOT draw any QR pixels, dots, squares, or pattern inside "
-        "the frame — leave it as a clean empty black rectangle. We will overlay "
-        "the real scannable QR code on top afterwards.\n"
+        "5. CRITICAL: Completely REMOVE both the existing QR code pattern AND its "
+        "gold frame from the top-right area. In that entire region, render only "
+        "the flat warm-black plaque background with the same leather/grain texture "
+        "as the rest of the plaque — no QR pixels, no frame, no border, no "
+        "rectangle, nothing. We will draw a new QR code with its own gold frame "
+        "on top afterwards. Leave that ~340x310 px area in the top-right corner "
+        "as a clean empty black surface.\n"
         "6. Keep the small 'Scan voor mijn huurportaal / Betalen \u00b7 Kwitanties \u00b7 Onderhoud melden' "
         "text under the QR exactly as it appears.\n\n"
         "Output: a single full-resolution photorealistic PNG of the edited plaque, "
@@ -1448,17 +1449,41 @@ async def luxury_plate_pdf_ai(*, tenant_name: str, apartment_number: str,
     PLATE_BLACK = (14, 13, 10)
     # QR-frame coördinaten in het template
     qr_x0, qr_y0, qr_x1, qr_y1 = 1120, 160, 1395, 440
-    # STAP 2a: Smalle zwarte mask alléén binnen het verwachte QR-frame, om
-    # te zorgen dat eventuele AI-resten van het QR-patroon verdwijnen, zonder
-    # over de bedrijfsnaam of de gouden buitenrand heen te schilderen.
-    # We blijven bewust BINNEN de plek waar de AI het gouden QR-frame
-    # behoort te tekenen, zodat dat frame zichtbaar rondom de overlay blijft.
-    inner_margin = 6  # vlak binnen het frame
-    draw.rectangle(
-        [qr_x0 + inner_margin, qr_y0 + inner_margin,
-         qr_x1 - inner_margin, qr_y1 - inner_margin],
-        fill=PLATE_BLACK,
-    )
+    # STAP 2a: Mask het hele QR-gebied zwart (iets ruimer dan het frame zodat
+    # eventueel AI-restant van frame/QR verdwijnt). We blijven binnen veilige
+    # grenzen: rechts/onder dicht bij de plaquette-rand, links niet over de
+    # bedrijfsnaam (die op 2 regels staat tot ~x=1060) heen.
+    safety = 16
+    mask_x0 = qr_x0 - safety
+    mask_y0 = qr_y0 - safety
+    mask_x1 = qr_x1 + safety
+    mask_y1 = qr_y1 + safety
+    draw.rectangle([mask_x0, mask_y0, mask_x1, mask_y1], fill=PLATE_BLACK)
+
+    # STAP 2b: Teken zelf een 3D-achtig gouden frame op vaste coördinaten
+    # zodat het altijd uitgelijnd is met de QR-overlay. Meerdere concentrische
+    # lijnen met goud-tinten suggereren een bevel/emboss-effect.
+    GOLD_LIGHT = (240, 210, 130)
+    GOLD_DARK = (140, 110, 50)
+    # 6px dik frame opgebouwd uit: 1px donker (buiten) + 4px goud + 1px licht (binnen)
+    # buitenste donkere schaduwlijn
+    draw.rectangle([qr_x0, qr_y0, qr_x1, qr_y1], outline=GOLD_DARK, width=1)
+    # 4 goud-lijnen voor body
+    for k in range(1, 5):
+        draw.rectangle(
+            [qr_x0 + k, qr_y0 + k, qr_x1 - k, qr_y1 - k],
+            outline=GOLD, width=1,
+        )
+    # binnenste licht-goud hooglicht op boven + linkerrand (bevel boven-links)
+    draw.line([(qr_x0 + 5, qr_y0 + 5), (qr_x1 - 5, qr_y0 + 5)],
+              fill=GOLD_LIGHT, width=1)  # boven
+    draw.line([(qr_x0 + 5, qr_y0 + 5), (qr_x0 + 5, qr_y1 - 5)],
+              fill=GOLD_LIGHT, width=1)  # links
+    # binnenste donker-goud op onder + rechterrand (schaduw onder-rechts)
+    draw.line([(qr_x0 + 5, qr_y1 - 5), (qr_x1 - 5, qr_y1 - 5)],
+              fill=GOLD_DARK, width=1)  # onder
+    draw.line([(qr_x1 - 5, qr_y0 + 5), (qr_x1 - 5, qr_y1 - 5)],
+              fill=GOLD_DARK, width=1)  # rechts
     # STAP 2c: De echte scanbare QR-code centreren binnen het mask-paneel.
     inner = 14
     qr_box_size = qr_x1 - qr_x0 - 2 * inner
