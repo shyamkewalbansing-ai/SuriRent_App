@@ -14,9 +14,14 @@ api.interceptors.request.use((config) => {
   const tenantToken = localStorage.getItem('tenant_token');
   const activeCompanyId = localStorage.getItem('active_company_id');
   const url = config.url || '';
+  // Token-keuze op basis van endpoint, NIET op basis van wat als eerste in
+  // localStorage staat. Anders zou een stale admin_token de voorkeur krijgen
+  // op kiosk-endpoints en alles met 401 falen (klassieke bug na fresh PIN
+  // entry waarbij oude admin sessie nog blijft hangen).
   if (url.startsWith('/tenant-portal/') && tenantToken) {
     config.headers.Authorization = `Bearer ${tenantToken}`;
-  } else if ((url.startsWith('/kiosk/payments') || url.startsWith('/kiosk/customer-display')) && kioskToken) {
+  } else if (url.startsWith('/kiosk/') && kioskToken) {
+    // Élke /kiosk/* endpoint gebruikt PRIMAIR het kiosk_token.
     config.headers.Authorization = `Bearer ${kioskToken}`;
   } else if (adminToken) {
     config.headers.Authorization = `Bearer ${adminToken}`;
