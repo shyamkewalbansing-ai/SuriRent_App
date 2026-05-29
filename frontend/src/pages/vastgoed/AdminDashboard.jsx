@@ -9,7 +9,7 @@ import {
   FileText, ShieldCheck, Wrench, FileSignature, Bell, Briefcase, Mail,
   Zap, Power, Menu, MoreHorizontal, MapPin, Crown, Paintbrush, Palette,
   Gauge, Activity, Clock as ClockIcon, Monitor, QrCode, Printer,
-  ReceiptText, UsersRound, Building, Calendar,
+  ReceiptText, UsersRound, Building, Calendar, Sparkles,
 } from 'lucide-react';
 import { api, formatError, fmtMoney, MONTHS_NL, openAuthedPdf } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
@@ -31,6 +31,7 @@ import SaasSettings from './admin/SaasSettings';
 import LandingEditor from './admin/LandingEditor';
 import Branding from './admin/Branding';
 import BusinessInfo from './admin/BusinessInfo';
+import SetupWizard from './admin/SetupWizard';
 import MyUrlCard from '../../components/MyUrlCard';
 import MijnAbonnement from './admin/MijnAbonnement';
 import TrialBanner from '../../components/TrialBanner';
@@ -61,6 +62,7 @@ const BASE_TABS = [
   { id: 'employees', label: 'Werknemers', icon: Users },
   { id: 'notifications', label: 'Notificaties', icon: Bell },
   { id: 'mijn_abonnement', label: 'Mijn Abonnement', icon: Crown },
+  { id: 'setup_wizard', label: 'Setup Wizard', icon: Sparkles },
   { id: 'business_info', label: 'Bedrijfsgegevens', icon: Briefcase },
   { id: 'branding', label: 'Branding', icon: Palette },
   { id: 'settings', label: 'Instellingen', icon: KeySquare },
@@ -82,7 +84,7 @@ const SIDEBAR_GROUPS = {
   hoofd: { label: 'Hoofd', ids: ['overview', 'locations', 'apartments', 'tenants', 'contracts'] },
   geld: { label: 'Financieel', ids: ['payments', 'invoices', 'payment_plans', 'deposits', 'kasgeld'] },
   ops: { label: 'Operaties', ids: ['maintenance', 'employees', 'notifications'] },
-  account: { label: 'Account', ids: ['mijn_abonnement', 'business_info', 'branding', 'settings'] },
+  account: { label: 'Account', ids: ['mijn_abonnement', 'setup_wizard', 'business_info', 'branding', 'settings'] },
 };
 function groupTabs(tabs) {
   const byId = Object.fromEntries(tabs.map((t) => [t.id, t]));
@@ -1727,6 +1729,7 @@ export default function AdminDashboard() {
           {tab === 'subscriptions' && <Subscriptions />}
           {tab === 'saas_settings' && <SaasSettings />}
           {tab === 'landing_editor' && <LandingEditor />}
+          {tab === 'setup_wizard' && <SetupWizard />}
           {tab === 'business_info' && <BusinessInfo />}
           {tab === 'branding' && <Branding />}
           {tab === 'overview' && <Overview />}

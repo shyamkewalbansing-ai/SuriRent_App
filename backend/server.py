@@ -2036,6 +2036,50 @@ async def put_my_company_profile(
     return _company_branding_response(c)
 
 
+@api.get("/companies/me/setup-status")
+async def get_company_setup_status(user=Depends(require_role("admin"))):
+    """Geeft een overzicht van wat er nog geconfigureerd moet worden voor een
+    bedrijf om volledig functioneel te zijn. Gebruikt door de Setup Wizard
+    om te bepalen welke stappen al klaar zijn en waar de wizard moet starten.
+    """
+    cid = company_id_of(user)
+    if not cid:
+        raise HTTPException(status_code=400, detail="Geen actief bedrijf")
+    c = await db.companies.find_one({"id": cid}, {"_id": 0}) or {}
+
+    has_name = bool((c.get("name") or "").strip()) and \
+        (c.get("name") or "").strip().lower() not in ("nieuw bedrijf", "demo", "company")
+    has_contact = bool((c.get("contact_email") or "").strip()) or \
+        bool((c.get("contact_phone") or "").strip())
+    has_bank = bool((c.get("bank_account_sr") or "").strip()) or \
+        bool((c.get("bank_account_nl") or "").strip())
+    has_wallet = bool((c.get("mope_account") or "").strip()) or \
+        bool((c.get("uni5pay_account") or "").strip())
+
+    apt_count = await db.apartments.count_documents({"company_id": cid})
+    tenant_count = await db.tenants.count_documents({"company_id": cid})
+
+    steps = [
+        {"id": "profile", "label": "Bedrijfsgegevens", "done": bool(has_name and has_contact)},
+        {"id": "bank", "label": "Bankrekening", "done": has_bank},
+        {"id": "wallet", "label": "Mobile wallet (Mope/Uni5Pay)", "done": has_wallet},
+        {"id": "apartment", "label": "Eerste appartement", "done": apt_count > 0},
+        {"id": "tenant", "label": "Eerste huurder", "done": tenant_count > 0},
+    ]
+    completed = sum(1 for s in steps if s["done"])
+    return {
+        "complete": completed == len(steps),
+        "completed": completed,
+        "total": len(steps),
+        "percent": round(completed / len(steps) * 100),
+        "steps": steps,
+        "next_step": next((s["id"] for s in steps if not s["done"]), None),
+        "counts": {"apartments": apt_count, "tenants": tenant_count},
+    }
+
+
+
+
 @api.post("/companies/me/branding/upload")
 async def upload_branding_asset(file: UploadFile = File(...),
                                  user=Depends(require_role("admin"))):
