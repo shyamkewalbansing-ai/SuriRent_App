@@ -867,11 +867,8 @@ def onboarding_pdf(*, company_name: str, contact_name: str, email: str,
         ParagraphStyle("Link", parent=s["Body"], fontSize=10, leading=13, wordWrap="CJK"),
     ))
     if subdomain_url:
-        elements.append(Spacer(1, 4))
-        elements.append(Paragraph(
-            f'<font color="#6b7280" size="9">Zodra wildcard DNS actief is, kunt u ook gebruik maken van uw eigen subdomein:<br/><b>{subdomain_url}</b></font>',
-            s["Body"],
-        ))
+        # Legacy parameter — subdomein-feature is verwijderd. Genegeerd.
+        pass
 
     elements.append(Spacer(1, 14))
 

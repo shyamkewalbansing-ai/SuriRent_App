@@ -1,7 +1,7 @@
 // Per-company branding helpers.
 // Identification strategy (in priority order):
 //   1. URL: ?c=<slug> or /c/<slug> in pathname  → highest priority (a direct link)
-//   2. Hostname subdomain (klantnaam.app.surirent.sr)
+//   2. Backend host-based lookup via /public/branding-by-host (custom domain)
 //   3. localStorage `pwa_company_slug` from previous visit
 // Branding is fetched from /api/public/companies/{slug}/branding (no auth).
 
@@ -35,25 +35,10 @@ function readFromUrl() {
   return '';
 }
 
-function readFromSubdomain() {
-  try {
-    const host = window.location.hostname;
-    // Match e.g. klantnaam.app.surirent.sr   (3+ segments, first = candidate slug)
-    // Skip when host has no dots (localhost), or first segment is 'www'/'app'.
-    const parts = host.split('.');
-    if (parts.length < 3) return '';
-    const first = parts[0].toLowerCase();
-    if (!first || first === 'www' || first === 'app') return '';
-    // Only accept slug-style first segments (letters/digits/hyphens).
-    if (!/^[a-z0-9][a-z0-9-]*$/.test(first)) return '';
-    return first;
-  } catch { /* ignore */ }
-  return '';
-}
-
-/** Detect candidate company slug from URL → subdomain → localStorage. */
+/** Detect candidate company slug from URL → localStorage.
+ *  (Custom-domain branding is resolved server-side via fetchBrandingByHost.) */
 export function detectCompanySlug() {
-  return readFromUrl() || readFromSubdomain() || getStoredSlug();
+  return readFromUrl() || getStoredSlug();
 }
 
 /** Ask the backend who we are based on the Host header (useful when

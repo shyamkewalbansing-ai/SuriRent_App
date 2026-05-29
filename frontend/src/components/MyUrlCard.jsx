@@ -3,31 +3,6 @@ import { Copy, Check, Globe, Loader2, AlertCircle, ExternalLink, RefreshCw, Shar
 import { api, formatError, openAuthedPdf } from '../lib/api';
 import QrCodeModal from './QrCodeModal';
 
-const STATUS_META = {
-  active: { tone: 'emerald', label: 'Wildcard DNS actief', icon: Check,
-    desc: 'Klanten kunnen uw eigen subdomein gebruiken.' },
-  dns_missing: { tone: 'amber', label: 'Wildcard DNS nog niet ingesteld', icon: AlertCircle,
-    desc: 'Tot DNS actief is, gebruikt u de URL met ?c=… (werkt al direct).' },
-  error: { tone: 'rose', label: 'Subdomein gaf een fout terug', icon: AlertCircle,
-    desc: 'Het subdomein is bereikbaar, maar de health-check faalde.' },
-  unknown: { tone: 'slate', label: 'Status onbekend', icon: Loader2,
-    desc: 'Live check kon niet uitgevoerd worden.' },
-};
-
-function ToneBadge({ tone, children, icon: Icon }) {
-  const cls = {
-    emerald: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-    amber: 'bg-amber-50 text-amber-800 border-amber-200',
-    rose: 'bg-rose-50 text-rose-700 border-rose-200',
-    slate: 'bg-slate-50 text-slate-700 border-slate-200',
-  }[tone] || 'bg-slate-50 text-slate-700 border-slate-200';
-  return (
-    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-extrabold ${cls}`}>
-      {Icon && <Icon className="w-3 h-3" />}{children}
-    </span>
-  );
-}
-
 function CopyButton({ value, testid }) {
   const [copied, setCopied] = useState(false);
   const copy = async () => {
@@ -125,7 +100,7 @@ export default function MyUrlCard({ compact = false }) {
   }
   if (!info) return null;
 
-  const meta = STATUS_META[info.dns_status] || STATUS_META.unknown;
+  const hasCustomDomain = !!info.custom_domain_url;
 
   return (
     <>
@@ -142,7 +117,9 @@ export default function MyUrlCard({ compact = false }) {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <ToneBadge tone={meta.tone} icon={meta.icon}>{meta.label}</ToneBadge>
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-extrabold bg-emerald-50 text-emerald-700 border-emerald-200">
+            <Check className="w-3 h-3" />Branded URL · werkt overal
+          </span>
           <button type="button" onClick={load}
             data-testid="my-url-card-refresh"
             className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center transition">
@@ -151,34 +128,38 @@ export default function MyUrlCard({ compact = false }) {
         </div>
       </div>
 
-      <p className="text-xs text-white/70 mb-4 max-w-2xl">{meta.desc}</p>
+      <p className="text-xs text-white/70 mb-4 max-w-2xl">
+        {hasCustomDomain
+          ? 'Uw eigen domein is actief. Klanten kunnen ook het standaard branded pad gebruiken.'
+          : 'Deel deze branded link met uw huurders. Wilt u een eigen domein? Stel het in via Instellingen → Eigen domein.'}
+      </p>
 
       <div className="space-y-3">
-        {/* Subdomain URL (preferred when DNS active) */}
-        {info.subdomain_url && (
-          <div className="bg-white/8 backdrop-blur border border-white/10 rounded-xl p-3 flex items-center gap-2">
-            <div className="shrink-0 w-9 h-9 rounded-lg bg-[#FF5C00]/20 flex items-center justify-center">
-              <Globe className="w-4 h-4 text-orange-200" />
+        {/* Custom domain (Settings → Eigen domein, DNS-verified) — primary */}
+        {hasCustomDomain && (
+          <div className="bg-white/10 backdrop-blur border border-emerald-300/30 rounded-xl p-3 flex items-center gap-2">
+            <div className="shrink-0 w-9 h-9 rounded-lg bg-emerald-500/20 flex items-center justify-center">
+              <Globe className="w-4 h-4 text-emerald-200" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-[10px] uppercase tracking-widest font-black text-white/60">Eigen subdomein {info.dns_status === 'active' ? '· aanbevolen' : '· toekomstig'}</p>
-              <p className="font-mono text-xs sm:text-sm text-white truncate" data-testid="my-url-subdomain">{info.subdomain_url}</p>
+              <p className="text-[10px] uppercase tracking-widest font-black text-white/70">Eigen domein · aanbevolen</p>
+              <p className="font-mono text-xs sm:text-sm text-white truncate" data-testid="my-url-custom-domain">{info.custom_domain_url}</p>
             </div>
-            <button type="button" onClick={() => setQr({ kind: 'login', label: 'Login (subdomein)', url: info.subdomain_url })}
-              data-testid="my-url-subdomain-qr" title="Toon QR-code"
+            <button type="button" onClick={() => setQr({ kind: 'login', label: 'Eigen domein', url: info.custom_domain_url })}
+              data-testid="my-url-custom-domain-qr" title="Toon QR-code"
               className="shrink-0 h-9 w-9 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center">
               <QrCode className="w-4 h-4" />
             </button>
-            <a href={info.subdomain_url} target="_blank" rel="noreferrer"
-              data-testid="my-url-subdomain-open"
+            <a href={info.custom_domain_url} target="_blank" rel="noreferrer"
+              data-testid="my-url-custom-domain-open"
               className="shrink-0 h-9 px-3 rounded-lg bg-white/10 hover:bg-white/20 text-xs font-bold inline-flex items-center gap-1.5">
               <ExternalLink className="w-3.5 h-3.5" /> Open
             </a>
-            <CopyButton value={info.subdomain_url} testid="my-url-subdomain-copy" />
+            <CopyButton value={info.custom_domain_url} testid="my-url-custom-domain-copy" />
           </div>
         )}
 
-        {/* Path-based branded URL — werkt altijd, geen DNS nodig */}
+        {/* Path-based branded URL — werkt altijd */}
         {info.path_url && (
           <div className="bg-white/8 backdrop-blur border border-white/10 rounded-xl p-3 flex items-center gap-2">
             <div className="shrink-0 w-9 h-9 rounded-lg bg-sky-500/20 flex items-center justify-center">
@@ -237,13 +218,6 @@ export default function MyUrlCard({ compact = false }) {
           </div>
         )}
       </div>
-
-      {info.dns_status === 'dns_missing' && !compact && (
-        <p className="text-[11px] text-amber-200/80 mt-4 leading-relaxed">
-          Heeft je hostingsbeheerder de DNS al ingesteld? Geef het 5-15 minuten voor verspreiding,
-          klik dan op de refresh-knop. Tot die tijd kunnen klanten gewoon de universele link gebruiken.
-        </p>
-      )}
     </div>
     <QrCodeModal open={!!qr} onClose={() => setQr(null)}
       kind={qr?.kind} label={qr?.label} url={qr?.url} brandColor="#FF5C00" />

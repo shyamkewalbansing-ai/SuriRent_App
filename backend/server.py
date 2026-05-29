@@ -884,23 +884,13 @@ async def register(body: RegisterIn, response: Response):
         try:
             from email_service import send_email as _send_smtp, send_platform_email, wrap_template
             app_url = (os.environ.get("APP_PUBLIC_URL") or "https://app.surirent.sr").rstrip("/")
-            saas_app_domain = (os.environ.get("SAAS_APP_DOMAIN") or app_url.replace("https://", "").replace("http://", "")).strip("/").lower()
             slug = c.get("slug")
-            # Two URLs: the always-works query link + the personalised subdomain link
             login_query_url = f"{app_url}/login?c={slug}"
-            login_subdomain_url = f"https://{slug}.{saas_app_domain}" if slug and saas_app_domain else None
             plan_info = PLAN_PRICES.get(c.get("plan", "starter"), PLAN_PRICES["starter"])
             pin_row = ""
             if (body.kiosk_pin or "").isdigit() and len(body.kiosk_pin) == 4:
                 pin_row = f"<tr><td>Kiosk PIN</td><td>{body.kiosk_pin}</td></tr>"
             sub_block = ""
-            if login_subdomain_url:
-                sub_block = f"""
-                <p style="margin-top:18px;font-size:13px;color:#475569;">
-                  Of gebruik later uw eigen subdomein (zodra DNS actief is):
-                  <br /><a href="{login_subdomain_url}" style="color:#FF5C00;font-weight:700;text-decoration:none;">{login_subdomain_url}</a>
-                </p>
-                """
             # Generate the onboarding PDF + inline QR for the email body
             try:
                 qr_png_inline = _make_qr_png(login_query_url, size_px=320)
@@ -925,7 +915,7 @@ async def register(body: RegisterIn, response: Response):
                     plan_name=plan_info["name"],
                     plan_price_text=f"{plan_info['currency']} {int(plan_info['amount']):,}/maand".replace(",", "."),
                     login_url=login_query_url,
-                    subdomain_url=login_subdomain_url,
+                    subdomain_url=None,
                     kiosk_pin=kiosk_pin_val,
                     primary_hex=primary_hex,
                 )
@@ -2109,9 +2099,10 @@ async def upload_branding_asset(file: UploadFile = File(...),
 
 @api.get("/companies/me/url-info")
 async def get_my_url_info(request: Request, user=Depends(get_current_user)):
-    """Return all login-URL variants for the current company + live DNS-status
-    for the wildcard subdomain. SAAS_APP_DOMAIN env overrides runtime host."""
-    import httpx as _httpx
+    """Return all login-URL variants for the current company. Het branded pad
+    `/c/<slug>/…` is altijd primair; eigen subdomein-feature is verwijderd.
+    Bedrijven die een eigen domein willen, configureren dat in Instellingen →
+    Eigen domein (CNAME → app host)."""
     cid = company_id_of(user)
     if not cid:
         raise HTTPException(status_code=400, detail="Geen actief bedrijf")
@@ -2123,49 +2114,45 @@ async def get_my_url_info(request: Request, user=Depends(get_current_user)):
     host = (request.headers.get("x-forwarded-host") or request.headers.get("host") or "").lower().split(":")[0].strip()
     forwarded_proto = (request.headers.get("x-forwarded-proto") or "").split(",")[0].strip().lower()
     scheme = forwarded_proto or "https"
-    # Zie comment in _company_base_url: GEEN slug-prefix strippen — dat brak
-    # preview/non-prod waar de host meer dan 3 DNS-componenten heeft maar geen
-    # company-subdomein is. Path bevat al `/c/<slug>/…`.
     app_domain = (os.environ.get("SAAS_APP_DOMAIN") or "").strip().lower() or host
     base_url = f"{scheme}://{app_domain}" if app_domain else ""
     query_url = f"{base_url}/login?c={slug}" if base_url else ""
     path_url = f"{base_url}/c/{slug}" if base_url else ""
     kiosk_url = f"{base_url}/c/{slug}/kiosk" if base_url else ""
     tenant_kiosk_url = f"{base_url}/c/{slug}/kiosk/huurder" if base_url else ""
-    # tenant_portal_url linkt nu naar dezelfde Huurder Kiosk — de standalone
-    # /huurder route is afgeschaft, huurders loggen alleen nog via QR + PIN in.
     tenant_portal_url = tenant_kiosk_url
     customer_display_url = f"{base_url}/c/{slug}/kiosk/klant" if base_url else ""
-    subdomain_url = f"{scheme}://{slug}.{app_domain}" if slug and app_domain else None
 
-    dns_status = "unknown"
-    dns_error = None
-    if subdomain_url:
-        try:
-            async with _httpx.AsyncClient(timeout=3, follow_redirects=False, verify=True) as cli:
-                r = await cli.get(f"{subdomain_url}/api/health")
-                dns_status = "active" if r.status_code < 500 else "error"
-        except _httpx.ConnectError:
-            dns_status = "dns_missing"
-            dns_error = "Subdomein niet bereikbaar — DNS wildcard nog niet ingesteld."
-        except _httpx.HTTPError as e:
-            dns_status = "error"
-            dns_error = str(e)[:120]
+    # Custom domain (uit Instellingen → Eigen domein). Toon als primary wanneer
+    # admin het heeft ingesteld + DNS geverifieerd.
+    custom_domain = None
+    try:
+        cs = await db.company_settings.find_one(
+            {"company_id": cid}, {"_id": 0, "domain": 1}
+        ) or {}
+        dom = (cs.get("domain") or {})
+        if dom.get("enabled") and dom.get("dns_verified") and dom.get("custom_domain"):
+            custom_domain = (dom.get("custom_domain") or "").strip().lower()
+    except Exception:
+        custom_domain = None
+    custom_domain_url = f"{scheme}://{custom_domain}" if custom_domain else None
 
     return {
         "slug": slug,
         "company_name": c.get("name"),
-        "primary_url": subdomain_url if dns_status == "active" else (path_url or query_url),
+        "primary_url": custom_domain_url or path_url or query_url,
         "query_url": query_url,
         "path_url": path_url,
         "kiosk_url": kiosk_url,
         "tenant_kiosk_url": tenant_kiosk_url,
         "tenant_portal_url": tenant_portal_url,
         "customer_display_url": customer_display_url,
-        "subdomain_url": subdomain_url,
+        "custom_domain_url": custom_domain_url,
         "app_domain": app_domain,
-        "dns_status": dns_status,
-        "dns_error": dns_error,
+        # Legacy velden — leeg/none voor backward-compat met oude frontends.
+        "subdomain_url": None,
+        "dns_status": "na",
+        "dns_error": None,
     }
 
 
