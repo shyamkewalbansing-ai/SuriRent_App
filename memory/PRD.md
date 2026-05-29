@@ -1,5 +1,27 @@
 # Vastgoed Kiosk - PRD
 
+## Session 2026-02-26 — Kiosk Financieel: alle open facturen + Superadmin OCR-inbox ✅
+
+### Bug fix: Kiosk Financieel overzicht toont nu ALLE open facturen
+- **Backend `kiosk_tenant_overview` uitgebreid** met `open_invoices[]` + `open_invoices_total`. Haalt alle facturen op met `status != paid` voor de huurder, gesorteerd op periode_year/month/due_date. Voor elk: outstanding = amount_due - amount_paid.
+- **Frontend `KioskLayout.FinancialOverview`** rendert nu één regel per open factuur (`Huur Januari 2026` SRD 6.000, `Huur Februari 2026` SRD 6.000, ...) i.p.v. één samenvattingsregel "Openstaande huur" met alleen next_period label.
+- Backwards-compatible: huurders zonder facturen vallen terug op de oude balance-berekening.
+- Geverifieerd: huurder Melano (5 open facturen Jan-Mei 2026) toont alle 5 maanden + Totaal openstaand SRD 30.000,00.
+
+### Superadmin OCR-goedkeurings-inbox
+- **3 nieuwe backend endpoints** (allen superadmin-only):
+  - `GET /superadmin/saas-pending-approvals` → lijst van saas_payment_requests met status `pending_approval`, joined met company-naam en factuur-info.
+  - `GET /superadmin/saas-bank-statement/{id}` → cross-tenant download van bankafschrift voor preview (returnt blob).
+  - `POST /superadmin/saas-payment-requests/{id}/approve` → activeert het bedrijf via `_record_saas_payment_manual()`.
+  - `POST /superadmin/saas-payment-requests/{id}/reject` → markeert als afgewezen met optionele reden.
+- **Frontend Subscriptions.jsx** nieuwe tab "OCR-goedkeuring" met badge-count (amber wanneer >0). Toont per rij:
+  - Bedrijfsnaam + slug
+  - 2-koloms vergelijking "Verwacht (factuur)" vs "OCR-resultaat" met confidence%
+  - Knoppen: Bekijk afschrift (blob fetch → modal met img/PDF iframe), Afwijzen (prompt reden), Goedkeuren (confirm + activeren).
+- Geverifieerd visueel: 2 mismatches getoond met juiste data, preview modal opent correct.
+
+
+
 ## Session 2026-02-26 — SaaS Abonnement OCR Auto-approve voor Bankoverschrijving ✅
 - **Nieuw backend endpoint** `POST /api/billing/me/bank-confirm` (multipart): admin uploadt screenshot/PDF van bankoverschrijving voor zijn lopende SaaS-factuur.
   1. Bestand (≤5MB, JPG/PNG/WEBP/PDF) opgeslagen in `bank_statements` collectie met `kind: 'saas_billing'`.

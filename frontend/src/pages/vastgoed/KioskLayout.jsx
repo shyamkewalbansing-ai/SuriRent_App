@@ -258,15 +258,41 @@ function TenantOverview({ apartment, onBack, onPay }) {
 
   const { tenant, apartment: apt, balance, credit_balance: credit = 0 } = data;
   const internet = Number(tenant.internet_amount || 0);
-  const openRent = balance.balance > 0 ? balance.balance : 0;
+  // Open facturen vanuit de backend (sinds 2026-02-26). Toon één regel per
+  // open factuur i.p.v. één samenvattingsregel met alleen `next_period`,
+  // zodat huurder/medewerker direct zien welke maanden nog openstaan.
+  const openInvoices = Array.isArray(data.open_invoices) ? data.open_invoices : [];
+  const openInvoicesTotal = Number(data.open_invoices_total || 0);
+  const openRentLegacy = balance.balance > 0 ? balance.balance : 0;
+  // Gebruik openInvoices-totaal wanneer er facturen zijn, anders val terug
+  // op de oude balance-berekening (achterwaartse compatibiliteit met huurders
+  // zonder facturen).
+  const openRent = openInvoices.length > 0 ? openInvoicesTotal : openRentLegacy;
   const totalDue = openRent + internet;
   const allPaid = totalDue <= 0;
   const cur = balance.currency || apt.currency || 'SRD';
 
+  // Bouw één regel per open factuur. Backwards-compat: wanneer er geen
+  // facturen zijn, behouden we het oude gedrag (samenvatting van balance).
+  const invoiceItems = openInvoices.length > 0
+    ? openInvoices.map((inv) => ({
+        key: `inv-${inv.id}`,
+        label: inv.period_month && inv.period_year
+          ? `Huur ${MONTHS_NL[inv.period_month - 1]} ${inv.period_year}`
+          : (inv.label || 'Openstaande factuur'),
+        value: inv.outstanding,
+        icon: Wallet,
+        highlight: true,
+        sub: inv.due_date ? `Vervaldatum ${new Date(inv.due_date).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })}` : '',
+      }))
+    : (openRentLegacy > 0 ? [{
+        key: 'open', label: 'Openstaande huur', value: openRentLegacy, icon: Wallet, highlight: true,
+        sub: balance.next_period ? `${MONTHS_NL[balance.next_period.month - 1]} ${balance.next_period.year}` : '',
+      }] : []);
+
   const items = [
     { key: 'rent', label: 'Maandhuur', value: apt.rent_amount, icon: Home },
-    ...(openRent > 0 ? [{ key: 'open', label: 'Openstaande huur', value: openRent, icon: Wallet, highlight: true,
-        sub: balance.next_period ? `${MONTHS_NL[balance.next_period.month - 1]} ${balance.next_period.year}` : '' }] : []),
+    ...invoiceItems,
     { key: 'svc', label: 'Servicekosten', value: 0, icon: FileText, muted: true },
     { key: 'fines', label: 'Boetes', value: 0, icon: FileText, muted: true },
     { key: 'internet', label: 'Internet', value: internet, icon: Wifi, muted: internet === 0 },

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Building2, Users, Loader2, TrendingUp, Clock, AlertCircle, CheckCircle, XCircle,
   Banknote, Receipt, Search, Mail, Phone, MoreVertical, Plus, X, Check, Calendar,
-  Pencil, ArrowRight, Crown, LogIn, Landmark, CreditCard,
+  Pencil, ArrowRight, Crown, LogIn, Landmark, CreditCard, ScanLine, FileImage,
 } from 'lucide-react';
 import { api, formatError } from '../../../lib/api';
 import { useAuth } from '../../../lib/auth';
@@ -380,23 +380,28 @@ export default function Subscriptions() {
   const [companies, setCompanies] = useState([]);
   const [invoices, setInvoices] = useState([]);
   const [payments, setPayments] = useState([]);
+  const [pending, setPending] = useState([]);   // OCR-mismatch wachtend op handmatige goedkeuring
   const [tab, setTab] = useState('companies');
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
   const [selected, setSelected] = useState(null);
   const [showPay, setShowPay] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [previewStmt, setPreviewStmt] = useState(null);  // {url, contentType}
+  const [busyRow, setBusyRow] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [o, c, i, p] = await Promise.all([
+      const [o, c, i, p, pa] = await Promise.all([
         api.get('/superadmin/overview'),
         api.get('/companies'),
         api.get('/superadmin/subscription-invoices'),
         api.get('/superadmin/subscription-payments'),
+        api.get('/superadmin/saas-pending-approvals'),
       ]);
       setOverview(o.data); setCompanies(c.data); setInvoices(i.data); setPayments(p.data);
+      setPending(pa.data);
     } finally { setLoading(false); }
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -405,6 +410,45 @@ export default function Subscriptions() {
     if (!window.confirm(`Factuur ${inv.id.slice(-6)} voor ${inv.company_name} markeren als betaald?`)) return;
     await api.post(`/superadmin/subscription-invoices/${inv.id}/mark-paid`);
     load();
+  };
+
+  const approvePending = async (pr) => {
+    if (!window.confirm(`OCR-betaling van ${pr.company_name} goedkeuren? Het abonnement wordt direct geactiveerd.`)) return;
+    setBusyRow(pr.id);
+    try {
+      await api.post(`/superadmin/saas-payment-requests/${pr.id}/approve`);
+      load();
+    } catch (e) {
+      window.alert(formatError(e));
+    } finally { setBusyRow(''); }
+  };
+
+  const rejectPending = async (pr) => {
+    const reason = window.prompt(`Reden van afwijzing voor ${pr.company_name}?`, '');
+    if (reason === null) return;
+    setBusyRow(pr.id);
+    try {
+      await api.post(`/superadmin/saas-payment-requests/${pr.id}/reject`, { reason });
+      load();
+    } catch (e) {
+      window.alert(formatError(e));
+    } finally { setBusyRow(''); }
+  };
+
+  // Bankafschrift previewen: download als blob (authenticated) en maak object-URL.
+  const openStatementPreview = async (pr) => {
+    if (!pr.bank_statement_id) return;
+    setBusyRow(pr.id);
+    try {
+      const resp = await api.get(`/superadmin/saas-bank-statement/${pr.bank_statement_id}`, {
+        responseType: 'blob',
+      });
+      const blob = resp.data;
+      const url = URL.createObjectURL(blob);
+      setPreviewStmt({ url, name: `Bankafschrift · ${pr.company_name}`, isPdf: (blob.type || '').includes('pdf') });
+    } catch (e) {
+      window.alert(formatError(e));
+    } finally { setBusyRow(''); }
   };
 
   if (loading || !overview) {
@@ -447,16 +491,26 @@ export default function Subscriptions() {
       <div className="flex items-center gap-1.5 mb-4 border-b border-slate-100 overflow-x-auto">
         {[
           { id: 'companies', label: `Bedrijven (${companies.length})`, icon: Building2 },
+          { id: 'pending',
+            label: `OCR-goedkeuring${pending.length > 0 ? ` (${pending.length})` : ''}`,
+            icon: ScanLine, highlight: pending.length > 0 },
           { id: 'invoices', label: `Facturen (${invoices.length})`, icon: Receipt },
           { id: 'payments', label: `Betalingen (${payments.length})`, icon: Banknote },
         ].map((t) => {
           const Icon = t.icon;
+          const active = tab === t.id;
           return (
             <button key={t.id} onClick={() => setTab(t.id)} data-testid={`sub-tab-${t.id}`}
               className={`px-4 py-2.5 rounded-t-lg text-sm font-bold flex items-center gap-2 transition whitespace-nowrap ${
-                tab === t.id ? 'bg-white text-orange-600 border-b-2 border-orange-500 -mb-px' : 'text-slate-500 hover:text-slate-700'
+                active ? 'bg-white text-orange-600 border-b-2 border-orange-500 -mb-px'
+                  : t.highlight ? 'text-amber-700 bg-amber-50 hover:bg-amber-100' : 'text-slate-500 hover:text-slate-700'
               }`}>
               <Icon className="w-4 h-4" /> {t.label}
+              {t.id === 'pending' && pending.length > 0 && !active && (
+                <span className="ml-1 inline-flex items-center justify-center w-5 h-5 rounded-full bg-amber-500 text-white text-[10px] font-extrabold">
+                  {pending.length}
+                </span>
+              )}
             </button>
           );
         })}
@@ -556,6 +610,79 @@ export default function Subscriptions() {
         </div>
       )}
 
+      {tab === 'pending' && (
+        <div className="space-y-3" data-testid="sub-pending-list">
+          {pending.length === 0 && (
+            <div className="bg-white rounded-2xl border-2 border-dashed border-emerald-200 p-10 text-center">
+              <CheckCircle className="w-10 h-10 text-emerald-400 mx-auto mb-2" />
+              <p className="font-extrabold text-slate-700">Alles netjes!</p>
+              <p className="text-sm text-slate-500 mt-1">Geen OCR-mismatches die wachten op handmatige goedkeuring.</p>
+            </div>
+          )}
+          {pending.map((pr) => {
+            const ocr = pr.ocr || {};
+            return (
+              <div key={pr.id} data-testid={`pending-row-${pr.id}`}
+                className="bg-white rounded-2xl border border-amber-200 p-4 sm:p-5">
+                <div className="flex items-start gap-3 mb-3">
+                  <div className="w-11 h-11 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                    <ScanLine className="w-5 h-5" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-extrabold text-slate-900">{pr.company_name}</p>
+                    <p className="text-xs text-slate-500 font-mono">/{pr.company_slug}</p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="text-lg font-extrabold text-slate-900">{fmt(pr.amount, pr.currency)}</p>
+                    <p className="text-[10px] text-slate-400 uppercase tracking-wider font-bold">{pr.provider}</p>
+                  </div>
+                </div>
+
+                <div className="grid sm:grid-cols-2 gap-3 mb-3">
+                  <div className="bg-slate-50 rounded-xl p-3 text-xs">
+                    <p className="text-[10px] uppercase tracking-wider font-extrabold text-slate-500 mb-1.5">Verwacht (factuur)</p>
+                    <p className="font-bold text-slate-800">{fmt(pr.invoice_amount, pr.invoice_currency)}</p>
+                    <p className="text-slate-500 mt-1">Plan: <span className="font-mono capitalize">{pr.invoice_plan}</span></p>
+                    <p className="text-slate-500">Status: <span className="font-mono">{pr.invoice_status || 'open'}</span></p>
+                  </div>
+                  <div className="bg-amber-50 rounded-xl p-3 text-xs border border-amber-100">
+                    <p className="text-[10px] uppercase tracking-wider font-extrabold text-amber-700 mb-1.5">OCR-resultaat</p>
+                    <p className="font-bold text-slate-800">
+                      {ocr.amount != null ? `${ocr.currency || pr.currency} ${Number(ocr.amount).toLocaleString('nl-NL')}` : '— niet herkend —'}
+                    </p>
+                    <p className="text-slate-600 mt-1">Datum: <span className="font-mono">{ocr.date_iso || '?'}</span></p>
+                    <p className="text-slate-600">Betaler: <span className="font-mono">{ocr.payer_name || '?'}</span></p>
+                    <p className="text-slate-600">Confidence: <span className="font-mono">{ocr.confidence != null ? `${Math.round(ocr.confidence * 100)}%` : '?'}</span></p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  {pr.bank_statement_id && (
+                    <button onClick={() => openStatementPreview(pr)} disabled={busyRow === pr.id}
+                      data-testid={`pending-view-${pr.id}`}
+                      className="px-3 h-10 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center gap-1.5 disabled:opacity-50">
+                      <FileImage className="w-3.5 h-3.5" /> Bekijk afschrift
+                    </button>
+                  )}
+                  <div className="flex-1" />
+                  <button onClick={() => rejectPending(pr)} disabled={busyRow === pr.id}
+                    data-testid={`pending-reject-${pr.id}`}
+                    className="px-4 h-10 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 font-extrabold text-sm flex items-center gap-1.5 disabled:opacity-50">
+                    <XCircle className="w-4 h-4" /> Afwijzen
+                  </button>
+                  <button onClick={() => approvePending(pr)} disabled={busyRow === pr.id}
+                    data-testid={`pending-approve-${pr.id}`}
+                    className="px-4 h-10 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-extrabold text-sm flex items-center gap-1.5 disabled:opacity-50 shadow-md shadow-emerald-500/25">
+                    {busyRow === pr.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                    Goedkeuren
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       {tab === 'payments' && (
         <div className="space-y-2">
           {payments.map((p) => (
@@ -593,6 +720,39 @@ export default function Subscriptions() {
       {showPay && (
         <PaymentRegistrationModal companies={companies} onClose={() => setShowPay(false)}
           onSaved={() => { setShowPay(false); load(); }} />
+      )}
+
+      {previewStmt && (
+        <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4"
+          data-testid="stmt-preview-modal"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              if (previewStmt?.url) try { URL.revokeObjectURL(previewStmt.url); } catch { /* ignore */ }
+              setPreviewStmt(null);
+            }
+          }}>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full max-h-[90vh] flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between p-4 border-b border-slate-100 shrink-0">
+              <h3 className="font-extrabold text-slate-900 truncate">{previewStmt.name}</h3>
+              <button onClick={() => {
+                if (previewStmt?.url) try { URL.revokeObjectURL(previewStmt.url); } catch { /* ignore */ }
+                setPreviewStmt(null);
+              }} data-testid="stmt-preview-close"
+                className="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-auto bg-slate-50 p-4">
+              {previewStmt.isPdf ? (
+                <iframe src={previewStmt.url} title="Bankafschrift PDF"
+                  className="w-full h-[80vh] rounded-lg bg-white border border-slate-200" />
+              ) : (
+                <img src={previewStmt.url} alt="Bankafschrift"
+                  className="max-w-full mx-auto rounded-lg shadow-md" />
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

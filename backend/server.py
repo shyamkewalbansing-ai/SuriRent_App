@@ -2671,6 +2671,112 @@ async def list_subscription_payments(user=Depends(require_role("superadmin"))):
     return docs
 
 
+@api.get("/superadmin/saas-pending-approvals")
+async def list_saas_pending_approvals(user=Depends(require_role("superadmin"))):
+    """Lijst van SaaS-betalingen die wachten op handmatige goedkeuring na
+    OCR-mismatch. Voor elk record join'en we company-naam, factuur-info en
+    de URL waarop het geüploade bankafschrift bekeken kan worden."""
+    docs = await db.saas_payment_requests.find(
+        {"status": "pending_approval"}, {"_id": 0},
+    ).sort("created_at", -1).to_list(200)
+    out = []
+    for pr in docs:
+        c = await db.companies.find_one({"id": pr.get("company_id")}, {"_id": 0, "name": 1, "slug": 1}) or {}
+        inv = await db.subscription_invoices.find_one(
+            {"id": pr.get("invoice_id")}, {"_id": 0, "amount": 1, "currency": 1, "plan": 1, "created_at": 1, "status": 1},
+        ) or {}
+        stmt_id = pr.get("bank_statement_id")
+        out.append({
+            "id": pr["id"],
+            "company_id": pr.get("company_id"),
+            "company_name": c.get("name", "—"),
+            "company_slug": c.get("slug", ""),
+            "invoice_id": pr.get("invoice_id"),
+            "invoice_amount": inv.get("amount"),
+            "invoice_currency": inv.get("currency"),
+            "invoice_plan": inv.get("plan"),
+            "invoice_status": inv.get("status"),
+            "amount": pr.get("amount"),
+            "currency": pr.get("currency"),
+            "provider": pr.get("provider", "bank"),
+            "ocr": pr.get("ocr") or {},
+            "bank_statement_id": stmt_id,
+            "bank_statement_url": f"/api/superadmin/saas-bank-statement/{stmt_id}" if stmt_id else None,
+            "created_at": pr.get("created_at"),
+        })
+    return out
+
+
+@api.get("/superadmin/saas-bank-statement/{asset_id}")
+async def superadmin_get_saas_bank_statement(asset_id: str, user=Depends(require_role("superadmin"))):
+    """Superadmin kan elk geüpload bankafschrift inzien (cross-tenant) — nodig
+    voor de OCR-goedkeuringsinbox."""
+    doc = await db.bank_statements.find_one({"id": asset_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Bankafschrift niet gevonden")
+    try:
+        data = base64.b64decode(doc["data_b64"])
+    except Exception:
+        raise HTTPException(status_code=500, detail="Bankafschrift corrupt")
+    return Response(content=data, media_type=doc.get("content_type", "application/octet-stream"))
+
+
+@api.post("/superadmin/saas-payment-requests/{pr_id}/approve")
+async def superadmin_approve_saas_payment(pr_id: str, user=Depends(require_role("superadmin"))):
+    """Handmatige goedkeuring na OCR-mismatch. Activeert het bedrijf."""
+    pr = await db.saas_payment_requests.find_one({"id": pr_id}, {"_id": 0})
+    if not pr:
+        raise HTTPException(status_code=404, detail="Betalingsverzoek niet gevonden")
+    if pr.get("status") == "paid":
+        return {"ok": True, "already_paid": True}
+    inv = await db.subscription_invoices.find_one({"id": pr.get("invoice_id")}, {"_id": 0})
+    if not inv:
+        raise HTTPException(status_code=404, detail="Bijbehorende factuur niet gevonden")
+    c = await db.companies.find_one({"id": pr.get("company_id")}, {"_id": 0}) or {}
+    result = await _record_saas_payment_manual(
+        invoice=inv,
+        company=c,
+        amount=float(pr.get("amount") or 0),
+        currency=pr.get("currency") or "SRD",
+        method=pr.get("provider") or "bank",
+        reference=f"Handmatige superadmin-goedkeuring van OCR-mismatch ({pr_id[:8]})",
+        statement_id=pr.get("bank_statement_id"),
+        ocr_meta=pr.get("ocr") or {},
+        auto_approved=True,  # we doen het effectief paid in dit endpoint
+        approved_by=user.get("email") or "superadmin",
+    )
+    # Markeer het oorspronkelijke pending request ook als paid (er is een
+    # nieuw paid-request via `_record_saas_payment_manual`). De originele
+    # blijft historisch staan met status=approved_by_superadmin.
+    await db.saas_payment_requests.update_one(
+        {"id": pr_id},
+        {"$set": {"status": "approved_by_superadmin", "approved_at": iso(now_utc()),
+                  "approved_by": user.get("email") or "superadmin"}},
+    )
+    return {"ok": True, **result}
+
+
+@api.post("/superadmin/saas-payment-requests/{pr_id}/reject")
+async def superadmin_reject_saas_payment(
+    pr_id: str, body: dict = Body(default_factory=dict),
+    user=Depends(require_role("superadmin")),
+):
+    """Afwijzen van een OCR-mismatch. Bedrijf blijft onbetaald."""
+    pr = await db.saas_payment_requests.find_one({"id": pr_id}, {"_id": 0})
+    if not pr:
+        raise HTTPException(status_code=404, detail="Betalingsverzoek niet gevonden")
+    reason = (body.get("reason") or "").strip() if isinstance(body, dict) else ""
+    await db.saas_payment_requests.update_one(
+        {"id": pr_id},
+        {"$set": {"status": "rejected", "rejected_at": iso(now_utc()),
+                  "rejected_by": user.get("email") or "superadmin",
+                  "rejection_reason": reason or "geen reden opgegeven"}},
+    )
+    return {"ok": True}
+
+
+
+
 @api.post("/superadmin/subscription-payments")
 async def register_subscription_payment(body: SubscriptionPaymentIn, user=Depends(require_role("superadmin"))):
     """Register an incoming SaaS payment (bank transfer or Mope) and auto-activate the company."""
@@ -5436,6 +5542,38 @@ async def kiosk_tenant_overview(tenant_id: str, _session=Depends(get_kiosk_sessi
         # Aanname: huurder werkt in 1 valuta (SRD) — anders zou je per
         # valuta moeten optellen. Voor nu enkel SRD/lokaal.
         credit += float(p.get("credit_remaining") or 0)
+
+    # ----- Open facturen ophalen (sinds 2026-02-26) -----
+    # Toon EXPLICIET in de kiosk welke maanden nog openstaan met hun
+    # bedrag — voorheen lieten we alleen de "volgende periode" zien
+    # waardoor 5 openstaande maanden er als 1 enkele regel uitzagen.
+    open_invoices = []
+    open_total = 0.0
+    async for inv in db.invoices.find(
+        {"tenant_id": tenant_id, "status": {"$ne": "paid"}},
+        {"_id": 0, "id": 1, "period_month": 1, "period_year": 1,
+         "amount_due": 1, "amount": 1, "amount_paid": 1, "currency": 1,
+         "due_date": 1, "status": 1, "kind": 1, "label": 1},
+    ).sort([("period_year", 1), ("period_month", 1), ("due_date", 1)]):
+        total = float(inv.get("amount_due") or inv.get("amount") or 0)
+        paid = float(inv.get("amount_paid") or 0)
+        outstanding = max(total - paid, 0)
+        if outstanding <= 0:
+            continue
+        open_invoices.append({
+            "id": inv["id"],
+            "period_month": inv.get("period_month"),
+            "period_year": inv.get("period_year"),
+            "amount": total,
+            "amount_paid": paid,
+            "outstanding": outstanding,
+            "currency": inv.get("currency") or balance.get("currency") or "SRD",
+            "due_date": inv.get("due_date"),
+            "status": inv.get("status") or "open",
+            "kind": inv.get("kind") or "huur",
+            "label": inv.get("label") or "",
+        })
+        open_total += outstanding
     return {
         "tenant": {
             "id": t["id"],
@@ -5453,6 +5591,8 @@ async def kiosk_tenant_overview(tenant_id: str, _session=Depends(get_kiosk_sessi
         },
         "balance": balance,
         "credit_balance": round(credit, 2),
+        "open_invoices": open_invoices,
+        "open_invoices_total": round(open_total, 2),
     }
 
 
