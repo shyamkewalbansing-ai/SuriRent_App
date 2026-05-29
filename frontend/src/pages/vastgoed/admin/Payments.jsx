@@ -219,6 +219,47 @@ function ApprovePaymentSheet({ payment, onCancel, onApproved }) {
             </>
           )}
         </div>
+        {payment.method === 'bank' && payment.ocr_status && (
+          <div className={`rounded-2xl p-3 mb-4 border ${
+            payment.ocr_status === 'matched'
+              ? 'bg-emerald-50 border-emerald-200'
+              : payment.ocr_status === 'mismatch'
+              ? 'bg-amber-50 border-amber-200'
+              : 'bg-rose-50 border-rose-200'
+          }`} data-testid="approve-ocr-block">
+            <p className="text-[10px] font-black uppercase tracking-widest mb-1.5"
+              style={{ color: payment.ocr_status === 'matched' ? '#047857' : payment.ocr_status === 'mismatch' ? '#92400e' : '#9f1239' }}>
+              🤖 OCR-controle
+              {payment.ocr_confidence != null && (
+                <span className="ml-2 opacity-75">· confidence {Math.round(payment.ocr_confidence * 100)}%</span>
+              )}
+            </p>
+            {payment.ocr_status === 'matched' && (
+              <p className="text-xs font-bold text-emerald-800">
+                ✅ Bedrag, valuta en datum kloppen. Veilig om goed te keuren.
+              </p>
+            )}
+            {payment.ocr_status === 'mismatch' && payment.ocr_mismatch_reasons && (
+              <ul className="text-xs font-semibold text-amber-800 space-y-0.5">
+                {payment.ocr_mismatch_reasons.map((r, i) => (
+                  <li key={i}>⚠️ {r}</li>
+                ))}
+              </ul>
+            )}
+            {payment.ocr_status === 'failed' && (
+              <p className="text-xs font-semibold text-rose-700">
+                OCR is niet gelukt — beoordeel handmatig.
+              </p>
+            )}
+            <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 mt-2 text-[11px] text-slate-600">
+              {payment.ocr_amount != null && <div><strong className="text-slate-800">Bedrag:</strong> {payment.ocr_currency || ''} {payment.ocr_amount}</div>}
+              {payment.ocr_date_iso && <div><strong className="text-slate-800">Datum:</strong> {payment.ocr_date_iso}</div>}
+              {payment.ocr_payer_name && <div className="col-span-2"><strong className="text-slate-800">Van:</strong> {payment.ocr_payer_name}</div>}
+              {payment.ocr_beneficiary && <div className="col-span-2"><strong className="text-slate-800">Naar:</strong> {payment.ocr_beneficiary}</div>}
+              {payment.ocr_reference && <div className="col-span-2"><strong className="text-slate-800">Kenmerk:</strong> {payment.ocr_reference}</div>}
+            </div>
+          </div>
+        )}
         {!showReject ? (
           <>
             <p className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-2">Uw handtekening</p>

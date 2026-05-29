@@ -742,3 +742,17 @@ Lint clean. Verified via desktop screenshots (1440×900): élke admin-pagina (Ov
 - ✅ **Push/SSE notificatie**: bankoverschrijving stuurt `kind=payment_pending` met titel "Bankoverschrijving wacht op goedkeuring · SRD X". URL wijst naar `/admin/payments`.
 - ✅ **End-to-end backend getest**: PUT profile met bank velden ✓, tenant pin-login ✓, missing statement → 400 ✓, upload PDF (34 bytes) ✓, payment create met bank+statement → status=pending_approval ✓, admin list pending → ziet record incl. country=SR + statement_id ✓, admin download statement → 200 application/pdf ✓.
 - ✅ **Smoke screenshot 390×844**: methode-picker toont 3 opties (Bankoverschrijving/Mope/Uni5Pay), bank-flow toont land-keuze + uploader perfect responsive.
+
+
+### Session 2026-02 — OCR auto-approve bankafschriften (Gemini 2.5 Flash) ✅
+- ✅ **`_ocr_bank_statement()`** helper in `server.py` gebruikt `emergentintegrations` LlmChat met `gemini-2.5-flash` model + `FileContentWithMimeType` om PDF/PNG/JPG/WEBP bankafschriften te analyseren. Strict JSON output schema: `{amount, currency, date_iso, payer_name, beneficiary, reference, confidence, raw_text}`. Markdown-codeblock stripping voor robust parsing.
+- ✅ **`_ocr_match_ok()`** vergelijkings-logica: confidence ≥0.7, bedrag binnen 1% of 1.0 tolerantie, exact currency match, datum ≤21 dagen oud (geen toekomst datums). Geeft `(ok, reasons[])` terug zodat mismatch-reden zichtbaar is.
+- ✅ **`_ocr_and_auto_approve_payment()`** achtergrond-task via `asyncio.create_task` direct na payment create — huurder krijgt instant feedback ("Verstuurd ter goedkeuring") terwijl OCR async draait. Bij match → auto-approve met `approved_by="OCR auto-approve"`, `auto_approved=True` + factuur-allocatie (zelfde FIFO overflow als manual approve). Bij mismatch → blijft `pending_approval` + push naar admin met mismatch-reden(en).
+- ✅ **PaymentOut model** uitgebreid met 11 OCR velden: `ocr_status` (matched/mismatch/failed), `ocr_amount`, `ocr_currency`, `ocr_date_iso`, `ocr_payer_name`, `ocr_beneficiary`, `ocr_reference`, `ocr_confidence`, `ocr_mismatch_reasons[]`, `auto_approved`. Wordt zichtbaar in admin Payments lijst.
+- ✅ **Admin Payments — Goedkeuren modal**: nieuwe groene/amber/rose OCR-controle box met confidence % + iconen, mismatch-redenen als bullet-lijst, extra grid met OCR data (bedrag/datum/van/naar/kenmerk). Admin ziet in één oogopslag of AI-controle akkoord is.
+- ✅ **End-to-end getest** met 3 scenario's:
+  - Match scenario (test image van 7000 SRD met huidige datum): `status=approved, auto_approved=True, approved_by="OCR auto-approve"` ✓
+  - Mismatch bedrag (claim 9999, afschrift toont 7000): `status=pending_approval, ocr_status=mismatch, reasons=["bedrag 7000 ≠ claim 9999 (verschil 2999)"]` ✓
+  - Mismatch datum (oud afschrift 103 dagen): `status=pending_approval, reasons=["afschrift 103 dagen oud (>21)"]` ✓
+- ✅ **OCR-tijd**: ~6-10 sec per afschrift (Gemini 2.5 Flash latency). Vuur-en-vergeet zodat de huurder geen vertraging ervaart.
+- ✅ **Audit-trail**: alle OCR resultaten worden permanent opgeslagen op het payment record (zowel bij approve als mismatch) zodat back-tracing en compliance-controle altijd mogelijk is.

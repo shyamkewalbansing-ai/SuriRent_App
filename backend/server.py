@@ -355,6 +355,17 @@ class PaymentOut(BaseModel):
     bank_statement_filename: Optional[str] = None
     bank_statement_size: Optional[int] = None
     bank_statement_content_type: Optional[str] = None
+    # OCR-resultaat (gevuld door achtergrond-task na bank upload)
+    ocr_status: Optional[str] = None  # matched|mismatch|failed
+    ocr_amount: Optional[float] = None
+    ocr_currency: Optional[str] = None
+    ocr_date_iso: Optional[str] = None
+    ocr_payer_name: Optional[str] = None
+    ocr_beneficiary: Optional[str] = None
+    ocr_reference: Optional[str] = None
+    ocr_confidence: Optional[float] = None
+    ocr_mismatch_reasons: Optional[list] = None
+    auto_approved: Optional[bool] = None
 
 
 class PaymentApproveIn(BaseModel):
@@ -3307,6 +3318,273 @@ async def tenant_portal_maintenance(tenant=Depends(get_tenant_session)):
     return [await _enrich_maint(d) for d in docs]
 
 
+# ---------------------------------------------------------------------------
+# OCR + auto-approve voor bankafschriften (Gemini 2.5 Flash via Emergent LLM key).
+# ---------------------------------------------------------------------------
+
+OCR_AMOUNT_TOLERANCE_PCT = 0.01
+OCR_AMOUNT_TOLERANCE_ABS = 1.0
+OCR_DATE_WINDOW_DAYS = 21
+
+
+async def _ocr_bank_statement(statement_id: str) -> dict:
+    """Stuurt bankafschrift naar Gemini en haalt gestructureerde data op."""
+    import os
+    import json
+    import tempfile
+    from emergentintegrations.llm.chat import LlmChat, UserMessage, FileContentWithMimeType
+
+    api_key = os.getenv("EMERGENT_LLM_KEY")
+    if not api_key:
+        raise RuntimeError("EMERGENT_LLM_KEY ontbreekt in environment")
+
+    doc = await db.bank_statements.find_one({"id": statement_id}, {"_id": 0})
+    if not doc:
+        raise RuntimeError(f"Bankafschrift {statement_id} niet gevonden")
+
+    raw = base64.b64decode(doc["data_b64"])
+    ctype = (doc.get("content_type") or "").lower()
+    if "pdf" in ctype:
+        mime, suffix = "application/pdf", ".pdf"
+    elif "png" in ctype:
+        mime, suffix = "image/png", ".png"
+    elif "webp" in ctype:
+        mime, suffix = "image/webp", ".webp"
+    else:
+        mime, suffix = "image/jpeg", ".jpg"
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as f:
+        f.write(raw)
+        tmp_path = f.name
+
+    prompt = (
+        "Je bent een precieze OCR-extractie engine voor bankafschriften en "
+        "betalingsbewijzen (Suriname DSB/Finabank, Nederlandse banken zoals "
+        "ING/ABN/RABO). Analyseer het bijgevoegde document en haal de "
+        "transactie-informatie eruit.\n\n"
+        "Antwoord UITSLUITEND met geldig JSON (geen markdown, geen code-blok, "
+        "geen uitleg) in dit exacte schema:\n"
+        '{\n'
+        '  "amount": <number of null>,\n'
+        '  "currency": "SRD"|"EUR"|"USD"|null,\n'
+        '  "date_iso": "YYYY-MM-DD" of null,\n'
+        '  "payer_name": "<string>" of null,\n'
+        '  "beneficiary": "<string>" of null,\n'
+        '  "reference": "<string>" of null,\n'
+        '  "confidence": <0..1>,\n'
+        '  "raw_text": "<korte samenvatting>"\n'
+        '}\n\n'
+        "Belangrijk:\n"
+        "- Als het document GEEN bankafschrift is, zet confidence op 0.\n"
+        "- Bedragen: gebruik punt als decimaalteken (bv 7000.00).\n"
+        "- Datum altijd in ISO-formaat YYYY-MM-DD.\n"
+        "- Confidence = 1.0 alleen als ALLES duidelijk leesbaar is."
+    )
+
+    chat = LlmChat(
+        api_key=api_key,
+        session_id=f"ocr-{statement_id[:8]}",
+        system_message="Je bent een OCR-extractie engine die uitsluitend geldig JSON terug geeft.",
+    ).with_model("gemini", "gemini-2.5-flash")
+
+    try:
+        file_attach = FileContentWithMimeType(file_path=tmp_path, mime_type=mime)
+        msg = UserMessage(text=prompt, file_contents=[file_attach])
+        response_text = await chat.send_message(msg)
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except Exception:
+            pass
+
+    txt = (response_text or "").strip()
+    if txt.startswith("```"):
+        lines = txt.split("\n")
+        txt = "\n".join(line for line in lines if not line.startswith("```"))
+    try:
+        result = json.loads(txt)
+    except Exception as e:
+        raise RuntimeError(f"OCR JSON parse faalde: {e}; raw={txt[:200]}")
+
+    try:
+        if result.get("amount") is not None:
+            result["amount"] = float(result["amount"])
+    except Exception:
+        result["amount"] = None
+    try:
+        result["confidence"] = float(result.get("confidence") or 0)
+    except Exception:
+        result["confidence"] = 0.0
+    return result
+
+
+def _ocr_match_ok(ocr: dict, *, expected_amount: float, expected_currency: str):
+    """Returns (ok, reasons[])."""
+    reasons: list[str] = []
+    if not ocr or not isinstance(ocr, dict):
+        return False, ["geen OCR-resultaat"]
+    conf = float(ocr.get("confidence") or 0)
+    if conf < 0.7:
+        reasons.append(f"lage confidence {conf:.2f}")
+    ocr_amount = ocr.get("amount")
+    if ocr_amount is None:
+        reasons.append("geen bedrag gedetecteerd")
+    else:
+        diff = abs(float(ocr_amount) - float(expected_amount))
+        tol = max(OCR_AMOUNT_TOLERANCE_ABS,
+                  OCR_AMOUNT_TOLERANCE_PCT * float(expected_amount))
+        if diff > tol:
+            reasons.append(
+                f"bedrag {ocr_amount} ≠ claim {expected_amount} (verschil {diff:.2f})"
+            )
+    ocr_curr = (ocr.get("currency") or "").upper()
+    if ocr_curr and ocr_curr != (expected_currency or "").upper():
+        reasons.append(f"valuta {ocr_curr} ≠ {expected_currency}")
+    date_iso = ocr.get("date_iso")
+    if date_iso:
+        try:
+            d = datetime.fromisoformat(date_iso)
+            age_days = (now_utc().replace(tzinfo=None) - d).days
+            if age_days > OCR_DATE_WINDOW_DAYS:
+                reasons.append(f"afschrift {age_days} dagen oud (>21)")
+            if age_days < -2:
+                reasons.append("afschrift heeft toekomst-datum")
+        except Exception:
+            reasons.append(f"datum '{date_iso}' onleesbaar")
+    else:
+        reasons.append("geen datum gedetecteerd")
+    return (len(reasons) == 0), reasons
+
+
+async def _ocr_and_auto_approve_payment(*, payment_id: str, statement_id: str,
+                                        expected_amount: float,
+                                        expected_currency: str,
+                                        tenant_name: str,
+                                        company_id: Optional[str]):
+    """Achtergrond-task: OCR + auto-approve indien match."""
+    try:
+        ocr = await _ocr_bank_statement(statement_id)
+    except Exception as e:
+        await db.payments.update_one(
+            {"id": payment_id},
+            {"$set": {"ocr_status": "failed", "ocr_error": str(e)[:300],
+                      "ocr_run_at": iso(now_utc())}},
+        )
+        print(f"[ocr] payment={payment_id[:8]} faalde: {e}")
+        return
+
+    ok, reasons = _ocr_match_ok(
+        ocr, expected_amount=expected_amount, expected_currency=expected_currency
+    )
+    ocr_doc = {
+        "ocr_status": "matched" if ok else "mismatch",
+        "ocr_amount": ocr.get("amount"),
+        "ocr_currency": ocr.get("currency"),
+        "ocr_date_iso": ocr.get("date_iso"),
+        "ocr_payer_name": ocr.get("payer_name"),
+        "ocr_beneficiary": ocr.get("beneficiary"),
+        "ocr_reference": ocr.get("reference"),
+        "ocr_confidence": ocr.get("confidence"),
+        "ocr_raw_text": (ocr.get("raw_text") or "")[:500],
+        "ocr_mismatch_reasons": reasons,
+        "ocr_run_at": iso(now_utc()),
+    }
+    await db.payments.update_one({"id": payment_id}, {"$set": ocr_doc})
+
+    if not ok:
+        try:
+            await _notify_company_admins(
+                company_id,
+                "OCR-controle: handmatige goedkeuring nodig",
+                f"{tenant_name}: {', '.join(reasons[:2])}",
+                {"kind": "payment_pending", "url": "/admin/payments",
+                 "payment_id": payment_id, "badge_inc": 0},
+            )
+        except Exception:
+            pass
+        return
+
+    p = await db.payments.find_one({"id": payment_id}, {"_id": 0})
+    if not p or p.get("status") != "pending_approval":
+        return
+    approved_at = iso(now_utc())
+
+    matched_invoice = None
+    if p.get("category") == "huur":
+        inv_q = {"tenant_id": p["tenant_id"], "status": {"$ne": "paid"}}
+        if company_id:
+            inv_q["company_id"] = company_id
+        if p.get("period_month") and p.get("period_year"):
+            scoped_q = {**inv_q, "period_month": p["period_month"],
+                        "period_year": p["period_year"]}
+            matched_invoice = await db.invoices.find_one(scoped_q, {"_id": 0})
+        if not matched_invoice:
+            matched_invoice = await db.invoices.find_one(
+                inv_q, {"_id": 0},
+                sort=[("period_year", 1), ("period_month", 1)],
+            )
+
+    update = {
+        "status": "approved", "approved_at": approved_at,
+        "approved_by": "OCR auto-approve", "auto_approved": True,
+    }
+    if matched_invoice:
+        update["invoice_id"] = matched_invoice["id"]
+        update["invoice_number"] = matched_invoice.get("invoice_number")
+    await db.payments.update_one({"id": payment_id}, {"$set": update})
+
+    if matched_invoice:
+        try:
+            inv_amt = float(matched_invoice.get("amount") or 0)
+            already_paid = matched_invoice.get("paid_amount")
+            if already_paid is None:
+                already_paid = await _invoice_currently_paid(matched_invoice["id"])
+            open_on = max(0.0, round(inv_amt - float(already_paid or 0), 2))
+            pay_amt = float(p.get("amount") or 0)
+            primary = min(pay_amt, open_on) if open_on > 0 else pay_amt
+            overflow = round(pay_amt - primary, 2)
+            if primary > 0:
+                await _apply_payment_to_invoice(
+                    matched_invoice["id"], primary,
+                    payment_id=p["id"], paid_at=approved_at,
+                    method=p.get("method"),
+                    receipt_number=p.get("receipt_number"),
+                )
+            if overflow > 0:
+                other_ids: list[str] = []
+                async for inv in db.invoices.find(
+                    {"tenant_id": p["tenant_id"],
+                     "currency": p.get("currency") or "SRD",
+                     "status": {"$nin": ["paid", "cancelled"]},
+                     "id": {"$ne": matched_invoice["id"]},
+                     **({"company_id": company_id} if company_id else {})},
+                    {"_id": 0, "id": 1},
+                ).sort([("period_year", 1), ("period_month", 1)]):
+                    other_ids.append(inv["id"])
+                if other_ids:
+                    await _allocate_payment_to_invoices(
+                        other_ids, overflow,
+                        payment_id=p["id"], paid_at=approved_at,
+                        method=p.get("method"),
+                        receipt_number=p.get("receipt_number"),
+                    )
+        except Exception as e:
+            print(f"[ocr.auto-approve] invoice apply failed: {e}")
+
+    try:
+        await _notify_company_admins(
+            company_id,
+            "Bankoverschrijving automatisch goedgekeurd (OCR)",
+            f"{tenant_name}: {expected_currency} {expected_amount:,.2f} — bedrag/datum kloppen",
+            {"kind": "payment", "url": "/admin/payments",
+             "payment_id": payment_id, "badge_inc": 1},
+        )
+    except Exception:
+        pass
+
+
+
+
 class TenantMaintenanceIn(BaseModel):
     title: str
     description: Optional[str] = ""
@@ -3456,6 +3734,20 @@ async def tenant_portal_create_payment(body: TenantPaymentIn, tenant=Depends(get
         doc["bank_country"] = body.bank_country
         doc["bank_statement_id"] = body.bank_statement_id
         doc["bank_statement_filename"] = stmt.get("filename")
+        # Vuur-en-vergeet OCR + auto-approve in achtergrond zodat de huurder
+        # direct een snelle "Verstuurd ter goedkeuring" bevestiging krijgt.
+        try:
+            import asyncio as _asyncio
+            _asyncio.create_task(_ocr_and_auto_approve_payment(
+                payment_id=doc["id"],
+                statement_id=body.bank_statement_id,
+                expected_amount=float(doc.get("amount") or 0),
+                expected_currency=doc.get("currency") or body.currency,
+                tenant_name=tenant.get("name") or "",
+                company_id=tenant.get("company_id"),
+            ))
+        except Exception as e:
+            print(f"[ocr] kon achtergrond OCR niet starten: {e}")
     enriched = await _enrich_payment(doc)
     # Notify admins of the company about the self-service payment.
     try:
