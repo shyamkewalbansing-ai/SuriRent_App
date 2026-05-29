@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useBrandedNavigate } from '../../lib/branded-nav';
-import { Loader2, Delete, KeyRound, ArrowLeft, Eye, EyeOff, UserPlus, LogIn, Check } from 'lucide-react';
+import { RESERVED_SLUGS } from '../../lib/branded-nav';
+import { Loader2, Delete, KeyRound, ArrowLeft, Eye, EyeOff, UserPlus, LogIn, Check, Globe } from 'lucide-react';
 import { api, formatError } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { setPreferredRole, isStandalonePWA, getPreferredRole, routeForRole } from '../../lib/pwaRole';
@@ -272,6 +273,20 @@ function PasswordView({ initialMode = 'login', onBack, onRegistered, branding })
     api.get('/billing/bank-details').then((r) => setBankDetails(r.data)).catch(() => setBankDetails(null));
   }, [mode, planQuery]);
 
+  // Live preview van de portal-URL die deze klant na registratie krijgt.
+  // Gebruikt dezelfde slug-regels als de backend (`_slugify` + reserved suffix).
+  const portalPreview = useMemo(() => {
+    const raw = (companyName || '').toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 40) || '';
+    if (!raw) return { slug: '', host: '' };
+    const slug = RESERVED_SLUGS.has(raw) ? `${raw}-bedrijf` : raw;
+    let host = '';
+    try { host = (window.location.host || '').replace(/:.*$/, ''); } catch { /* ignore */ }
+    return { slug, host };
+  }, [companyName]);
+
   const submit = async (e) => {
     e?.preventDefault();
     if (mode === 'register' && !companyName.trim()) {
@@ -340,33 +355,33 @@ function PasswordView({ initialMode = 'login', onBack, onRegistered, branding })
       paddingRight: 'env(safe-area-inset-right, 0px)',
     }}>
       <Header branding={branding} />
-      <div className="flex-1 flex items-start sm:items-center justify-center p-4 sm:p-6">
-        <div className="bg-white rounded-3xl shadow-[0_20px_60px_rgba(0,0,0,0.15)] w-full max-w-xl p-8 md:p-12" data-testid="auth-form">
+      <div className="flex-1 flex items-start sm:items-center justify-center p-3 sm:p-6">
+        <div className="bg-white rounded-3xl shadow-[0_20px_60px_rgba(0,0,0,0.15)] w-full max-w-xl p-5 sm:p-8 md:p-10" data-testid="auth-form">
           {branding?.slug && (
-            <button onClick={onBack} data-testid="auth-back" className="flex items-center gap-2 text-sm font-medium text-slate-400 hover:text-slate-600 mb-6 transition active:scale-95">
+            <button onClick={onBack} data-testid="auth-back" className="flex items-center gap-2 text-sm font-medium text-slate-400 hover:text-slate-600 mb-4 transition active:scale-95">
               <ArrowLeft className="w-4 h-4" /> Terug naar PIN
             </button>
           )}
 
-          <div className="text-center mb-8">
-            <div className="w-16 h-16 rounded-2xl bg-[#FF5C00] flex items-center justify-center mx-auto mb-4 shadow-lg shadow-orange-500/20">
-              {mode === 'login' ? <KeyRound className="w-9 h-9 text-white" /> : <UserPlus className="w-9 h-9 text-white" />}
+          <div className="text-center mb-5">
+            <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-[#FF5C00] flex items-center justify-center mx-auto mb-3 shadow-lg shadow-orange-500/20">
+              {mode === 'login' ? <KeyRound className="w-6 h-6 sm:w-7 sm:h-7 text-white" /> : <UserPlus className="w-6 h-6 sm:w-7 sm:h-7 text-white" />}
             </div>
-            <h2 className="text-3xl font-bold text-slate-900 tracking-tight">{mode === 'login' ? 'Beheerder Login' : 'Nieuw account'}</h2>
-            <p className="text-base text-slate-400 mt-1">{mode === 'login' ? 'Log in met uw e-mail en wachtwoord' : 'Maak uw eigen Vastgoed omgeving aan'}</p>
+            <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">{mode === 'login' ? 'Beheerder Login' : 'Nieuw account'}</h2>
+            <p className="text-sm text-slate-400 mt-1">{mode === 'login' ? 'Log in met uw e-mail en wachtwoord' : 'Maak in 30 seconden uw eigen Vastgoed omgeving'}</p>
           </div>
 
           {error && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-600 rounded-xl text-center text-sm font-medium" data-testid="auth-error">
+            <div className="mb-3 p-3 bg-red-50 border border-red-200 text-red-600 rounded-xl text-center text-sm font-medium" data-testid="auth-error">
               {error}
             </div>
           )}
 
-          <form onSubmit={submit} className="space-y-4">
+          <form onSubmit={submit} className="space-y-3">
             {mode === 'register' && (
               <>
                 <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-2">Land &amp; valuta</label>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Land &amp; valuta</label>
                   <div className="grid grid-cols-3 gap-2" data-testid="country-picker">
                     {[
                       { code: 'SR', flag: '🇸🇷', label: 'Suriname', sub: 'SRD' },
@@ -377,110 +392,120 @@ function PasswordView({ initialMode = 'login', onBack, onRegistered, branding })
                       return (
                         <button key={c.code} type="button" onClick={() => setCountry(c.code)}
                           data-testid={`country-${c.code.toLowerCase()}`}
-                          className={`rounded-xl border-2 p-3 text-center transition-all ${
+                          className={`rounded-xl border-2 p-2 text-center transition-all ${
                             sel ? 'border-[#FF5C00] bg-orange-50 shadow-md shadow-orange-500/10' : 'border-slate-200 bg-white hover:border-orange-300'
                           }`}>
-                          <div className="text-2xl leading-none mb-1">{c.flag}</div>
-                          <div className={`text-xs font-extrabold ${sel ? 'text-[#C74600]' : 'text-slate-700'}`}>{c.label}</div>
-                          <div className="text-[10px] text-slate-400 font-bold mt-0.5">{c.sub}</div>
+                          <div className="text-xl leading-none mb-0.5">{c.flag}</div>
+                          <div className={`text-[11px] font-extrabold ${sel ? 'text-[#C74600]' : 'text-slate-700'}`}>{c.label}</div>
+                          <div className="text-[10px] text-slate-400 font-bold">{c.sub}</div>
                         </button>
                       );
                     })}
                   </div>
-                  <p className="text-[11px] text-slate-400 mt-1.5">
-                    Bepaalt de valuta waarin u factureert en betaalt. Standaard: gedetecteerd uit uw telefoonnummer.
-                  </p>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-2">Kies uw pakket</label>
-                  <div className="grid sm:grid-cols-2 gap-3">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Kies uw pakket</label>
+                  <div className="grid sm:grid-cols-2 gap-2">
                     {plans.map((p) => {
                       const sel = plan === p.id;
                       return (
                         <button key={p.id} type="button" onClick={() => setPlan(p.id)}
                           data-testid={`plan-${p.id}`}
-                          className={`text-left rounded-2xl border-2 p-4 transition-all ${
-                            sel ? 'border-[#FF5C00] bg-orange-50 shadow-lg shadow-orange-500/15' : 'border-slate-200 bg-white hover:border-orange-300'
+                          className={`text-left rounded-xl border-2 p-3 transition-all ${
+                            sel ? 'border-[#FF5C00] bg-orange-50 shadow-md shadow-orange-500/15' : 'border-slate-200 bg-white hover:border-orange-300'
                           }`}>
-                          <div className="flex items-start justify-between mb-1">
-                            <p className={`font-extrabold ${sel ? 'text-[#C74600]' : 'text-slate-900'}`}>{p.name}</p>
-                            <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${sel ? 'border-[#FF5C00] bg-[#FF5C00]' : 'border-slate-300'}`}>
-                              {sel && <div className="w-2 h-2 rounded-full bg-white" />}
+                          <div className="flex items-start justify-between mb-0.5">
+                            <p className={`font-extrabold text-sm ${sel ? 'text-[#C74600]' : 'text-slate-900'}`}>{p.name}</p>
+                            <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${sel ? 'border-[#FF5C00] bg-[#FF5C00]' : 'border-slate-300'}`}>
+                              {sel && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
                             </div>
                           </div>
-                          <p className="text-xs text-slate-500 mb-2 leading-snug">{p.description}</p>
-                          <p className={`text-xl font-extrabold ${sel ? 'text-[#FF5C00]' : 'text-slate-900'}`}>
+                          <p className={`text-lg font-extrabold ${sel ? 'text-[#FF5C00]' : 'text-slate-900'}`}>
                             {(p.currency || 'SRD').toUpperCase() === 'EUR'
                               ? `€${Number(p.amount).toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                               : `${p.currency} ${Number(p.amount).toLocaleString('nl-NL')}`}
-                            <span className="text-xs font-medium text-slate-400 ml-1">/maand</span>
+                            <span className="text-[11px] font-medium text-slate-400 ml-1">/m</span>
                           </p>
-                          <ul className="mt-2 space-y-0.5 text-[11px] text-slate-500">
-                            {(p.features || []).slice(0, 3).map((f) => (
-                              <li key={f} className="flex items-center gap-1.5">
-                                <span className={`w-1 h-1 rounded-full ${sel ? 'bg-[#FF5C00]' : 'bg-slate-400'}`} />{f}
-                              </li>
-                            ))}
-                          </ul>
+                          <p className="text-[10px] text-slate-500 mt-0.5 leading-tight">{p.description}</p>
                         </button>
                       );
                     })}
                   </div>
-                  <p className="text-[11px] text-slate-400 mt-2">U start met een gratis proefperiode van 14 dagen. Daarna factureren we per bankoverschrijving.</p>
+                  <p className="text-[10px] text-slate-400 mt-1">14 dagen gratis · daarna factureren via bankoverschrijving</p>
                 </div>
+
                 <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-2">Bedrijfsnaam <span className="text-red-500">*</span></label>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Bedrijfsnaam *</label>
                   <input type="text" value={companyName} onChange={(e) => setCompanyName(e.target.value)} data-testid="auth-company-name"
                     required minLength={2}
                     placeholder="Demo Vastgoed N.V."
-                    className="w-full h-14 text-lg px-5 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] focus:ring-4 focus:ring-[#FF5C00]/10 bg-[#F9FAFB] outline-none transition" />
+                    className="w-full h-12 text-base px-4 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] focus:ring-4 focus:ring-[#FF5C00]/10 bg-[#F9FAFB] outline-none transition" />
+                  {/* Live portal-URL preview */}
+                  {portalPreview.slug && (
+                    <div className="mt-2 flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-50 border border-emerald-200" data-testid="auth-portal-preview">
+                      <Globe className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[10px] uppercase tracking-wider font-bold text-emerald-700">Uw portaal-URL</p>
+                        <p className="text-xs sm:text-sm font-mono font-bold text-emerald-900 truncate">
+                          {portalPreview.host || 'app.surirent.sr'}<span className="text-emerald-600">/</span>{portalPreview.slug}
+                        </p>
+                      </div>
+                    </div>
+                  )}
                 </div>
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-2">Uw naam</label>
-                  <input type="text" value={name} onChange={(e) => setName(e.target.value)} data-testid="auth-name"
-                    required minLength={2}
-                    placeholder="Demo Beheerder"
-                    className="w-full h-14 text-lg px-5 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] focus:ring-4 focus:ring-[#FF5C00]/10 bg-[#F9FAFB] outline-none transition" />
+
+                <div className="grid sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Uw naam</label>
+                    <input type="text" value={name} onChange={(e) => setName(e.target.value)} data-testid="auth-name"
+                      required minLength={2}
+                      placeholder="Voornaam Achternaam"
+                      className="w-full h-12 text-base px-4 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] focus:ring-4 focus:ring-[#FF5C00]/10 bg-[#F9FAFB] outline-none transition" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Telefoon</label>
+                    <input type="tel" value={telefoon} onChange={(e) => setTelefoon(e.target.value)} data-testid="auth-telefoon"
+                      placeholder="+597 ..."
+                      className="w-full h-12 text-base px-4 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] focus:ring-4 focus:ring-[#FF5C00]/10 bg-[#F9FAFB] outline-none transition" />
+                  </div>
                 </div>
+
                 <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-2">Telefoon</label>
-                  <input type="tel" value={telefoon} onChange={(e) => setTelefoon(e.target.value)} data-testid="auth-telefoon"
-                    placeholder="+597 ..."
-                    className="w-full h-14 text-lg px-5 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] focus:ring-4 focus:ring-[#FF5C00]/10 bg-[#F9FAFB] outline-none transition" />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-2">Kiosk PIN (4 cijfers)</label>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Kiosk PIN (4 cijfers, optioneel)</label>
                   <input type="text" inputMode="numeric" pattern="\d{4}" maxLength={4} autoComplete="off"
                     value={kioskPin}
                     onChange={(e) => setKioskPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
                     data-testid="auth-kiosk-pin"
-                    placeholder="bv. 1234"
-                    className="w-full h-14 text-lg px-5 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] focus:ring-4 focus:ring-[#FF5C00]/10 bg-[#F9FAFB] outline-none transition font-mono tracking-[0.5em] text-center" />
-                  <p className="text-[11px] text-slate-400 mt-1">Optioneel — wordt gebruikt om de Kiosk te ontgrendelen. U kunt dit later wijzigen onder Instellingen.</p>
+                    placeholder="• • • •"
+                    className="w-full h-12 text-base px-4 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] focus:ring-4 focus:ring-[#FF5C00]/10 bg-[#F9FAFB] outline-none transition font-mono tracking-[0.5em] text-center" />
                 </div>
               </>
             )}
-            <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-2">E-mailadres</label>
-              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} data-testid="auth-email"
-                required
-                className="w-full h-14 text-lg px-5 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] focus:ring-4 focus:ring-[#FF5C00]/10 bg-[#F9FAFB] outline-none transition"
-                placeholder={mode === 'register' ? 'naam@bedrijf.sr' : 'admin@vastgoed.sr'} />
-            </div>
-            <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-2">Wachtwoord</label>
-              <div className="relative">
-                <input type={showPw ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)}
-                  data-testid="auth-password" required minLength={6}
-                  className="w-full h-14 text-lg px-5 pr-12 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] focus:ring-4 focus:ring-[#FF5C00]/10 bg-[#F9FAFB] outline-none transition" />
-                <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
-                  {showPw ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                </button>
+
+            <div className={mode === 'register' ? 'grid sm:grid-cols-2 gap-3' : ''}>
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">E-mailadres</label>
+                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} data-testid="auth-email"
+                  required
+                  className="w-full h-12 text-base px-4 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] focus:ring-4 focus:ring-[#FF5C00]/10 bg-[#F9FAFB] outline-none transition"
+                  placeholder={mode === 'register' ? 'naam@bedrijf.sr' : 'admin@vastgoed.sr'} />
+              </div>
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Wachtwoord</label>
+                <div className="relative">
+                  <input type={showPw ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)}
+                    data-testid="auth-password" required minLength={6}
+                    className="w-full h-12 text-base px-4 pr-11 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] focus:ring-4 focus:ring-[#FF5C00]/10 bg-[#F9FAFB] outline-none transition" />
+                  <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                    {showPw ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  </button>
+                </div>
               </div>
             </div>
+
             <button type="submit" disabled={loading} data-testid="auth-submit"
-              className="w-full h-16 bg-[#FF5C00] hover:bg-[#E05200] text-white rounded-xl text-xl font-semibold transition-all active:scale-[0.97] shadow-lg shadow-orange-500/20 disabled:opacity-50 flex items-center justify-center gap-2">
+              className="w-full h-14 mt-1 bg-[#FF5C00] hover:bg-[#E05200] text-white rounded-xl text-lg font-semibold transition-all active:scale-[0.97] shadow-lg shadow-orange-500/20 disabled:opacity-50 flex items-center justify-center gap-2">
               {loading ? <Loader2 className="w-6 h-6 animate-spin" /> : (
                 <>{mode === 'login' ? <LogIn className="w-5 h-5" /> : <UserPlus className="w-5 h-5" />}
                 {mode === 'login' ? 'Inloggen' : 'Account aanmaken'}</>
@@ -488,7 +513,7 @@ function PasswordView({ initialMode = 'login', onBack, onRegistered, branding })
             </button>
           </form>
 
-          <p className="text-center text-sm text-slate-400 mt-5">
+          <p className="text-center text-sm text-slate-400 mt-4">
             {mode === 'login' ? 'Nog geen account?' : 'Al een account?'}{' '}
             <button onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setError(''); }}
               data-testid="auth-switch-mode"
@@ -497,10 +522,11 @@ function PasswordView({ initialMode = 'login', onBack, onRegistered, branding })
             </button>
           </p>
 
-          <p className="text-center text-xs text-slate-300 mt-4">
-            {mode === 'login' ? <>Standaard: <span className="font-bold text-slate-400">admin@vastgoed.sr / admin123</span></> :
-              <>14 dagen gratis · Annuleer wanneer u wilt</>}
-          </p>
+          {mode === 'login' && (
+            <p className="text-center text-xs text-slate-300 mt-3">
+              Standaard: <span className="font-bold text-slate-400">admin@vastgoed.sr / admin123</span>
+            </p>
+          )}
         </div>
       </div>
     </div>

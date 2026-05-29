@@ -1,5 +1,18 @@
 # Vastgoed Kiosk - PRD
 
+## Session 2026-02-26 — Compacte Registratie + Live Portal-URL Preview ✅
+- **Registratieformulier herontworpen** voor minder scrollen op zowel desktop als mobiel:
+  - 2-koloms grid voor Naam+Telefoon, Email+Wachtwoord (klapt naar 1-kol op mobiel).
+  - Compactere input-hoogte (h-12 i.p.v. h-14), kleinere icons (w-12), strakker spacing (space-y-3).
+  - Land & valuta cards compacter, Plan cards op 1-regel layout met kleinere description.
+  - Padding p-5 op mobiel (i.p.v. p-8) zodat het formulier breder in het scherm past.
+- **Live portaal-URL preview** onder de Bedrijfsnaam-input. Toont in een groene kaart "Uw portaal-URL: vastgoed-app.preview.../{slug}" die meebeweegt met wat de gebruiker typt. Gebruikt dezelfde slug-regels als backend (`_slugify` + RESERVED_SLUGS suffix). Geeft direct duidelijkheid: "dit wordt mijn URL".
+  - Bv. "Demo Vastgoed N.V." → `.../demo-vastgoed-n-v`
+  - "Admin" → `.../admin-bedrijf` (reserved auto-suffix zichtbaar)
+- Geverifieerd via screenshot op desktop (1440px) + mobile (390px). Geen verticale scrollbalk meer op desktop voor de complete registratie.
+
+
+
 ## Session 2026-02-26 — PIN-login per-bedrijf + Direct naar eigen portaal na registratie ✅
 - **PIN-login is nu strikt company-scoped**. `/auth/kiosk-pin` accepteert `company_slug` of `company_id` in de body. Zonder bedrijfs-context → 400 ("PIN-login werkt alleen op uw bedrijfs-portaal"). Met slug → alleen die ene bedrijfs-PIN + employee-PINs van datzelfde bedrijf worden gecheckt.
 - **Globale PIN-uniqueness opgeheven** (zowel `/auth/kiosk-set-pin` als `/employees/{id}/kiosk-pin`). Twee verschillende bedrijven mogen nu dezelfde PIN (bv. `1234`) gebruiken zonder conflict. Uniqueness wordt alleen binnen het eigen bedrijf afgedwongen (geen botsing tussen company-PIN en employee-PIN van datzelfde bedrijf).
