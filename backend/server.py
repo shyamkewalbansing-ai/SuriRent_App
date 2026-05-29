@@ -5589,6 +5589,7 @@ async def kiosk_tenant_overview(tenant_id: str, _session=Depends(get_kiosk_sessi
     cur_year, cur_month = now_local.year, now_local.month
     open_invoices = []
     open_total = 0.0
+    current_month_invoice = None  # de mei-factuur (huidige maand) — apart!
     async for inv in db.invoices.find(
         {"tenant_id": tenant_id, "status": {"$ne": "paid"}},
         {"_id": 0, "id": 1, "period_month": 1, "period_year": 1,
@@ -5602,10 +5603,25 @@ async def kiosk_tenant_overview(tenant_id: str, _session=Depends(get_kiosk_sessi
             continue
         py = inv.get("period_year") or 0
         pm = inv.get("period_month") or 0
-        # Skip toekomst-/huidige-maand facturen (komt-nog) — alleen
-        # echte achterstanden tonen we als open_invoices.
-        if py > cur_year or (py == cur_year and pm >= cur_month):
+        # Toekomst: skip (vooruit gefactureerd, geen achterstand én geen huidige maand)
+        if py > cur_year or (py == cur_year and pm > cur_month):
             continue
+        # Huidige maand: apart bucket (NIET in open_invoices, NIET in totaal)
+        if py == cur_year and pm == cur_month:
+            current_month_invoice = {
+                "id": inv["id"],
+                "period_month": pm,
+                "period_year": py,
+                "amount": total,
+                "amount_paid": paid,
+                "outstanding": outstanding,
+                "currency": inv.get("currency") or balance.get("currency") or "SRD",
+                "due_date": inv.get("due_date"),
+                "status": inv.get("status") or "open",
+                "is_partial": paid > 0 and outstanding > 0,
+            }
+            continue
+        # Anders: echte achterstand (periode < huidige maand)
         open_invoices.append({
             "id": inv["id"],
             "period_month": pm,
@@ -5640,6 +5656,7 @@ async def kiosk_tenant_overview(tenant_id: str, _session=Depends(get_kiosk_sessi
         "credit_balance": round(credit, 2),
         "open_invoices": open_invoices,
         "open_invoices_total": round(open_total, 2),
+        "current_month_invoice": current_month_invoice,
     }
 
 

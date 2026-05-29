@@ -263,11 +263,19 @@ function TenantOverview({ apartment, onBack, onPay }) {
   // zodat huurder/medewerker direct zien welke maanden nog openstaan.
   const openInvoices = Array.isArray(data.open_invoices) ? data.open_invoices : [];
   const openInvoicesTotal = Number(data.open_invoices_total || 0);
+  // Huidige maand-factuur is apart — NIET in achterstand maar wel zichtbaar.
+  const currentInvoice = data.current_month_invoice || null;
   const openRentLegacy = balance.balance > 0 ? balance.balance : 0;
   // Gebruik openInvoices-totaal wanneer er facturen zijn, anders val terug
   // op de oude balance-berekening (achterwaartse compatibiliteit met huurders
   // zonder facturen).
   const openRent = openInvoices.length > 0 ? openInvoicesTotal : openRentLegacy;
+  // Huidige maandhuur: gebruik outstanding uit factuur (als bestaat) anders
+  // de standaard apartement-huur als fallback.
+  const currentMonthAmount = currentInvoice ? Number(currentInvoice.outstanding || 0) : Number(apt.rent_amount || 0);
+  const currentMonthLabel = currentInvoice && currentInvoice.period_month
+    ? `Huidige maandhuur · ${MONTHS_NL[currentInvoice.period_month - 1]} ${currentInvoice.period_year}`
+    : 'Maandhuur';
   const totalDue = openRent + internet;
   const allPaid = totalDue <= 0;
   const cur = balance.currency || apt.currency || 'SRD';
@@ -299,7 +307,10 @@ function TenantOverview({ apartment, onBack, onPay }) {
     : (balance.next_period ? `${MONTHS_NL[balance.next_period.month - 1]} ${balance.next_period.year}` : '');
 
   const items = [
-    { key: 'rent', label: 'Maandhuur', value: apt.rent_amount, icon: Home },
+    { key: 'rent', label: currentMonthLabel, value: currentMonthAmount, icon: Home,
+      sub: currentInvoice && currentInvoice.due_date
+        ? `Vervalt ${new Date(currentInvoice.due_date).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })}`
+        : '' },
     ...(openRent > 0 ? [{
       key: 'open',
       label: openLabel,
@@ -383,7 +394,7 @@ function TenantOverview({ apartment, onBack, onPay }) {
                 </div>
               )}
               {!credit && <div className="h-3" />}
-              <button onClick={() => onPay({ ...data, internet, total_due: 0, isAdvance: true, open_invoices: openInvoices, open_invoices_total: openInvoicesTotal })}
+              <button onClick={() => onPay({ ...data, internet, total_due: 0, isAdvance: true, open_invoices: openInvoices, open_invoices_total: openInvoicesTotal, current_month_invoice: currentInvoice })}
                 data-testid="overview-advance-pay-btn"
                 className="mt-2 w-full max-w-xs bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl flex items-center justify-center gap-2 transition py-2.5 text-sm active:scale-[0.98]">
                 Vooruitbetaling registreren
@@ -400,7 +411,7 @@ function TenantOverview({ apartment, onBack, onPay }) {
               </div>
               <p className="text-xs sm:text-sm font-bold uppercase tracking-widest text-slate-400">Te betalen</p>
               <p className="text-4xl sm:text-5xl font-extrabold text-slate-900 tracking-tight mt-1 mb-6">{fmtMoney(totalDue, cur)}</p>
-              <button onClick={() => onPay({ ...data, internet, total_due: totalDue, open_invoices: openInvoices, open_invoices_total: openInvoicesTotal })}
+              <button onClick={() => onPay({ ...data, internet, total_due: totalDue, open_invoices: openInvoices, open_invoices_total: openInvoicesTotal, current_month_invoice: currentInvoice })}
                 data-testid="overview-pay-btn"
                 className="w-full max-w-xs bg-orange-500 hover:bg-orange-600 text-white text-base sm:text-lg font-bold rounded-xl flex items-center justify-center gap-2 transition py-3 sm:py-3.5 active:scale-[0.98]">
                 Volgende <ArrowRight className="w-5 h-5" />
@@ -518,7 +529,8 @@ const PAY_ITEMS_TEMPLATE = [
 
 function PaySelect({ overview, onBack, onConfirm }) {
   const { tenant, apartment: apt, balance, internet, total_due, isAdvance = false,
-    open_invoices: openInvoices = [], open_invoices_total: openInvoicesTotal = 0 } = overview;
+    open_invoices: openInvoices = [], open_invoices_total: openInvoicesTotal = 0,
+    current_month_invoice: currentInvoice = null } = overview;
   const cur = (balance.currency || apt.currency || 'SRD').toUpperCase();
   const fmt = (v) => fmtMoney(v, cur);
   // Bij facturen → gebruik som van openstaand uit alle open facturen, anders
@@ -526,9 +538,11 @@ function PaySelect({ overview, onBack, onConfirm }) {
   const openRentFromInvoices = Number(openInvoicesTotal || 0);
   const openRentLegacy = balance.balance > 0 ? balance.balance : 0;
   const openRent = openInvoices.length > 0 ? openRentFromInvoices : openRentLegacy;
+  // Huidige maand-factuur: aparte knop, NIET in openstaand totaal.
+  const currentMonthAmount = currentInvoice ? Number(currentInvoice.outstanding || 0) : Number(apt.rent_amount || 0);
 
   const amounts = {
-    huur: openRent > 0 ? openRent : apt.rent_amount,
+    huur: currentMonthAmount,
     servicekosten: 0,
     boete: 0,
     internet: Number(internet || 0),
@@ -560,9 +574,13 @@ function PaySelect({ overview, onBack, onConfirm }) {
 
   const planItemKey = (it) => `plan:${it.planId}:${it.seq}`;
   const invItemKey = (inv) => `inv:${inv.id}`;
-  // Splitsmodus: wanneer er meerdere open facturen zijn, vervangen we de
-  // enkele "Huur"-knop door één selecteerbare regel per maand.
-  const splitHuur = openInvoices.length > 1;
+  // Toon openstaand-sectie wanneer er minstens één achterstand is. De generieke
+  // "Huur"-knop in `PAY_ITEMS_TEMPLATE` blijft staan en stelt nu de HUIDIGE
+  // maand voor (mei 2026) — met label uit current_month_invoice indien beschikbaar.
+  const hasOpenInvoices = openInvoices.length >= 1;
+  const currentMonthLabel = currentInvoice && currentInvoice.period_month
+    ? `Huidige maandhuur · ${MONTHS_NL[currentInvoice.period_month - 1]} ${currentInvoice.period_year}`
+    : 'Maandhuur';
 
   const toggle = (id) => {
     setSelected((cur) => {
@@ -574,13 +592,10 @@ function PaySelect({ overview, onBack, onConfirm }) {
   };
 
   const isDisabled = (id) => (amounts[id] || 0) <= 0;
-  // In splitmodus tellen we niet de generieke "huur"-knop mee in enabled.
-  const enabled = PAY_ITEMS_TEMPLATE
-    .filter((t) => !(splitHuur && t.id === 'huur'))
-    .filter((t) => !isDisabled(t.id));
+  const enabled = PAY_ITEMS_TEMPLATE.filter((t) => !isDisabled(t.id));
   const allSelectableKeys = [
     ...enabled.map((t) => t.id),
-    ...(splitHuur ? openInvoices.map(invItemKey) : []),
+    ...(hasOpenInvoices ? openInvoices.map(invItemKey) : []),
     ...planInstallments.map(planItemKey),
   ];
   const allSelected = allSelectableKeys.length > 0
@@ -720,14 +735,13 @@ function PaySelect({ overview, onBack, onConfirm }) {
           )}
 
           <div className="flex flex-col gap-1 sm:gap-1.5 flex-1">
-            {/* In splitmodus: één regel per open factuur (met eigen checkbox).
-                Buiten splitmodus: één enkele "Huur"-regel zoals voorheen. */}
-            {splitHuur && openInvoices.length > 0 && (
+            {/* Openstaande huur (echte achterstanden) — één regel per maand */}
+            {hasOpenInvoices && (
               <>
                 <div className="flex items-center gap-2 mt-1 mb-0.5 px-1">
                   <div className="h-px flex-1 bg-orange-200" />
                   <span className="text-[10px] font-black uppercase tracking-widest text-orange-500">
-                    Openstaande huur · {openInvoices.length} maanden
+                    Openstaande huur · {openInvoices.length} {openInvoices.length === 1 ? 'maand' : 'maanden'}
                   </span>
                   <div className="h-px flex-1 bg-orange-200" />
                 </div>
@@ -769,21 +783,20 @@ function PaySelect({ overview, onBack, onConfirm }) {
                     </button>
                   );
                 })}
-                {(amounts.servicekosten > 0 || amounts.boete > 0 || amounts.internet > 0) && (
-                  <div className="flex items-center gap-2 mt-1 mb-0.5 px-1">
-                    <div className="h-px flex-1 bg-slate-200" />
-                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Overig</span>
-                    <div className="h-px flex-1 bg-slate-200" />
-                  </div>
-                )}
+                <div className="flex items-center gap-2 mt-2 mb-0.5 px-1">
+                  <div className="h-px flex-1 bg-slate-200" />
+                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Huidige maand</span>
+                  <div className="h-px flex-1 bg-slate-200" />
+                </div>
               </>
             )}
-            {PAY_ITEMS_TEMPLATE
-              .filter((t) => !(splitHuur && t.id === 'huur'))
-              .map((t) => {
+            {/* Reguliere regels: Huur (huidige maand), Servicekosten, Boetes, Internet */}
+            {PAY_ITEMS_TEMPLATE.map((t) => {
               const disabled = isDisabled(t.id);
               const sel = selected.has(t.id);
               const Icon = t.icon;
+              // De Huur-regel stelt voortaan de HUIDIGE maand voor.
+              const label = t.id === 'huur' ? currentMonthLabel : t.label;
               return (
                 <button key={t.id} disabled={disabled} onClick={() => toggle(t.id)} data-testid={`pay-type-${t.id}`}
                   className={`flex items-center justify-between w-full rounded-lg border-2 transition px-2.5 py-2 sm:px-3 sm:py-2.5 ${
@@ -797,7 +810,7 @@ function PaySelect({ overview, onBack, onConfirm }) {
                     <div className={`rounded-lg flex items-center justify-center flex-shrink-0 w-8 h-8 sm:w-9 sm:h-9 ${sel ? 'bg-orange-100' : 'bg-slate-50'}`}>
                       <Icon className={`w-4 h-4 sm:w-5 sm:h-5 ${sel ? 'text-orange-500' : 'text-slate-400'}`} />
                     </div>
-                    <span className="text-sm font-bold text-slate-900">{t.label}</span>
+                    <span className="text-sm font-bold text-slate-900">{label}</span>
                   </div>
                   <p className={`text-sm sm:text-base flex-shrink-0 ml-2 whitespace-nowrap font-semibold ${disabled ? 'text-slate-300' : sel ? 'text-orange-600' : 'text-slate-900'}`}>
                     {fmt(amounts[t.id] || 0)}
