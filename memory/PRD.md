@@ -1,5 +1,27 @@
 # Vastgoed Kiosk - PRD
 
+## Session 2026-02-26 — SaaS Abonnement OCR Auto-approve voor Bankoverschrijving ✅
+- **Nieuw backend endpoint** `POST /api/billing/me/bank-confirm` (multipart): admin uploadt screenshot/PDF van bankoverschrijving voor zijn lopende SaaS-factuur.
+  1. Bestand (≤5MB, JPG/PNG/WEBP/PDF) opgeslagen in `bank_statements` collectie met `kind: 'saas_billing'`.
+  2. Direct synchroon Gemini 2.5 Flash OCR via bestaande `_ocr_bank_statement()` helper.
+  3. Match-check via bestaande `_ocr_match_ok()` (bedrag-tolerantie, confidence ≥0.7, valuta).
+  4. Bij match → **automatisch goedgekeurd** via nieuwe `_record_saas_payment_manual()`:
+     - `subscription_invoices.status = paid`
+     - `subscription_payments` record aangemaakt met `auto_approved: true`, `bank_statement_id`, `method: bank`
+     - `companies.billing_status = active` via `_activate_company_after_saas_payment()`
+     - Confirmation email verstuurd
+  5. Bij mismatch → `saas_payment_requests.status = pending_approval` (superadmin moet handmatig goedkeuren). Mismatch-reasons gereturnd.
+- **Frontend** `MijnAbonnement.jsx`: nieuw `<BankProofUploader>` component geïntegreerd in bestaande `<BankBox>`. Toont:
+  - Heldere uitleg ("wij scannen automatisch het bedrag, datum en omschrijving — als alles matcht wordt uw abonnement direct geactiveerd")
+  - Donkere upload-knop (toggle naar "Scannen…" spinner tijdens OCR)
+  - **Groene `✓ Goedgekeurd` kaart** bij paid status met OCR-detected bedrag/datum/payer
+  - **Amber `⚠ Wacht op handmatige goedkeuring` kaart** bij mismatch met lijst van redenen
+  - "Opnieuw uploaden" knop om nieuwe poging
+- Bij `status: 'paid'` reload `MijnAbonnement` zichzelf → `billing_status: active` badge wordt direct zichtbaar.
+- Geverifieerd: curl POST met 4-byte fake JPEG → `pending_approval` met heldere OCR-fout, Playwright visueel + UI flow getest.
+
+
+
 ## Session 2026-02-26 — Slug Beschikbaarheids-check + Landscape Desktop Layout ✅
 - **Nieuw publiek endpoint** `GET /api/public/companies/{slug}/available` → `{available: bool, reason?: 'format'|'reserved'|'taken'}`. Lekt geen interne data (geen naam/branding van bestaande bedrijven).
 - **Frontend debounced check (350ms)** in `LoginPage.PasswordView`. State-machine met 5 toestanden: `idle | checking | available | taken | reserved | format`. Visualiseert met kleurcodering:

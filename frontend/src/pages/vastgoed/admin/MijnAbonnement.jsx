@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Crown, Clock, CheckCircle, AlertCircle, ArrowUp, ArrowDown, Loader2,
   Receipt, Landmark, CreditCard, Banknote, Copy, Check, X, Zap, Euro,
+  Upload, FileCheck2, ScanLine,
 } from 'lucide-react';
 import { api, formatError } from '../../../lib/api';
 
@@ -120,7 +121,112 @@ function OnlinePayBox({ options, openInvoice, onErr }) {
   );
 }
 
-function BankBox({ details, invoice, company }) {
+function BankProofUploader({ invoice, onSuccess, onErr }) {
+  const fileInput = useRef(null);
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState(null);  // {status, ocr, mismatch_reasons?}
+
+  if (!invoice) {
+    return (
+      <p className="text-[11px] text-slate-400 mt-3">
+        Wacht op een nieuwe factuur om bewijs te kunnen uploaden.
+      </p>
+    );
+  }
+
+  const onPick = () => fileInput.current?.click();
+
+  const onFile = async (e) => {
+    const f = e.target.files?.[0];
+    e.target.value = '';
+    if (!f) return;
+    if (f.size > 5 * 1024 * 1024) { onErr('Bestand groter dan 5 MB'); return; }
+    setBusy(true);
+    setResult(null);
+    try {
+      const fd = new FormData();
+      fd.append('file', f);
+      fd.append('invoice_id', invoice.id);
+      const { data } = await api.post('/billing/me/bank-confirm', fd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      setResult(data);
+      if (data.status === 'paid') onSuccess?.();
+    } catch (err) {
+      onErr(formatError(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="mt-4 pt-4 border-t border-slate-200" data-testid="saas-bank-proof-uploader">
+      <div className="flex items-center gap-2 mb-2">
+        <ScanLine className="w-4 h-4 text-orange-600" />
+        <h5 className="font-extrabold text-sm text-slate-900">Upload bankafschrift voor automatische controle</h5>
+      </div>
+      <p className="text-[11px] text-slate-500 mb-3 leading-snug">
+        Screenshot of PDF van uw bankoverschrijving. Wij scannen automatisch het bedrag, de datum en de omschrijving
+        — als alles matcht, wordt uw abonnement direct geactiveerd. Geen wachten op handmatige controle.
+      </p>
+
+      <input
+        ref={fileInput} type="file" accept="image/jpeg,image/png,image/webp,application/pdf"
+        onChange={onFile} className="hidden" data-testid="saas-bank-proof-input"
+      />
+
+      {!result && (
+        <button onClick={onPick} disabled={busy}
+          data-testid="saas-bank-proof-upload-btn"
+          className="w-full h-12 rounded-xl bg-slate-900 hover:bg-slate-700 text-white font-extrabold flex items-center justify-center gap-2 disabled:opacity-50 transition">
+          {busy ? <><Loader2 className="w-4 h-4 animate-spin" /> Scannen…</> : <><Upload className="w-4 h-4" /> Upload betaalbewijs</>}
+        </button>
+      )}
+
+      {result?.status === 'paid' && (
+        <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-3 flex items-start gap-2" data-testid="saas-bank-proof-result-paid">
+          <FileCheck2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+          <div className="text-xs text-emerald-900 font-bold leading-snug">
+            ✓ Betaling automatisch goedgekeurd. Uw abonnement is direct geactiveerd!
+            <p className="font-normal text-emerald-700 mt-1">
+              Herkend: {result.ocr?.currency || ''} {result.ocr?.amount?.toFixed(2) || '?'}
+              {result.ocr?.date_iso && ` · ${result.ocr.date_iso}`}
+              {result.ocr?.payer_name && ` · ${result.ocr.payer_name}`}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {result?.status === 'pending_approval' && (
+        <div className="rounded-xl bg-amber-50 border border-amber-200 p-3 flex items-start gap-2" data-testid="saas-bank-proof-result-pending">
+          <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+          <div className="text-xs text-amber-900 leading-snug">
+            <p className="font-bold">Wacht op handmatige goedkeuring.</p>
+            <p className="font-normal text-amber-800 mt-1">
+              De automatische controle kon de gegevens niet 100% bevestigen:
+            </p>
+            <ul className="font-normal text-amber-800 mt-1 ml-4 list-disc">
+              {(result.mismatch_reasons || []).slice(0, 3).map((r, i) => <li key={i}>{r}</li>)}
+            </ul>
+            <p className="font-normal text-amber-700 mt-2">
+              Een medewerker controleert binnenkort uw afschrift.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {result && (
+        <button onClick={() => setResult(null)}
+          className="mt-2 text-xs text-slate-500 hover:text-slate-700 font-medium"
+          data-testid="saas-bank-proof-retry">
+          Opnieuw uploaden
+        </button>
+      )}
+    </div>
+  );
+}
+
+function BankBox({ details, invoice, company, onSuccess, onErr }) {
   const [copied, setCopied] = useState('');
   const refText = `ABONNEMENT — ${company} — ${invoice ? new Date(invoice.created_at).toLocaleDateString('nl-NL', { month: 'long', year: 'numeric' }) : 'huidige maand'}`;
   const copy = (label, value) => {
@@ -147,6 +253,9 @@ function BankBox({ details, invoice, company }) {
         Vragen? {details.whatsapp && <>WhatsApp <a href={`https://wa.me/${(details.whatsapp || '').replace(/\D/g, '')}`} className="text-orange-600 font-bold">{details.whatsapp}</a> · </>}
         {details.support_email && <>E-mail <a href={`mailto:${details.support_email}`} className="text-orange-600 font-bold">{details.support_email}</a></>}
       </p>
+
+      {/* Auto-OCR upload-flow — alleen tonen wanneer er een open factuur is */}
+      <BankProofUploader invoice={invoice} onSuccess={onSuccess} onErr={onErr} />
     </div>
   );
 }
@@ -285,7 +394,9 @@ export default function MijnAbonnement() {
         <>
           <OnlinePayBox options={checkoutOptions} openInvoice={openInvoices[0]} onErr={setErr} />
           {bank && (me.currency || 'SRD') === 'SRD' && (
-            <BankBox details={bank} invoice={openInvoices[0]} company="UW BEDRIJF" />
+            <BankBox details={bank} invoice={openInvoices[0]} company={me.company_name || 'UW BEDRIJF'}
+              onSuccess={() => { setMsg('Betaling automatisch goedgekeurd — abonnement is geactiveerd!'); load(); }}
+              onErr={setErr} />
           )}
         </>
       )}

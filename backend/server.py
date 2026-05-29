@@ -14,7 +14,7 @@ import jwt
 from datetime import datetime, timezone, timedelta
 from typing import List, Optional, Literal
 
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, Response, Query, UploadFile, File, Body
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, Response, Query, UploadFile, File, Body, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, EmailStr, Field
@@ -1549,6 +1549,172 @@ async def billing_me_checkout(body: SaasCheckoutIn, user=Depends(get_current_use
     await db.saas_payment_requests.insert_one(pr)
     pr.pop("_id", None)
     return {"url": res["hosted_checkout_url"], "provider": "sumup", "amount": eur_amount, "currency": "EUR"}
+
+
+
+async def _record_saas_payment_manual(
+    *, invoice: dict, company: dict, amount: float, currency: str,
+    method: str, reference: str, statement_id: Optional[str],
+    ocr_meta: Optional[dict], auto_approved: bool, approved_by: str,
+) -> dict:
+    """Helper voor handmatige (bankoverschrijving) SaaS-betalingen. Maakt
+    `saas_payment_requests` + `subscription_payments` aan en activeert het
+    bedrijf wanneer auto-goedgekeurd. Idempotent op invoice_id wanneer al
+    betaald."""
+    if invoice.get("status") == "paid":
+        return {"already_paid": True, "invoice_id": invoice["id"]}
+    now = now_utc()
+    paid_at = iso(now)
+    pr_id = new_id()
+    pr = {
+        "id": pr_id,
+        "company_id": company["id"],
+        "invoice_id": invoice["id"],
+        "provider": method,
+        "provider_id": f"manual:{pr_id[:8]}",
+        "amount": amount,
+        "currency": currency,
+        "status": "paid" if auto_approved else "pending_approval",
+        "bank_statement_id": statement_id,
+        "ocr": ocr_meta or {},
+        "auto_approved": auto_approved,
+        "approved_by": approved_by,
+        "created_at": paid_at,
+        "paid_at": paid_at if auto_approved else None,
+    }
+    await db.saas_payment_requests.insert_one(pr)
+    if not auto_approved:
+        # OCR mismatch — superadmin moet handmatig goedkeuren.
+        return {"status": "pending_approval", "invoice_id": invoice["id"], "request_id": pr_id, "ocr": ocr_meta or {}}
+    # Mark invoice paid
+    await db.subscription_invoices.update_one(
+        {"id": invoice["id"]},
+        {"$set": {"status": "paid", "paid_at": paid_at, "payment_method": method}},
+    )
+    # Subscription payment record
+    pay = {
+        "id": new_id(),
+        "invoice_id": invoice["id"],
+        "company_id": company["id"],
+        "company_name": company.get("name", ""),
+        "amount": amount,
+        "currency": currency,
+        "method": method,
+        "reference": reference,
+        "note": "Auto-goedgekeurd na OCR-controle van bankafschrift" if auto_approved else "",
+        "paid_at": paid_at,
+        "created_at": paid_at,
+        "created_by": approved_by,
+        "auto_approved": auto_approved,
+        "bank_statement_id": statement_id,
+    }
+    await db.subscription_payments.insert_one(pay)
+    await _activate_company_after_saas_payment(company["id"], plan_in_payment=invoice.get("plan"))
+    await _send_saas_payment_email(company, amount, currency, method, invoice["id"])
+    return {"status": "paid", "invoice_id": invoice["id"], "request_id": pr_id, "ocr": ocr_meta or {}}
+
+
+@api.post("/billing/me/bank-confirm")
+async def billing_me_bank_confirm(
+    file: UploadFile = File(...),
+    invoice_id: Optional[str] = Form(None),
+    user=Depends(get_current_user),
+):
+    """Admin upload bankafschrift voor zijn lopende abonnement-factuur. Wij:
+      1. Slaan het bestand op in `bank_statements` (5 MB max, jpg/png/pdf/webp).
+      2. Sturen direct door naar Gemini-OCR voor amount/date/reference-extractie.
+      3. Als bedrag/valuta matcht met de open factuur → auto-goedkeuren →
+         abonnement wordt direct geactiveerd.
+      4. Bij mismatch → status `pending_approval`, superadmin krijgt notificatie.
+
+    Returns: `{status: 'paid'|'pending_approval', ocr: {...}, invoice_id, mismatch_reasons?}`
+    """
+    cid = company_id_of(user)
+    if not cid:
+        raise HTTPException(status_code=400, detail="Geen actief bedrijf")
+    c = await db.companies.find_one({"id": cid}, {"_id": 0})
+    if not c:
+        raise HTTPException(status_code=404, detail="Bedrijf niet gevonden")
+    raw = await file.read()
+    if len(raw) > MAX_LANDING_ASSET_BYTES:
+        raise HTTPException(status_code=413, detail="Bestand groter dan 5 MB")
+    ctype = (file.content_type or "").lower()
+    allowed = ("image/jpeg", "image/jpg", "image/png", "image/webp", "application/pdf")
+    if not any(ctype.startswith(a) or ctype == a for a in allowed):
+        raise HTTPException(status_code=400, detail="Alleen JPG, PNG, WEBP of PDF toegestaan")
+
+    # Vind of maak open factuur
+    if invoice_id:
+        inv = await db.subscription_invoices.find_one(
+            {"id": invoice_id, "company_id": cid}, {"_id": 0},
+        )
+        if not inv:
+            raise HTTPException(status_code=404, detail="Factuur niet gevonden")
+        if inv.get("status") == "paid":
+            raise HTTPException(status_code=400, detail="Deze factuur is al betaald")
+    else:
+        inv = await _ensure_open_invoice_for_company(c, user.get("email", ""))
+
+    # Sla statement op
+    asset_id = new_id()
+    await db.bank_statements.insert_one({
+        "id": asset_id,
+        "filename": file.filename or f"saas-afschrift-{asset_id}",
+        "content_type": ctype,
+        "data_b64": base64.b64encode(raw).decode("ascii"),
+        "size": len(raw),
+        "company_id": cid,
+        "kind": "saas_billing",
+        "invoice_id": inv["id"],
+        "uploaded_at": iso(now_utc()),
+        "uploaded_by": user.get("email"),
+    })
+
+    # OCR + match-check synchroon — gebruiker krijgt direct feedback.
+    ocr_meta: dict = {}
+    auto_approved = False
+    mismatch_reasons: list[str] = []
+    try:
+        ocr = await _ocr_bank_statement(asset_id)
+        ok, reasons = _ocr_match_ok(
+            ocr,
+            expected_amount=float(inv.get("amount") or 0),
+            expected_currency=inv.get("currency") or "SRD",
+        )
+        ocr_meta = {
+            "amount": ocr.get("amount"),
+            "currency": ocr.get("currency"),
+            "date_iso": ocr.get("date_iso"),
+            "payer_name": ocr.get("payer_name"),
+            "reference": ocr.get("reference"),
+            "confidence": ocr.get("confidence"),
+            "raw_text": (ocr.get("raw_text") or "")[:300],
+        }
+        auto_approved = ok
+        mismatch_reasons = reasons
+    except Exception as e:
+        # OCR-engine niet bereikbaar → veilig: laat het als pending_approval staan
+        # zodat superadmin handmatig kan controleren. Frontend toont dat netjes.
+        print(f"[saas-ocr] faalde voor invoice={inv['id'][:8]}: {e}")
+        mismatch_reasons = [f"OCR engine fout: {str(e)[:120]}"]
+
+    result = await _record_saas_payment_manual(
+        invoice=inv,
+        company=c,
+        amount=float(inv.get("amount") or 0),
+        currency=inv.get("currency") or "SRD",
+        method="bank",
+        reference=f"ABONNEMENT — {c.get('name', '')} — {inv.get('id', '')[:8]}",
+        statement_id=asset_id,
+        ocr_meta=ocr_meta,
+        auto_approved=auto_approved,
+        approved_by="auto-ocr" if auto_approved else (user.get("email") or "self"),
+    )
+    if not auto_approved and mismatch_reasons:
+        result["mismatch_reasons"] = mismatch_reasons
+    return result
+
+
 
 
 async def _activate_company_after_saas_payment(company_id: str, plan_in_payment: Optional[str] = None):
