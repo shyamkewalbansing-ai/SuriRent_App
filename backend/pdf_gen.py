@@ -1115,3 +1115,179 @@ def portal_poster_pdf(*, company_name: str, portal_url: str,
     ))
 
     return _build_a6(el)
+
+
+
+def luxury_plate_pdf(*, tenant_name: str, apartment_number: str,
+                     address: str, company_name: str,
+                     kiosk_url: str, company_logo: bytes | None = None,
+                     accent_hex: str = "#D4AF37") -> bytes:
+    """Luxueuze "gouden plaat" QR-poster per huurder.
+    Zwarte achtergrond met goud-getinte randen, logo links, QR-code rechts,
+    centraal huisnummer + adres onderaan. Geschikt om af te drukken als
+    PVC/aluminium plaat voor naast de voordeur.
+
+    Layout: landscape 200mm × 130mm (3:2 ratio) — past op standaard
+    sticker-vellen en is leesbaar van ~2 meter afstand.
+    """
+    from reportlab.pdfgen import canvas
+    from reportlab.lib.pagesizes import landscape
+    from reportlab.lib.utils import ImageReader
+    import qrcode
+
+    # Pagina-dimensies
+    W, H = 200 * mm, 130 * mm
+    buf = io.BytesIO()
+    c = canvas.Canvas(buf, pagesize=landscape((H, W)))  # swap for landscape
+
+    BLACK = colors.HexColor("#0a0a0a")
+    GOLD = colors.HexColor(accent_hex if accent_hex.startswith("#") else "#D4AF37")
+    GOLD_LIGHT = colors.HexColor("#E8C766")
+    GOLD_DARK = colors.HexColor("#A88420")
+
+    # 1) Pagina-achtergrond licht grijs (zoals in voorbeeld foto)
+    c.setFillColor(colors.HexColor("#dcd6cd"))
+    c.rect(0, 0, W, H, fill=1, stroke=0)
+
+    # 2) Buitenrand plaat — gouden border, afgeronde hoeken
+    pad = 6 * mm
+    c.setFillColor(GOLD_DARK)
+    c.roundRect(pad, pad, W - 2 * pad, H - 2 * pad, 6 * mm, fill=1, stroke=0)
+    # Donkere binnenring
+    inner = pad + 3 * mm
+    c.setFillColor(BLACK)
+    c.roundRect(inner, inner, W - 2 * inner, H - 2 * inner, 5 * mm, fill=1, stroke=0)
+    # Innerlijke gouden lijn-rand
+    c.setStrokeColor(GOLD)
+    c.setLineWidth(0.8)
+    c.roundRect(inner + 2 * mm, inner + 2 * mm,
+                W - 2 * (inner + 2 * mm), H - 2 * (inner + 2 * mm),
+                4 * mm, fill=0, stroke=1)
+
+    # 3) Schroef-cirkels in onderhoeken (decoratief)
+    screw_r = 4 * mm
+    for sx in (inner + 6 * mm, W - inner - 6 * mm):
+        sy = inner + 8 * mm
+        c.setFillColor(GOLD_DARK)
+        c.circle(sx, sy, screw_r, fill=1, stroke=0)
+        c.setFillColor(GOLD)
+        c.circle(sx, sy, screw_r - 0.8 * mm, fill=1, stroke=0)
+        # plus-kruis in midden
+        c.setStrokeColor(BLACK)
+        c.setLineWidth(0.6)
+        c.line(sx - 1.5 * mm, sy, sx + 1.5 * mm, sy)
+        c.line(sx, sy - 1.5 * mm, sx, sy + 1.5 * mm)
+
+    # 4) Logo links (als beschikbaar) — gouden tint via blend
+    content_top = H - inner - 8 * mm
+    if company_logo:
+        try:
+            from PIL import Image as PILImage
+            from PIL import ImageOps
+            img = PILImage.open(io.BytesIO(company_logo)).convert("RGBA")
+            # Maak het logo in goud-tint: grayscale → gekleurd
+            r, g, b, a = img.split()
+            gray = ImageOps.grayscale(img)
+            # Pas een gouden tint toe
+            gold_rgb = (212, 175, 55)
+            colored = ImageOps.colorize(gray, black=(20, 15, 0), white=gold_rgb)
+            colored.putalpha(a)
+            out = io.BytesIO()
+            colored.save(out, format="PNG")
+            out.seek(0)
+            logo_size = 38 * mm
+            c.drawImage(ImageReader(out), inner + 10 * mm, content_top - logo_size,
+                        logo_size, logo_size, mask='auto', preserveAspectRatio=True)
+        except Exception:
+            pass  # logo optioneel
+
+    # 5) Bedrijfsnaam in goud (rechts van logo)
+    name_x = inner + 55 * mm
+    c.setFillColor(GOLD)
+    c.setFont("Helvetica-Bold", 34)
+    c.drawString(name_x, content_top - 18 * mm, company_name[:18])
+    # subtekst
+    c.setFillColor(GOLD_LIGHT)
+    c.setFont("Helvetica", 11)
+    c.drawString(name_x, content_top - 25 * mm, "Appartement")
+
+    # 6) QR-code rechts in gouden frame
+    qr_size = 38 * mm
+    qr_x = W - inner - qr_size - 6 * mm
+    qr_y = content_top - qr_size - 2 * mm
+    # frame rond QR
+    c.setStrokeColor(GOLD)
+    c.setLineWidth(1.5)
+    c.roundRect(qr_x - 2 * mm, qr_y - 2 * mm,
+                qr_size + 4 * mm, qr_size + 4 * mm, 2 * mm, fill=0, stroke=1)
+    # gouden achtergrond achter QR
+    c.setFillColor(GOLD)
+    c.rect(qr_x, qr_y, qr_size, qr_size, fill=1, stroke=0)
+    # genereer QR (zwart op transparant — krijgt gouden achtergrond)
+    qr_img = qrcode.QRCode(box_size=10, border=1, error_correction=qrcode.constants.ERROR_CORRECT_H)
+    qr_img.add_data(kiosk_url)
+    qr_img.make(fit=True)
+    qr_pil = qr_img.make_image(fill_color="black", back_color="transparent").convert("RGBA")
+    qr_buf = io.BytesIO()
+    qr_pil.save(qr_buf, format="PNG")
+    qr_buf.seek(0)
+    c.drawImage(ImageReader(qr_buf), qr_x + 1 * mm, qr_y + 1 * mm,
+                qr_size - 2 * mm, qr_size - 2 * mm, mask='auto')
+    # Scan-tekst onder QR
+    c.setFillColor(GOLD)
+    c.setFont("Helvetica-Bold", 9)
+    text = "Scan voor mijn"
+    text2 = "huurportaal"
+    c.drawCentredString(qr_x + qr_size / 2, qr_y - 6 * mm, text)
+    c.drawCentredString(qr_x + qr_size / 2, qr_y - 10 * mm, text2)
+    c.setFillColor(GOLD_LIGHT)
+    c.setFont("Helvetica", 6.5)
+    c.drawCentredString(qr_x + qr_size / 2, qr_y - 14 * mm,
+                        "Betalen • Kwitanties • Onderhoud melden")
+
+    # 7) Horizontale scheidingslijn
+    div_y = inner + 38 * mm
+    c.setStrokeColor(GOLD)
+    c.setLineWidth(0.8)
+    c.line(inner + 12 * mm, div_y, W - inner - 12 * mm, div_y)
+
+    # 8) Naam huurder + appartementsnummer — BIG center
+    # Strip "HUIS" prefix als die al in apt_number staat zodat we niet
+    # "HUIS HUIS 7B" krijgen.
+    apt_clean = apartment_number.strip()
+    upper = apt_clean.upper()
+    if upper.startswith("HUIS "):
+        apt_clean = apt_clean[5:].strip()
+    elif upper.startswith("APPARTEMENT "):
+        apt_clean = apt_clean[12:].strip()
+    tenant_first = (tenant_name or "").split(" ")[0] if tenant_name else ""
+    headline_y = div_y - 14 * mm
+    c.setFillColor(GOLD)
+    c.setFont("Helvetica-Bold", 44)
+    c.drawCentredString(W / 2, headline_y - 4 * mm,
+                        f"HUIS {apt_clean}".upper())
+
+    # 9) Adres onderaan (met locatie-pin glyph)
+    if address:
+        c.setFillColor(GOLD_LIGHT)
+        c.setFont("Helvetica-Bold", 13)
+        addr_y = headline_y - 14 * mm
+        # Pin glyph (simpele cirkel + lijntje, lichtgewicht)
+        pin_x = W / 2 - (c.stringWidth(address, "Helvetica-Bold", 13) / 2) - 6 * mm
+        c.setFillColor(GOLD)
+        c.circle(pin_x + 1.5 * mm, addr_y + 1.5 * mm, 1.5 * mm, fill=1, stroke=0)
+        c.setFillColor(BLACK)
+        c.circle(pin_x + 1.5 * mm, addr_y + 1.8 * mm, 0.7 * mm, fill=1, stroke=0)
+        c.setFillColor(GOLD_LIGHT)
+        c.drawString(pin_x + 5 * mm, addr_y, address)
+
+    # 10) Naam huurder klein in voet (subtiel)
+    if tenant_first:
+        c.setFillColor(GOLD_DARK)
+        c.setFont("Helvetica", 7.5)
+        c.drawCentredString(W / 2, inner + 4 * mm, f"VOOR: {tenant_first.upper()}")
+
+    c.showPage()
+    c.save()
+    buf.seek(0)
+    return buf.getvalue()

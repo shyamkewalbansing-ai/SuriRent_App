@@ -3525,6 +3525,66 @@ async def apartment_kiosk_sticker(apt_id: str, request: Request):
     return _pdf_response(pdf, f"kiosk-sticker-{apt.get('number', apt_id)}.pdf")
 
 
+@api.get("/tenants/{tenant_id}/qr-plate.pdf")
+async def tenant_qr_plate(tenant_id: str, request: Request):
+    """Luxueuze "gouden plaat" QR-poster per huurder voor naast de voordeur.
+    Bevat persoonlijke QR (?t=<tenant_id>) zodat huurder bij eerste scan
+    een eigen PIN kan kiezen. Publiek (geen auth) zodat beheerder de link
+    direct in een nieuw tabblad kan openen voor afdrukken."""
+    t = await db.tenants.find_one(
+        {"id": tenant_id},
+        {"_id": 0, "id": 1, "name": 1, "company_id": 1, "apartment_id": 1},
+    )
+    if not t:
+        raise HTTPException(status_code=404, detail="Huurder niet gevonden")
+    # Appartement info ophalen
+    apt_number = "—"
+    address = ""
+    if t.get("apartment_id"):
+        a = await db.apartments.find_one(
+            {"id": t["apartment_id"]}, {"_id": 0, "number": 1, "address": 1}
+        )
+        if a:
+            apt_number = a.get("number") or apt_number
+            address = a.get("address") or ""
+    # Bedrijf branding ophalen
+    company_name = "SuriRent"
+    accent_hex = "#D4AF37"  # default goud
+    company_logo_bytes = None
+    slug = ""
+    cid = t.get("company_id")
+    if cid:
+        c = await db.companies.find_one(
+            {"id": cid}, {"_id": 0, "name": 1, "slug": 1, "branding": 1, "logo_url": 1}
+        )
+        if c:
+            company_name = c.get("name") or company_name
+            slug = c.get("slug") or ""
+            # Probeer logo te laden uit branding.logo_url
+            logo_url = (c.get("branding") or {}).get("logo_url") or c.get("logo_url")
+            if logo_url:
+                brand = await _company_brand_info(cid)
+                company_logo_bytes = (brand or {}).get("company_logo_bytes")
+    # URL bouwen — persoonlijke huurder-QR
+    base = _company_base_url(request) or _public_url("")
+    if slug:
+        kiosk_url = f"{base}/c/{slug}/kiosk/huurder?t={tenant_id}"
+    else:
+        kiosk_url = f"{base}/kiosk/huurder?t={tenant_id}"
+    from pdf_gen import luxury_plate_pdf
+    pdf = luxury_plate_pdf(
+        tenant_name=t.get("name") or "",
+        apartment_number=apt_number,
+        address=address,
+        company_name=company_name,
+        kiosk_url=kiosk_url,
+        company_logo=company_logo_bytes,
+        accent_hex=accent_hex,
+    )
+    safe_name = (t.get("name") or "huurder").split()[0].lower()
+    return _pdf_response(pdf, f"qr-plaat-{safe_name}-{apt_number}.pdf")
+
+
 @api.get("/companies/me/portal-poster.pdf")
 async def company_portal_poster(request: Request, user=Depends(get_current_user)):
     """A6 printbare poster met QR-code naar het algemene huurportaal van het

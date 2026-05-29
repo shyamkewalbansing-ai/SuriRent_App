@@ -979,10 +979,19 @@ function Apartments() {
               <a href={`${process.env.REACT_APP_BACKEND_URL}/api/apartments/${a.id}/kiosk-sticker.pdf`}
                 target="_blank" rel="noreferrer"
                 data-testid={`apt-qr-${a.id}`}
-                title="QR-sticker voor naast de voordeur"
+                title="Standaard QR-sticker (oranje) voor naast de voordeur"
                 className="w-10 h-10 rounded-xl bg-orange-50 hover:bg-orange-100 text-[#FF5C00] flex items-center justify-center">
                 <QrCode className="w-4 h-4" />
               </a>
+              {a.tenant_id && (
+                <a href={`${process.env.REACT_APP_BACKEND_URL}/api/tenants/${a.tenant_id}/qr-plate.pdf`}
+                  target="_blank" rel="noreferrer"
+                  data-testid={`apt-plate-${a.id}`}
+                  title="Luxe gouden plaat per huurder (printbaar als sticker/PVC plaat)"
+                  className="w-10 h-10 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-700 flex items-center justify-center">
+                  <span className="text-base font-black">★</span>
+                </a>
+              )}
               <button onClick={() => setShellyFor(a)} data-testid={`apt-shelly-${a.id}`}
                 title={a.shelly?.device_id ? `Stroom: ${a.shelly.label || a.shelly.device_id}` : 'Stroom koppelen'}
                 className={`w-10 h-10 rounded-xl flex items-center justify-center ${
