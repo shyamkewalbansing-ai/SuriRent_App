@@ -6,6 +6,7 @@
 // Branding is fetched from /api/public/companies/{slug}/branding (no auth).
 
 import { api } from './api';
+import { RESERVED_SLUGS } from './branded-nav';
 
 const STORAGE_KEY = 'pwa_company_slug';
 const PRIMARY_KEY = 'pwa_company_primary';
@@ -29,8 +30,15 @@ function readFromUrl() {
     const params = new URLSearchParams(window.location.search);
     const fromQuery = (params.get('c') || '').trim().toLowerCase();
     if (fromQuery) return fromQuery;
-    const m = window.location.pathname.match(/^\/c\/([a-z0-9-]+)/i);
-    if (m) return m[1].toLowerCase();
+    // Legacy /c/<slug>/... pad
+    const mLegacy = window.location.pathname.match(/^\/c\/([a-z0-9-]+)/i);
+    if (mLegacy) return mLegacy[1].toLowerCase();
+    // Nieuw /<slug>/... pad — eerste segment, mits geen gereserveerde route.
+    const mNew = window.location.pathname.match(/^\/([a-z0-9-]+)(?=\/|$)/i);
+    if (mNew) {
+      const slug = mNew[1].toLowerCase();
+      if (!RESERVED_SLUGS.has(slug)) return slug;
+    }
   } catch { /* ignore */ }
   return '';
 }

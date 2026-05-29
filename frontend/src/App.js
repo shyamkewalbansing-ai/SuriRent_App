@@ -126,6 +126,12 @@ function AppRoutes() {
       <Route path="/vastgoed/kiosk/huurder" element={<Navigate to="/kiosk/huurder" replace />} />
       <Route path="/vastgoed/kiosk/klant" element={<Navigate to="/kiosk/klant" replace />} />
 
+      {/* Nieuw: branded routes als short-path `/<slug>/*`.
+          MOET als laatste vóór de 404-catch staan zodat alle exacte paden
+          (login, admin, kiosk, etc.) eerst matchen. Gereserveerde slugs
+          worden in BrandedShell als 404 afgehandeld. */}
+      <Route path="/:slug/*" element={<BrandedRouteTree />} />
+
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
@@ -156,6 +162,9 @@ function HybridRoutes() {
       <Route path="/vastgoed/kiosk" element={<Navigate to="/kiosk" replace />} />
       <Route path="/vastgoed/kiosk/huurder" element={<Navigate to="/kiosk/huurder" replace />} />
       <Route path="/vastgoed/kiosk/klant" element={<Navigate to="/kiosk/klant" replace />} />
+
+      {/* Nieuw: branded routes als short-path `/<slug>/*` — moet als laatste. */}
+      <Route path="/:slug/*" element={<BrandedRouteTree />} />
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

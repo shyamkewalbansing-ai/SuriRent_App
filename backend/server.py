@@ -781,6 +781,36 @@ def _slugify(name: str) -> str:
     return s[:40] or "bedrijf"
 
 
+# Slugs die niet als bedrijfsnaam gebruikt mogen worden — anders botsen ze met
+# vaste app-routes (https://app.surirent.sr/<slug>/...). LET OP: deze lijst
+# moet gesynchroniseerd blijven met de gereserveerde slugs in
+# `frontend/src/lib/branding.js` (`RESERVED_SLUGS`).
+RESERVED_SLUGS = {
+    # Frontend app-routes
+    "login", "admin", "kiosk", "huurder", "onderteken", "c", "vastgoed",
+    # Backend / infra paths
+    "api", "health", "static", "manifest", "sw", "favicon", "assets",
+    # Marketing & meta
+    "www", "app", "mail", "ftp", "blog", "support", "docs", "help",
+    # Toekomstige uitbreidingen
+    "register", "settings", "billing", "checkout", "auth", "logout",
+    "tenant", "tenants", "company", "companies", "superadmin",
+}
+
+
+def _validate_slug_or_raise(slug: str) -> str:
+    """Normaliseert + valideert een slug. Raise 400 bij ongeldig of gereserveerd."""
+    import re
+    s = (slug or "").lower().strip()
+    if not s:
+        raise HTTPException(status_code=400, detail="Slug is verplicht")
+    if not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,39}", s):
+        raise HTTPException(status_code=400, detail="Slug mag alleen letters, cijfers en streepjes bevatten (max 40 tekens)")
+    if s in RESERVED_SLUGS:
+        raise HTTPException(status_code=400, detail=f"De slug '{s}' is gereserveerd door het platform. Kies een andere.")
+    return s
+
+
 def _detect_country_currency(phone: str) -> tuple:
     """Detect (country, currency) from international phone prefix.
     NL (+31 / 0031) → EUR; everything else falls back to Suriname / SRD."""
@@ -810,6 +840,10 @@ async def register(body: RegisterIn, response: Response):
     # Self-serve onboarding: when company_name is provided, create a new tenant.
     if (body.company_name or "").strip():
         base_slug = _slugify(body.company_name)
+        # Gereserveerde slugs auto-bypassen door direct te suffixen (registratie
+        # mag nooit falen op een randgeval — superadmin kan later wel renamen).
+        if base_slug in RESERVED_SLUGS:
+            base_slug = f"{base_slug}-bedrijf"
         slug = base_slug
         i = 2
         while await db.companies.find_one({"slug": slug}, {"_id": 1}):
@@ -2117,11 +2151,11 @@ async def get_my_url_info(request: Request, user=Depends(get_current_user)):
     app_domain = (os.environ.get("SAAS_APP_DOMAIN") or "").strip().lower() or host
     base_url = f"{scheme}://{app_domain}" if app_domain else ""
     query_url = f"{base_url}/login?c={slug}" if base_url else ""
-    path_url = f"{base_url}/c/{slug}" if base_url else ""
-    kiosk_url = f"{base_url}/c/{slug}/kiosk" if base_url else ""
-    tenant_kiosk_url = f"{base_url}/c/{slug}/kiosk/huurder" if base_url else ""
+    path_url = f"{base_url}/{slug}" if base_url else ""
+    kiosk_url = f"{base_url}/{slug}/kiosk" if base_url else ""
+    tenant_kiosk_url = f"{base_url}/{slug}/kiosk/huurder" if base_url else ""
     tenant_portal_url = tenant_kiosk_url
-    customer_display_url = f"{base_url}/c/{slug}/kiosk/klant" if base_url else ""
+    customer_display_url = f"{base_url}/{slug}/kiosk/klant" if base_url else ""
 
     # Custom domain (uit Instellingen → Eigen domein). Toon als primary wanneer
     # admin het heeft ingesteld + DNS geverifieerd.
@@ -2160,12 +2194,12 @@ async def get_my_url_info(request: Request, user=Depends(get_current_user)):
 # zodat een gebruiker niet zomaar een willekeurige (phishing-)URL door onze
 # QR-generator kan jagen.
 _QR_KIND_PATHS = {
-    "login":           "/c/{slug}",
-    "kiosk":           "/c/{slug}/kiosk",
-    "tenant_kiosk":    "/c/{slug}/kiosk/huurder",
-    "customer_display":"/c/{slug}/kiosk/klant",
+    "login":           "/{slug}",
+    "kiosk":           "/{slug}/kiosk",
+    "tenant_kiosk":    "/{slug}/kiosk/huurder",
+    "customer_display":"/{slug}/kiosk/klant",
     # Huurportaal = zelfde route als de huurder-kiosk (PIN-only via QR).
-    "tenant_portal":   "/c/{slug}/kiosk/huurder",
+    "tenant_portal":   "/{slug}/kiosk/huurder",
     "query":           "/login?c={slug}",
 }
 
@@ -2725,9 +2759,7 @@ async def test_saas_smtp(user=Depends(require_role("superadmin"))):
 
 @api.post("/companies", response_model=CompanyOut)
 async def create_company(body: CompanyIn, user=Depends(require_role("superadmin"))):
-    slug = body.slug.lower().strip()
-    if not slug.isidentifier() and not all(c.isalnum() or c == '-' for c in slug):
-        raise HTTPException(status_code=400, detail="Slug mag alleen letters, cijfers en streepjes bevatten")
+    slug = _validate_slug_or_raise(body.slug)
     existing = await db.companies.find_one({"slug": slug})
     if existing:
         raise HTTPException(status_code=400, detail="Slug is al in gebruik")
@@ -2741,7 +2773,12 @@ async def create_company(body: CompanyIn, user=Depends(require_role("superadmin"
 async def update_company(cid: str, body: CompanyIn, user=Depends(require_role("superadmin"))):
     from pymongo import ReturnDocument
     payload = body.model_dump()
-    payload["slug"] = payload["slug"].lower().strip()
+    new_slug = _validate_slug_or_raise(payload["slug"])
+    # Check of nieuwe slug niet al door een ander bedrijf in gebruik is.
+    clash = await db.companies.find_one({"slug": new_slug, "id": {"$ne": cid}}, {"_id": 0, "id": 1})
+    if clash:
+        raise HTTPException(status_code=400, detail="Slug is al in gebruik")
+    payload["slug"] = new_slug
     res = await db.companies.find_one_and_update(
         {"id": cid}, {"$set": payload},
         projection={"_id": 0}, return_document=ReturnDocument.AFTER,
@@ -4043,7 +4080,7 @@ async def apartment_kiosk_sticker(apt_id: str, request: Request):
     base = _company_base_url(request) or _public_url("")
     tenant_param = f"?t={apt['tenant_id']}" if apt.get("tenant_id") else f"?apt={apt_id}"
     if slug:
-        kiosk_url = f"{base}/c/{slug}/kiosk/huurder{tenant_param}"
+        kiosk_url = f"{base}/{slug}/kiosk/huurder{tenant_param}"
     else:
         kiosk_url = f"{base}/kiosk/huurder{tenant_param}"
     from pdf_gen import kiosk_sticker_pdf
@@ -4113,7 +4150,7 @@ async def tenant_qr_plate(tenant_id: str, request: Request, refresh: int = 0,
     # URL bouwen — persoonlijke huurder-QR
     base = _company_base_url(request) or _public_url("")
     if slug:
-        kiosk_url = f"{base}/c/{slug}/kiosk/huurder?t={tenant_id}"
+        kiosk_url = f"{base}/{slug}/kiosk/huurder?t={tenant_id}"
     else:
         kiosk_url = f"{base}/kiosk/huurder?t={tenant_id}"
     from pdf_gen import luxury_plate_pdf, luxury_plate_pdf_ai
@@ -4186,7 +4223,7 @@ async def company_portal_poster(request: Request, user=Depends(get_current_user)
     if not c or not c.get("slug"):
         raise HTTPException(status_code=404, detail="Bedrijf niet gevonden")
     base = _company_base_url(request) or _public_url("")
-    portal_url = f"{base}/c/{c['slug']}/kiosk/huurder"
+    portal_url = f"{base}/{c['slug']}/kiosk/huurder"
     primary_hex = ((c.get("branding") or {}).get("primary_color")) or "#FF5C00"
     from pdf_gen import portal_poster_pdf
     pdf = portal_poster_pdf(
@@ -4224,7 +4261,7 @@ async def tenant_portal_poster(tenant_id: str, request: Request, user=Depends(ge
     # poster wel naam + appartement zodat iedereen weet welke sticker bij
     # welk huis hoort.
     base = _company_base_url(request) or _public_url("")
-    portal_url = f"{base}/c/{c['slug']}/kiosk/huurder"
+    portal_url = f"{base}/{c['slug']}/kiosk/huurder"
     primary_hex = ((c.get("branding") or {}).get("primary_color")) or "#FF5C00"
     from pdf_gen import portal_poster_pdf
     pdf = portal_poster_pdf(

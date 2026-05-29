@@ -1,5 +1,18 @@
 # Vastgoed Kiosk - PRD
 
+## Session 2026-02-26 — Short branded URLs + subdomain feature verwijderd ✅
+- **Branded URL gewijzigd van `/c/<slug>/...` → `/<slug>/...`** (zonder `/c/`-prefix). Bv. `surirent.sr/surirent` i.p.v. `surirent.sr/c/surirent`. Legacy `/c/<slug>/...` URLs blijven werken (oude QR-codes, welkomstmails).
+- **Reserved slugs server-side afgedwongen** (`RESERVED_SLUGS` constant): `admin`, `login`, `kiosk`, `huurder`, `onderteken`, `c`, `api`, `health`, `static`, etc. Superadmin POST/PUT `/api/companies` weigert reserved slugs met 400. Auto-suffix in self-serve registratie (auto-generated slug die per ongeluk reserved is → `-bedrijf` suffix).
+- **`_validate_slug_or_raise()` helper** controleert regex + reserved-lijst.
+- **Frontend `branded-nav.js`** bevat nu `RESERVED_SLUGS` Set (gesynced met backend). `brandedSlugFromPath()` detecteert zowel `/c/<slug>/` (legacy) als `/<slug>/` (nieuw, met reserved-filter). `useBrandedNavigate()` prefixt nu `/<slug>` i.p.v. `/c/<slug>`.
+- **Frontend `App.js`** voegt `<Route path="/:slug/*">` als laatste vóór 404 catch-all toe (zowel `AppRoutes` als `HybridRoutes`). Alle exacte paden matchen eerst.
+- **Frontend `branding.js`** detecteert beide URL-vormen.
+- **`MyUrlCard` toont nu de nieuwe URL** + de "Eigen subdomein"-feature is volledig verwijderd. Alleen `Custom domain` (vanuit Instellingen → Eigen domein, DNS verified) wordt nog als primaire URL gemarkeerd.
+- **Backend wijzigingen**: `_QR_KIND_PATHS`, `/companies/me/url-info`, `kiosk-sticker.pdf`, `qr-plate.pdf`, `portal-poster.pdf` allemaal naar `/<slug>/...`.
+- Geverifieerd: `/surirent` toont branded LoginPage, `/c/surirent` blijft werken (legacy compat), `/login` blijft default LoginPage, `/nonexistent-xyz` toont "Bedrijf niet gevonden", reserved-slug create geweigerd met heldere foutmelding.
+
+
+
 ## Original Problem Statement
 "Ik wil de /vastgoed en de KIOSK van dit https://github.com/shyamkewalbansing-ai/erp.git hierop zetten met backend en frontend alleen de /vastgoed en de KIOSK..."
 
