@@ -1158,61 +1158,52 @@ def luxury_plate_pdf(*, tenant_name: str, apartment_number: str,
                 return ImageFont.truetype(fp, size)
         return ImageFont.load_default()
 
-    # Helper om een dynamisch gebied schoon te maken door een schoon "leeg"
-    # stuk van de plaat te kopiëren. Vermijdt zichtbare flat-black rechthoeken.
-    def clear_region(x0, y0, x1, y1, source_y=480):
-        """Kopieer een horizontale strook plaat-zwart over het regio."""
-        from PIL import Image as _PILImage
-        # Source: een dunne horizontale strook van een leeg deel van de plaat,
-        # rond y=source_y, breedte uit het zelfde gebied + tile horizontaal.
-        h = y1 - y0
-        w = x1 - x0
-        # Pak een SOURCE strook van zelfde breedte, op een Y zonder tekst
-        src = img.crop((x0, source_y - h // 2, x1, source_y + h - h // 2))
-        # Als source te smal/scheef is, fall back op flat zwart
-        if src.size != (w, h):
-            src = _PILImage.new("RGB", (w, h), PLATE_BLACK)
-        img.paste(src, (x0, y0))
+    # STAP 0 — Maskeer de COMPLETE binnenkant van de plaat met flat zwart,
+    # zodat we vers kunnen tekenen. Bewust GEEN cropping uit andere delen
+    # van de template (kopieerde de bestaande tekst over zichzelf heen!).
+    # We behouden:
+    #   • Gouden buitenrand
+    #   • Logo regio links (x < 600, y in 150..820)
+    #   • Schroef-cirkels in onderhoeken
+    # Alles binnen het zwarte vlak wordt vers opgebouwd.
 
-    # 2) BEDRIJFSNAAM — overschrijf "Gopi" tekst.
-    # Template-coördinaten van "Gopi" big text: ongeveer x=465..870 y=195..420
-    # We maskeren dat gebied met plaat-zwart en zetten de echte bedrijfsnaam.
+    # Mask de TEKST/QR rechterkant + onderste tekstdelen
+    # Rechter helft (vanaf na het logo)
+    draw.rectangle([670, 130, W - 130, H - 130], fill=PLATE_BLACK)
+    # Onder-strook midden (verbergt evt restanten van "Kewalbansingweg")
+    draw.rectangle([130, 600, W - 130, H - 130], fill=PLATE_BLACK)
+
+    # 2) BEDRIJFSNAAM — alles in rechterhelft is al zwart gemaskeerd in STAP 0.
     company_name_clean = (company_name or "").strip() or "Bedrijf"
-    # Mask box voor de oude "Gopi" tekst — kopieer schone plaat-strook
-    mask_x0, mask_y0, mask_x1, mask_y1 = 460, 175, 1080, 415
-    clear_region(mask_x0, mask_y0, mask_x1, mask_y1, source_y=510)
-    # Bepaal font-grootte zodat het in de breedte past
-    target_height = 200
-    cn_size = 200
-    cn_font = font_at(cn_size)
+    # Tekst-zone (rechts van logo, ruim weg van logo om overlap te voorkomen)
+    cn_x0, cn_y0, cn_x1, cn_y1 = 670, 230, 1090, 480
+    # Auto-fit font op breedte
+    cn_size = 130
     while cn_size > 50:
         cn_font = font_at(cn_size)
         bbox = draw.textbbox((0, 0), company_name_clean, font=cn_font)
-        cn_w = bbox[2] - bbox[0]
-        cn_h = bbox[3] - bbox[1]
-        if cn_w <= (mask_x1 - mask_x0) and cn_h <= target_height:
+        if (bbox[2] - bbox[0]) <= (cn_x1 - cn_x0) and (bbox[3] - bbox[1]) <= 160:
             break
-        cn_size -= 10
+        cn_size -= 8
+    cn_font = font_at(cn_size)
     bbox = draw.textbbox((0, 0), company_name_clean, font=cn_font)
     cn_h = bbox[3] - bbox[1]
-    # Plaats de tekst links uitgelijnd, verticaal gecentreerd in de mask
-    text_x = mask_x0 + 5
-    text_y = mask_y0 + ((mask_y1 - mask_y0) - cn_h) // 2 - bbox[1]
+    text_x = cn_x0
+    text_y = cn_y0 + ((cn_y1 - cn_y0) - cn_h) // 2 - bbox[1] - 30
     draw.text((text_x, text_y), company_name_clean, fill=GOLD, font=cn_font)
-    # "Appartement's" subtekst — staat al in template op y≈430-490, dus we
-    # laten die intact (statisch).
+    # "Appartement's" subtekst onder bedrijfsnaam
+    sub_font = font_at(50)
+    sub_x = cn_x0 + 8
+    sub_y = text_y + cn_h + 30
+    draw.text((sub_x, sub_y), "Appartement's", fill=GOLD_LIGHT, font=sub_font)
 
-    # 3) QR-CODE — overlay een nieuwe TRANSPARANTE QR over het bestaande gebied
-    # QR area in template (incl. gouden rand): x=1115..1395 y=140..440
-    qr_x0, qr_y0, qr_x1, qr_y1 = 1115, 140, 1400, 440
-    # Mask het oude QR-gebied met een schone plaat-strook zodat de oude QR weg is.
-    # We laten de gouden frame-rand intact door alleen het binnenste gebied
-    # te overschrijven (14px marge).
+    # 3) QR-CODE — overlay vers in de top-right zone (al gemaskeerd in STAP 0)
+    qr_x0, qr_y0, qr_x1, qr_y1 = 1120, 160, 1395, 440
+    # Gouden frame rond QR (vers tekenen)
+    frame_thickness = 6
+    draw.rectangle([qr_x0, qr_y0, qr_x1, qr_y1], outline=GOLD, width=frame_thickness)
+    # Klein binnen-margin tussen frame en QR
     inner = 14
-    clear_region(
-        qr_x0 + inner, qr_y0 + inner, qr_x1 - inner, qr_y1 - inner,
-        source_y=510,
-    )
     # Nieuwe transparante QR (goud op plaat-zwart, naadloos met achtergrond)
     qr_box_size = qr_x1 - qr_x0 - 2 * inner  # ~257px
     qr = qrcode.QRCode(box_size=10, border=0, error_correction=qrcode.constants.ERROR_CORRECT_H)
@@ -1222,7 +1213,11 @@ def luxury_plate_pdf(*, tenant_name: str, apartment_number: str,
     qr_resized = qr_pil.resize((qr_box_size, qr_box_size), PILImage.NEAREST)
     img.paste(qr_resized, (qr_x0 + inner, qr_y0 + inner))
 
-    # 4) HUIS XX — overschrijf de "HUIS 7B" tekst
+    # Horizontale scheidingslijn boven HUIS-tekst (gouden lijn vers tekenen)
+    div_y = 620
+    draw.line([(180, div_y), (W - 180, div_y)], fill=GOLD, width=4)
+
+    # 4) HUIS XX
     apt_clean = (apartment_number or "").strip()
     upper = apt_clean.upper()
     if upper.startswith("HUIS "):
@@ -1230,29 +1225,25 @@ def luxury_plate_pdf(*, tenant_name: str, apartment_number: str,
     elif upper.startswith("APPARTEMENT "):
         apt_clean = apt_clean[12:].strip()
     headline = f"HUIS {apt_clean}".upper()
-    # Mask het "HUIS 7B" gebied met een schoon stuk plaat-zwart
-    huis_x0, huis_y0, huis_x1, huis_y1 = 240, 640, 1280, 820
-    clear_region(huis_x0, huis_y0, huis_x1, huis_y1, source_y=510)
+    huis_y0, huis_y1 = 660, 830
     # Auto-fit font
-    huis_size = 170
+    huis_size = 200
     while huis_size > 80:
         huis_font = font_at(huis_size)
         bbox = draw.textbbox((0, 0), headline, font=huis_font)
-        if (bbox[2] - bbox[0]) <= (huis_x1 - huis_x0 - 40):
+        if (bbox[2] - bbox[0]) <= (W - 360):
             break
         huis_size -= 10
     huis_font = font_at(huis_size)
     bbox = draw.textbbox((0, 0), headline, font=huis_font)
     hw = bbox[2] - bbox[0]
     hh = bbox[3] - bbox[1]
-    # Gecentreerd in het mask-gebied
     hx = (W - hw) // 2
     hy = huis_y0 + ((huis_y1 - huis_y0) - hh) // 2 - bbox[1]
     draw.text((hx, hy), headline, fill=GOLD, font=huis_font)
 
-    # 5) ADRES — overschrijf "Kewalbansingweg 7 B" lijn met schoon plaat-zwart
-    addr_x0, addr_y0, addr_x1, addr_y1 = 240, 840, 1280, 920
-    clear_region(addr_x0, addr_y0, addr_x1, addr_y1, source_y=510)
+    # 5) ADRES (al gemaskeerd in STAP 0)
+    addr_x0, addr_y0, addr_x1, addr_y1 = 240, 860, 1280, 940
     if address:
         addr_text = address
         addr_size = 56
