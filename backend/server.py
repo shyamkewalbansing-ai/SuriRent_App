@@ -1885,6 +1885,8 @@ def _company_branding_response(c: dict) -> dict:
         "address": c.get("address") or "",
         "bank_account_sr": c.get("bank_account_sr") or "",
         "bank_account_nl": c.get("bank_account_nl") or "",
+        "mope_account": c.get("mope_account") or "",
+        "uni5pay_account": c.get("uni5pay_account") or "",
     }
 
 
@@ -1984,6 +1986,8 @@ class CompanyProfileIn(BaseModel):
     address: Optional[str] = None
     bank_account_sr: Optional[str] = None
     bank_account_nl: Optional[str] = None
+    mope_account: Optional[str] = None
+    uni5pay_account: Optional[str] = None
 
 
 @api.put("/companies/me/profile")
@@ -2012,6 +2016,10 @@ async def put_my_company_profile(
         update["bank_account_sr"] = body.bank_account_sr.strip()[:200]
     if body.bank_account_nl is not None:
         update["bank_account_nl"] = body.bank_account_nl.strip()[:200]
+    if body.mope_account is not None:
+        update["mope_account"] = body.mope_account.strip()[:200]
+    if body.uni5pay_account is not None:
+        update["uni5pay_account"] = body.uni5pay_account.strip()[:200]
     if not update:
         raise HTTPException(status_code=400, detail="Geen velden om bij te werken")
     update["updated_at"] = iso(now_utc())
@@ -3666,27 +3674,31 @@ async def tenant_portal_invoices(tenant=Depends(get_tenant_session)):
 async def tenant_portal_create_payment(body: TenantPaymentIn, tenant=Depends(get_tenant_session)):
     """Huurder registreert zelf een betaling via de Kiosk.
 
-    Bankoverschrijving-flow:
-      • method == "bank" → status = "pending_approval"
+    Bewijs-vereiste flow (bank, Mope, Uni5Pay):
+      • method == "bank|mope|uni5pay" → status = "pending_approval"
       • bank_statement_id is verplicht (geüpload via /bank-statement-upload)
-      • bank_country (SR/NL) wordt opgeslagen voor admin overzicht
-      • Factuur blijft open tot admin op /payments/{id}/approve klikt
+      • bank_country (alleen bij bank): "SR" of "NL"
+      • Factuur blijft open tot OCR auto-approve of admin manual approve
     """
     is_bank = body.method == "bank"
-    if is_bank:
+    needs_proof = body.method in ("bank", "mope", "uni5pay")
+    proof_label = {
+        "bank": "Bankafschrift", "mope": "Mope betaalbewijs",
+        "uni5pay": "Uni5Pay betaalbewijs",
+    }.get(body.method, "Betaalbewijs")
+    if needs_proof:
         if not body.bank_statement_id:
             raise HTTPException(
                 status_code=400,
-                detail="Bankafschrift is verplicht bij bankoverschrijving.",
+                detail=f"{proof_label} is verplicht.",
             )
-        # Verifieer dat het bankafschrift bestaat en bij deze tenant hoort
         stmt = await db.bank_statements.find_one(
             {"id": body.bank_statement_id, "tenant_id": tenant["id"]},
             {"_id": 0, "id": 1, "filename": 1, "size": 1, "content_type": 1},
         )
         if not stmt:
-            raise HTTPException(status_code=404, detail="Bankafschrift niet gevonden")
-        if not body.bank_country:
+            raise HTTPException(status_code=404, detail=f"{proof_label} niet gevonden")
+        if is_bank and not body.bank_country:
             raise HTTPException(status_code=400, detail="Geef aan vanuit welk land u betaalt.")
 
     if body.invoice_id:
@@ -3712,18 +3724,18 @@ async def tenant_portal_create_payment(body: TenantPaymentIn, tenant=Depends(get
         note=body.note or "",
         received_by=tenant.get("name") or "Huurder Kiosk",
     )
-    payment_status = "pending_approval" if is_bank else "approved"
+    payment_status = "pending_approval" if needs_proof else "approved"
     doc = await _create_payment_doc(
         pin, company_id=tenant.get("company_id"),
         approved_by=tenant.get("name") or "Huurder Kiosk",
         status=payment_status,
     )
-    # Voeg bankoverschrijving-metadata toe aan het payment document
-    if is_bank:
+    # Voeg bewijs-metadata toe (bank/mope/uni5pay)
+    if needs_proof:
         await db.payments.update_one(
             {"id": doc["id"]},
             {"$set": {
-                "bank_country": body.bank_country,
+                "bank_country": body.bank_country if is_bank else None,
                 "bank_statement_id": body.bank_statement_id,
                 "bank_statement_filename": stmt.get("filename"),
                 "bank_statement_size": stmt.get("size"),
@@ -3731,7 +3743,7 @@ async def tenant_portal_create_payment(body: TenantPaymentIn, tenant=Depends(get
                 "submitted_at": iso(now_utc()),
             }},
         )
-        doc["bank_country"] = body.bank_country
+        doc["bank_country"] = body.bank_country if is_bank else None
         doc["bank_statement_id"] = body.bank_statement_id
         doc["bank_statement_filename"] = stmt.get("filename")
         # Vuur-en-vergeet OCR + auto-approve in achtergrond zodat de huurder
@@ -3751,10 +3763,14 @@ async def tenant_portal_create_payment(body: TenantPaymentIn, tenant=Depends(get
     enriched = await _enrich_payment(doc)
     # Notify admins of the company about the self-service payment.
     try:
-        if is_bank:
-            country_label = "Suriname" if body.bank_country == "SR" else "Nederland"
-            title = f"Bankoverschrijving wacht op goedkeuring · {enriched.get('currency', '')} {float(enriched.get('amount', 0)):,.2f}"
-            body_msg = f"{enriched.get('tenant_name') or tenant.get('name')} ({country_label}) — controleer bankafschrift"
+        if needs_proof:
+            method_label = {"bank": "Bankoverschrijving", "mope": "Mope-betaling",
+                            "uni5pay": "Uni5Pay-betaling"}.get(body.method, "Betaling")
+            extra = ""
+            if is_bank:
+                extra = f" ({'Suriname' if body.bank_country == 'SR' else 'Nederland'})"
+            title = f"{method_label} wacht op goedkeuring · {enriched.get('currency', '')} {float(enriched.get('amount', 0)):,.2f}"
+            body_msg = f"{enriched.get('tenant_name') or tenant.get('name')}{extra} — controleer bewijs"
             kind = "payment_pending"
         else:
             title = f"Huurder-betaling {enriched.get('currency', '')} {float(enriched.get('amount', 0)):,.2f}"

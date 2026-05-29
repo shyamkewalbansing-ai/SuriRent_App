@@ -756,3 +756,17 @@ Lint clean. Verified via desktop screenshots (1440×900): élke admin-pagina (Ov
   - Mismatch datum (oud afschrift 103 dagen): `status=pending_approval, reasons=["afschrift 103 dagen oud (>21)"]` ✓
 - ✅ **OCR-tijd**: ~6-10 sec per afschrift (Gemini 2.5 Flash latency). Vuur-en-vergeet zodat de huurder geen vertraging ervaart.
 - ✅ **Audit-trail**: alle OCR resultaten worden permanent opgeslagen op het payment record (zowel bij approve als mismatch) zodat back-tracing en compliance-controle altijd mogelijk is.
+
+
+### Session 2026-02 — Mope + Uni5Pay flow (QR + bewijs upload + OCR) ✅
+- ✅ **Backend**: `needs_proof = method in (bank, mope, uni5pay)` — alle 3 bewijs-vereiste methoden hebben dezelfde behandeling: verplichte upload via `/bank-statement-upload`, status `pending_approval`, OCR auto-approve via Gemini 2.5 Flash. Foutmeldingen geleidelijk naargelang methode ("Mope betaalbewijs verplicht" / "Uni5Pay betaalbewijs verplicht" / "Bankafschrift verplicht").
+- ✅ **CompanyProfileIn + _company_branding_response** uitgebreid met `mope_account` en `uni5pay_account` (Mope ID/telefoonnummer en Uni5Pay merchant code).
+- ✅ **Branding pagina** ("Mobile wallets" sectie): admins kunnen Mope rekening en Uni5Pay rekening invullen, met emoji 📱 + uitleg.
+- ✅ **Tenant Kiosk — TenantPayMobile component**: nieuw scherm voor mope/uni5pay met:
+  - QR-code (kleurgecodeerd groen Mope / rose Uni5Pay) via `qrcode.react` library
+  - Info-blok: naar / bedrag / kenmerk
+  - "Open Mope/Uni5Pay app" knop met deep-link (`mope://pay?to=...` / `uni5pay://pay?to=...`)
+  - Verplichte schermafdruk upload (zelfde uploader als bank flow)
+- ✅ **Pay-confirm scherm**: amber waarschuwing en knop-label nu universeel voor alle 3 methodes ("Verstuur ter controle"). ConfirmRow toont "Betaalbewijs" voor mope/uni5pay; Land alleen voor bank.
+- ✅ **Backend tests E2E**: Mope zonder bewijs → 400 ✓; Uni5Pay zonder bewijs → 400 ✓; Mope met PNG bewijs (7000 SRD) → OCR detecteert bedrag 7000.0, confidence 1.0, status=approved, auto_approved=True ✓.
+- ✅ **Smoke screenshot 390×844**: Mope flow toont groene QR + bedrijfsinfo (NAAR/BEDRAG/KENMERK) + groene "Open Mope app" knop + upload zone.

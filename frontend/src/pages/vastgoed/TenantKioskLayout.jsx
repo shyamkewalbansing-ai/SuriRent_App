@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useBrandedNavigate } from '../../lib/branded-nav';
 import { AnimatePresence, motion } from 'framer-motion';
+import { QRCodeSVG } from 'qrcode.react';
 import {
   Lock, Loader2, LogOut, CreditCard, Wrench, User, Phone,
   CheckCircle2, ChevronRight, Calendar, ArrowLeft, Building2, Delete,
@@ -1185,6 +1186,184 @@ function TenantPayBank({ payload, overview, branding, onBack, onConfirm }) {
 
 
 
+
+// =====================================================================
+// PAY MOBILE — Mope / Uni5Pay: QR + open-app + upload bewijs (verplicht)
+// =====================================================================
+function TenantPayMobile({ payload, overview, branding, onBack, onConfirm }) {
+  const { tenant, apartment: apt } = overview;
+  const cur = payload.currency || 'SRD';
+  const [stmt, setStmt] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const [err, setErr] = useState('');
+  const fileRef = useRef(null);
+
+  const isMope = payload.method === 'mope';
+  const providerName = isMope ? 'Mope' : 'Uni5Pay';
+  const account = isMope ? (branding?.mope_account || '') : (branding?.uni5pay_account || '');
+  const accent = isMope ? 'emerald' : 'rose';
+  const accentBg = isMope ? 'bg-emerald-100' : 'bg-rose-100';
+  const accentText = isMope ? 'text-emerald-700' : 'text-rose-700';
+
+  // QR payload — bevat alle relevante info zodat een betaal-app het kan
+  // herkennen. Voor echte deep-link integraties wordt dit meestal door de
+  // provider gespecificeerd; we tonen hier een leesbare string zodat zowel
+  // de mens als de app de info kan zien.
+  const qrPayload = [
+    `provider:${providerName}`,
+    `to:${account || 'onbekend'}`,
+    `amount:${cur} ${(payload.amount || 0).toFixed(2)}`,
+    `ref:${tenant?.name || ''}${apt ? ` HUIS ${apt.number}` : ''}`,
+  ].join('\n');
+
+  // Deep link — fallback naar zoeken in store als app niet geïnstalleerd
+  const deepLink = isMope
+    ? `mope://pay?to=${encodeURIComponent(account)}&amount=${payload.amount}&currency=${cur}`
+    : `uni5pay://pay?to=${encodeURIComponent(account)}&amount=${payload.amount}&currency=${cur}`;
+
+  const onPick = async (file) => {
+    setErr('');
+    if (!file) return;
+    const ALLOWED = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+    if (!ALLOWED.includes(file.type)) { setErr('Alleen PDF, JPG of PNG toegestaan.'); return; }
+    if (file.size > 5 * 1024 * 1024) { setErr('Bestand mag max 5 MB zijn.'); return; }
+    setUploading(true);
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      const { data } = await api.post('/tenant-portal/bank-statement-upload', form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      setStmt({ id: data.id, url: data.url, filename: file.name, size: file.size });
+    } catch (e) {
+      setErr(formatError(e, 'Upload mislukt'));
+    } finally { setUploading(false); }
+  };
+
+  const canContinue = stmt?.id;
+  const proceed = () => {
+    if (!canContinue) return;
+    onConfirm({
+      ...payload,
+      bank_statement_id: stmt.id,
+      bank_statement_filename: stmt.filename,
+    });
+  };
+
+  return (
+    <div className="min-h-full w-full px-3 sm:px-6 py-3 sm:py-6" data-testid="tk-pay-mobile">
+      <div className="max-w-2xl mx-auto">
+        <div className="flex items-center justify-between flex-wrap gap-2 py-2">
+          <button onClick={onBack} data-testid="tk-mobile-back"
+            className="flex items-center gap-1.5 text-white font-bold bg-white/20 backdrop-blur-sm rounded-lg px-3 py-1.5">
+            <ArrowLeft className="w-4 h-4" /> <span className="text-xs sm:text-sm">Terug</span>
+          </button>
+          <span className="text-sm sm:text-base font-semibold text-white">
+            {providerName} · {fmtMoney(payload.amount, cur)}
+          </span>
+        </div>
+        <p className="text-xs text-white/85 mb-3 mt-1">{tenant.name}{apt ? ` — Appt. ${apt.number}` : ''}</p>
+
+        {/* STAP 1 — QR + open-app */}
+        <div className="bg-white rounded-3xl shadow-xl p-4 sm:p-5 mb-3">
+          <p className="text-[11px] font-black uppercase tracking-widest text-slate-500 mb-3">
+            1. Open de {providerName} app en betaal
+          </p>
+          {account ? (
+            <>
+              <div className="flex flex-col items-center mb-3" data-testid="tk-mobile-qr">
+                <div className={`p-3 rounded-2xl ${accentBg}`}>
+                  <QRCodeSVG value={qrPayload} size={180} level="M" includeMargin={false}
+                    bgColor="transparent" fgColor={isMope ? '#047857' : '#9f1239'} />
+                </div>
+                <p className="text-[10px] text-slate-500 mt-2 text-center">
+                  Scan met uw {providerName} app
+                </p>
+              </div>
+              <div className="space-y-1.5 p-3 rounded-xl bg-slate-50 border border-slate-200 text-sm">
+                <div className="flex justify-between gap-2">
+                  <span className="text-slate-500 text-xs font-bold uppercase tracking-wide">Naar</span>
+                  <span className={`font-bold ${accentText} text-right break-all`}>{account}</span>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <span className="text-slate-500 text-xs font-bold uppercase tracking-wide">Bedrag</span>
+                  <span className="font-extrabold text-slate-900">{fmtMoney(payload.amount, cur)}</span>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <span className="text-slate-500 text-xs font-bold uppercase tracking-wide">Kenmerk</span>
+                  <span className="font-bold text-slate-900 text-right text-xs">
+                    {tenant.name}{apt ? ` — HUIS ${apt.number}` : ''}
+                  </span>
+                </div>
+              </div>
+              <a href={deepLink} data-testid="tk-mobile-open-app"
+                className={`mt-3 w-full inline-flex items-center justify-center gap-2 h-12 rounded-xl font-bold text-sm ${
+                  isMope ? 'bg-emerald-500 hover:bg-emerald-600' : 'bg-rose-500 hover:bg-rose-600'
+                } text-white shadow-md active:scale-95 transition`}>
+                <Smartphone className="w-4 h-4" /> Open {providerName} app
+              </a>
+            </>
+          ) : (
+            <p className="text-sm text-amber-700 font-semibold bg-amber-50 border border-amber-200 rounded-xl p-3">
+              Het bedrijf heeft nog geen {providerName} rekening ingesteld. Neem contact op met de beheerder.
+            </p>
+          )}
+        </div>
+
+        {/* STAP 2 — Upload bewijs */}
+        <div className="bg-white rounded-3xl shadow-xl p-4 sm:p-5 mb-3">
+          <p className="text-[11px] font-black uppercase tracking-widest text-slate-500 mb-2">
+            2. Upload schermafdruk van de gelukte betaling
+          </p>
+          <p className="text-[11px] text-slate-500 mb-3">
+            PDF, JPG of PNG · max 5 MB. Het bedrag wordt automatisch gecontroleerd via OCR.
+          </p>
+          {stmt ? (
+            <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-emerald-50 border border-emerald-200"
+              data-testid="tk-mobile-stmt-uploaded">
+              <div className="flex items-center gap-2 min-w-0">
+                <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-sm font-bold text-emerald-800 truncate">{stmt.filename}</p>
+                  <p className="text-[10px] text-emerald-700">{Math.round(stmt.size / 1024)} KB · geüpload</p>
+                </div>
+              </div>
+              <button onClick={() => { setStmt(null); if (fileRef.current) fileRef.current.value = ''; }}
+                data-testid="tk-mobile-stmt-remove"
+                className="text-xs font-bold text-rose-600 hover:underline flex-shrink-0">
+                Verwijderen
+              </button>
+            </div>
+          ) : (
+            <label className="block">
+              <span className={`block w-full p-4 rounded-xl border-2 border-dashed transition cursor-pointer text-center ${
+                uploading ? 'border-slate-200 bg-slate-50' : 'border-orange-300 hover:border-orange-500 hover:bg-orange-50'
+              }`}>
+                {uploading
+                  ? <Loader2 className="w-5 h-5 animate-spin mx-auto text-slate-500" />
+                  : <FileUp className="w-6 h-6 mx-auto text-orange-500 mb-1" />}
+                <p className="text-sm font-bold text-slate-900">{uploading ? 'Bezig met uploaden…' : 'Klik om bestand te kiezen'}</p>
+                <p className="text-[10px] text-slate-500 mt-0.5">PDF, JPG of PNG (max 5 MB)</p>
+              </span>
+              <input ref={fileRef} type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/*"
+                className="hidden" data-testid="tk-mobile-stmt-file"
+                onChange={(e) => onPick(e.target.files?.[0])} disabled={uploading} />
+            </label>
+          )}
+          {err && <p className="text-xs font-bold text-rose-600 mt-2">{err}</p>}
+        </div>
+
+        <button onClick={proceed} disabled={!canContinue}
+          data-testid="tk-mobile-continue"
+          className="w-full h-14 rounded-2xl bg-gradient-to-r from-[#FF8A3D] to-[#FF5C00] text-white font-black text-base shadow-md active:scale-95 transition disabled:opacity-50 disabled:cursor-not-allowed">
+          Verder naar bevestiging <ArrowRight className="w-5 h-5 inline ml-1" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+
 // =====================================================================
 // PAY CONFIRM — overzicht + Bevestig
 // =====================================================================
@@ -1198,8 +1377,8 @@ function TenantPayConfirm({ payload, overview, onBack, onPaid }) {
     try {
       // Mixed checkout: plan_items via /payment-plans/.../pay, plain via
       // /tenant-portal/payments. Eén klantenscherm-actie, meerdere API calls.
-      const isBank = payload.method === 'bank';
-      const bankExtras = isBank ? {
+      const needsProof = ['bank', 'mope', 'uni5pay'].includes(payload.method);
+      const bankExtras = needsProof ? {
         bank_country: payload.bank_country,
         bank_statement_id: payload.bank_statement_id,
       } : {};
@@ -1285,19 +1464,18 @@ function TenantPayConfirm({ payload, overview, onBack, onPaid }) {
               <ConfirmRow label="Periode"
                 value={`${MONTHS_NL[payload.period_month - 1]} ${payload.period_year}`} />
             )}
+            {(payload.method === 'bank' || payload.method === 'mope' || payload.method === 'uni5pay') && payload.bank_statement_filename && (
+              <ConfirmRow label="Betaalbewijs" value={payload.bank_statement_filename} />
+            )}
             {payload.method === 'bank' && (
-              <>
-                <ConfirmRow label="Land"
-                  value={payload.bank_country === 'SR' ? '🇸🇷 Suriname' : '🇳🇱 Nederland'} />
-                <ConfirmRow label="Bankafschrift"
-                  value={payload.bank_statement_filename || 'Geüpload'} />
-              </>
+              <ConfirmRow label="Land"
+                value={payload.bank_country === 'SR' ? '🇸🇷 Suriname' : '🇳🇱 Nederland'} />
             )}
           </div>
-          {payload.method === 'bank' && (
+          {(payload.method === 'bank' || payload.method === 'mope' || payload.method === 'uni5pay') && (
             <div className="mb-3 p-3 rounded-xl bg-amber-50 border border-amber-200" data-testid="tk-bank-warning">
               <p className="text-xs font-bold text-amber-800 leading-snug">
-                ⏳ Uw betaling wordt pas goedgekeurd zodra het bedrag op onze rekening staat. U krijgt bericht via de app of e-mail.
+                ⏳ Uw betaling wordt automatisch gecontroleerd via OCR. Als het bedrag en de datum kloppen wordt de betaling direct goedgekeurd, anders verifieert een beheerder uw bewijs.
               </p>
             </div>
           )}
@@ -1305,7 +1483,7 @@ function TenantPayConfirm({ payload, overview, onBack, onPaid }) {
           <button onClick={submit} disabled={busy} data-testid="tk-confirm-submit"
             className="w-full h-14 rounded-2xl bg-gradient-to-r from-[#FF8A3D] to-[#FF5C00] text-white font-black text-base shadow-lg active:scale-95 transition disabled:opacity-50 flex items-center justify-center gap-2">
             {busy ? <Loader2 className="w-5 h-5 animate-spin" /> : <Check className="w-5 h-5" />}
-            {payload.method === 'bank' ? 'Verstuur ter goedkeuring' : 'Bevestig betaling'}
+            {(payload.method === 'bank' || payload.method === 'mope' || payload.method === 'uni5pay') ? 'Verstuur ter controle' : 'Bevestig betaling'}
           </button>
         </div>
       </div>
@@ -1920,8 +2098,9 @@ export default function TenantKioskLayout() {
                 onBack={() => setView('pay')}
                 onConfirm={(p) => {
                   setPayload(p);
-                  // Bankoverschrijving heeft een extra stap: land kiezen + afschrift uploaden
-                  setView(p.method === 'bank' ? 'pay-bank' : 'pay-confirm');
+                  if (p.method === 'bank') setView('pay-bank');
+                  else if (p.method === 'mope' || p.method === 'uni5pay') setView('pay-mobile');
+                  else setView('pay-confirm');
                 }} />
             )}
             {view === 'pay-bank' && payload && (
@@ -1929,9 +2108,18 @@ export default function TenantKioskLayout() {
                 onBack={() => setView('pay-method')}
                 onConfirm={(p) => { setPayload(p); setView('pay-confirm'); }} />
             )}
+            {view === 'pay-mobile' && payload && (
+              <TenantPayMobile payload={payload} overview={overview} branding={branding}
+                onBack={() => setView('pay-method')}
+                onConfirm={(p) => { setPayload(p); setView('pay-confirm'); }} />
+            )}
             {view === 'pay-confirm' && payload && (
               <TenantPayConfirm payload={payload} overview={overview}
-                onBack={() => setView(payload.method === 'bank' ? 'pay-bank' : 'pay-method')}
+                onBack={() => {
+                  if (payload.method === 'bank') setView('pay-bank');
+                  else if (payload.method === 'mope' || payload.method === 'uni5pay') setView('pay-mobile');
+                  else setView('pay-method');
+                }}
                 onPaid={() => { setView('paid'); setPayload(null); loadOverview(); }} />
             )}
             {view === 'paid' && <PaidView onContinue={() => setView('dashboard')} />}

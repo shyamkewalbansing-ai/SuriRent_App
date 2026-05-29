@@ -104,7 +104,7 @@ export default function Branding() {
         logo_url: b.logo_url || '',
         tagline: b.tagline || '',
       });
-      // 2) Save bedrijfsgegevens (name/email/phone/address/banks)
+      // 2) Save bedrijfsgegevens (name/email/phone/address/banks/wallets)
       const { data: prof } = await api.put('/companies/me/profile', {
         name: b.name || '',
         contact_email: b.contact_email || '',
@@ -112,6 +112,8 @@ export default function Branding() {
         address: b.address || '',
         bank_account_sr: b.bank_account_sr || '',
         bank_account_nl: b.bank_account_nl || '',
+        mope_account: b.mope_account || '',
+        uni5pay_account: b.uni5pay_account || '',
       });
       const merged = { ...data, ...prof };
       setB(merged);
@@ -229,6 +231,31 @@ export default function Branding() {
                 data-testid="company-bank-nl-input"
                 className="w-full h-10 px-3 border-2 border-slate-200 rounded-lg text-sm focus:border-slate-900 focus:outline-none" />
               <p className="text-[10px] text-slate-400 mt-0.5">IBAN + tenaamstelling</p>
+            </label>
+          </div>
+
+          <div className="bg-white border border-slate-200 rounded-2xl p-4">
+            <h3 className="text-sm font-extrabold text-slate-900 mb-3 flex items-center gap-2">
+              📱 Mobile wallets voor huurders
+            </h3>
+            <p className="text-[11px] text-slate-500 mb-3 leading-relaxed">
+              Huurders scannen een QR-code in hun Mope of Uni5Pay app, betalen, en uploaden een schermafdruk als bewijs.
+            </p>
+            <label className="block mb-3">
+              <span className="block text-xs font-bold text-slate-700 mb-1">Mope rekening</span>
+              <input type="text" value={b.mope_account || ''} onChange={(e) => upd('mope_account', e.target.value)}
+                placeholder="bv. Mope ID of telefoonnummer +597 ..."
+                data-testid="company-mope-input"
+                className="w-full h-10 px-3 border-2 border-slate-200 rounded-lg text-sm focus:border-slate-900 focus:outline-none" />
+              <p className="text-[10px] text-slate-400 mt-0.5">Mope ID, merchant-code of telefoonnummer waarmee huurders kunnen betalen</p>
+            </label>
+            <label className="block">
+              <span className="block text-xs font-bold text-slate-700 mb-1">Uni5Pay rekening</span>
+              <input type="text" value={b.uni5pay_account || ''} onChange={(e) => upd('uni5pay_account', e.target.value)}
+                placeholder="bv. Uni5Pay ID of merchant code"
+                data-testid="company-uni5pay-input"
+                className="w-full h-10 px-3 border-2 border-slate-200 rounded-lg text-sm focus:border-slate-900 focus:outline-none" />
+              <p className="text-[10px] text-slate-400 mt-0.5">Uni5Pay ID of merchant-code</p>
             </label>
           </div>
 
