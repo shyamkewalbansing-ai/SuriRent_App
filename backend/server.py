@@ -3627,7 +3627,7 @@ async def tenant_qr_plate(tenant_id: str, request: Request, refresh: int = 0):
     import hashlib as _hashlib
     # Cache key: tenant + alle dynamische inputs. Voorkomt herhaald LLM-budget
     # verbruik bij elke download.
-    cache_inputs = f"{tenant_id}|{company_name}|{apt_number}|{address}|{kiosk_url}|v8"
+    cache_inputs = f"{tenant_id}|{company_name}|{apt_number}|{address}|{kiosk_url}|v9"
     cache_hash = _hashlib.sha256(cache_inputs.encode("utf-8")).hexdigest()
     cached = await db.qr_plate_cache.find_one(
         {"hash": cache_hash}, {"_id": 0, "pdf_b64": 1}

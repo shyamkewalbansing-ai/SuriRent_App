@@ -1291,25 +1291,19 @@ def luxury_plate_pdf(*, tenant_name: str, apartment_number: str,
         draw.text((start_x + pin_d + 12, addr_baseline_y), addr_text,
                   fill=GOLD_LIGHT, font=addr_font)
 
-    # 6) PNG → PDF conversie. Behoud volledige resolutie, A5-landscape PDF.
+    # 6) PNG → PDF conversie. Behoud volledige resolutie, 300×200mm 3:2 landscape.
     pdf_buf = io.BytesIO()
-    # Schaal naar 200mm × 133mm A5-achtige landschap (mm to pt via reportlab)
     from reportlab.pdfgen import canvas as rl_canvas
     from reportlab.lib.utils import ImageReader
-    PAGE_W = 200 * mm
-    PAGE_H = 133 * mm  # 3:2 ratio
+    PAGE_W = 300 * mm
+    PAGE_H = 200 * mm  # exact 3:2 ratio, matcht 1536×1024 image
     c = rl_canvas.Canvas(pdf_buf, pagesize=(PAGE_W, PAGE_H))
-    # Lichtgrijs paginavlak
     c.setFillColor(colors.HexColor("#dcd6cd"))
     c.rect(0, 0, PAGE_W, PAGE_H, fill=1, stroke=0)
-    # Plaat-image bijna full-bleed (margin van 4mm rondom)
-    margin = 4 * mm
-    plate_w = PAGE_W - 2 * margin
-    plate_h = PAGE_H - 2 * margin
     out = io.BytesIO()
     img.save(out, format="PNG", optimize=True)
     out.seek(0)
-    c.drawImage(ImageReader(out), margin, margin, plate_w, plate_h,
+    c.drawImage(ImageReader(out), 0, 0, PAGE_W, PAGE_H,
                 preserveAspectRatio=True, anchor='c')
     c.showPage()
     c.save()
@@ -1518,18 +1512,20 @@ async def luxury_plate_pdf_ai(*, tenant_name: str, apartment_number: str,
     pdf_buf = io.BytesIO()
     from reportlab.pdfgen import canvas as rl_canvas
     from reportlab.lib.utils import ImageReader
-    PAGE_W = 200 * mm
-    PAGE_H = 133 * mm
+    # PDF-pagina exact 3:2 landschap formaat (1536×1024 ratio), groter formaat
+    # zodat de plaquette levensgroot kan worden afgedrukt op A4-papier of
+    # groter. 300×200 mm = 3:2 ratio = ongeveer A4-landschap breedte.
+    PAGE_W = 300 * mm
+    PAGE_H = 200 * mm
     c = rl_canvas.Canvas(pdf_buf, pagesize=(PAGE_W, PAGE_H))
     c.setFillColor(colors.HexColor("#dcd6cd"))
     c.rect(0, 0, PAGE_W, PAGE_H, fill=1, stroke=0)
-    margin = 4 * mm
-    plate_w = PAGE_W - 2 * margin
-    plate_h = PAGE_H - 2 * margin
+    # Plaat volledig vullend (geen marges, hele pagina = de plaat-image,
+    # ratio matcht exact 1536×1024 = 3:2 dus geen vervorming).
     out = io.BytesIO()
     img.save(out, format="PNG", optimize=True)
     out.seek(0)
-    c.drawImage(ImageReader(out), margin, margin, plate_w, plate_h,
+    c.drawImage(ImageReader(out), 0, 0, PAGE_W, PAGE_H,
                 preserveAspectRatio=True, anchor='c')
     c.showPage()
     c.save()
