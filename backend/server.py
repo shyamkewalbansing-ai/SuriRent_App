@@ -8994,6 +8994,117 @@ async def kiosk_pay_installment(
     return out
 
 
+class KioskQuickPlanIn(BaseModel):
+    """Snelle betalingsregeling vanuit de kiosk-flow nadat een partial
+    betaling is geregistreerd. Bedrijf-context komt van de bestaande
+    kiosk-sessie (niet van de gebruiker — kiosk heeft geen user)."""
+    tenant_id: str
+    invoice_id: Optional[str] = None
+    total_amount: float = Field(gt=0)
+    num_installments: int = Field(ge=2, le=12)
+    currency: Literal["SRD", "USD", "EUR"] = "SRD"
+    start_date: Optional[str] = None  # yyyy-mm-dd, default = vandaag + 30 dagen
+
+
+@app.post("/api/kiosk/payment-plans/quick")
+async def kiosk_quick_payment_plan(body: KioskQuickPlanIn, request: Request):
+    """Maakt direct een actieve betalingsregeling vanuit de kiosk. Bedoeld
+    voor de "Restbedrag in N termijnen afbetalen?"-suggestie die getoond
+    wordt na een partial-betaling. Werkt onder kiosk-token (geen admin-PIN
+    nodig — de huurder staat fysiek voor de kiosk en heeft net contant
+    deelbetaald).
+    """
+    from datetime import date as _date
+    from datetime import timedelta as _timedelta
+    session = await get_kiosk_session(request)
+    cid = session.get("company_id") if isinstance(session, dict) else None
+    if not cid:
+        raise HTTPException(status_code=400, detail="Geen actieve kiosk-sessie")
+    tenant = await db.tenants.find_one({"id": body.tenant_id, "company_id": cid}, {"_id": 0})
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Huurder niet gevonden")
+
+    # Start: standaard 30 dagen vanaf vandaag zodat huurder tijd heeft.
+    if body.start_date:
+        try:
+            start_d = _date.fromisoformat(body.start_date)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Ongeldige startdatum (yyyy-mm-dd)")
+    else:
+        start_d = now_utc().date() + _timedelta(days=30)
+
+    n = int(body.num_installments)
+    per = round(body.total_amount / n, 2)
+    running = 0.0
+    installments_docs: list = []
+    plan_id = new_id()
+    now_iso = iso(now_utc())
+
+    # Helper inline — kopie van payment_plans._add_months om circulaire
+    # import te vermijden (kiosk endpoint draait BUITEN de admin-router).
+    def _add_months_local(d, months):
+        m = d.month - 1 + months
+        y = d.year + m // 12
+        m = m % 12 + 1
+        last_day = [31, 29 if (y % 4 == 0 and (y % 100 != 0 or y % 400 == 0)) else 28,
+                    31, 30, 31, 30, 31, 31, 30, 31, 30, 31][m - 1]
+        return _date(y, m, min(d.day, last_day))
+
+    for i in range(n):
+        due = _add_months_local(start_d, i)
+        amt = per if i < n - 1 else round(body.total_amount - running, 2)
+        running += per
+        installments_docs.append({
+            "id": new_id(),
+            "plan_id": plan_id,
+            "company_id": cid,
+            "sequence": i + 1,
+            "due_date": due.isoformat(),
+            "amount": amt,
+            "status": "pending",
+        })
+
+    plan_doc = {
+        "id": plan_id,
+        "company_id": cid,
+        "tenant_id": body.tenant_id,
+        "tenant_name": tenant.get("name") or "",
+        "invoice_ids": [body.invoice_id] if body.invoice_id else [],
+        "total_amount": round(body.total_amount, 2),
+        "currency": body.currency,
+        "notes": "Automatisch aangemaakt vanuit kiosk na gedeeltelijke betaling",
+        "status": "active",
+        "created_by": "kiosk",
+        "created_at": now_iso,
+    }
+    await db.payment_plans.insert_one(plan_doc)
+    for inst in installments_docs:
+        await db.payment_plan_installments.insert_one(inst)
+
+    # Stuur admins een notificatie zodat ze weten dat er een regeling is.
+    try:
+        await _notify_company_admins(
+            cid,
+            title="Nieuwe betalingsregeling vanuit kiosk",
+            body=f"{tenant.get('name', 'Huurder')} — {body.currency} {body.total_amount:.2f} in {n} termijnen",
+            url="/admin/payment_plans",
+        )
+    except Exception as e:
+        print(f"[push] kiosk quick plan notify failed: {e}")
+
+    return {
+        "id": plan_id,
+        "tenant_id": body.tenant_id,
+        "total_amount": plan_doc["total_amount"],
+        "currency": plan_doc["currency"],
+        "num_installments": n,
+        "first_due_date": installments_docs[0]["due_date"],
+        "monthly_amount": installments_docs[0]["amount"],
+    }
+
+
+
+
 # ---------- Background — Achterstallige termijnen WhatsApp/Email ----------
 async def _send_overdue_installment_reminders():
     """1x per dag per huurder: stuur een herinnering voor achterstallige

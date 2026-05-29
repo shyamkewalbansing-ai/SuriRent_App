@@ -1234,6 +1234,110 @@ function Row({ label, value }) {
   );
 }
 
+function PartialPlanSuggestion({ tenantId, partialInvoice, onClose, onPlanned }) {
+  const cur = (partialInvoice?.currency || 'SRD').toUpperCase();
+  const remaining = Number(partialInvoice?.outstanding || 0);
+  const fmt = (v) => fmtMoney(v, cur);
+  const [n, setN] = useState(2);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const monthly = useMemo(() => Math.round((remaining / n) * 100) / 100, [remaining, n]);
+
+  if (!partialInvoice || remaining <= 0) return null;
+
+  const monthName = partialInvoice.period_month
+    ? `${MONTHS_NL[partialInvoice.period_month - 1]} ${partialInvoice.period_year}`
+    : 'deze factuur';
+
+  const submit = async () => {
+    setBusy(true); setErr('');
+    try {
+      const { data } = await api.post('/kiosk/payment-plans/quick', {
+        tenant_id: tenantId,
+        invoice_id: partialInvoice.id,
+        total_amount: remaining,
+        num_installments: n,
+        currency: cur,
+      });
+      onPlanned?.(data);
+    } catch (e) {
+      setErr(formatError(e));
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-end sm:items-center justify-center"
+      data-testid="partial-plan-suggestion"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose?.(); }}>
+      <div className="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]"
+        style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 0px)' }}>
+        <div className="sm:hidden flex justify-center pt-3 pb-1 shrink-0">
+          <span className="w-10 h-1.5 rounded-full bg-slate-200" />
+        </div>
+        <div className="px-5 pt-3 sm:pt-6 pb-2 text-center">
+          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center mx-auto mb-3 shadow-lg shadow-orange-500/25">
+            <Calendar className="w-6 h-6 text-white" />
+          </div>
+          <h3 className="text-xl font-extrabold text-slate-900">Resterend bedrag afspreken?</h3>
+          <p className="text-sm text-slate-500 mt-1">
+            Er staat nog <span className="font-extrabold text-orange-600">{fmt(remaining)}</span> open voor {monthName}.
+          </p>
+        </div>
+
+        <div className="px-5 py-3 flex-1 overflow-y-auto">
+          <p className="text-xs font-extrabold uppercase tracking-wider text-slate-500 mb-2">In hoeveel termijnen?</p>
+          <div className="grid grid-cols-3 gap-2">
+            {[2, 3, 4].map((opt) => {
+              const sel = n === opt;
+              const per = Math.round((remaining / opt) * 100) / 100;
+              return (
+                <button key={opt} onClick={() => setN(opt)} data-testid={`partial-plan-n-${opt}`}
+                  className={`rounded-xl border-2 p-3 text-center transition ${
+                    sel ? 'border-orange-500 bg-orange-50 shadow-md shadow-orange-500/20'
+                      : 'border-slate-200 bg-white hover:border-orange-300'
+                  }`}>
+                  <p className={`text-2xl font-extrabold ${sel ? 'text-orange-600' : 'text-slate-700'}`}>{opt}×</p>
+                  <p className={`text-[10px] uppercase tracking-wider font-bold mt-0.5 ${sel ? 'text-orange-700' : 'text-slate-400'}`}>termijnen</p>
+                  <p className={`text-xs font-mono font-extrabold mt-1.5 ${sel ? 'text-orange-700' : 'text-slate-500'}`}>{fmt(per)}</p>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="mt-3 rounded-xl bg-slate-50 border border-slate-200 p-3 text-xs">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-slate-500 font-bold">Per maand</span>
+              <span className="font-extrabold text-slate-900 font-mono">{fmt(monthly)}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-slate-500 font-bold">Eerste vervaldatum</span>
+              <span className="font-mono text-slate-700 font-semibold">~30 dagen vanaf vandaag</span>
+            </div>
+          </div>
+
+          {err && (
+            <div className="mt-3 px-3 py-2 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold">
+              {err}
+            </div>
+          )}
+        </div>
+
+        <div className="border-t border-slate-100 px-5 py-3 grid grid-cols-2 gap-2 shrink-0">
+          <button onClick={onClose} disabled={busy} data-testid="partial-plan-skip"
+            className="h-12 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold disabled:opacity-50">
+            Nee, later
+          </button>
+          <button onClick={submit} disabled={busy} data-testid="partial-plan-confirm"
+            className="h-12 rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-extrabold disabled:opacity-50 flex items-center justify-center gap-1.5 shadow-md shadow-orange-500/25">
+            {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+            Maak regeling
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ReceiptScreen({ payment, overview, onDone }) {
   // Bereken openstaand saldo NA deze betaling — refetch van backend voor
   // de echte stand (rekening houdend met openstaande maanden + nieuwe
@@ -1247,6 +1351,12 @@ function ReceiptScreen({ payment, overview, onDone }) {
   // E-mail status — null = bezig, {sent:true,to} = verstuurd, {sent:false} = overgeslagen/mislukt.
   const [emailStatus, setEmailStatus] = useState(null);
 
+  // Partial-betaling detectie: na de refetch checken we of er een factuur
+  // is die zojuist gedeeltelijk betaald is en nog open staat. Zo ja, tonen
+  // we de "regeling maken?"-suggestie BEFORE auto-done.
+  const [partialInv, setPartialInv] = useState(null);
+  const [planMade, setPlanMade] = useState(false);
+
   useEffect(() => {
     const tid = payment.tenant_id || overview?.tenant?.id;
     if (!tid) { setRemainingLoading(false); return; }
@@ -1257,6 +1367,10 @@ function ReceiptScreen({ payment, overview, onDone }) {
         const open = bal > 0 ? bal : 0;
         const internet = Number(data?.tenant?.internet_amount || 0);
         setRemaining(open + internet);
+        // Eerste partial-factuur uit de bijgewerkte overview pakken.
+        const invs = Array.isArray(data?.open_invoices) ? data.open_invoices : [];
+        const partial = invs.find((inv) => inv.is_partial && inv.outstanding > 0);
+        if (partial) setPartialInv(partial);
       })
       .catch(() => { /* val terug op lokale schatting */ })
       .finally(() => setRemainingLoading(false));
@@ -1372,11 +1486,14 @@ function ReceiptScreen({ payment, overview, onDone }) {
     return () => { try { ctx && ctx.close(); } catch { /* noop */ } };
   }, []);
 
-  // Auto-terug naar beginscherm na 10 seconden.
+  // Auto-terug naar beginscherm na 10 seconden. Pauzeer wanneer de partial-
+  // suggestie open is — anders verdwijnt de modal achter het home-scherm voor
+  // de huurder hem kan beantwoorden.
   useEffect(() => {
+    if (partialInv && !planMade) return undefined;
     const t = setTimeout(onDone, 10000);
     return () => clearTimeout(t);
-  }, [onDone]);
+  }, [onDone, partialInv, planMade]);
 
   return (
     <div className="h-full bg-orange-500 flex flex-col items-center justify-start sm:justify-center p-4 sm:p-8 overflow-hidden">
@@ -1503,6 +1620,17 @@ function ReceiptScreen({ payment, overview, onDone }) {
           </div>
         )}
       </div>
+
+      {/* Partial-payment regeling suggestie — verschijnt na ~1.5s zodat de
+          huurder eerst de bevestiging "Bedankt!" ziet, dan een keuze maakt. */}
+      {partialInv && !planMade && (
+        <PartialPlanSuggestion
+          tenantId={payment.tenant_id || overview?.tenant?.id}
+          partialInvoice={partialInv}
+          onClose={() => setPartialInv(null)}
+          onPlanned={() => { setPlanMade(true); setPartialInv(null); }}
+        />
+      )}
     </div>
   );
 }

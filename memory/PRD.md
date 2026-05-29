@@ -1,5 +1,18 @@
 # Vastgoed Kiosk - PRD
 
+## Session 2026-02-26 — Dynamische betalingsregeling-suggestie na partial ✅
+- **Nieuw backend endpoint** `POST /api/kiosk/payment-plans/quick` (kiosk-token authenticated, geen admin-PIN nodig). Body: `tenant_id, invoice_id?, total_amount, num_installments (2-12), currency`. Maakt direct een actief `payment_plans` document + `payment_plan_installments` records (één per termijn, gelijke verdeling met laatste termijn afronding). Eerste vervaldatum: vandaag + 30 dagen. Push-notificatie naar admins.
+- **Nieuw frontend component** `<PartialPlanSuggestion>` — bottom-sheet op mobiel / center-modal op desktop. Toont:
+  - "Er staat nog X open voor januari 2026"
+  - 3 keuze-tiles: 2× / 3× / 4× termijnen met live per-maand bedrag preview
+  - Samenvattings-vak met monthly + eerste vervaldatum
+  - "Nee, later" / "Maak regeling" knoppen
+- **ReceiptScreen integratie**: na partial betaling refetch overview, detect eerste factuur met `is_partial: true` → modal opent automatisch. Auto-done timer (10s) wordt gepauzeerd zolang modal open is — sluit als de huurder de keuze heeft gemaakt of "Nee, later" tikt.
+- **Belangrijke route registratie-fix**: endpoint geregistreerd via `@app.post("/api/kiosk/...")` direct (niet `@api.post(...)`) omdat `app.include_router(api)` al uitgevoerd was vóór de nieuwe regel — anders 404.
+- End-to-end geverifieerd via curl: partial SRD 4.000 op Jan → status partial → quick-plan SRD 2.000 / 2 termijnen → returnt monthly SRD 1.000 + first_due 2026-06-28. Visual UI bevestigd.
+
+
+
 ## Session 2026-02-26 — Kiosk/Admin sync + Partial Payment flow ✅
 
 ### Bug fix: huidige maand niet meer als achterstand in kiosk
