@@ -1,5 +1,18 @@
 # Vastgoed Kiosk - PRD
 
+## Session 2026-02-26 — Slug Beschikbaarheids-check + Landscape Desktop Layout ✅
+- **Nieuw publiek endpoint** `GET /api/public/companies/{slug}/available` → `{available: bool, reason?: 'format'|'reserved'|'taken'}`. Lekt geen interne data (geen naam/branding van bestaande bedrijven).
+- **Frontend debounced check (350ms)** in `LoginPage.PasswordView`. State-machine met 5 toestanden: `idle | checking | available | taken | reserved | format`. Visualiseert met kleurcodering:
+  - **Groen `✓ VRIJ`** badge wanneer slug beschikbaar is
+  - **Rood `✗ BEZET`** badge + rode preview-kaart wanneer al in gebruik
+  - **Geel `AUTO-NAAM`** badge bij reserved slug (auto-suffix `-bedrijf` zichtbaar in preview)
+  - Spinner tijdens check
+- **Submit-knop disabled** wanneer status `taken` of `format` is → voorkomt nutteloze pogingen.
+- **Landscape desktop layout**: form max-w-2xl op tablet, **max-w-4xl** op lg+. In register-mode 2-koloms grid: links `Land & valuta` + `Pakket-kiezer` (1 kolom plans op lg), rechts `Bedrijfsnaam+URL-preview`, `Naam+Telefoon`, `Email+Wachtwoord`, `Kiosk PIN`. CTA volledige breedte onderaan. Geen scroll meer op standaard 1440×900 monitor.
+- Geverifieerd: 3 status-screenshots (VRIJ/BEZET/preview) groen, mobile responsive blijft compact.
+
+
+
 ## Session 2026-02-26 — Compacte Registratie + Live Portal-URL Preview ✅
 - **Registratieformulier herontworpen** voor minder scrollen op zowel desktop als mobiel:
   - 2-koloms grid voor Naam+Telefoon, Email+Wachtwoord (klapt naar 1-kol op mobiel).

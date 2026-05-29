@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useBrandedNavigate } from '../../lib/branded-nav';
 import { RESERVED_SLUGS } from '../../lib/branded-nav';
-import { Loader2, Delete, KeyRound, ArrowLeft, Eye, EyeOff, UserPlus, LogIn, Check, Globe } from 'lucide-react';
+import { Loader2, Delete, KeyRound, ArrowLeft, Eye, EyeOff, UserPlus, LogIn, Check, Globe, X as XIcon } from 'lucide-react';
 import { api, formatError } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { setPreferredRole, isStandalonePWA, getPreferredRole, routeForRole } from '../../lib/pwaRole';
@@ -287,6 +287,32 @@ function PasswordView({ initialMode = 'login', onBack, onRegistered, branding })
     return { slug, host };
   }, [companyName]);
 
+  // Debounced availability-check tegen `/api/public/companies/{slug}/available`.
+  // 350ms na de laatste keystroke. State:
+  //   - 'idle'      → geen check
+  //   - 'checking'  → request loopt
+  //   - 'available' → slug is vrij
+  //   - 'taken'     → slug al in gebruik
+  //   - 'reserved'  → gereserveerde platform-slug (krijgt sowieso `-bedrijf` suffix)
+  //   - 'format'    → ongeldig formaat (zou niet moeten — wij hebben hem geslugified)
+  const [slugStatus, setSlugStatus] = useState('idle');
+  useEffect(() => {
+    if (mode !== 'register') return undefined;
+    const s = portalPreview.slug;
+    if (!s) { setSlugStatus('idle'); return undefined; }
+    setSlugStatus('checking');
+    const handle = setTimeout(async () => {
+      try {
+        const { data } = await api.get(`/public/companies/${encodeURIComponent(s)}/available`);
+        if (data?.available) setSlugStatus('available');
+        else setSlugStatus(data?.reason || 'taken');
+      } catch {
+        setSlugStatus('idle');  // backend onbereikbaar — silence, niet blokkeren
+      }
+    }, 350);
+    return () => clearTimeout(handle);
+  }, [portalPreview.slug, mode]);
+
   const submit = async (e) => {
     e?.preventDefault();
     if (mode === 'register' && !companyName.trim()) {
@@ -356,7 +382,12 @@ function PasswordView({ initialMode = 'login', onBack, onRegistered, branding })
     }}>
       <Header branding={branding} />
       <div className="flex-1 flex items-start sm:items-center justify-center p-3 sm:p-6">
-        <div className="bg-white rounded-3xl shadow-[0_20px_60px_rgba(0,0,0,0.15)] w-full max-w-xl p-5 sm:p-8 md:p-10" data-testid="auth-form">
+        <div
+          className={`bg-white rounded-3xl shadow-[0_20px_60px_rgba(0,0,0,0.15)] w-full ${
+            mode === 'register' ? 'max-w-2xl lg:max-w-4xl' : 'max-w-xl'
+          } p-5 sm:p-8 md:p-10`}
+          data-testid="auth-form"
+        >
           {branding?.slug && (
             <button onClick={onBack} data-testid="auth-back" className="flex items-center gap-2 text-sm font-medium text-slate-400 hover:text-slate-600 mb-4 transition active:scale-95">
               <ArrowLeft className="w-4 h-4" /> Terug naar PIN
@@ -379,133 +410,192 @@ function PasswordView({ initialMode = 'login', onBack, onRegistered, branding })
 
           <form onSubmit={submit} className="space-y-3">
             {mode === 'register' && (
-              <>
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Land &amp; valuta</label>
-                  <div className="grid grid-cols-3 gap-2" data-testid="country-picker">
-                    {[
-                      { code: 'SR', flag: '🇸🇷', label: 'Suriname', sub: 'SRD' },
-                      { code: 'NL', flag: '🇳🇱', label: 'Nederland', sub: 'EUR' },
-                      { code: 'OTHER', flag: '🌍', label: 'Anders', sub: 'SRD' },
-                    ].map((c) => {
-                      const sel = country === c.code;
-                      return (
-                        <button key={c.code} type="button" onClick={() => setCountry(c.code)}
-                          data-testid={`country-${c.code.toLowerCase()}`}
-                          className={`rounded-xl border-2 p-2 text-center transition-all ${
-                            sel ? 'border-[#FF5C00] bg-orange-50 shadow-md shadow-orange-500/10' : 'border-slate-200 bg-white hover:border-orange-300'
-                          }`}>
-                          <div className="text-xl leading-none mb-0.5">{c.flag}</div>
-                          <div className={`text-[11px] font-extrabold ${sel ? 'text-[#C74600]' : 'text-slate-700'}`}>{c.label}</div>
-                          <div className="text-[10px] text-slate-400 font-bold">{c.sub}</div>
-                        </button>
-                      );
-                    })}
+              <div className="lg:grid lg:grid-cols-2 lg:gap-x-6 space-y-3 lg:space-y-0">
+                {/* LINKER kolom op desktop — bedrijf-keuzes */}
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Land &amp; valuta</label>
+                    <div className="grid grid-cols-3 gap-2" data-testid="country-picker">
+                      {[
+                        { code: 'SR', flag: '🇸🇷', label: 'Suriname', sub: 'SRD' },
+                        { code: 'NL', flag: '🇳🇱', label: 'Nederland', sub: 'EUR' },
+                        { code: 'OTHER', flag: '🌍', label: 'Anders', sub: 'SRD' },
+                      ].map((c) => {
+                        const sel = country === c.code;
+                        return (
+                          <button key={c.code} type="button" onClick={() => setCountry(c.code)}
+                            data-testid={`country-${c.code.toLowerCase()}`}
+                            className={`rounded-xl border-2 p-2 text-center transition-all ${
+                              sel ? 'border-[#FF5C00] bg-orange-50 shadow-md shadow-orange-500/10' : 'border-slate-200 bg-white hover:border-orange-300'
+                            }`}>
+                            <div className="text-xl leading-none mb-0.5">{c.flag}</div>
+                            <div className={`text-[11px] font-extrabold ${sel ? 'text-[#C74600]' : 'text-slate-700'}`}>{c.label}</div>
+                            <div className="text-[10px] text-slate-400 font-bold">{c.sub}</div>
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
 
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Kies uw pakket</label>
-                  <div className="grid sm:grid-cols-2 gap-2">
-                    {plans.map((p) => {
-                      const sel = plan === p.id;
-                      return (
-                        <button key={p.id} type="button" onClick={() => setPlan(p.id)}
-                          data-testid={`plan-${p.id}`}
-                          className={`text-left rounded-xl border-2 p-3 transition-all ${
-                            sel ? 'border-[#FF5C00] bg-orange-50 shadow-md shadow-orange-500/15' : 'border-slate-200 bg-white hover:border-orange-300'
-                          }`}>
-                          <div className="flex items-start justify-between mb-0.5">
-                            <p className={`font-extrabold text-sm ${sel ? 'text-[#C74600]' : 'text-slate-900'}`}>{p.name}</p>
-                            <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${sel ? 'border-[#FF5C00] bg-[#FF5C00]' : 'border-slate-300'}`}>
-                              {sel && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Kies uw pakket</label>
+                    <div className="grid sm:grid-cols-2 lg:grid-cols-1 gap-2">
+                      {plans.map((p) => {
+                        const sel = plan === p.id;
+                        return (
+                          <button key={p.id} type="button" onClick={() => setPlan(p.id)}
+                            data-testid={`plan-${p.id}`}
+                            className={`text-left rounded-xl border-2 p-3 transition-all ${
+                              sel ? 'border-[#FF5C00] bg-orange-50 shadow-md shadow-orange-500/15' : 'border-slate-200 bg-white hover:border-orange-300'
+                            }`}>
+                            <div className="flex items-start justify-between mb-0.5">
+                              <p className={`font-extrabold text-sm ${sel ? 'text-[#C74600]' : 'text-slate-900'}`}>{p.name}</p>
+                              <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${sel ? 'border-[#FF5C00] bg-[#FF5C00]' : 'border-slate-300'}`}>
+                                {sel && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                              </div>
                             </div>
-                          </div>
-                          <p className={`text-lg font-extrabold ${sel ? 'text-[#FF5C00]' : 'text-slate-900'}`}>
-                            {(p.currency || 'SRD').toUpperCase() === 'EUR'
-                              ? `€${Number(p.amount).toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                              : `${p.currency} ${Number(p.amount).toLocaleString('nl-NL')}`}
-                            <span className="text-[11px] font-medium text-slate-400 ml-1">/m</span>
-                          </p>
-                          <p className="text-[10px] text-slate-500 mt-0.5 leading-tight">{p.description}</p>
-                        </button>
-                      );
-                    })}
+                            <p className={`text-lg font-extrabold ${sel ? 'text-[#FF5C00]' : 'text-slate-900'}`}>
+                              {(p.currency || 'SRD').toUpperCase() === 'EUR'
+                                ? `€${Number(p.amount).toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                                : `${p.currency} ${Number(p.amount).toLocaleString('nl-NL')}`}
+                              <span className="text-[11px] font-medium text-slate-400 ml-1">/m</span>
+                            </p>
+                            <p className="text-[10px] text-slate-500 mt-0.5 leading-tight">{p.description}</p>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <p className="text-[10px] text-slate-400 mt-1">14 dagen gratis · daarna bankoverschrijving</p>
                   </div>
-                  <p className="text-[10px] text-slate-400 mt-1">14 dagen gratis · daarna factureren via bankoverschrijving</p>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Bedrijfsnaam *</label>
-                  <input type="text" value={companyName} onChange={(e) => setCompanyName(e.target.value)} data-testid="auth-company-name"
-                    required minLength={2}
-                    placeholder="Demo Vastgoed N.V."
-                    className="w-full h-12 text-base px-4 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] focus:ring-4 focus:ring-[#FF5C00]/10 bg-[#F9FAFB] outline-none transition" />
-                  {/* Live portal-URL preview */}
-                  {portalPreview.slug && (
-                    <div className="mt-2 flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-50 border border-emerald-200" data-testid="auth-portal-preview">
-                      <Globe className="w-4 h-4 text-emerald-600 shrink-0" />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-[10px] uppercase tracking-wider font-bold text-emerald-700">Uw portaal-URL</p>
-                        <p className="text-xs sm:text-sm font-mono font-bold text-emerald-900 truncate">
-                          {portalPreview.host || 'app.surirent.sr'}<span className="text-emerald-600">/</span>{portalPreview.slug}
-                        </p>
+                {/* RECHTER kolom op desktop — gegevens */}
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Bedrijfsnaam *</label>
+                    <input type="text" value={companyName} onChange={(e) => setCompanyName(e.target.value)} data-testid="auth-company-name"
+                      required minLength={2}
+                      placeholder="Demo Vastgoed N.V."
+                      className="w-full h-12 text-base px-4 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] focus:ring-4 focus:ring-[#FF5C00]/10 bg-[#F9FAFB] outline-none transition" />
+                    {/* Live portaal-URL preview met beschikbaarheids-badge */}
+                    {portalPreview.slug && (() => {
+                      const okTone = slugStatus === 'available';
+                      const errTone = slugStatus === 'taken' || slugStatus === 'format';
+                      const reservedTone = slugStatus === 'reserved';
+                      const palette = errTone
+                        ? { bg: 'bg-rose-50', border: 'border-rose-200', icon: 'text-rose-600', heading: 'text-rose-700', url: 'text-rose-900' }
+                        : reservedTone
+                          ? { bg: 'bg-amber-50', border: 'border-amber-200', icon: 'text-amber-600', heading: 'text-amber-700', url: 'text-amber-900' }
+                          : { bg: 'bg-emerald-50', border: 'border-emerald-200', icon: 'text-emerald-600', heading: 'text-emerald-700', url: 'text-emerald-900' };
+                      return (
+                        <div className={`mt-2 flex items-center gap-2 px-3 py-2 rounded-xl ${palette.bg} border ${palette.border}`} data-testid="auth-portal-preview">
+                          <Globe className={`w-4 h-4 ${palette.icon} shrink-0`} />
+                          <div className="min-w-0 flex-1">
+                            <p className={`text-[10px] uppercase tracking-wider font-bold ${palette.heading}`}>Uw portaal-URL</p>
+                            <p className={`text-xs sm:text-sm font-mono font-bold ${palette.url} truncate`}>
+                              {portalPreview.host || 'app.surirent.sr'}<span className={palette.icon}>/</span>{portalPreview.slug}
+                            </p>
+                          </div>
+                          {/* Status-indicator badge */}
+                          <div className="shrink-0" data-testid={`slug-status-${slugStatus}`}>
+                            {slugStatus === 'checking' && <Loader2 className="w-4 h-4 text-slate-400 animate-spin" />}
+                            {okTone && (
+                              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-emerald-600 text-white text-[10px] font-extrabold">
+                                <Check className="w-3 h-3" />VRIJ
+                              </span>
+                            )}
+                            {slugStatus === 'taken' && (
+                              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-rose-600 text-white text-[10px] font-extrabold">
+                                <XIcon className="w-3 h-3" />BEZET
+                              </span>
+                            )}
+                            {reservedTone && (
+                              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-amber-500 text-white text-[10px] font-extrabold">
+                                AUTO-NAAM
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+
+                  <div className="grid sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Uw naam</label>
+                      <input type="text" value={name} onChange={(e) => setName(e.target.value)} data-testid="auth-name"
+                        required minLength={2}
+                        placeholder="Voornaam Achternaam"
+                        className="w-full h-12 text-base px-4 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] focus:ring-4 focus:ring-[#FF5C00]/10 bg-[#F9FAFB] outline-none transition" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Telefoon</label>
+                      <input type="tel" value={telefoon} onChange={(e) => setTelefoon(e.target.value)} data-testid="auth-telefoon"
+                        placeholder="+597 ..."
+                        className="w-full h-12 text-base px-4 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] focus:ring-4 focus:ring-[#FF5C00]/10 bg-[#F9FAFB] outline-none transition" />
+                    </div>
+                  </div>
+
+                  <div className="grid sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">E-mailadres</label>
+                      <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} data-testid="auth-email"
+                        required
+                        className="w-full h-12 text-base px-4 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] focus:ring-4 focus:ring-[#FF5C00]/10 bg-[#F9FAFB] outline-none transition"
+                        placeholder="naam@bedrijf.sr" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Wachtwoord</label>
+                      <div className="relative">
+                        <input type={showPw ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)}
+                          data-testid="auth-password" required minLength={6}
+                          className="w-full h-12 text-base px-4 pr-11 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] focus:ring-4 focus:ring-[#FF5C00]/10 bg-[#F9FAFB] outline-none transition" />
+                        <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                          {showPw ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                        </button>
                       </div>
                     </div>
-                  )}
-                </div>
-
-                <div className="grid sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Uw naam</label>
-                    <input type="text" value={name} onChange={(e) => setName(e.target.value)} data-testid="auth-name"
-                      required minLength={2}
-                      placeholder="Voornaam Achternaam"
-                      className="w-full h-12 text-base px-4 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] focus:ring-4 focus:ring-[#FF5C00]/10 bg-[#F9FAFB] outline-none transition" />
                   </div>
+
                   <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Telefoon</label>
-                    <input type="tel" value={telefoon} onChange={(e) => setTelefoon(e.target.value)} data-testid="auth-telefoon"
-                      placeholder="+597 ..."
-                      className="w-full h-12 text-base px-4 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] focus:ring-4 focus:ring-[#FF5C00]/10 bg-[#F9FAFB] outline-none transition" />
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Kiosk PIN (4 cijfers, optioneel)</label>
+                    <input type="text" inputMode="numeric" pattern="\d{4}" maxLength={4} autoComplete="off"
+                      value={kioskPin}
+                      onChange={(e) => setKioskPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                      data-testid="auth-kiosk-pin"
+                      placeholder="• • • •"
+                      className="w-full h-12 text-base px-4 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] focus:ring-4 focus:ring-[#FF5C00]/10 bg-[#F9FAFB] outline-none transition font-mono tracking-[0.5em] text-center" />
                   </div>
                 </div>
+              </div>
+            )}
 
+            {/* Login-modus: alleen email + wachtwoord (geen 2-col split nodig) */}
+            {mode === 'login' && (
+              <>
                 <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Kiosk PIN (4 cijfers, optioneel)</label>
-                  <input type="text" inputMode="numeric" pattern="\d{4}" maxLength={4} autoComplete="off"
-                    value={kioskPin}
-                    onChange={(e) => setKioskPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
-                    data-testid="auth-kiosk-pin"
-                    placeholder="• • • •"
-                    className="w-full h-12 text-base px-4 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] focus:ring-4 focus:ring-[#FF5C00]/10 bg-[#F9FAFB] outline-none transition font-mono tracking-[0.5em] text-center" />
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">E-mailadres</label>
+                  <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} data-testid="auth-email"
+                    required
+                    className="w-full h-12 text-base px-4 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] focus:ring-4 focus:ring-[#FF5C00]/10 bg-[#F9FAFB] outline-none transition"
+                    placeholder="admin@vastgoed.sr" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Wachtwoord</label>
+                  <div className="relative">
+                    <input type={showPw ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)}
+                      data-testid="auth-password" required minLength={6}
+                      className="w-full h-12 text-base px-4 pr-11 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] focus:ring-4 focus:ring-[#FF5C00]/10 bg-[#F9FAFB] outline-none transition" />
+                    <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                      {showPw ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    </button>
+                  </div>
                 </div>
               </>
             )}
 
-            <div className={mode === 'register' ? 'grid sm:grid-cols-2 gap-3' : ''}>
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">E-mailadres</label>
-                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} data-testid="auth-email"
-                  required
-                  className="w-full h-12 text-base px-4 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] focus:ring-4 focus:ring-[#FF5C00]/10 bg-[#F9FAFB] outline-none transition"
-                  placeholder={mode === 'register' ? 'naam@bedrijf.sr' : 'admin@vastgoed.sr'} />
-              </div>
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Wachtwoord</label>
-                <div className="relative">
-                  <input type={showPw ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)}
-                    data-testid="auth-password" required minLength={6}
-                    className="w-full h-12 text-base px-4 pr-11 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] focus:ring-4 focus:ring-[#FF5C00]/10 bg-[#F9FAFB] outline-none transition" />
-                  <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
-                    {showPw ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <button type="submit" disabled={loading} data-testid="auth-submit"
-              className="w-full h-14 mt-1 bg-[#FF5C00] hover:bg-[#E05200] text-white rounded-xl text-lg font-semibold transition-all active:scale-[0.97] shadow-lg shadow-orange-500/20 disabled:opacity-50 flex items-center justify-center gap-2">
+            <button type="submit" disabled={loading || slugStatus === 'taken' || slugStatus === 'format'} data-testid="auth-submit"
+              className="w-full h-14 mt-1 bg-[#FF5C00] hover:bg-[#E05200] text-white rounded-xl text-lg font-semibold transition-all active:scale-[0.97] shadow-lg shadow-orange-500/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
               {loading ? <Loader2 className="w-6 h-6 animate-spin" /> : (
                 <>{mode === 'login' ? <LogIn className="w-5 h-5" /> : <UserPlus className="w-5 h-5" />}
                 {mode === 'login' ? 'Inloggen' : 'Account aanmaken'}</>

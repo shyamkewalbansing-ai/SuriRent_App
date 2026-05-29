@@ -1930,6 +1930,30 @@ async def public_company_branding(slug: str):
     return _company_branding_response(c)
 
 
+@api.get("/public/companies/{slug}/available")
+async def public_slug_available(slug: str):
+    """Public lightweight beschikbaarheids-check tijdens registratie.
+    Returnt `{available: bool, reason?: str}` zonder enige interne data
+    van het bestaande bedrijf te lekken (geen naam, geen branding).
+    `reason` is een NL-vriendelijke fout-string:
+      - "format"   → slug bevat ongeldige tekens / te kort / te lang
+      - "reserved" → gereserveerde platform-slug (zoals 'admin', 'login')
+      - "taken"    → reeds in gebruik door een ander bedrijf
+    """
+    import re
+    s = (slug or "").lower().strip()
+    if not s or len(s) > 40 or not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,39}", s):
+        return {"available": False, "reason": "format"}
+    if s in RESERVED_SLUGS:
+        return {"available": False, "reason": "reserved"}
+    exists = await db.companies.find_one({"slug": s}, {"_id": 1})
+    if exists:
+        return {"available": False, "reason": "taken"}
+    return {"available": True}
+
+
+
+
 @api.get("/public/branding-default")
 async def public_branding_default():
     """Wanneer er exact één actief bedrijf is, geef de branding terug.
