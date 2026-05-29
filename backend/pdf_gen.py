@@ -1122,149 +1122,91 @@ def luxury_plate_pdf(*, tenant_name: str, apartment_number: str,
                      address: str, company_name: str,
                      kiosk_url: str, company_logo: bytes | None = None,
                      accent_hex: str = "#D4AF37") -> bytes:
-    """Luxueuze "gouden plaat" QR-poster per huurder.
-    Zwarte achtergrond met goud-getinte randen, vast huis-logo links,
-    bedrijfsnaam als tekst rechts ernaast, QR-code rechts, centraal
-    huisnummer + adres onderaan. Geschikt om af te drukken als PVC plaat
-    voor naast de voordeur.
+    """Luxueuze "gouden plaat" QR-poster per huurder, gegenereerd door de
+    door de gebruiker geleverde template-afbeelding (1536×1024 PNG) als
+    achtergrond te gebruiken en alleen de dynamische delen erboven te
+    overlayen: bedrijfsnaam, transparante QR-code, HUIS-nummer, en adres.
 
-    Layout: 3:2 ratio (200mm × 133mm) — past op standaard sticker-vellen.
-    `company_logo` parameter wordt GENEGEERD — we gebruiken altijd het
-    eigen huis-icoon zodat alle platen visueel consistent zijn.
+    Template-bestand: /app/backend/assets/qr-plate-template.png
     """
-    from reportlab.pdfgen import canvas
-    from reportlab.lib.pagesizes import landscape
-    from reportlab.lib.utils import ImageReader
+    import os
+    from PIL import Image as PILImage
+    from PIL import ImageDraw, ImageFont
     import qrcode
 
-    # Pagina-dimensies — 3:2 verhouding zoals het user-voorbeeld
-    W, H = 200 * mm, 133 * mm
-    buf = io.BytesIO()
-    c = canvas.Canvas(buf, pagesize=(W, H))
+    # 1) Template laden
+    template_path = "/app/backend/assets/qr-plate-template.png"
+    if not os.path.exists(template_path):
+        # Fallback: laadbare alternatieve template, anders error
+        raise FileNotFoundError(f"QR plate template ontbreekt: {template_path}")
+    img = PILImage.open(template_path).convert("RGB")
+    W, H = img.size  # 1536 × 1024
+    draw = ImageDraw.Draw(img)
 
-    BLACK = colors.HexColor("#0a0a0a")
-    GOLD = colors.HexColor(accent_hex if accent_hex.startswith("#") else "#D4AF37")
-    GOLD_LIGHT = colors.HexColor("#E8C766")
-    GOLD_DARK = colors.HexColor("#A88420")
+    # Goud-kleur die overeenkomt met de template (gesampled uit de afbeelding)
+    GOLD = (212, 174, 92)
+    GOLD_LIGHT = (232, 199, 102)
+    PLATE_BLACK = (28, 26, 24)  # zwart van de plaat zelf (iets warmer dan #000)
 
-    # 1) Pagina-achtergrond licht grijs
-    c.setFillColor(colors.HexColor("#dcd6cd"))
-    c.rect(0, 0, W, H, fill=1, stroke=0)
+    # Helper om TTF te laden (Liberation Sans Bold lijkt visueel op Helvetica)
+    def font_at(size: int):
+        for fp in (
+            "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        ):
+            if os.path.exists(fp):
+                return ImageFont.truetype(fp, size)
+        return ImageFont.load_default()
 
-    # 2) Buitenrand plaat — gouden border, afgeronde hoeken
-    pad = 6 * mm
-    c.setFillColor(GOLD_DARK)
-    c.roundRect(pad, pad, W - 2 * pad, H - 2 * pad, 7 * mm, fill=1, stroke=0)
-    # Donkere binnenring
-    inner = pad + 3.5 * mm
-    c.setFillColor(BLACK)
-    c.roundRect(inner, inner, W - 2 * inner, H - 2 * inner, 5 * mm, fill=1, stroke=0)
-    # Innerlijke gouden lijn-rand
-    c.setStrokeColor(GOLD)
-    c.setLineWidth(1.0)
-    c.roundRect(inner + 2 * mm, inner + 2 * mm,
-                W - 2 * (inner + 2 * mm), H - 2 * (inner + 2 * mm),
-                4 * mm, fill=0, stroke=1)
+    # 2) BEDRIJFSNAAM — overschrijf "Gopi" tekst.
+    # Template-coördinaten van "Gopi" big text: ongeveer x=465..870 y=195..420
+    # We maskeren dat gebied met plaat-zwart en zetten de echte bedrijfsnaam.
+    company_name_clean = (company_name or "").strip() or "Bedrijf"
+    # Mask box voor de oude "Gopi" tekst
+    mask_x0, mask_y0, mask_x1, mask_y1 = 460, 175, 1080, 415
+    draw.rectangle([mask_x0, mask_y0, mask_x1, mask_y1], fill=PLATE_BLACK)
+    # Bepaal font-grootte zodat het in de breedte past
+    target_height = 200
+    cn_size = 200
+    cn_font = font_at(cn_size)
+    while cn_size > 50:
+        cn_font = font_at(cn_size)
+        bbox = draw.textbbox((0, 0), company_name_clean, font=cn_font)
+        cn_w = bbox[2] - bbox[0]
+        cn_h = bbox[3] - bbox[1]
+        if cn_w <= (mask_x1 - mask_x0) and cn_h <= target_height:
+            break
+        cn_size -= 10
+    bbox = draw.textbbox((0, 0), company_name_clean, font=cn_font)
+    cn_h = bbox[3] - bbox[1]
+    # Plaats de tekst links uitgelijnd, verticaal gecentreerd in de mask
+    text_x = mask_x0 + 5
+    text_y = mask_y0 + ((mask_y1 - mask_y0) - cn_h) // 2 - bbox[1]
+    draw.text((text_x, text_y), company_name_clean, fill=GOLD, font=cn_font)
+    # "Appartement's" subtekst — staat al in template op y≈430-490, dus we
+    # laten die intact (statisch).
 
-    # 3) Schroef-cirkels in onderhoeken (decoratief)
-    screw_r = 4 * mm
-    for sx in (inner + 7 * mm, W - inner - 7 * mm):
-        sy = inner + 10 * mm
-        c.setFillColor(GOLD_DARK)
-        c.circle(sx, sy, screw_r, fill=1, stroke=0)
-        c.setFillColor(GOLD)
-        c.circle(sx, sy, screw_r - 0.8 * mm, fill=1, stroke=0)
-        # plus-kruis in midden
-        c.setStrokeColor(BLACK)
-        c.setLineWidth(0.8)
-        c.line(sx - 1.8 * mm, sy, sx + 1.8 * mm, sy)
-        c.line(sx, sy - 1.8 * mm, sx, sy + 1.8 * mm)
+    # 3) QR-CODE — overlay een nieuwe TRANSPARANTE QR over het bestaande gebied
+    # QR area in template (incl. gouden rand): x=1115..1395 y=140..440
+    qr_x0, qr_y0, qr_x1, qr_y1 = 1115, 140, 1400, 440
+    # Mask het oude QR-gebied met de plaat-achtergrond zodat de oude QR weg is.
+    # We laten de gouden frame-rand intact door alleen het binnenste gebied
+    # te overschrijven (5px marge).
+    inner = 14
+    draw.rectangle(
+        [qr_x0 + inner, qr_y0 + inner, qr_x1 - inner, qr_y1 - inner],
+        fill=PLATE_BLACK,
+    )
+    # Nieuwe transparante QR (goud op zwart, zoals de referentie)
+    qr_box_size = qr_x1 - qr_x0 - 2 * inner  # ~257px
+    qr = qrcode.QRCode(box_size=10, border=0, error_correction=qrcode.constants.ERROR_CORRECT_H)
+    qr.add_data(kiosk_url)
+    qr.make(fit=True)
+    qr_pil = qr.make_image(fill_color=GOLD, back_color=PLATE_BLACK).convert("RGB")
+    qr_resized = qr_pil.resize((qr_box_size, qr_box_size), PILImage.NEAREST)
+    img.paste(qr_resized, (qr_x0 + inner, qr_y0 + inner))
 
-    # 4) Vast huis-logo links — altijd dezelfde stijl voor brand consistency
-    content_top = H - inner - 9 * mm
-    logo_size = 38 * mm
-    logo_x = inner + 8 * mm
-    logo_y = content_top - logo_size
-    try:
-        from PIL import Image as PILImage
-        from PIL import ImageOps
-        # Probeer eerst lokaal het standaard huis-icoon te laden
-        import os
-        logo_paths = [
-            "/app/frontend/public/kiosk-icons/mark-white.png",
-            "/app/frontend/public/kiosk-icons/mark-dark.png",
-        ]
-        for lp in logo_paths:
-            if os.path.exists(lp):
-                with open(lp, "rb") as f:
-                    raw = f.read()
-                img = PILImage.open(io.BytesIO(raw)).convert("RGBA")
-                # Recolor naar goud — behoudt alpha kanaal
-                r, g, b, a = img.split()
-                gray = ImageOps.grayscale(img)
-                colored = ImageOps.colorize(gray, black=(20, 15, 0), white=(212, 175, 55))
-                colored.putalpha(a)
-                out = io.BytesIO()
-                colored.save(out, format="PNG")
-                out.seek(0)
-                c.drawImage(ImageReader(out), logo_x, logo_y,
-                            logo_size, logo_size, mask='auto', preserveAspectRatio=True)
-                break
-    except Exception:
-        pass
-
-    # 5) Bedrijfsnaam als tekst (rechts van logo) — groot in goud
-    name_x = logo_x + logo_size + 6 * mm
-    # Hoofdnaam — auto-fit lettergrootte op basis van lengte
-    company_name_clean = (company_name or "").strip()
-    font_size = 36 if len(company_name_clean) <= 12 else 28 if len(company_name_clean) <= 18 else 22
-    c.setFillColor(GOLD)
-    c.setFont("Helvetica-Bold", font_size)
-    c.drawString(name_x, content_top - (logo_size * 0.45), company_name_clean)
-    # Subtekst "Appartement's" of context onder bedrijfsnaam
-    c.setFillColor(GOLD_LIGHT)
-    c.setFont("Helvetica", 14)
-    c.drawString(name_x, content_top - (logo_size * 0.45) - 9 * mm, "Appartement's")
-
-    # 6) QR-code rechts in gouden frame
-    qr_size = 36 * mm
-    qr_x = W - inner - qr_size - 8 * mm
-    qr_y = content_top - qr_size + 2 * mm
-    # frame rond QR
-    c.setStrokeColor(GOLD)
-    c.setLineWidth(1.8)
-    c.roundRect(qr_x - 2.5 * mm, qr_y - 2.5 * mm,
-                qr_size + 5 * mm, qr_size + 5 * mm, 2.5 * mm, fill=0, stroke=1)
-    # gouden achtergrond achter QR
-    c.setFillColor(GOLD)
-    c.rect(qr_x, qr_y, qr_size, qr_size, fill=1, stroke=0)
-    # genereer QR (zwart op transparant)
-    qr_img = qrcode.QRCode(box_size=10, border=1, error_correction=qrcode.constants.ERROR_CORRECT_H)
-    qr_img.add_data(kiosk_url)
-    qr_img.make(fit=True)
-    qr_pil = qr_img.make_image(fill_color="black", back_color="transparent").convert("RGBA")
-    qr_buf = io.BytesIO()
-    qr_pil.save(qr_buf, format="PNG")
-    qr_buf.seek(0)
-    c.drawImage(ImageReader(qr_buf), qr_x + 1 * mm, qr_y + 1 * mm,
-                qr_size - 2 * mm, qr_size - 2 * mm, mask='auto')
-    # Scan-tekst onder QR
-    c.setFillColor(GOLD)
-    c.setFont("Helvetica-Bold", 10)
-    c.drawCentredString(qr_x + qr_size / 2, qr_y - 6 * mm, "Scan voor mijn")
-    c.drawCentredString(qr_x + qr_size / 2, qr_y - 11 * mm, "huurportaal")
-    c.setFillColor(GOLD_LIGHT)
-    c.setFont("Helvetica", 7)
-    c.drawCentredString(qr_x + qr_size / 2, qr_y - 16 * mm,
-                        "Betalen • Kwitanties • Onderhoud melden")
-
-    # 7) Horizontale scheidingslijn
-    div_y = inner + 42 * mm
-    c.setStrokeColor(GOLD)
-    c.setLineWidth(1.0)
-    c.line(inner + 14 * mm, div_y, W - inner - 14 * mm, div_y)
-
-    # 8) HUIS XX — BIG center (auto-fit grootte)
+    # 4) HUIS XX — overschrijf de "HUIS 7B" tekst
     apt_clean = (apartment_number or "").strip()
     upper = apt_clean.upper()
     if upper.startswith("HUIS "):
@@ -1272,37 +1214,93 @@ def luxury_plate_pdf(*, tenant_name: str, apartment_number: str,
     elif upper.startswith("APPARTEMENT "):
         apt_clean = apt_clean[12:].strip()
     headline = f"HUIS {apt_clean}".upper()
-    huis_font_size = 56 if len(headline) <= 8 else 48 if len(headline) <= 11 else 40
-    c.setFillColor(GOLD)
-    c.setFont("Helvetica-Bold", huis_font_size)
-    c.drawCentredString(W / 2, div_y - 17 * mm, headline)
+    # Mask het "HUIS 7B" gebied (zwarte vlak waar HUIS-tekst staat)
+    huis_x0, huis_y0, huis_x1, huis_y1 = 240, 640, 1280, 820
+    draw.rectangle([huis_x0, huis_y0, huis_x1, huis_y1], fill=PLATE_BLACK)
+    # Auto-fit font
+    huis_size = 170
+    while huis_size > 80:
+        huis_font = font_at(huis_size)
+        bbox = draw.textbbox((0, 0), headline, font=huis_font)
+        if (bbox[2] - bbox[0]) <= (huis_x1 - huis_x0 - 40):
+            break
+        huis_size -= 10
+    huis_font = font_at(huis_size)
+    bbox = draw.textbbox((0, 0), headline, font=huis_font)
+    hw = bbox[2] - bbox[0]
+    hh = bbox[3] - bbox[1]
+    # Gecentreerd in het mask-gebied
+    hx = (W - hw) // 2
+    hy = huis_y0 + ((huis_y1 - huis_y0) - hh) // 2 - bbox[1]
+    draw.text((hx, hy), headline, fill=GOLD, font=huis_font)
 
-    # 9) Adres onderaan met pin-icoon
+    # 5) ADRES — overschrijf "Kewalbansingweg 7 B" lijn
+    addr_x0, addr_y0, addr_x1, addr_y1 = 240, 840, 1280, 920
+    draw.rectangle([addr_x0, addr_y0, addr_x1, addr_y1], fill=PLATE_BLACK)
     if address:
-        c.setFillColor(GOLD_LIGHT)
-        c.setFont("Helvetica-Bold", 14)
-        addr_y = div_y - 28 * mm
-        addr_w = c.stringWidth(address, "Helvetica-Bold", 14)
-        pin_x = W / 2 - (addr_w / 2) - 7 * mm
-        # Pin icoon: druppel-vorm met gat
-        c.setFillColor(GOLD)
-        c.circle(pin_x + 2 * mm, addr_y + 2 * mm, 2 * mm, fill=1, stroke=0)
-        # Punt van de pin (driehoek)
-        from reportlab.graphics.shapes import Path
-        p = c.beginPath()
-        p.moveTo(pin_x + 0.4 * mm, addr_y + 1 * mm)
-        p.lineTo(pin_x + 2 * mm, addr_y - 1.5 * mm)
-        p.lineTo(pin_x + 3.6 * mm, addr_y + 1 * mm)
-        p.close()
-        c.drawPath(p, fill=1, stroke=0)
-        # Gat in midden van de pin
-        c.setFillColor(BLACK)
-        c.circle(pin_x + 2 * mm, addr_y + 2.3 * mm, 0.8 * mm, fill=1, stroke=0)
-        # Adres-tekst
-        c.setFillColor(GOLD_LIGHT)
-        c.drawString(pin_x + 6 * mm, addr_y, address)
+        addr_text = address
+        addr_size = 56
+        while addr_size > 24:
+            addr_font = font_at(addr_size)
+            bbox = draw.textbbox((0, 0), addr_text, font=addr_font)
+            if (bbox[2] - bbox[0]) <= (addr_x1 - addr_x0 - 100):
+                break
+            addr_size -= 4
+        addr_font = font_at(addr_size)
+        bbox = draw.textbbox((0, 0), addr_text, font=addr_font)
+        aw = bbox[2] - bbox[0]
+        ah = bbox[3] - bbox[1]
+        # Pin-icoon + tekst, samen gecentreerd
+        pin_d = max(20, addr_size // 2)
+        total_w = pin_d + 12 + aw
+        start_x = (W - total_w) // 2
+        addr_baseline_y = addr_y0 + ((addr_y1 - addr_y0) - ah) // 2 - bbox[1]
+        # Pin tekenen (druppel-shape: cirkel + driehoek)
+        pin_cx = start_x + pin_d // 2
+        pin_cy = addr_baseline_y + ah // 2 - 4
+        draw.ellipse(
+            [pin_cx - pin_d // 2, pin_cy - pin_d // 2,
+             pin_cx + pin_d // 2, pin_cy + pin_d // 2],
+            fill=GOLD,
+        )
+        draw.polygon(
+            [(pin_cx - pin_d // 3, pin_cy + pin_d // 4),
+             (pin_cx + pin_d // 3, pin_cy + pin_d // 4),
+             (pin_cx, pin_cy + pin_d)],
+            fill=GOLD,
+        )
+        # Gat in pin
+        hole_r = max(3, pin_d // 6)
+        draw.ellipse(
+            [pin_cx - hole_r, pin_cy - hole_r,
+             pin_cx + hole_r, pin_cy + hole_r],
+            fill=PLATE_BLACK,
+        )
+        # Adres tekst
+        draw.text((start_x + pin_d + 12, addr_baseline_y), addr_text,
+                  fill=GOLD_LIGHT, font=addr_font)
 
+    # 6) PNG → PDF conversie. Behoud volledige resolutie, A5-landscape PDF.
+    pdf_buf = io.BytesIO()
+    # Schaal naar 200mm × 133mm A5-achtige landschap (mm to pt via reportlab)
+    from reportlab.pdfgen import canvas as rl_canvas
+    from reportlab.lib.utils import ImageReader
+    PAGE_W = 200 * mm
+    PAGE_H = 133 * mm  # 3:2 ratio
+    c = rl_canvas.Canvas(pdf_buf, pagesize=(PAGE_W, PAGE_H))
+    # Lichtgrijs paginavlak
+    c.setFillColor(colors.HexColor("#dcd6cd"))
+    c.rect(0, 0, PAGE_W, PAGE_H, fill=1, stroke=0)
+    # Plaat-image bijna full-bleed (margin van 4mm rondom)
+    margin = 4 * mm
+    plate_w = PAGE_W - 2 * margin
+    plate_h = PAGE_H - 2 * margin
+    out = io.BytesIO()
+    img.save(out, format="PNG", optimize=True)
+    out.seek(0)
+    c.drawImage(ImageReader(out), margin, margin, plate_w, plate_h,
+                preserveAspectRatio=True, anchor='c')
     c.showPage()
     c.save()
-    buf.seek(0)
-    return buf.getvalue()
+    pdf_buf.seek(0)
+    return pdf_buf.getvalue()
