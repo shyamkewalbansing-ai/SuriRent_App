@@ -3574,15 +3574,23 @@ async def apartment_kiosk_sticker(apt_id: str, request: Request):
 
 
 @api.get("/tenants/{tenant_id}/qr-plate.pdf")
-async def tenant_qr_plate(tenant_id: str, request: Request, refresh: int = 0):
+async def tenant_qr_plate(tenant_id: str, request: Request, refresh: int = 0,
+                          size: str = "medium"):
     """Luxueuze "gouden plaat" QR-poster per huurder voor naast de voordeur.
     Bevat persoonlijke QR (?t=<tenant_id>) zodat huurder bij eerste scan
     een eigen PIN kan kiezen. Publiek (geen auth) zodat beheerder de link
     direct in een nieuw tabblad kan openen voor afdrukken.
 
     Query params:
-        refresh=1  → bypass de cache en regenereer via AI.
+        refresh=1                       → bypass de cache en regenereer via AI.
+        size=small|medium|large         → PDF-pagina formaat:
+            • small  = 200×133 mm (~A5 landschap)
+            • medium = 300×200 mm (~A4 landschap, default)
+            • large  = 400×267 mm (~A3 landschap)
     """
+    size = (size or "medium").lower().strip()
+    if size not in ("small", "medium", "large"):
+        size = "medium"
     t = await db.tenants.find_one(
         {"id": tenant_id},
         {"_id": 0, "id": 1, "name": 1, "company_id": 1, "apartment_id": 1},
@@ -3627,7 +3635,7 @@ async def tenant_qr_plate(tenant_id: str, request: Request, refresh: int = 0):
     import hashlib as _hashlib
     # Cache key: tenant + alle dynamische inputs. Voorkomt herhaald LLM-budget
     # verbruik bij elke download.
-    cache_inputs = f"{tenant_id}|{company_name}|{apt_number}|{address}|{kiosk_url}|v9"
+    cache_inputs = f"{tenant_id}|{company_name}|{apt_number}|{address}|{kiosk_url}|{size}|v10"
     cache_hash = _hashlib.sha256(cache_inputs.encode("utf-8")).hexdigest()
     cached = await db.qr_plate_cache.find_one(
         {"hash": cache_hash}, {"_id": 0, "pdf_b64": 1}
@@ -3645,6 +3653,7 @@ async def tenant_qr_plate(tenant_id: str, request: Request, refresh: int = 0):
                 kiosk_url=kiosk_url,
                 company_logo=company_logo_bytes,
                 accent_hex=accent_hex,
+                size=size,
             )
         except Exception as e:
             # Fallback naar PIL-versie als AI faalt (offline, quota, etc.)
@@ -3660,6 +3669,7 @@ async def tenant_qr_plate(tenant_id: str, request: Request, refresh: int = 0):
                 kiosk_url=kiosk_url,
                 company_logo=company_logo_bytes,
                 accent_hex=accent_hex,
+                size=size,
             )
         else:
             # Alleen succesvolle AI-renders cachen

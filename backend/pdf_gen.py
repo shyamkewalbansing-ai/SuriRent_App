@@ -1121,7 +1121,8 @@ def portal_poster_pdf(*, company_name: str, portal_url: str,
 def luxury_plate_pdf(*, tenant_name: str, apartment_number: str,
                      address: str, company_name: str,
                      kiosk_url: str, company_logo: bytes | None = None,
-                     accent_hex: str = "#D4AF37") -> bytes:
+                     accent_hex: str = "#D4AF37",
+                     size: str = "medium") -> bytes:
     """Luxueuze "gouden plaat" QR-poster per huurder, gegenereerd door de
     door de gebruiker geleverde template-afbeelding (1536×1024 PNG) als
     achtergrond te gebruiken en alleen de dynamische delen erboven te
@@ -1291,12 +1292,18 @@ def luxury_plate_pdf(*, tenant_name: str, apartment_number: str,
         draw.text((start_x + pin_d + 12, addr_baseline_y), addr_text,
                   fill=GOLD_LIGHT, font=addr_font)
 
-    # 6) PNG → PDF conversie. Behoud volledige resolutie, 300×200mm 3:2 landscape.
+    # 6) PNG → PDF conversie. Behoud volledige resolutie, 3:2 landscape.
     pdf_buf = io.BytesIO()
     from reportlab.pdfgen import canvas as rl_canvas
     from reportlab.lib.utils import ImageReader
-    PAGE_W = 300 * mm
-    PAGE_H = 200 * mm  # exact 3:2 ratio, matcht 1536×1024 image
+    SIZE_MAP = {
+        "small":  (200, 133),
+        "medium": (300, 200),
+        "large":  (400, 267),
+    }
+    pw, ph = SIZE_MAP.get(size, SIZE_MAP["medium"])
+    PAGE_W = pw * mm
+    PAGE_H = ph * mm
     c = rl_canvas.Canvas(pdf_buf, pagesize=(PAGE_W, PAGE_H))
     c.setFillColor(colors.HexColor("#dcd6cd"))
     c.rect(0, 0, PAGE_W, PAGE_H, fill=1, stroke=0)
@@ -1419,7 +1426,8 @@ async def _nano_banana_edit_plate(template_bytes: bytes, *, company_name: str,
 async def luxury_plate_pdf_ai(*, tenant_name: str, apartment_number: str,
                               address: str, company_name: str,
                               kiosk_url: str, company_logo: bytes | None = None,
-                              accent_hex: str = "#D4AF37") -> bytes:
+                              accent_hex: str = "#D4AF37",
+                              size: str = "medium") -> bytes:
     """AI-versie van :func:`luxury_plate_pdf`. Gebruikt Gemini Nano Banana om
     de dynamische tekst in de template te vervangen met behoud van het
     3D-embossed gouden effect, en plakt vervolgens een echte scanbare QR-code
@@ -1512,11 +1520,15 @@ async def luxury_plate_pdf_ai(*, tenant_name: str, apartment_number: str,
     pdf_buf = io.BytesIO()
     from reportlab.pdfgen import canvas as rl_canvas
     from reportlab.lib.utils import ImageReader
-    # PDF-pagina exact 3:2 landschap formaat (1536×1024 ratio), groter formaat
-    # zodat de plaquette levensgroot kan worden afgedrukt op A4-papier of
-    # groter. 300×200 mm = 3:2 ratio = ongeveer A4-landschap breedte.
-    PAGE_W = 300 * mm
-    PAGE_H = 200 * mm
+    # PDF-pagina exact 3:2 landschap formaat, configureerbare grootte.
+    SIZE_MAP = {
+        "small":  (200, 133),   # ~A5 landschap
+        "medium": (300, 200),   # ~A4 landschap (default)
+        "large":  (400, 267),   # ~A3 landschap
+    }
+    pw, ph = SIZE_MAP.get(size, SIZE_MAP["medium"])
+    PAGE_W = pw * mm
+    PAGE_H = ph * mm
     c = rl_canvas.Canvas(pdf_buf, pagesize=(PAGE_W, PAGE_H))
     c.setFillColor(colors.HexColor("#dcd6cd"))
     c.rect(0, 0, PAGE_W, PAGE_H, fill=1, stroke=0)

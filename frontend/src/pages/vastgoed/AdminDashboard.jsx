@@ -870,6 +870,7 @@ function Apartments() {
   const [creating, setCreating] = useState(false);
   const [assignFor, setAssignFor] = useState(null);
   const [shellyFor, setShellyFor] = useState(null);
+  const [plateFor, setPlateFor] = useState(null);
   const [q, setQ] = useState('');
 
   const load = useCallback(async () => {
@@ -878,7 +879,7 @@ function Apartments() {
   }, []);
   useEffect(() => { load(); }, [load]);
   // Stille polling — lijst wordt in place vervangen, geen scroll-reset.
-  useAutoRefresh(load, { interval: 15000, enabled: !creating && !editing && !assignFor && !shellyFor });
+  useAutoRefresh(load, { interval: 15000, enabled: !creating && !editing && !assignFor && !shellyFor && !plateFor });
 
   const del = async (id) => {
     if (!window.confirm('Appartement verwijderen?')) return;
@@ -984,13 +985,12 @@ function Apartments() {
                 <QrCode className="w-4 h-4" />
               </a>
               {a.tenant_id && (
-                <a href={`${process.env.REACT_APP_BACKEND_URL}/api/tenants/${a.tenant_id}/qr-plate.pdf`}
-                  target="_blank" rel="noreferrer"
+                <button type="button" onClick={() => setPlateFor(a)}
                   data-testid={`apt-plate-${a.id}`}
-                  title="Luxe gouden plaat per huurder (printbaar als sticker/PVC plaat)"
+                  title="Luxe gouden plaat per huurder (kies formaat)"
                   className="w-10 h-10 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-700 flex items-center justify-center">
                   <span className="text-base font-black">★</span>
-                </a>
+                </button>
               )}
               <button onClick={() => setShellyFor(a)} data-testid={`apt-shelly-${a.id}`}
                 title={a.shelly?.device_id ? `Stroom: ${a.shelly.label || a.shelly.device_id}` : 'Stroom koppelen'}
@@ -1043,6 +1043,60 @@ function Apartments() {
         <ShellyControlModal apt={shellyFor} onClose={() => setShellyFor(null)}
           onChanged={() => { setShellyFor(null); load(); }} />
       )}
+      {plateFor && (
+        <PlateSizeModal apt={plateFor} onClose={() => setPlateFor(null)} />
+      )}
+    </div>
+  );
+}
+
+function PlateSizeModal({ apt, onClose }) {
+  const tenantId = apt.tenant_id;
+  const base = process.env.REACT_APP_BACKEND_URL;
+  const SIZES = [
+    { id: 'small',  label: 'Klein',   sub: '200 × 133 mm',  hint: 'A5-landschap, voor sticker' },
+    { id: 'medium', label: 'Normaal', sub: '300 × 200 mm',  hint: 'A4-landschap, standaard' },
+    { id: 'large',  label: 'Groot',   sub: '400 × 267 mm',  hint: 'A3-landschap, voordeur-plaat' },
+  ];
+  const open = (size) => {
+    window.open(
+      `${base}/api/tenants/${tenantId}/qr-plate.pdf?size=${size}`,
+      '_blank', 'noopener,noreferrer'
+    );
+    onClose();
+  };
+  return (
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
+      onClick={onClose} data-testid="plate-size-modal">
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-5"
+        onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <h3 className="text-base font-extrabold text-slate-900">Gouden plaat formaat</h3>
+            <p className="text-xs text-slate-500 mt-0.5">Huis {apt.number} — kies een afdrukformaat</p>
+          </div>
+          <button onClick={onClose} data-testid="plate-size-close"
+            className="w-8 h-8 rounded-lg hover:bg-slate-100 text-slate-500 font-bold">
+            ✕
+          </button>
+        </div>
+        <div className="space-y-2">
+          {SIZES.map((s) => (
+            <button key={s.id} type="button" onClick={() => open(s.id)}
+              data-testid={`plate-size-${s.id}`}
+              className="w-full text-left p-3 rounded-xl border-2 border-slate-200 hover:border-amber-500 hover:bg-amber-50 transition flex items-center justify-between gap-3">
+              <div>
+                <div className="font-extrabold text-slate-900 text-sm">{s.label}</div>
+                <div className="text-[11px] text-slate-500">{s.hint}</div>
+              </div>
+              <div className="text-xs font-mono font-bold text-amber-700">{s.sub}</div>
+            </button>
+          ))}
+        </div>
+        <p className="text-[11px] text-slate-400 mt-3 leading-relaxed">
+          Elke download opent in een nieuw tabblad. De PDF heeft exact 3:2 verhouding voor optimaal afdrukken zonder vervorming.
+        </p>
+      </div>
     </div>
   );
 }
