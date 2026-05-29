@@ -1167,16 +1167,20 @@ def luxury_plate_pdf(*, tenant_name: str, apartment_number: str,
     #   • Schroef-cirkels in onderhoeken
     # Alles binnen het zwarte vlak wordt vers opgebouwd.
 
-    # Mask de TEKST/QR rechterkant + onderste tekstdelen
-    # Rechter helft (vanaf na het logo)
-    draw.rectangle([670, 130, W - 130, H - 130], fill=PLATE_BLACK)
-    # Onder-strook midden (verbergt evt restanten van "Kewalbansingweg")
-    draw.rectangle([130, 600, W - 130, H - 130], fill=PLATE_BLACK)
+    # Mask alle bestaande sjabloon-tekst zodat we vers kunnen overschilderen.
+    # We behouden bewust: gouden buitenrand, het S-huis logo links, en de
+    # 4 schroef-cirkels bij de onderhoeken.
+    # Bovenste rechterzone — verbergt "Gopi", "Appartement's", QR, scan-tekst
+    draw.rectangle([540, 130, W - 130, 640], fill=PLATE_BLACK)
+    # Onderste midden-strook — verbergt "HUIS 7B" + "Kewalbansingweg 7 B".
+    # Begin/eind binnen de schroef-zone (~x=260 ↔ x=1280) zodat de schroeven
+    # in de hoeken intact blijven.
+    draw.rectangle([260, 640, W - 260, H - 130], fill=PLATE_BLACK)
 
     # 2) BEDRIJFSNAAM — alles in rechterhelft is al zwart gemaskeerd in STAP 0.
     company_name_clean = (company_name or "").strip() or "Bedrijf"
-    # Tekst-zone (rechts van logo, ruim weg van logo om overlap te voorkomen)
-    cn_x0, cn_y0, cn_x1, cn_y1 = 670, 230, 1090, 480
+    # Tekst-zone (rechts van logo, met marge zodat het logo intact blijft)
+    cn_x0, cn_y0, cn_x1, cn_y1 = 600, 230, 1080, 480
     # Auto-fit font op breedte
     cn_size = 130
     while cn_size > 50:
