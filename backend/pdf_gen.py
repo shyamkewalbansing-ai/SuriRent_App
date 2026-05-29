@@ -1364,12 +1364,20 @@ async def _nano_banana_edit_plate(template_bytes: bytes, *, company_name: str,
         "plaque. Only replace the text content as follows, preserving the same "
         "embossed gold typography (3D extruded letters with realistic highlights "
         "and shadows, matching the existing engraving depth):\n\n"
-        f"1. Replace the large company-name text (currently 'Gopi') with: '{company_clean}'\n"
+        f"1. Replace the large company-name text (currently 'Gopi') with: '{company_clean}'. "
+        "If the company name is long, wrap it onto two lines so it stays inside "
+        "the left-half region (must NOT cross to the right of approximately x=1050 "
+        "in a 1536-wide image — the QR code on the right must remain clear).\n"
         f"2. Keep the smaller subtext 'Appartement\u2019s' directly underneath it.\n"
         f"3. Replace the large bottom heading (currently 'HUIS 7B') with: '{huis_label}'\n"
         f"4. Replace the address line with pin icon (currently 'Kewalbansingweg 7 B') with: "
         f"'{address_clean or 'Adres niet ingevuld'}'\n"
-        "5. Leave the QR code area exactly as-is — do not modify the QR pattern.\n"
+        "5. CRITICAL: Remove the existing QR code pattern entirely. Where the QR "
+        "code currently is, render only the polished gold rectangular frame with "
+        "a COMPLETELY FLAT SOLID BLACK INTERIOR (same warm-black as the plaque "
+        "background). Do NOT draw any QR pixels, dots, squares, or pattern inside "
+        "the frame — leave it as a clean empty black rectangle. We will overlay "
+        "the real scannable QR code on top afterwards.\n"
         "6. Keep the small 'Scan voor mijn huurportaal / Betalen \u00b7 Kwitanties \u00b7 Onderhoud melden' "
         "text under the QR exactly as it appears.\n\n"
         "Output: a single full-resolution photorealistic PNG of the edited plaque, "
@@ -1425,16 +1433,33 @@ async def luxury_plate_pdf_ai(*, tenant_name: str, apartment_number: str,
 
     # 2) Echte scanbare QR genereren en op het QR-gebied plakken.
     # Nano Banana kan geen pixel-perfecte scanbare QR-code garanderen, dus we
-    # overlayen een echte QR op de bekende positie van het QR-frame.
+    # overlayen een echte QR op de bekende positie van het QR-frame. We maken
+    # de mask-zone bewust groter dan het frame zodat eventuele AI-resten
+    # (offset/groter getekende QR) volledig overschilderd worden.
     img = PILImage.open(io.BytesIO(edited_png)).convert("RGB")
     # Resize naar canonieke 1536x1024 voor consistente coördinaten.
     if img.size != (1536, 1024):
         img = img.resize((1536, 1024), PILImage.LANCZOS)
 
+    from PIL import ImageDraw as _ImageDraw
+    draw = _ImageDraw.Draw(img)
+
     GOLD = (212, 174, 92)
     PLATE_BLACK = (14, 13, 10)
     # QR-frame coördinaten in het template
-    qr_x0, qr_y0, qr_x1, _qr_y1 = 1120, 160, 1395, 440
+    qr_x0, qr_y0, qr_x1, qr_y1 = 1120, 160, 1395, 440
+    # STAP 2a: Smalle zwarte mask alléén binnen het verwachte QR-frame, om
+    # te zorgen dat eventuele AI-resten van het QR-patroon verdwijnen, zonder
+    # over de bedrijfsnaam of de gouden buitenrand heen te schilderen.
+    # We blijven bewust BINNEN de plek waar de AI het gouden QR-frame
+    # behoort te tekenen, zodat dat frame zichtbaar rondom de overlay blijft.
+    inner_margin = 6  # vlak binnen het frame
+    draw.rectangle(
+        [qr_x0 + inner_margin, qr_y0 + inner_margin,
+         qr_x1 - inner_margin, qr_y1 - inner_margin],
+        fill=PLATE_BLACK,
+    )
+    # STAP 2c: De echte scanbare QR-code centreren binnen het mask-paneel.
     inner = 14
     qr_box_size = qr_x1 - qr_x0 - 2 * inner
 
