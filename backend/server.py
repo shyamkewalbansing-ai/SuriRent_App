@@ -2908,6 +2908,98 @@ class TenantPinLoginIn(BaseModel):
     company_slug: Optional[str] = None
 
 
+@api.get("/tenant-portal/welcome/{tenant_id}")
+async def tenant_portal_welcome(tenant_id: str):
+    """Public lookup endpoint voor persoonlijke huurder-QR.
+    Geeft alleen de minimale info terug: naam + of er al een PIN is gezet.
+    GEEN authenticatie nodig — de tenant_id in de QR is bewust geen geheim
+    (de QR krijgt de huurder fysiek aangeleverd; PIN beschermt de toegang)."""
+    t = await db.tenants.find_one(
+        {"id": tenant_id}, {"_id": 0, "id": 1, "name": 1, "company_id": 1, "pin_hash": 1}
+    )
+    if not t:
+        raise HTTPException(status_code=404, detail="Huurder niet gevonden")
+    c = await db.companies.find_one(
+        {"id": t.get("company_id")},
+        {"_id": 0, "id": 1, "name": 1, "slug": 1, "branding": 1},
+    ) if t.get("company_id") else None
+    return {
+        "tenant_id": t["id"],
+        "tenant_name": t.get("name"),
+        "has_pin": bool(t.get("pin_hash")),
+        "company": c and {
+            "id": c["id"], "name": c.get("name"), "slug": c.get("slug"),
+            "branding": c.get("branding") or {},
+        },
+    }
+
+
+class TenantSetupPinIn(BaseModel):
+    tenant_id: str
+    pin: str = Field(min_length=4, max_length=4)
+
+
+@api.post("/tenant-portal/setup-pin")
+async def tenant_portal_setup_pin(body: TenantSetupPinIn, request: Request, response: Response):
+    """Eerste-keer PIN setup voor een huurder via de persoonlijke QR.
+    Werkt ALLEEN als de huurder nog GEEN PIN heeft (anti-takeover).
+    Resultaat: PIN wordt opgeslagen + huurder krijgt direct een geldig
+    tenant_token zodat hij na de setup meteen ingelogd is in zijn portal.
+
+    Veiligheid:
+      • Tenant_id staat in QR (semi-publiek) maar zonder PIN kan een aanvaller
+        niets doen — eerste setup is one-shot.
+      • Bij bestaande PIN: 409 Conflict → frontend toont login i.p.v. setup.
+      • Throttling via IP zodat brute-force PIN setup niet mogelijk is.
+    """
+    if not body.pin.isdigit() or len(body.pin) != 4:
+        raise HTTPException(status_code=400, detail="PIN moet exact 4 cijfers zijn")
+    throttle_key = f"tenant-setup-pin:{_client_ip(request)}"
+    _pin_throttle_check(throttle_key)
+    t = await db.tenants.find_one(
+        {"id": body.tenant_id},
+        {"_id": 0, "id": 1, "name": 1, "email": 1, "phone": 1,
+         "pin_hash": 1, "company_id": 1, "apartment_id": 1},
+    )
+    if not t:
+        _pin_throttle_fail(throttle_key)
+        raise HTTPException(status_code=404, detail="Huurder niet gevonden")
+    if t.get("pin_hash"):
+        _pin_throttle_fail(throttle_key)
+        raise HTTPException(status_code=409, detail="PIN is al ingesteld — log in met uw bestaande PIN")
+    # Conflict-check: deze PIN mag nog niet in gebruik zijn binnen hetzelfde
+    # bedrijf (anders zou PIN-only login twee huurders vinden).
+    cid = t.get("company_id")
+    if cid:
+        async for other in db.tenants.find(
+            {"company_id": cid, "pin_hash": {"$exists": True, "$ne": None},
+             "id": {"$ne": t["id"]}},
+            {"_id": 0, "pin_hash": 1},
+        ):
+            if verify_password(body.pin, other.get("pin_hash") or ""):
+                raise HTTPException(
+                    status_code=409,
+                    detail="Deze PIN is al in gebruik. Kies een andere 4-cijferige PIN.",
+                )
+    # PIN opslaan
+    await db.tenants.update_one(
+        {"id": t["id"]},
+        {"$set": {"pin_hash": hash_password(body.pin),
+                  "pin_set_at": iso(now_utc())}},
+    )
+    _pin_throttle_clear(throttle_key)
+    # Direct inloggen — geef token mee zodat user na setup gelijk doorgaat
+    token = create_token({"sub": t["id"], "type": "tenant"}, TENANT_TOKEN_MIN)
+    _set_access_cookie(response, token, name="tenant_token", minutes=TENANT_TOKEN_MIN)
+    return {
+        "token": token,
+        "tenant": {
+            "id": t["id"], "name": t.get("name"),
+            "email": t.get("email"), "phone": t.get("phone"),
+        },
+    }
+
+
 @api.post("/tenant-portal/pin-login")
 async def tenant_portal_pin_login(body: TenantPinLoginIn, request: Request, response: Response):
     """PIN-only login voor de Huurder Kiosk.
@@ -3412,11 +3504,15 @@ async def apartment_kiosk_sticker(apt_id: str, request: Request):
             slug = c.get("slug") or ""
     # Bouw een absolute URL met scheme + host. Als we de bedrijfsslug kennen
     # gebruiken we het branded pad zodat de juiste kleuren laden bij scan.
+    # Per-tenant: gebruik `?t=<tenant_id>` zodat de huurder bij eerste scan
+    # direct een PIN kan kiezen (welkom-flow) en daarna altijd herkend wordt.
+    # Fallback `?apt=` blijft werken voor stickers van vóór deze feature.
     base = _company_base_url(request) or _public_url("")
+    tenant_param = f"?t={apt['tenant_id']}" if apt.get("tenant_id") else f"?apt={apt_id}"
     if slug:
-        kiosk_url = f"{base}/c/{slug}/kiosk/huurder?apt={apt_id}"
+        kiosk_url = f"{base}/c/{slug}/kiosk/huurder{tenant_param}"
     else:
-        kiosk_url = f"{base}/kiosk/huurder?apt={apt_id}"
+        kiosk_url = f"{base}/kiosk/huurder{tenant_param}"
     from pdf_gen import kiosk_sticker_pdf
     pdf = kiosk_sticker_pdf(
         apartment_number=apt.get("number", "—"),

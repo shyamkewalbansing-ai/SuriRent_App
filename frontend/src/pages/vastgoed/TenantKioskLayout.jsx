@@ -39,23 +39,26 @@ function PinPad({ value, onDigit, onBack, busy }) {
     try { if (navigator.vibrate) navigator.vibrate(8); } catch { /* ignore */ }
     onBack();
   };
+  // Layout afgestemd op de Kiosk-PIN look: 3-koloms grid, ruime gap,
+  // visueel diepere knoppen door drop-shadow + active-translate. Werkt
+  // van iPhone SE (320px) tot iPad Pro (1024px+) zonder horizontale scroll.
   return (
-    <div className="grid grid-cols-3 gap-3 sm:gap-4 w-full max-w-sm" data-testid="tk-pinpad">
+    <div className="grid grid-cols-3 gap-3 sm:gap-4 w-full max-w-[420px] mx-auto" data-testid="tk-pinpad">
       {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((d) => (
         <button key={d} onClick={() => press(String(d))} disabled={busy}
           data-testid={`tk-key-${d}`}
-          className="h-16 sm:h-20 rounded-2xl bg-white text-3xl font-black text-slate-900 shadow-[0_6px_0_rgba(0,0,0,0.08)] active:translate-y-[2px] active:shadow-[0_2px_0_rgba(0,0,0,0.08)] transition disabled:opacity-50">
+          className="aspect-square rounded-3xl bg-white text-4xl sm:text-5xl font-black text-slate-900 shadow-[0_8px_0_rgba(0,0,0,0.08)] active:translate-y-[3px] active:shadow-[0_3px_0_rgba(0,0,0,0.08)] transition disabled:opacity-50">
           {d}
         </button>
       ))}
       <span />
       <button onClick={() => press('0')} disabled={busy} data-testid="tk-key-0"
-        className="h-16 sm:h-20 rounded-2xl bg-white text-3xl font-black text-slate-900 shadow-[0_6px_0_rgba(0,0,0,0.08)] active:translate-y-[2px] active:shadow-[0_2px_0_rgba(0,0,0,0.08)] transition disabled:opacity-50">
+        className="aspect-square rounded-3xl bg-white text-4xl sm:text-5xl font-black text-slate-900 shadow-[0_8px_0_rgba(0,0,0,0.08)] active:translate-y-[3px] active:shadow-[0_3px_0_rgba(0,0,0,0.08)] transition disabled:opacity-50">
         0
       </button>
       <button onClick={back} disabled={busy} data-testid="tk-key-back"
-        className="h-16 sm:h-20 rounded-2xl bg-white/85 text-slate-600 shadow-[0_6px_0_rgba(0,0,0,0.08)] active:translate-y-[2px] active:shadow-[0_2px_0_rgba(0,0,0,0.08)] transition flex items-center justify-center disabled:opacity-50">
-        <Delete className="w-6 h-6" />
+        className="aspect-square rounded-3xl bg-white/90 text-slate-600 shadow-[0_8px_0_rgba(0,0,0,0.08)] active:translate-y-[3px] active:shadow-[0_3px_0_rgba(0,0,0,0.08)] transition flex items-center justify-center disabled:opacity-50">
+        <Delete className="w-8 h-8 sm:w-9 sm:h-9" />
       </button>
     </div>
   );
@@ -85,6 +88,125 @@ function PinDots({ value, error }) {
     </div>
   );
 }
+
+// =====================================================================
+// SETUP-PIN view — eerste-keer flow via persoonlijke huurder-QR (?t=).
+// Huurder kiest zelf een 4-cijferige PIN (2x bevestigen) en wordt direct
+// ingelogd. Werkt alleen 1× per huurder (backend weigert bij bestaande PIN).
+// =====================================================================
+function SetupPinView({ branding, tenantSetup, onSetupComplete }) {
+  const [step, setStep] = useState('choose');  // 'choose' | 'confirm'
+  const [pin, setPin] = useState('');
+  const [confirmPin, setConfirmPin] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  const currentValue = step === 'choose' ? pin : confirmPin;
+  const setCurrentValue = step === 'choose' ? setPin : setConfirmPin;
+
+  const onDigit = (d) => {
+    setError('');
+    setCurrentValue((p) => (p.length >= PIN_LENGTH ? p : p + d));
+  };
+  const onBack = () => setCurrentValue((p) => p.slice(0, -1));
+
+  // Bij choose-step → na 4 cijfers automatisch naar confirm.
+  useEffect(() => {
+    if (step === 'choose' && pin.length === PIN_LENGTH) {
+      setTimeout(() => setStep('confirm'), 200);
+    }
+  }, [pin, step]);
+
+  // Bij confirm-step → na 4 cijfers verificatie.
+  useEffect(() => {
+    if (step !== 'confirm' || confirmPin.length !== PIN_LENGTH) return;
+    if (confirmPin !== pin) {
+      setError('PIN komt niet overeen. Probeer opnieuw.');
+      setTimeout(() => { setPin(''); setConfirmPin(''); setStep('choose'); }, 700);
+      return;
+    }
+    // Match — verstuur naar backend
+    let cancelled = false;
+    (async () => {
+      setBusy(true); setError('');
+      try {
+        const { data } = await api.post('/tenant-portal/setup-pin', {
+          tenant_id: tenantSetup.tenant_id, pin,
+        });
+        if (cancelled) return;
+        localStorage.setItem(TENANT_TOKEN_KEY, data.token);
+        onSetupComplete();
+      } catch (e) {
+        if (cancelled) return;
+        setError(formatError(e) || 'Kon PIN niet instellen — probeer opnieuw');
+        setTimeout(() => { setPin(''); setConfirmPin(''); setStep('choose'); }, 1200);
+      } finally {
+        if (!cancelled) setBusy(false);
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line
+  }, [confirmPin, step]);
+
+  const welcome = tenantSetup.firstName ? `Welkom, ${tenantSetup.firstName}!` : 'Welkom!';
+  const title = step === 'choose'
+    ? 'Kies uw 4-cijferige PIN'
+    : 'Bevestig uw PIN';
+  const subtitle = step === 'choose'
+    ? 'Dit wordt uw persoonlijke toegangscode tot uw portaal.'
+    : 'Voer dezelfde 4 cijfers nogmaals in.';
+
+  return (
+    <div className="min-h-full w-full flex flex-col items-center justify-center px-5 py-8" data-testid="tk-setup">
+      <motion.div
+        initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.35 }}
+        className="w-full max-w-md flex flex-col items-center text-center">
+        <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-3xl bg-white/95 shadow-2xl flex items-center justify-center p-3 mb-5">
+          {branding?.logo_url ? (
+            <img src={resolveLogoUrl(branding.logo_url)} alt="logo" className="w-full h-full object-contain" />
+          ) : (
+            <HomeIcon className="w-10 h-10 text-[color:var(--brand-primary,#FF5C00)]" strokeWidth={2.4} />
+          )}
+        </div>
+        <p className="text-[11px] font-black uppercase tracking-[0.28em] text-white/80 mb-1">
+          Eerste keer inloggen
+        </p>
+        <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight mb-1" data-testid="tk-setup-welcome">
+          {welcome}
+        </h1>
+        <p className="text-base font-bold text-white mt-2">{title}</p>
+        <p className="text-xs text-white/85 mt-1 max-w-xs">{subtitle}</p>
+        <motion.div
+          animate={error ? { x: [-8, 8, -6, 6, -3, 3, 0] } : { x: 0 }}
+          transition={{ duration: 0.4 }}
+          className="mt-7 mb-3">
+          <PinDots value={currentValue} error={!!error} />
+        </motion.div>
+        {error && (
+          <p className="text-xs font-bold text-white/95 bg-red-500/30 px-3 py-1 rounded-full mb-4"
+            data-testid="tk-setup-error">{error}</p>
+        )}
+        <div className="mt-2">
+          <PinPad value={currentValue} onDigit={onDigit} onBack={onBack} busy={busy} />
+        </div>
+        {busy && (
+          <div className="mt-4 flex items-center gap-2 text-white/90 text-sm">
+            <Loader2 className="w-4 h-4 animate-spin" /> PIN instellen…
+          </div>
+        )}
+        {step === 'confirm' && !busy && (
+          <button onClick={() => { setConfirmPin(''); setPin(''); setStep('choose'); setError(''); }}
+            className="mt-5 text-sm font-bold text-white/80 hover:text-white underline"
+            data-testid="tk-setup-restart">
+            Andere PIN kiezen
+          </button>
+        )}
+      </motion.div>
+    </div>
+  );
+}
+
 
 // =====================================================================
 // LOGIN view — PIN-only (geen email-stap meer)
@@ -1347,12 +1469,14 @@ export default function TenantKioskLayout() {
   const navigate = useBrandedNavigate();
   const [searchParams] = useSearchParams();
   const aptId = searchParams.get('apt');
+  const tenantIdParam = searchParams.get('t');
   const [authed, setAuthed] = useState(() => !!localStorage.getItem(TENANT_TOKEN_KEY));
   const [view, setView] = useState('dashboard');
   const [payload, setPayload] = useState(null);  // payment-flow draft
   const [overview, setOverview] = useState(null);
   const [loading, setLoading] = useState(false);
   const [prefill, setPrefill] = useState(null);
+  const [tenantSetup, setTenantSetup] = useState(null); // { tenant_id, name, has_pin }
   const [branding, setBranding] = useState(() => readCachedBranding());
   const idleTimer = useRef(null);
 
@@ -1376,15 +1500,15 @@ export default function TenantKioskLayout() {
         applyBranding(data);
         setBranding(data);
         setNeedsCompanyPick(false);
-      } else if (!aptId) {
+      } else if (!aptId && !tenantIdParam) {
         // Geen context én geen QR — toon picker.
         setNeedsCompanyPick(true);
       }
     })();
     return () => { alive = false; };
-  }, [aptId]);
+  }, [aptId, tenantIdParam]);
 
-  // 2) QR-mode prefill via ?apt=
+  // 2a) QR-mode prefill via ?apt= (legacy: hele appartement)
   useEffect(() => {
     if (!aptId || authed) return;
     let alive = true;
@@ -1403,6 +1527,34 @@ export default function TenantKioskLayout() {
     })();
     return () => { alive = false; };
   }, [aptId, authed]);
+
+  // 2b) Persoonlijke huurder-QR via ?t=<tenant_id>
+  //     - Eerste scan zonder PIN → setup-mode (huurder kiest eigen 4-cijferige PIN)
+  //     - Volgende scans / bestaande PIN → normale PIN-login pre-filled
+  useEffect(() => {
+    if (!tenantIdParam || authed) return;
+    let alive = true;
+    (async () => {
+      try {
+        const { data } = await api.get(`/tenant-portal/welcome/${tenantIdParam}`);
+        if (!alive) return;
+        if (data.company?.branding) {
+          applyBranding({ ...data.company.branding, id: data.company.id, name: data.company.name, slug: data.company.slug });
+          setBranding({ ...data.company.branding, id: data.company.id, name: data.company.name, slug: data.company.slug });
+          setNeedsCompanyPick(false);
+        }
+        setTenantSetup({
+          tenant_id: data.tenant_id,
+          name: data.tenant_name,
+          firstName: (data.tenant_name || '').split(' ')[0],
+          has_pin: !!data.has_pin,
+        });
+      } catch {
+        if (alive) setTenantSetup(null);
+      }
+    })();
+    return () => { alive = false; };
+  }, [tenantIdParam, authed]);
 
   // 3) Overview laden na login
   const loadOverview = useCallback(async () => {
@@ -1516,10 +1668,14 @@ export default function TenantKioskLayout() {
               initial="enter" animate="center" exit="exit"
               transition={{ duration: 0.25 }}
               className="min-h-full w-full">
-              {needsCompanyPick && !prefill?.email ? (
+              {needsCompanyPick && !prefill?.email && !tenantSetup ? (
                 <CompanyPicker onPicked={(data) => { setBranding(data); setNeedsCompanyPick(false); }} />
+              ) : tenantSetup && !tenantSetup.has_pin ? (
+                <SetupPinView branding={branding} tenantSetup={tenantSetup}
+                  onSetupComplete={() => { setTenantSetup(null); setAuthed(true); }} />
               ) : (
-                <LoginView branding={branding} prefill={prefill}
+                <LoginView branding={branding}
+                  prefill={prefill || (tenantSetup ? { firstName: tenantSetup.firstName } : null)}
                   onLoggedIn={() => setAuthed(true)} />
               )}
             </motion.div>
