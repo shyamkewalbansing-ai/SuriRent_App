@@ -1731,9 +1731,9 @@ export default function AdminDashboard() {
           {tab === 'saas_settings' && <SaasSettings />}
           {tab === 'landing_editor' && <LandingEditor />}
           {tab === 'setup_wizard' && (
-            <SetupWizard onJumpToSettings={(section) => {
-              setSettingsSection(section);
-              setTab('settings');
+            <SetupWizard onJumpTo={(target) => {
+              if (target?.section) setSettingsSection(target.section);
+              if (target?.tab) setTab(target.tab);
             }} />
           )}
           {tab === 'business_info' && <BusinessInfo />}

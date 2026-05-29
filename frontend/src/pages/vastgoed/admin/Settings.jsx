@@ -103,7 +103,7 @@ function useSection(section, initial) {
 }
 
 // ============== Per-section forms ==============
-function SmtpForm({ initial }) {
+export function SmtpForm({ initial }) {
   const s = useSection('smtp', initial);
   const d = s.data;
   return (
@@ -127,7 +127,7 @@ function SmtpForm({ initial }) {
   );
 }
 
-function TwilioForm({ initial }) {
+export function TwilioForm({ initial }) {
   const s = useSection('twilio', initial);
   const d = s.data;
   return (
@@ -146,7 +146,7 @@ function TwilioForm({ initial }) {
   );
 }
 
-function PaymentGatewayForm({ section, initial }) {
+export function PaymentGatewayForm({ section, initial }) {
   const s = useSection(section, initial);
   const d = s.data;
   return (
@@ -193,7 +193,7 @@ function PaymentGatewayForm({ section, initial }) {
   );
 }
 
-function ShellyForm({ initial }) {
+export function ShellyForm({ initial }) {
   const s = useSection('shelly', initial);
   const d = s.data;
   return (
@@ -208,7 +208,7 @@ function ShellyForm({ initial }) {
   );
 }
 
-function DomainForm({ initial }) {
+export function DomainForm({ initial }) {
   const s = useSection('domain', initial);
   const d = s.data;
   // We expose the production target via Settings backend response in a future
@@ -246,7 +246,7 @@ TTL:    3600`}
   );
 }
 
-function InvoicingForm({ initial }) {
+export function InvoicingForm({ initial }) {
   const s = useSection('invoicing', initial);
   const d = s.data;
   return (
@@ -287,7 +287,7 @@ function InvoicingForm({ initial }) {
 }
 
 
-function KioskPinForm() {
+export function KioskPinForm() {
   const [pin, setPin] = useState('');
   const [confirm, setConfirm] = useState('');
   const [loading, setLoading] = useState(false);
