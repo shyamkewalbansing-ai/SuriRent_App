@@ -1,5 +1,22 @@
 # Vastgoed Kiosk - PRD
 
+## Session 2026-02-26 — Kiosk/Admin sync + Partial Payment flow ✅
+
+### Bug fix: huidige maand niet meer als achterstand in kiosk
+- **Backend `kiosk_tenant_overview`** filtert `open_invoices` nu op `period < curMonth/Year`, dezelfde regel als admin `Invoices.jsx` `isOverdueInv`. De huidige maand-factuur wordt niet meer als achterstand getoond — die hoort bij "Maandhuur" + admin "Komt nog".
+- **Backend veld-bug**: was `inv.get("amount_paid")` (bestaat niet), nu `paid_amount` (juiste veldnaam).
+- Geverifieerd: Melano had 5 open (Jan-Mei), nu 4 (Jan-Apr). Kiosk + admin tonen identiek aantal.
+
+### Partial Payment flow
+- **Backend `_apply_payment_to_invoice`**: factuur status springt nu naar `partial` zodra `paid_amount > 0` maar < 95% van factuurbedrag. Wanneer cumulatief ≥ 95% → status automatisch `paid` (zoals voorheen).
+- **Backend `PaymentIn`** model uitgebreid met `invoice_ids: Optional[List[str]]`. Wanneer gevuld: `_create_payment_doc` mat de betaling tegen exact die set (oudst-eerst), overflow blijft binnen die selectie en lekt niet naar andere maanden.
+- **Frontend PaySelect**: stuurt `invoice_ids` mee met `onConfirm` payload zodat backend FIFO binnen de gekozen set werkt.
+- **`is_partial` flag** in kiosk overview returns. PaySelect toont "Deels betaald · nog X open" sub-label onder factuur-button.
+- **Admin Invoices.jsx**: amber "Deels betaald" badge bij invoice met `status: partial` of `paid_amount > 0 && < 95%`.
+- End-to-end geverifieerd: SRD 4.000 betaling op Jan-factuur → status `partial`, openstaand SRD 2.000, overige maanden ongewijzigd, totaal openstaand correct SRD 20.000.
+
+
+
 ## Session 2026-02-26 — Breakdown weg in overzicht + per-maand selectie in betaalscherm ✅
 - **Financieel overzicht**: het uitgeklapte breakdown-vak onder "Openstaande huur (N maanden)" is verwijderd. Sub-tekst `jan, feb, maa, apr, mei 2026` blijft als compacte hint. Overzicht is nu minimaal.
 - **PaySelect "Wat wilt u betalen?"**: bij ≥2 open facturen wordt de enkele "Huur"-knop vervangen door een sectie **"Openstaande huur · N maanden"** met één selecteerbare regel per maand (`Huur januari 2026`, `februari 2026`, ...). Elke knop heeft eigen checkbox + bedrag + vervaldatum sub-tekst. Huurder kan deelbetalingen kiezen (bv. alleen Jan+Feb).

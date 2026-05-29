@@ -323,6 +323,12 @@ class PaymentIn(BaseModel):
     period_year: Optional[int] = None
     note: Optional[str] = ""
     received_by: Optional[str] = ""  # naam medewerker die betaling ontving
+    # Optioneel: specifieke factuur-IDs waarop de betaling moet worden
+    # toegewezen. Wanneer leeg: backend gebruikt FIFO over alle open
+    # facturen van de huurder. Wanneer gevuld: het bedrag wordt alleen
+    # over deze facturen verdeeld (volgens periode-volgorde). Sinds
+    # 2026-02-26 om huurders te laten kiezen welke maanden te betalen.
+    invoice_ids: Optional[List[str]] = None
 
 
 class PaymentOut(BaseModel):
@@ -4908,6 +4914,11 @@ async def _apply_payment_to_invoice(invoice_id: str, amount: float,
     if inv_amt <= 0 or new_paid >= inv_amt * 0.95:
         update["status"] = "paid"
         update["paid_at"] = paid_at or iso(now_utc())
+    elif new_paid > 0:
+        # Gedeeltelijke betaling — duidelijk te onderscheiden in admin UI
+        # (Invoices.jsx) en in OCR-rapportages. Status springt automatisch
+        # naar "paid" zodra cumulatief ≥ 95% van het factuurbedrag binnen is.
+        update["status"] = "partial"
     await db.invoices.update_one({"id": invoice_id}, {"$set": update})
     inv.update(update)
     return inv
@@ -4981,14 +4992,23 @@ async def _create_payment_doc(body: PaymentIn, company_id: Optional[str] = None,
     #  • Anders: pak de oudst openstaande huur-factuur van deze huurder.
     #  • Bij pending_approval: koppelen we NIET automatisch — pas bij goedkeuring.
     matched_invoice = None
+    explicit_invoice_ids = list(body.invoice_ids or [])
     if body.category == "huur" and status == "approved":
         inv_q = {"tenant_id": body.tenant_id, "status": {"$ne": "paid"}}
         if company_id:
             inv_q["company_id"] = company_id
-        if body.period_month and body.period_year:
+        # Wanneer expliciete invoice_ids zijn meegegeven (kiosk per-maand
+        # selectie) → match alleen tegen die set zodat de allocatie binnen
+        # de selectie blijft. Oudst-eerst binnen die selectie.
+        if explicit_invoice_ids:
+            matched_invoice = await db.invoices.find_one(
+                {**inv_q, "id": {"$in": explicit_invoice_ids}},
+                {"_id": 0}, sort=[("period_year", 1), ("period_month", 1)],
+            )
+        elif body.period_month and body.period_year:
             scoped = {**inv_q, "period_month": body.period_month, "period_year": body.period_year}
             matched_invoice = await db.invoices.find_one(scoped, {"_id": 0})
-        if not matched_invoice:
+        if not matched_invoice and not explicit_invoice_ids:
             matched_invoice = await db.invoices.find_one(
                 inv_q, {"_id": 0}, sort=[("period_year", 1), ("period_month", 1)]
             )
@@ -5051,17 +5071,30 @@ async def _create_payment_doc(body: PaymentIn, company_id: Optional[str] = None,
                     method=body.method, receipt_number=receipt_no,
                 )
             # Overflow FIFO-alloceren over andere openstaande facturen
-            # (zelfde tenant + currency, niet de matched factuur)
+            # (zelfde tenant + currency, niet de matched factuur). Wanneer
+            # expliciete invoice_ids zijn opgegeven, beperken we de overflow-
+            # alloctie tot díe set zodat de huurder niet per ongeluk een
+            # niet-geselecteerde maand betaalt.
             if overflow > 0:
                 other_inv_ids = []
-                async for inv in db.invoices.find(
-                    {"tenant_id": body.tenant_id,
-                     "currency": body.currency,
-                     "status": {"$nin": ["paid", "cancelled"]},
-                     "id": {"$ne": matched_invoice["id"]},
-                     **({"company_id": company_id} if company_id else {})},
-                    {"_id": 0, "id": 1},
-                ).sort([("period_year", 1), ("period_month", 1)]):
+                if explicit_invoice_ids:
+                    candidates = [i for i in explicit_invoice_ids if i != matched_invoice["id"]]
+                    other_q = {
+                        "tenant_id": body.tenant_id,
+                        "currency": body.currency,
+                        "status": {"$nin": ["paid", "cancelled"]},
+                        "id": {"$in": candidates},
+                        **({"company_id": company_id} if company_id else {}),
+                    }
+                else:
+                    other_q = {
+                        "tenant_id": body.tenant_id,
+                        "currency": body.currency,
+                        "status": {"$nin": ["paid", "cancelled"]},
+                        "id": {"$ne": matched_invoice["id"]},
+                        **({"company_id": company_id} if company_id else {}),
+                    }
+                async for inv in db.invoices.find(other_q, {"_id": 0, "id": 1}).sort([("period_year", 1), ("period_month", 1)]):
                     other_inv_ids.append(inv["id"])
                 if other_inv_ids:
                     applied_overflow = await _allocate_payment_to_invoices(
@@ -5547,29 +5580,43 @@ async def kiosk_tenant_overview(tenant_id: str, _session=Depends(get_kiosk_sessi
     # Toon EXPLICIET in de kiosk welke maanden nog openstaan met hun
     # bedrag — voorheen lieten we alleen de "volgende periode" zien
     # waardoor 5 openstaande maanden er als 1 enkele regel uitzagen.
+    # FILTER: alleen achterstanden tonen (periode < huidige maand). De
+    # huidige maand-factuur is technisch nog "open" maar is geen
+    # achterstand — die hoort bij de reguliere "Maandhuur"-regel. Dit
+    # houdt kiosk + admin in sync (admin gebruikt dezelfde regel in
+    # `Invoices.jsx`).
+    now_local = now_utc()
+    cur_year, cur_month = now_local.year, now_local.month
     open_invoices = []
     open_total = 0.0
     async for inv in db.invoices.find(
         {"tenant_id": tenant_id, "status": {"$ne": "paid"}},
         {"_id": 0, "id": 1, "period_month": 1, "period_year": 1,
-         "amount_due": 1, "amount": 1, "amount_paid": 1, "currency": 1,
+         "amount_due": 1, "amount": 1, "paid_amount": 1, "currency": 1,
          "due_date": 1, "status": 1, "kind": 1, "label": 1},
     ).sort([("period_year", 1), ("period_month", 1), ("due_date", 1)]):
         total = float(inv.get("amount_due") or inv.get("amount") or 0)
-        paid = float(inv.get("amount_paid") or 0)
+        paid = float(inv.get("paid_amount") or 0)
         outstanding = max(total - paid, 0)
         if outstanding <= 0:
             continue
+        py = inv.get("period_year") or 0
+        pm = inv.get("period_month") or 0
+        # Skip toekomst-/huidige-maand facturen (komt-nog) — alleen
+        # echte achterstanden tonen we als open_invoices.
+        if py > cur_year or (py == cur_year and pm >= cur_month):
+            continue
         open_invoices.append({
             "id": inv["id"],
-            "period_month": inv.get("period_month"),
-            "period_year": inv.get("period_year"),
+            "period_month": pm,
+            "period_year": py,
             "amount": total,
             "amount_paid": paid,
             "outstanding": outstanding,
             "currency": inv.get("currency") or balance.get("currency") or "SRD",
             "due_date": inv.get("due_date"),
             "status": inv.get("status") or "open",
+            "is_partial": paid > 0 and outstanding > 0,
             "kind": inv.get("kind") or "huur",
             "label": inv.get("label") or "",
         })

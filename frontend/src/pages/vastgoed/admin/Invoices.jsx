@@ -394,18 +394,26 @@ function TenantRow({ group, expanded, onToggle, onReminder, tenants }) {
                 <div className="space-y-1.5">
                   {group.open.map((inv) => {
                     const isOverdue = (inv.period_year < curY) || (inv.period_year === curY && inv.period_month < curM);
+                    const isPartial = inv.status === 'partial' || (Number(inv.paid_amount || 0) > 0 && Number(inv.paid_amount || 0) < Number(inv.amount || 0) * 0.95);
                     return (
                     <div key={inv.id} className="flex items-center justify-between gap-2 text-sm"
                       data-testid={`invoice-row-${inv.id}`}>
                       <div className="flex items-center gap-2.5 min-w-0 flex-1">
                         <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
                           !isOverdue ? 'bg-blue-500'
+                            : isPartial ? 'bg-amber-500'
                             : sev === 'critical' ? 'bg-red-500'
                             : 'bg-orange-500'
                         }`} />
                         <span className="text-slate-700 capitalize truncate">{MONTHS_NL[inv.period_month - 1]} {inv.period_year}</span>
                         {!isOverdue && (
                           <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 uppercase tracking-wider">Komt nog</span>
+                        )}
+                        {isPartial && (
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 uppercase tracking-wider"
+                            title={`SRD ${Number(inv.paid_amount || 0).toLocaleString('nl-NL')} van SRD ${Number(inv.amount || 0).toLocaleString('nl-NL')} betaald`}>
+                            Deels betaald
+                          </span>
                         )}
                         {(inv.plans || []).map((pl) => {
                           const isDone = pl.status === 'completed' || pl.paid_installments >= pl.total_installments;

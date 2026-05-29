@@ -660,17 +660,27 @@ function PaySelect({ overview, onBack, onConfirm }) {
     }
     const plainCategory = selectedPlainKeys.length === 1 ? selectedPlainKeys[0]
       : selectedPlainKeys.length === 0 ? 'betalingsregeling' : 'huur';
+    // Bepaal de category op basis van wat er geselecteerd is. Als ALLEEN
+    // invoice-items zijn geselecteerd, label de betaling als "huur" met
+    // expliciete invoice_ids zodat backend FIFO naar die exacte facturen
+    // alloceert (i.p.v. oudste eerst).
+    const category = selectedInvItems.length > 0 && selectedPlainKeys.length === 0
+      ? 'huur' : plainCategory;
     onConfirm({
       tenant_id: tenant.id, apartment_id: apt.id,
       amount: selectedTotal,  // totaal incl. plan items (voor display + Mope QR)
-      plain_amount: selectedPlainTotal,  // alleen plain items voor /kiosk/payments
-      currency: cur, category: plainCategory, method: 'contant',
-      period_month: plainCategory === 'huur' && balance.next_period ? balance.next_period.month : null,
-      period_year: plainCategory === 'huur' && balance.next_period ? balance.next_period.year : null,
+      plain_amount: selectedPlainTotal + selectedInvTotal,  // alleen plain + invoice voor /kiosk/payments
+      currency: cur, category, method: 'contant',
+      period_month: category === 'huur' && balance.next_period ? balance.next_period.month : null,
+      period_year: category === 'huur' && balance.next_period ? balance.next_period.year : null,
       note: buildDescription(),
       plan_items: selectedPlanItems.map((x) => ({
         plan_id: x.planId, seq: x.seq, amount: x.amount,
       })),
+      // Doorgeven aan backend zodat _allocate_payment_to_invoices op deze
+      // specifieke factuur-IDs werkt (FIFO BINNEN selectie). Backend gebruikt
+      // dit veld om de partial-betaling correct toe te wijzen.
+      invoice_ids: selectedInvItems.map((x) => x.id),
     });
   };
 
@@ -742,11 +752,15 @@ function PaySelect({ overview, onBack, onConfirm }) {
                               ? `${MONTHS_NL[inv.period_month - 1]} ${inv.period_year}`
                               : ''}
                           </span>
-                          {inv.due_date && (
+                          {inv.is_partial ? (
+                            <span className="text-[10px] text-amber-700 font-bold">
+                              Deels betaald · nog {fmt(inv.outstanding)} open
+                            </span>
+                          ) : inv.due_date ? (
                             <span className="text-[10px] text-slate-400">
                               Vervalt {new Date(inv.due_date).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })}
                             </span>
-                          )}
+                          ) : null}
                         </div>
                       </div>
                       <p className={`text-sm sm:text-base flex-shrink-0 ml-2 whitespace-nowrap font-semibold ${sel ? 'text-orange-600' : 'text-slate-900'}`}>
