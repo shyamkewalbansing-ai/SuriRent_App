@@ -272,27 +272,48 @@ function TenantOverview({ apartment, onBack, onPay }) {
   const allPaid = totalDue <= 0;
   const cur = balance.currency || apt.currency || 'SRD';
 
-  // Bouw één regel per open factuur. Backwards-compat: wanneer er geen
-  // facturen zijn, behouden we het oude gedrag (samenvatting van balance).
-  const invoiceItems = openInvoices.length > 0
-    ? openInvoices.map((inv) => ({
-        key: `inv-${inv.id}`,
-        label: inv.period_month && inv.period_year
-          ? `Huur ${MONTHS_NL[inv.period_month - 1]} ${inv.period_year}`
-          : (inv.label || 'Openstaande factuur'),
-        value: inv.outstanding,
-        icon: Wallet,
-        highlight: true,
-        sub: inv.due_date ? `Vervaldatum ${new Date(inv.due_date).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })}` : '',
-      }))
-    : (openRentLegacy > 0 ? [{
-        key: 'open', label: 'Openstaande huur', value: openRentLegacy, icon: Wallet, highlight: true,
-        sub: balance.next_period ? `${MONTHS_NL[balance.next_period.month - 1]} ${balance.next_period.year}` : '',
-      }] : []);
+  // Bouw één samenvattende regel voor alle openstaande facturen + een
+  // breakdown-lijst die uitklapt onder de regel. Voorheen toonden we één
+  // regel per maand wat de UI te lang maakte met meerdere openstaande
+  // facturen. Backwards-compat: zonder facturen valt het terug op het oude
+  // gedrag (samenvatting uit `balance.balance`).
+  const monthsCovered = openInvoices.length;
+  const openLabel = monthsCovered > 0
+    ? `Openstaande huur (${monthsCovered} maand${monthsCovered === 1 ? '' : 'en'})`
+    : 'Openstaande huur';
+  const openSub = openInvoices.length > 0
+    ? (() => {
+        // Toon "Jan, Feb, Mrt 2026" — knap kort
+        const months = openInvoices
+          .map((inv) => inv.period_month && inv.period_year
+            ? `${MONTHS_NL[inv.period_month - 1].slice(0, 3)}`
+            : null)
+          .filter(Boolean);
+        const years = [...new Set(openInvoices.map((i) => i.period_year).filter(Boolean))];
+        return months.length > 0
+          ? `${months.join(', ')}${years.length === 1 ? ` ${years[0]}` : ''}`
+          : (balance.next_period
+              ? `${MONTHS_NL[balance.next_period.month - 1]} ${balance.next_period.year}`
+              : '');
+      })()
+    : (balance.next_period ? `${MONTHS_NL[balance.next_period.month - 1]} ${balance.next_period.year}` : '');
 
   const items = [
     { key: 'rent', label: 'Maandhuur', value: apt.rent_amount, icon: Home },
-    ...invoiceItems,
+    ...(openRent > 0 ? [{
+      key: 'open',
+      label: openLabel,
+      value: openRent,
+      icon: Wallet,
+      highlight: true,
+      sub: openSub,
+      breakdown: openInvoices.length > 0 ? openInvoices.map((inv) => ({
+        label: inv.period_month && inv.period_year
+          ? `${MONTHS_NL[inv.period_month - 1]} ${inv.period_year}`
+          : (inv.label || 'Factuur'),
+        value: inv.outstanding,
+      })) : null,
+    }] : []),
     { key: 'svc', label: 'Servicekosten', value: 0, icon: FileText, muted: true },
     { key: 'fines', label: 'Boetes', value: 0, icon: FileText, muted: true },
     { key: 'internet', label: 'Internet', value: internet, icon: Wifi, muted: internet === 0 },
@@ -325,19 +346,34 @@ function TenantOverview({ apartment, onBack, onPay }) {
               const Icon = it.icon;
               const klass = it.highlight ? 'text-orange-600' : it.muted ? 'text-slate-400' : 'text-slate-900';
               return (
-                <div key={it.key} className={`flex items-center justify-between py-2.5 px-1 ${klass}`}>
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${
-                      it.highlight ? 'bg-orange-100 text-orange-500' : it.muted ? 'bg-slate-50 text-slate-300' : 'bg-slate-100 text-slate-500'
-                    }`}>
-                      <Icon className="w-3.5 h-3.5" />
+                <div key={it.key} className={`py-2.5 px-1 ${klass}`}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${
+                        it.highlight ? 'bg-orange-100 text-orange-500' : it.muted ? 'bg-slate-50 text-slate-300' : 'bg-slate-100 text-slate-500'
+                      }`}>
+                        <Icon className="w-3.5 h-3.5" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className={`text-sm ${it.highlight ? 'font-extrabold' : 'font-semibold'}`}>{it.label}</p>
+                        {it.sub && <p className="text-[10px] mt-0.5">{it.sub}</p>}
+                      </div>
                     </div>
-                    <div className="min-w-0">
-                      <p className={`text-sm ${it.highlight ? 'font-extrabold' : 'font-semibold'}`}>{it.label}</p>
-                      {it.sub && <p className="text-[10px] mt-0.5">{it.sub}</p>}
-                    </div>
+                    <p className={`font-bold text-sm sm:text-base ${it.highlight ? 'font-extrabold' : ''}`}>{fmtMoney(it.value, cur)}</p>
                   </div>
-                  <p className={`font-bold text-sm sm:text-base ${it.highlight ? 'font-extrabold' : ''}`}>{fmtMoney(it.value, cur)}</p>
+                  {/* Breakdown: ingeklapte maandregels in een licht vak onder
+                      de samenvattende regel. Alleen voor de "Openstaande huur"-
+                      regel met meerdere facturen. */}
+                  {it.breakdown && it.breakdown.length > 0 && (
+                    <div className="mt-2 ml-9 rounded-lg bg-orange-50/70 border border-orange-100 px-2.5 py-2 space-y-1">
+                      {it.breakdown.map((b, idx) => (
+                        <div key={idx} className="flex items-center justify-between text-[11px]">
+                          <span className="text-orange-700/90 font-semibold">{b.label}</span>
+                          <span className="text-orange-800 font-bold font-mono">{fmtMoney(b.value, cur)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -366,7 +402,7 @@ function TenantOverview({ apartment, onBack, onPay }) {
                 </div>
               )}
               {!credit && <div className="h-3" />}
-              <button onClick={() => onPay({ ...data, internet, total_due: 0, isAdvance: true })}
+              <button onClick={() => onPay({ ...data, internet, total_due: 0, isAdvance: true, open_invoices: openInvoices, open_invoices_total: openInvoicesTotal })}
                 data-testid="overview-advance-pay-btn"
                 className="mt-2 w-full max-w-xs bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl flex items-center justify-center gap-2 transition py-2.5 text-sm active:scale-[0.98]">
                 Vooruitbetaling registreren
@@ -383,7 +419,7 @@ function TenantOverview({ apartment, onBack, onPay }) {
               </div>
               <p className="text-xs sm:text-sm font-bold uppercase tracking-widest text-slate-400">Te betalen</p>
               <p className="text-4xl sm:text-5xl font-extrabold text-slate-900 tracking-tight mt-1 mb-6">{fmtMoney(totalDue, cur)}</p>
-              <button onClick={() => onPay({ ...data, internet, total_due: totalDue })}
+              <button onClick={() => onPay({ ...data, internet, total_due: totalDue, open_invoices: openInvoices, open_invoices_total: openInvoicesTotal })}
                 data-testid="overview-pay-btn"
                 className="w-full max-w-xs bg-orange-500 hover:bg-orange-600 text-white text-base sm:text-lg font-bold rounded-xl flex items-center justify-center gap-2 transition py-3 sm:py-3.5 active:scale-[0.98]">
                 Volgende <ArrowRight className="w-5 h-5" />
@@ -500,10 +536,15 @@ const PAY_ITEMS_TEMPLATE = [
 ];
 
 function PaySelect({ overview, onBack, onConfirm }) {
-  const { tenant, apartment: apt, balance, internet, total_due, isAdvance = false } = overview;
+  const { tenant, apartment: apt, balance, internet, total_due, isAdvance = false,
+    open_invoices: openInvoices = [], open_invoices_total: openInvoicesTotal = 0 } = overview;
   const cur = (balance.currency || apt.currency || 'SRD').toUpperCase();
   const fmt = (v) => fmtMoney(v, cur);
-  const openRent = balance.balance > 0 ? balance.balance : 0;
+  // Bij facturen → gebruik som van openstaand uit alle open facturen, anders
+  // val terug op de legacy balance-berekening.
+  const openRentFromInvoices = Number(openInvoicesTotal || 0);
+  const openRentLegacy = balance.balance > 0 ? balance.balance : 0;
+  const openRent = openInvoices.length > 0 ? openRentFromInvoices : openRentLegacy;
 
   const amounts = {
     huur: openRent > 0 ? openRent : apt.rent_amount,
@@ -673,25 +714,54 @@ function PaySelect({ overview, onBack, onConfirm }) {
               const disabled = isDisabled(t.id);
               const sel = selected.has(t.id);
               const Icon = t.icon;
+              // Voor de Huur-regel: als er meerdere open facturen zijn, toon
+              // direct onder de regel een breakdown per maand zodat huurders
+              // zien welke achterstanden zij betalen.
+              const showHuurBreakdown = t.id === 'huur' && openInvoices.length > 1 && openRent > 0;
               return (
-                <button key={t.id} disabled={disabled} onClick={() => toggle(t.id)} data-testid={`pay-type-${t.id}`}
-                  className={`flex items-center justify-between w-full rounded-lg border-2 transition px-2.5 py-2 sm:px-3 sm:py-2.5 ${
-                    disabled ? 'bg-slate-50 border-slate-100 opacity-40 cursor-not-allowed' :
-                    sel ? 'bg-orange-50 border-orange-400' : 'bg-white border-slate-200 hover:border-orange-300'
-                  }`}>
-                  <div className="flex items-center gap-2">
-                    <div className={`flex items-center justify-center rounded border-2 flex-shrink-0 w-5 h-5 ${sel ? 'bg-orange-500 border-orange-500' : 'border-slate-300'}`}>
-                      {sel && <Check className="text-white w-3.5 h-3.5" strokeWidth={3} />}
+                <div key={t.id}>
+                  <button disabled={disabled} onClick={() => toggle(t.id)} data-testid={`pay-type-${t.id}`}
+                    className={`flex items-center justify-between w-full rounded-lg border-2 transition px-2.5 py-2 sm:px-3 sm:py-2.5 ${
+                      disabled ? 'bg-slate-50 border-slate-100 opacity-40 cursor-not-allowed' :
+                      sel ? 'bg-orange-50 border-orange-400' : 'bg-white border-slate-200 hover:border-orange-300'
+                    }`}>
+                    <div className="flex items-center gap-2">
+                      <div className={`flex items-center justify-center rounded border-2 flex-shrink-0 w-5 h-5 ${sel ? 'bg-orange-500 border-orange-500' : 'border-slate-300'}`}>
+                        {sel && <Check className="text-white w-3.5 h-3.5" strokeWidth={3} />}
+                      </div>
+                      <div className={`rounded-lg flex items-center justify-center flex-shrink-0 w-8 h-8 sm:w-9 sm:h-9 ${sel ? 'bg-orange-100' : 'bg-slate-50'}`}>
+                        <Icon className={`w-4 h-4 sm:w-5 sm:h-5 ${sel ? 'text-orange-500' : 'text-slate-400'}`} />
+                      </div>
+                      <div className="text-left">
+                        <span className="text-sm font-bold text-slate-900 block">{t.label}</span>
+                        {t.id === 'huur' && openInvoices.length > 1 && (
+                          <span className="text-[10px] text-orange-600 font-bold">
+                            {openInvoices.length} maand{openInvoices.length === 1 ? '' : 'en'} achterstand
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    <div className={`rounded-lg flex items-center justify-center flex-shrink-0 w-8 h-8 sm:w-9 sm:h-9 ${sel ? 'bg-orange-100' : 'bg-slate-50'}`}>
-                      <Icon className={`w-4 h-4 sm:w-5 sm:h-5 ${sel ? 'text-orange-500' : 'text-slate-400'}`} />
+                    <p className={`text-sm sm:text-base flex-shrink-0 ml-2 whitespace-nowrap font-semibold ${disabled ? 'text-slate-300' : sel ? 'text-orange-600' : 'text-slate-900'}`}>
+                      {fmt(amounts[t.id] || 0)}
+                    </p>
+                  </button>
+                  {showHuurBreakdown && (
+                    <div className="ml-9 mt-1 mb-0.5 rounded-lg bg-orange-50/70 border border-orange-100 px-2.5 py-1.5 space-y-0.5">
+                      {openInvoices.map((inv, idx) => (
+                        <div key={inv.id || idx} className="flex items-center justify-between text-[11px]">
+                          <span className="text-orange-700/90 font-semibold">
+                            {inv.period_month && inv.period_year
+                              ? `${MONTHS_NL[inv.period_month - 1]} ${inv.period_year}`
+                              : 'Factuur'}
+                          </span>
+                          <span className="text-orange-800 font-bold font-mono">
+                            {fmt(inv.outstanding)}
+                          </span>
+                        </div>
+                      ))}
                     </div>
-                    <span className="text-sm font-bold text-slate-900">{t.label}</span>
-                  </div>
-                  <p className={`text-sm sm:text-base flex-shrink-0 ml-2 whitespace-nowrap font-semibold ${disabled ? 'text-slate-300' : sel ? 'text-orange-600' : 'text-slate-900'}`}>
-                    {fmt(amounts[t.id] || 0)}
-                  </p>
-                </button>
+                  )}
+                </div>
               );
             })}
             {planInstallments.length > 0 && (

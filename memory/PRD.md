@@ -1,5 +1,15 @@
 # Vastgoed Kiosk - PRD
 
+## Session 2026-02-26 — Financieel overzicht consolideren + breakdown in betaalscherm ✅
+- **Financieel overzicht**: terug naar één enkele "Openstaande huur (N maanden)"-regel met sub-tekst `jan, feb, ...` i.p.v. één regel per maand. Direct onder deze regel wordt een light-orange **breakdown-vak** getoond met alle openstaande maanden + bedragen. Compactere visuele weergave maar alle data blijft direct zichtbaar.
+- **PaySelect "Wat wilt u betalen?"** verwerkt nu `open_invoices` + `open_invoices_total` vanuit overview:
+  - Huur-bedrag = som van alle openstaande facturen (i.p.v. legacy balance-berekening)
+  - Onder de "Huur"-knop verschijnt automatisch hetzelfde maand-voor-maand breakdown-vak wanneer er >1 openstaande factuur is
+  - Huur-knop subtekst toont "{N} maanden achterstand" in oranje
+- Geverifieerd visueel voor Melano (5 open facturen): overzicht toont 5 maanden in 1 ingeklapt vak met SRD 30.000 totaal, betaalselectie toont Huur SRD 30.000,00 met "5 maanden achterstand" sub-label + breakdown lijst.
+
+
+
 ## Session 2026-02-26 — Kiosk Financieel: alle open facturen + Superadmin OCR-inbox ✅
 
 ### Bug fix: Kiosk Financieel overzicht toont nu ALLE open facturen
