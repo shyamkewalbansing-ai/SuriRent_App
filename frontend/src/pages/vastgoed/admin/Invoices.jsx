@@ -59,16 +59,14 @@ function groupByTenant(invoices) {
     if (inv.apartment_number) g.apartment_number = inv.apartment_number;
     if (inv.location_name) g.location_name = inv.location_name;
   }
-  // Bepaal de huidige (1-based) periode-cursor zodat we openstaande maanden
-  // kunnen splitsen in "achterstand" (vóór deze maand) en "toekomstig"
-  // (vanaf deze maand). Een factuur voor sep 2026 terwijl we in mei 2026
-  // zijn is dus géén achterstand maar een vooruitbetaalde / komende
-  // factuur.
+  // Bepaal de huidige (1-based) periode-cursor. Alleen facturen voor periodes
+  // NA de huidige maand zijn "komende" (Komt nog). De huidige maand en alles
+  // ervoor telt als achterstand / openstaand zodra de factuur niet betaald is.
   const now = new Date();
   const curY = now.getFullYear();
   const curM = now.getMonth() + 1;
   const isOverdueInv = (inv) => (
-    inv.period_year < curY || (inv.period_year === curY && inv.period_month < curM)
+    inv.period_year < curY || (inv.period_year === curY && inv.period_month <= curM)
   );
   for (const g of map.values()) {
     g.open.sort((a, b) => (a.period_year - b.period_year) || (a.period_month - b.period_month));
@@ -393,7 +391,7 @@ function TenantRow({ group, expanded, onToggle, onReminder, tenants }) {
                 </p>
                 <div className="space-y-1.5">
                   {group.open.map((inv) => {
-                    const isOverdue = (inv.period_year < curY) || (inv.period_year === curY && inv.period_month < curM);
+                    const isOverdue = (inv.period_year < curY) || (inv.period_year === curY && inv.period_month <= curM);
                     const isPartial = inv.status === 'partial' || (Number(inv.paid_amount || 0) > 0 && Number(inv.paid_amount || 0) < Number(inv.amount || 0) * 0.95);
                     return (
                     <div key={inv.id} className="flex items-center justify-between gap-2 text-sm"

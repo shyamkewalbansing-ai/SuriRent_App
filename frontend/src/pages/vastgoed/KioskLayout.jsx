@@ -5,7 +5,7 @@ import {
   Building2, ArrowRight, ArrowLeft, Banknote, Receipt, LogOut, MapPin,
   Check, Loader2, Home, X, Wallet, FileText, Wifi, AlertCircle,
   Smartphone, QrCode, ShieldCheck, Clock as ClockIcon, Printer, Download,
-  Droplets, User, Settings as SettingsIcon, Hash, CheckCircle, Calendar,
+  User, Settings as SettingsIcon, Hash, CheckCircle, Calendar,
 } from 'lucide-react';
 import { api, formatError, fmtMoney, MONTHS_NL } from '../../lib/api';
 import { playSuccessPing, playErrorBuzz } from '../../lib/tap-sounds';
@@ -276,7 +276,8 @@ function TenantOverview({ apartment, onBack, onPay }) {
   const currentMonthLabel = currentInvoice && currentInvoice.period_month
     ? `Huidige maandhuur · ${MONTHS_NL[currentInvoice.period_month - 1]} ${currentInvoice.period_year}`
     : 'Maandhuur';
-  const totalDue = openRent + internet;
+  // Totaal openstaand = huidige maand + achterstand + internet
+  const totalDue = currentMonthAmount + openRent + internet;
   const allPaid = totalDue <= 0;
   const cur = balance.currency || apt.currency || 'SRD';
 
@@ -319,7 +320,6 @@ function TenantOverview({ apartment, onBack, onPay }) {
       highlight: true,
       sub: openSub,
     }] : []),
-    { key: 'svc', label: 'Servicekosten', value: 0, icon: FileText, muted: true },
     { key: 'fines', label: 'Boetes', value: 0, icon: FileText, muted: true },
     { key: 'internet', label: 'Internet', value: internet, icon: Wifi, muted: internet === 0 },
   ];
@@ -522,7 +522,6 @@ function PaymentHistoryModal({ tenant, apartment, onClose }) {
 // =====================================================================
 const PAY_ITEMS_TEMPLATE = [
   { id: 'huur', label: 'Huur', icon: Banknote, desc: 'Openstaand huurbedrag' },
-  { id: 'servicekosten', label: 'Servicekosten', icon: Droplets, desc: 'Water, stroom en overige' },
   { id: 'boete', label: 'Boetes', icon: AlertCircle, desc: 'Openstaande boetes' },
   { id: 'internet', label: 'Internet', icon: Wifi, desc: 'Internetaansluiting' },
 ];
@@ -543,7 +542,6 @@ function PaySelect({ overview, onBack, onConfirm }) {
 
   const amounts = {
     huur: currentMonthAmount,
-    servicekosten: 0,
     boete: 0,
     internet: Number(internet || 0),
   };
@@ -631,7 +629,6 @@ function PaySelect({ overview, onBack, onConfirm }) {
     } else if (selected.has('huur')) {
       labels.push('Huur');
     }
-    if (selected.has('servicekosten')) labels.push('Servicekosten');
     if (selected.has('boete')) labels.push('Boetes');
     if (selected.has('internet')) labels.push('Internet');
     if (selectedPlanItems.length > 0) labels.push(`Regeling (${selectedPlanItems.length}× termijn)`);
@@ -790,7 +787,7 @@ function PaySelect({ overview, onBack, onConfirm }) {
                 </div>
               </>
             )}
-            {/* Reguliere regels: Huur (huidige maand), Servicekosten, Boetes, Internet */}
+            {/* Reguliere regels: Huur (huidige maand), Boetes, Internet */}
             {PAY_ITEMS_TEMPLATE.map((t) => {
               const disabled = isDisabled(t.id);
               const sel = selected.has(t.id);
