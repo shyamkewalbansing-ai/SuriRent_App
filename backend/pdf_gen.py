@@ -1358,12 +1358,19 @@ async def _nano_banana_edit_plate(template_bytes: bytes, *, company_name: str,
     prompt = (
         "You are editing a luxury 3D-embossed gold-on-black house plaque. "
         "Keep the EXACT same composition, materials, lighting, leather texture, "
-        "polished gold outer border, the S-shaped house logo on the left, the "
-        "QR code frame in the top-right, the horizontal gold divider line, and "
-        "the two metal screw heads in the bottom corners. Do NOT redesign the "
-        "plaque. Only replace the text content as follows, preserving the same "
-        "embossed gold typography (3D extruded letters with realistic highlights "
-        "and shadows, matching the existing engraving depth):\n\n"
+        "polished gold outer border, and the two metal screw heads in the "
+        "bottom corners. "
+        "CRITICAL — DO NOT REMOVE OR MODIFY THE LOGO: There is a large 3D "
+        "embossed gold 'S-shaped house' logo on the LEFT side of the plaque "
+        "(an S that doubles as a stylized house with a triangular roof and four "
+        "small window squares inside). This logo MUST remain fully intact, in "
+        "the same position, with the same 3D embossing and gold finish. Do not "
+        "shrink it, move it, replace it with text, or remove it. "
+        "Also keep the horizontal gold divider line below the QR area. "
+        "Do NOT redesign the plaque. Only replace the text content as follows, "
+        "preserving the same embossed gold typography (3D extruded letters with "
+        "realistic highlights and shadows, matching the existing engraving "
+        "depth):\n\n"
         f"1. Replace the large company-name text (currently 'Gopi') with: '{company_clean}'. "
         "If the company name is long, wrap it onto two lines so it stays inside "
         "the left-half region (must NOT cross to the right of approximately x=1050 "
@@ -1388,20 +1395,31 @@ async def _nano_banana_edit_plate(template_bytes: bytes, *, company_name: str,
 
     image_b64 = base64.b64encode(template_bytes).decode("utf-8")
 
-    chat = LlmChat(
-        api_key=api_key,
-        session_id=f"plate-{uuid.uuid4().hex[:8]}{session_suffix}",
-        system_message="You are a precision image editor that preserves source compositions while replacing only the specified text.",
-    )
-    chat.with_model("gemini", "gemini-3.1-flash-image-preview").with_params(modalities=["image", "text"])
+    # Retry tot 3x — Nano Banana faalt soms zonder fout (lege response).
+    last_err: Exception | None = None
+    for attempt in range(3):
+        chat = LlmChat(
+            api_key=api_key,
+            session_id=f"plate-{uuid.uuid4().hex[:8]}{session_suffix}-{attempt}",
+            system_message=(
+                "You are a precision image editor that preserves source "
+                "compositions while replacing only the specified text."
+            ),
+        )
+        chat.with_model("gemini", "gemini-3.1-flash-image-preview").with_params(
+            modalities=["image", "text"]
+        )
+        msg = UserMessage(text=prompt, file_contents=[ImageContent(image_b64)])
+        try:
+            _text, images = await chat.send_message_multimodal_response(msg)
+        except Exception as e:
+            last_err = e
+            continue
+        if images:
+            return base64.b64decode(images[0]["data"])
+        last_err = RuntimeError("Nano Banana gaf geen afbeelding terug")
 
-    msg = UserMessage(text=prompt, file_contents=[ImageContent(image_b64)])
-    _text, images = await chat.send_message_multimodal_response(msg)
-
-    if not images:
-        raise RuntimeError("Nano Banana gaf geen afbeelding terug")
-    img_bytes = base64.b64decode(images[0]["data"])
-    return img_bytes
+    raise last_err or RuntimeError("Nano Banana faalde na 3 pogingen")
 
 
 async def luxury_plate_pdf_ai(*, tenant_name: str, apartment_number: str,

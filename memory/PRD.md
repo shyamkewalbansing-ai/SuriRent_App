@@ -713,3 +713,13 @@ Lint clean. Verified via desktop screenshots (1440×900): élke admin-pagina (Ov
 - ✅ **MongoDB cache** (`db.qr_plate_cache`) keyt op `sha256(tenant_id|company|apt|address|kiosk_url|v2)` — eerste call ~19s (AI render), cache-hit ~334ms. Bypass via `?refresh=1` query param.
 - ✅ **PIL fallback** automatisch als AI faalt (offline/quota). PIL-maskers ook verbeterd: extended mask boundaries (`[540, 130, ...]` + `[260, 640, ...]`) zodat geen template-tekst meer doorheen bleedt.
 - ✅ **End-to-end getest** met echte tenant data (SuriRent N.V., HUIS 7B, Kewalbansingweg 7) — output ziet er identiek uit aan het originele design met behoud van alle 3D-effecten en luxe uitstraling.
+
+
+### Session 2026-02 — Bedrijfsgegevens editor + plate logo preservation ✅
+- ✅ **Nieuwe endpoint** `PUT /api/companies/me/profile` (admin role) — laat admins zelf hun bedrijfsnaam, contact-email, telefoon en adres aanpassen. Slug en plan/billing blijven superadmin-only.
+- ✅ **Branding GET response uitgebreid** met `contact_email`, `contact_phone`, `address` velden.
+- ✅ **Branding.jsx UI** — nieuwe "Bedrijfsgegevens" sectie bovenaan met 4 input-velden (Building2/Mail/Phone/MapPin icons). Save knop slaat zowel branding als profiel in 1 klik op.
+- ✅ **QR plaat cache invalidatie** — bij wijziging van bedrijfsnaam of adres wordt `db.qr_plate_cache` geleegd zodat nieuwe waardes direct in toekomstige plaquette-downloads verschijnen.
+- ✅ **AI prompt versterkt** voor de Gold Plaque — expliciete instructie om het 3D embossed S-house logo te behouden ("MUST remain fully intact, do not shrink/move/replace/remove").
+- ✅ **3x retry op Nano Banana** — Nano Banana faalt soms zonder fout (lege response). Nieuwe loop probeert tot 3x met unieke session ids voor robuustere generatie. Reduceert PIL-fallbacks aanzienlijk.
+- ✅ **Backend tests via curl**: GET branding incl. nieuwe velden ✓, PUT profile full update ✓, PUT profile partial (alleen name) ✓, empty name → 400 ✓.

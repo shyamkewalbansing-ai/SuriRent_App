@@ -1863,6 +1863,9 @@ def _company_branding_response(c: dict) -> dict:
         "primary_color": _hex_color(b.get("primary_color")),
         "logo_url": b.get("logo_url") or "",
         "tagline": b.get("tagline") or "",
+        "contact_email": c.get("contact_email") or "",
+        "contact_phone": c.get("contact_phone") or "",
+        "address": c.get("address") or "",
     }
 
 
@@ -1951,6 +1954,51 @@ async def put_my_branding(body: BrandingIn, user=Depends(require_role("admin")))
         "branding.updated_by": user.get("email"),
     }
     await db.companies.update_one({"id": cid}, {"$set": update})
+    c = await db.companies.find_one({"id": cid}, {"_id": 0})
+    return _company_branding_response(c)
+
+
+class CompanyProfileIn(BaseModel):
+    name: Optional[str] = None
+    contact_email: Optional[str] = None
+    contact_phone: Optional[str] = None
+    address: Optional[str] = None
+
+
+@api.put("/companies/me/profile")
+async def put_my_company_profile(
+    body: CompanyProfileIn, user=Depends(require_role("admin"))
+):
+    """Admins kunnen hun eigen bedrijfsgegevens bewerken: bedrijfsnaam,
+    contact-email, telefoon en adres. Slug en plan/billing blijven
+    superadmin-only."""
+    cid = company_id_of(user)
+    if not cid:
+        raise HTTPException(status_code=400, detail="Geen actief bedrijf")
+    update = {}
+    if body.name is not None:
+        nm = body.name.strip()
+        if not nm:
+            raise HTTPException(status_code=400, detail="Bedrijfsnaam mag niet leeg zijn")
+        update["name"] = nm[:120]
+    if body.contact_email is not None:
+        update["contact_email"] = body.contact_email.strip()[:200]
+    if body.contact_phone is not None:
+        update["contact_phone"] = body.contact_phone.strip()[:60]
+    if body.address is not None:
+        update["address"] = body.address.strip()[:300]
+    if not update:
+        raise HTTPException(status_code=400, detail="Geen velden om bij te werken")
+    update["updated_at"] = iso(now_utc())
+    update["updated_by"] = user.get("email")
+    await db.companies.update_one({"id": cid}, {"$set": update})
+    # Invalidate de Gold Plaque cache zodat nieuwe bedrijfsnaam/adres direct
+    # zichtbaar is in toekomstige plaquette-downloads.
+    if "name" in update or "address" in update:
+        try:
+            await db.qr_plate_cache.delete_many({})
+        except Exception:
+            pass
     c = await db.companies.find_one({"id": cid}, {"_id": 0})
     return _company_branding_response(c)
 
@@ -3579,7 +3627,7 @@ async def tenant_qr_plate(tenant_id: str, request: Request, refresh: int = 0):
     import hashlib as _hashlib
     # Cache key: tenant + alle dynamische inputs. Voorkomt herhaald LLM-budget
     # verbruik bij elke download.
-    cache_inputs = f"{tenant_id}|{company_name}|{apt_number}|{address}|{kiosk_url}|v7"
+    cache_inputs = f"{tenant_id}|{company_name}|{apt_number}|{address}|{kiosk_url}|v8"
     cache_hash = _hashlib.sha256(cache_inputs.encode("utf-8")).hexdigest()
     cached = await db.qr_plate_cache.find_one(
         {"hash": cache_hash}, {"_id": 0, "pdf_b64": 1}
