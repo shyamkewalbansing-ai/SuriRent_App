@@ -1,5 +1,15 @@
 # Vastgoed Kiosk - PRD
 
+## Session 2026-02-26 — PIN-login per-bedrijf + Direct naar eigen portaal na registratie ✅
+- **PIN-login is nu strikt company-scoped**. `/auth/kiosk-pin` accepteert `company_slug` of `company_id` in de body. Zonder bedrijfs-context → 400 ("PIN-login werkt alleen op uw bedrijfs-portaal"). Met slug → alleen die ene bedrijfs-PIN + employee-PINs van datzelfde bedrijf worden gecheckt.
+- **Globale PIN-uniqueness opgeheven** (zowel `/auth/kiosk-set-pin` als `/employees/{id}/kiosk-pin`). Twee verschillende bedrijven mogen nu dezelfde PIN (bv. `1234`) gebruiken zonder conflict. Uniqueness wordt alleen binnen het eigen bedrijf afgedwongen (geen botsing tussen company-PIN en employee-PIN van datzelfde bedrijf).
+- **Generieke `/login` toont alleen e-mail + wachtwoord** (Beheerder Login formulier). De "Terug naar PIN"-knop verbergt zich automatisch zonder bedrijfs-context. PIN-flow start ALLEEN op `/<slug>/login` of `/<slug>/` (branded portaal).
+- **Na registratie hard-redirect naar `/<slug>/admin`** (eigen branded portaal) i.p.v. de generieke `/admin`. RegisterSuccess-knop "Naar mijn dashboard" stuurt direct naar het bedrijfs-pad zodat BrandedShell de juiste kleuren/logo bootstrapt vóór dashboard laadt.
+- **Frontend `PinLanding`** stuurt nu `company_slug` (of `company_id`) mee met `/auth/kiosk-pin`. LoginPage hoofd-component skip de PinLanding wanneer `branding?.slug` ontbreekt en valt direct terug op `PasswordView`.
+- Geverifieerd: `/login` toont email/wachtwoord (geen PIN), `/surirent` toont branded PIN+Welkom, PIN 1234 + slug=surirent → success + admin_token, PIN 1234 + slug=test-vastgoed-b → 401 (cross-bedrijf geblokkeerd), registratie van "NewCo351" → final URL `/newco351/admin` (✓) + Setup Wizard sheet auto-opent op branded portaal.
+
+
+
 ## Session 2026-02-26 — Setup Wizard auto-open als Sheet/Modal ✅
 - **Nieuw component**: `/app/frontend/src/pages/vastgoed/admin/SetupWizardSheet.jsx` — wrapper rond bestaande `SetupWizard`. Op desktop een gecentreerde modal (max-w-5xl), op mobiel een bottom-sheet die slide-up van onderaan met pull-handle. Sluit-knop linksboven en "Later voltooien" footer op mobiel.
 - **AdminDashboard.jsx** uitgebreid met `wizardOpen` state + auto-detect useEffect. Bij login GET `/api/companies/me/setup-status`: als `completed < 2` (basis-setup nog niet begonnen) EN `localStorage.setup_wizard_dismissed_<company_id>` is niet '1' → wizard auto-opent. Sluiten zet de dismiss-flag → blijft daarna gesloten tot admin de "Setup Wizard" tab handmatig opent.

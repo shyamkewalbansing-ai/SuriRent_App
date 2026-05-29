@@ -235,6 +235,11 @@ class LoginIn(BaseModel):
 
 class PinIn(BaseModel):
     pin: str = Field(min_length=4, max_length=4)
+    # Optioneel: bedrijfs-context. Op `/<slug>/login` stuurt frontend de slug
+    # mee zodat de PIN alleen tegen die bedrijfs-PINs (en employees) gecheckt
+    # wordt. Op de generieke `/login` (zonder slug) wordt PIN-login geweigerd.
+    company_slug: Optional[str] = None
+    company_id: Optional[str] = None
 
 
 class SetPinIn(BaseModel):
@@ -2829,32 +2834,54 @@ async def seed_company_admin(cid: str, body: RegisterIn, user=Depends(require_ro
 # Kiosk PIN
 @api.post("/auth/kiosk-pin")
 async def kiosk_pin(body: PinIn, request: Request, response: Response):
-    """Try the PIN against every company. Each company has unique pin.
+    """Verifieer een PIN binnen de SCOPE van één bedrijf.
 
-    Returns both a kiosk_token (short-lived, kiosk-scope) AND an admin access
-    token for the company's primary admin user. The PIN is the company's
-    secret, so anyone who knows it is implicitly trusted to access admin
-    surfaces of that company. This lets the kiosk "Beheerder" button drop
-    the user straight into /admin without a second login.
+    De PIN-login werkt alleen op het branded login-scherm (`/<slug>/login` of
+    `/login?c=<slug>`). De frontend stuurt `company_slug` of `company_id`
+    mee zodat we alleen tegen die bedrijfs-PIN + diens medewerker-PINs
+    matchen. Dit voorkomt dat twee bedrijven met dezelfde PIN per ongeluk
+    in elkaars omgeving belanden.
 
-    NEW: Als de PIN niet matcht met een company-shared PIN, proberen we
-    ALLE actieve kiosk-medewerker PINs. Dat geeft elke medewerker een eigen
-    `/login` route → direct naar `/kiosk` mét vooringestelde employee-sessie.
-    Medewerkers krijgen GEEN admin_token (kunnen dus niet bij Beheer).
+    Retourneert zowel een kiosk_token (kort-levend, kiosk-scope) ALS een
+    admin access token voor de primary admin van het bedrijf, zodat de
+    "Beheerder"-knop direct door kan navigeren zonder tweede login.
+
+    Voor employee-PINs: GEEN admin_token (zij mogen niet bij Beheer).
     """
     throttle_key = f"kiosk:{_client_ip(request)}"
     _pin_throttle_check(throttle_key)
-    pin_docs = await db.kiosk_pins.find({}, {"_id": 0}).to_list(1000)
-    matched_company_id = None
-    for d in pin_docs:
-        if verify_password(body.pin, d.get("pin_hash", "")):
-            matched_company_id = d["company_id"]
-            break
 
-    # ---- NIEUWE FLOW: employee PIN ----
+    # ---- Bepaal bedrijfs-scope ----
+    target_cid = None
+    if body.company_id:
+        c = await db.companies.find_one({"id": body.company_id.strip()}, {"_id": 0, "id": 1})
+        if c:
+            target_cid = c["id"]
+    elif body.company_slug:
+        c = await db.companies.find_one({"slug": body.company_slug.strip().lower()}, {"_id": 0, "id": 1})
+        if c:
+            target_cid = c["id"]
+    if not target_cid:
+        raise HTTPException(
+            status_code=400,
+            detail="PIN-login werkt alleen op uw bedrijfs-portaal. Open de link uw bedrijf u stuurde, of gebruik e-mail + wachtwoord.",
+        )
+
+    # ---- Probeer eerst de gedeelde bedrijfs-PIN ----
+    pin_doc = await db.kiosk_pins.find_one({"company_id": target_cid}, {"_id": 0})
+    matched_company_id = None
+    if pin_doc and verify_password(body.pin, pin_doc.get("pin_hash", "")):
+        matched_company_id = target_cid
+
+    # ---- NIEUWE FLOW: employee PIN binnen dit bedrijf ----
     if not matched_company_id:
         emp_docs = await db.employees.find(
-            {"active": True, "app_role": "kiosk", "kiosk_pin_hash": {"$exists": True, "$ne": None}},
+            {
+                "company_id": target_cid,
+                "active": True,
+                "app_role": "kiosk",
+                "kiosk_pin_hash": {"$exists": True, "$ne": None},
+            },
             {"_id": 0},
         ).to_list(2000)
         matched_emp = None
@@ -2928,15 +2955,14 @@ async def set_kiosk_pin(body: SetPinIn, user=Depends(get_current_user)):
     cid = company_id_of(user)
     if not cid:
         raise HTTPException(status_code=400, detail="Geen actief bedrijf geselecteerd")
-    # Check uniqueness against other companies
-    others = await db.kiosk_pins.find({"company_id": {"$ne": cid}}, {"_id": 0, "pin_hash": 1}).to_list(1000)
-    for o in others:
-        if verify_password(body.pin, o.get("pin_hash", "")):
-            raise HTTPException(status_code=400, detail="Deze PIN is al in gebruik door een ander bedrijf, kies een andere")
-    # Check uniqueness against employee kiosk-PINs (since /auth/kiosk-pin now
-    # also tries employee PINs, a clash would cause unexpected employee login).
+    # Uniqueness alleen BINNEN dit bedrijf — andere bedrijven mogen dezelfde
+    # PIN gebruiken omdat PIN-login altijd company-scoped is.
     emps = await db.employees.find(
-        {"active": True, "kiosk_pin_hash": {"$exists": True, "$ne": None}},
+        {
+            "company_id": cid,
+            "active": True,
+            "kiosk_pin_hash": {"$exists": True, "$ne": None},
+        },
         {"_id": 0, "name": 1, "kiosk_pin_hash": 1},
     ).to_list(2000)
     for e in emps:
@@ -6832,9 +6858,9 @@ async def set_employee_kiosk_pin(eid: str, body: EmployeeKioskPinIn, user=Depend
     Met deze PIN kan de medewerker zich op de Receptie Kiosk identificeren
     voordat hij een betaling registreert (die dan in pending_approval gaat).
 
-    Sinds 2026-02-26: deze PIN werkt ook op `/login` als directe medewerker-login.
-    Daarom moet de PIN globaal uniek zijn (geen botsing met company-PIN of een
-    andere medewerker-PIN), anders zou /auth/kiosk-pin de verkeerde sessie geven.
+    PIN-uniqueness is sinds 2026-02-26 alleen BINNEN het eigen bedrijf —
+    PIN-login is company-scoped via `/<slug>/login`, dus twee bedrijven
+    mogen dezelfde PINs gebruiken.
     """
     pin = (body.pin or "").strip()
     if not pin.isdigit() or not (4 <= len(pin) <= 6):
@@ -6842,15 +6868,15 @@ async def set_employee_kiosk_pin(eid: str, body: EmployeeKioskPinIn, user=Depend
     e = await db.employees.find_one({"id": eid, **scope(user)}, {"_id": 0})
     if not e:
         raise HTTPException(status_code=404, detail="Werknemer niet gevonden")
-    # Uniqueness: company-shared PINs (any company)
-    company_pins = await db.kiosk_pins.find({}, {"_id": 0, "pin_hash": 1}).to_list(1000)
-    for cp in company_pins:
-        if verify_password(pin, cp.get("pin_hash", "")):
-            raise HTTPException(status_code=409, detail="Deze PIN is al in gebruik als bedrijfs-PIN, kies een andere")
-    # Uniqueness: andere medewerkers (alle bedrijven)
+    cid = e.get("company_id")
+    # Uniqueness: company-shared PIN binnen ditzelfde bedrijf
+    company_pin = await db.kiosk_pins.find_one({"company_id": cid}, {"_id": 0, "pin_hash": 1})
+    if company_pin and verify_password(pin, company_pin.get("pin_hash", "")):
+        raise HTTPException(status_code=409, detail="Deze PIN is al in gebruik als bedrijfs-PIN, kies een andere")
+    # Uniqueness: andere medewerkers binnen ditzelfde bedrijf
     others = await db.employees.find(
-        {"id": {"$ne": eid}, "active": True, "kiosk_pin_hash": {"$exists": True, "$ne": None}},
-        {"_id": 0, "id": 1, "name": 1, "kiosk_pin_hash": 1, "company_id": 1},
+        {"id": {"$ne": eid}, "company_id": cid, "active": True, "kiosk_pin_hash": {"$exists": True, "$ne": None}},
+        {"_id": 0, "id": 1, "name": 1, "kiosk_pin_hash": 1},
     ).to_list(2000)
     for o in others:
         if verify_password(pin, o.get("kiosk_pin_hash", "")):

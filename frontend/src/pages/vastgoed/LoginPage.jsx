@@ -68,7 +68,13 @@ function PinLanding({ onSuccess, onPassword, onRegister, branding, pwaTarget }) 
   const verify = async (code) => {
     setLoading(true); setError('');
     try {
-      const { data } = await api.post('/auth/kiosk-pin', { pin: code });
+      const { data } = await api.post('/auth/kiosk-pin', {
+        pin: code,
+        // company_slug komt uit het branded pad of de cached branding —
+        // zonder bedrijfs-context weigert backend de PIN-login.
+        company_slug: branding?.slug || undefined,
+        company_id: branding?.company_id || undefined,
+      });
       if (data?.token) localStorage.setItem('kiosk_token', data.token);
       if (data?.company) localStorage.setItem('kiosk_company', JSON.stringify(data.company));
       // Detecteer of dit een MEDEWERKER-PIN was (eigen PIN) of een bedrijfs-PIN.
@@ -247,6 +253,7 @@ function PasswordView({ initialMode = 'login', onBack, onRegistered, branding })
   const [plans, setPlans] = useState([]);
   const [bankDetails, setBankDetails] = useState(null);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [registeredSlug, setRegisteredSlug] = useState('');
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -282,7 +289,7 @@ function PasswordView({ initialMode = 'login', onBack, onRegistered, branding })
         setPreferredRole('admin');
         navigate('/admin');
       } else {
-        await register({
+        const result = await register({
           name: name.trim(),
           email: email.trim(),
           password,
@@ -293,6 +300,11 @@ function PasswordView({ initialMode = 'login', onBack, onRegistered, branding })
           ...(country ? { country } : {}),
         });
         setPreferredRole('admin');
+        // Sla de slug op zodat de "doorgaan" knop direct naar het branded
+        // portaal (`/<slug>/admin`) navigeert i.p.v. de generieke `/admin`.
+        // Hierdoor leert de nieuwe admin meteen zijn eigen URL kennen.
+        const newSlug = result?.company?.slug || '';
+        if (newSlug) setRegisteredSlug(newSlug);
         if (onRegistered) onRegistered();
         setShowSuccess(true);
       }
@@ -303,8 +315,18 @@ function PasswordView({ initialMode = 'login', onBack, onRegistered, branding })
 
   if (showSuccess) {
     const selectedPlan = plans.find((p) => p.id === plan) || { name: plan, amount: 0, currency: 'SRD' };
+    // Bij registratie altijd doorsturen naar het eigen branded portaal —
+    // dit is "hun" omgeving. Gebruikt hard-navigate zodat BrandedShell
+    // de branding/kleuren netjes opnieuw bootstrapt vóór /admin laadt.
+    const goToOwnPortal = () => {
+      if (registeredSlug) {
+        window.location.assign(`/${registeredSlug}/admin`);
+      } else {
+        navigate('/admin');
+      }
+    };
     return <RegisterSuccess plan={selectedPlan} company={companyName} bankDetails={bankDetails}
-      onContinue={() => navigate('/admin')} />;
+      onContinue={goToOwnPortal} />;
   }
 
   return (
@@ -320,9 +342,11 @@ function PasswordView({ initialMode = 'login', onBack, onRegistered, branding })
       <Header branding={branding} />
       <div className="flex-1 flex items-start sm:items-center justify-center p-4 sm:p-6">
         <div className="bg-white rounded-3xl shadow-[0_20px_60px_rgba(0,0,0,0.15)] w-full max-w-xl p-8 md:p-12" data-testid="auth-form">
-          <button onClick={onBack} data-testid="auth-back" className="flex items-center gap-2 text-sm font-medium text-slate-400 hover:text-slate-600 mb-6 transition active:scale-95">
-            <ArrowLeft className="w-4 h-4" /> Terug naar PIN
-          </button>
+          {branding?.slug && (
+            <button onClick={onBack} data-testid="auth-back" className="flex items-center gap-2 text-sm font-medium text-slate-400 hover:text-slate-600 mb-6 transition active:scale-95">
+              <ArrowLeft className="w-4 h-4" /> Terug naar PIN
+            </button>
+          )}
 
           <div className="text-center mb-8">
             <div className="w-16 h-16 rounded-2xl bg-[#FF5C00] flex items-center justify-center mx-auto mb-4 shadow-lg shadow-orange-500/20">
@@ -676,6 +700,17 @@ export default function LoginPage() {
     return (
       <PasswordView initialMode={view} onBack={() => setView('pin')}
         onRegistered={() => setSkipRedirect(true)} branding={branding} />
+    );
+  }
+
+  // Geen bedrijfs-context (gebruiker is op generieke `/login`, niet op
+  // `/<slug>/login`)? → PIN-login is hier zinloos en zou onveilig zijn
+  // (kruis-bedrijf matching). Toon direct het e-mail+wachtwoord formulier.
+  // Klanten openen de PIN-flow alleen via hun branded URL.
+  if (!branding?.slug) {
+    return (
+      <PasswordView initialMode="login" onBack={() => {}}
+        onRegistered={() => setSkipRedirect(true)} branding={null} />
     );
   }
 
