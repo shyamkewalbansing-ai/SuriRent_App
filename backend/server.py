@@ -3367,8 +3367,16 @@ async def tenant_portal_create_payment(body: TenantPaymentIn, tenant=Depends(get
 async def tenant_portal_maintenance_create(body: TenantMaintenanceIn, tenant=Depends(get_tenant_session)):
     if not tenant.get("apartment_id"):
         raise HTTPException(status_code=400, detail="U bent niet gekoppeld aan een appartement")
+    cid = tenant.get("company_id")
+    if not cid:
+        # Fallback: lookup via apartment om robuust te zijn voor oude tenant-records
+        apt = await db.apartments.find_one(
+            {"id": tenant["apartment_id"]}, {"_id": 0, "company_id": 1}
+        )
+        cid = (apt or {}).get("company_id")
     doc = {
         "id": new_id(),
+        "company_id": cid,
         "apartment_id": tenant["apartment_id"],
         "title": body.title,
         "description": body.description or "",
@@ -3382,7 +3390,31 @@ async def tenant_portal_maintenance_create(body: TenantMaintenanceIn, tenant=Dep
     }
     await db.maintenance.insert_one(doc)
     doc.pop("_id", None)
-    return await _enrich_maint(doc)
+    enriched = await _enrich_maint(doc)
+    # Notify alle admins/owners/boekhouders van het bedrijf zodat ze een
+    # push-melding én een SSE-update krijgen, en de melding direct in de
+    # admin maintenance lijst verschijnt.
+    try:
+        prio_label = {
+            "low": "lage", "medium": "normale", "high": "hoge",
+        }.get(body.priority, body.priority or "")
+        prio_prefix = f"[{prio_label} prioriteit] " if prio_label else ""
+        apt_lbl = enriched.get("apartment_number") or "appartement"
+        tenant_name = tenant.get("name") or "Huurder"
+        await _notify_company_admins(
+            cid,
+            f"Nieuwe onderhoudsmelding · {apt_lbl}",
+            f"{prio_prefix}{tenant_name}: {body.title}",
+            {
+                "kind": "maintenance",
+                "url": "/admin/maintenance",
+                "maintenance_id": enriched.get("id"),
+                "badge_inc": 1,
+            },
+        )
+    except Exception as e:
+        print(f"[push] tenant-portal maintenance notify failed: {e}")
+    return enriched
 
 
 # =====================================================================

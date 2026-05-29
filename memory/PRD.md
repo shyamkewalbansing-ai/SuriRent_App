@@ -723,3 +723,10 @@ Lint clean. Verified via desktop screenshots (1440×900): élke admin-pagina (Ov
 - ✅ **AI prompt versterkt** voor de Gold Plaque — expliciete instructie om het 3D embossed S-house logo te behouden ("MUST remain fully intact, do not shrink/move/replace/remove").
 - ✅ **3x retry op Nano Banana** — Nano Banana faalt soms zonder fout (lege response). Nieuwe loop probeert tot 3x met unieke session ids voor robuustere generatie. Reduceert PIL-fallbacks aanzienlijk.
 - ✅ **Backend tests via curl**: GET branding incl. nieuwe velden ✓, PUT profile full update ✓, PUT profile partial (alleen name) ✓, empty name → 400 ✓.
+
+
+### Session 2026-02 — Onderhoud-melding fix + Mobile responsive ✅
+- ✅ **BUG FIX (P0)**: `POST /api/tenant-portal/maintenance` zette geen `company_id` op het document → admin's `GET /maintenance` (filtert via `scope(user)` op company_id) zag de melding niet. Nu wordt `company_id` correct gezet (uit tenant of fallback via apartment) zodat tenant-meldingen direct in de admin lijst verschijnen.
+- ✅ **Notificatie toegevoegd**: tenant-onderhoudsmelding triggert nu `_notify_company_admins()` → push-melding + SSE-broadcast naar alle admin/owner/boekhouder users met titel "Nieuwe onderhoudsmelding · HUIS X" en body inclusief urgentie + huurder naam + probleem-titel. URL-data wijst naar `/admin/maintenance`.
+- ✅ **Mobile responsive fix** (`TenantKioskLayout.jsx`): authed kiosk-wrapper had `overflowY: hidden` waardoor inhoud op kleine viewports werd weggeknipt. Nu `overflowY: auto` + `flex-none` op stacked dashboard panels → financieel overzicht + balans-kaart + secundaire tegels (Onderhoud/Gegevens/Contact) zijn nu volledig zichtbaar en scrollbaar op iPhone-formaat (390×844).
+- ✅ **End-to-end getest**: tenant pin-login → maintenance create (HTTP 200, company_id gezet) → admin list-maintenance (record verschijnt) → fingerprint check via screenshots op 390×844 viewport.

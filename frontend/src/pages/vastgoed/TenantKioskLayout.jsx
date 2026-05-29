@@ -497,7 +497,7 @@ function DashboardView({ overview, onAction, onHistory }) {
 
   return (
     <div className="h-full w-full flex flex-col" data-testid="tk-dashboard"
-      style={{ padding: '1.5vh 1.5vw 0' }}>
+      style={{ padding: '1.5vh 1.5vw 0', minHeight: '100%' }}>
       <div className="flex items-center justify-between flex-wrap gap-2 px-1 sm:px-2 py-2">
         <div className="text-white">
           <p className="text-xs sm:text-sm font-bold">{tenant?.name}</p>
@@ -508,7 +508,7 @@ function DashboardView({ overview, onAction, onHistory }) {
 
       <div className="flex-1 min-h-0 flex flex-col md:flex-row gap-2 sm:gap-3 pb-3">
         {/* LEFT — Financieel overzicht (kiosk-style) */}
-        <div className="bg-white rounded-2xl flex-1 md:flex-[3] flex flex-col p-3 sm:p-4 min-w-0">
+        <div className="bg-white rounded-2xl flex-none md:flex-[3] flex flex-col p-3 sm:p-4 min-w-0">
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-sm sm:text-base font-bold text-slate-900">Financieel overzicht</h3>
           </div>
@@ -585,7 +585,7 @@ function DashboardView({ overview, onAction, onHistory }) {
         </div>
 
         {/* RIGHT — Te betalen + Volgende + Geschiedenis (kiosk-style) */}
-        <div className="bg-white rounded-2xl md:flex-[2] flex flex-col items-center justify-center text-center p-5 sm:p-6 min-h-[260px]">
+        <div className="bg-white rounded-2xl flex-none md:flex-[2] flex flex-col items-center justify-center text-center p-5 sm:p-6 min-h-[260px]">
           <div className={`w-14 h-14 sm:w-16 sm:h-16 rounded-2xl flex items-center justify-center mb-3 ${
             hasBalance ? 'bg-orange-100' : 'bg-emerald-100'
           }`}>
@@ -1613,7 +1613,13 @@ export default function TenantKioskLayout() {
     paddingLeft: 'env(safe-area-inset-left, 0px)',
     paddingRight: 'env(safe-area-inset-right, 0px)',
   };
-  const wrapperLocked = { ...wrapper, overflowY: 'hidden' };
+  // Voor de authed kiosk-views willen we op tablets exact het volle viewport
+  // gebruiken zonder onderaan oranje leegte. Op phones kan de inhoud (financieel
+  // overzicht + balans-kaart + secundaire tegels) echter langer zijn dan het
+  // scherm — daarom houden we scrolling AAN zodat niets weggeknipt wordt.
+  // (Eerder stond hier `overflowY: 'hidden'` wat content op kleine schermen
+  // onzichtbaar maakte.)
+  const wrapperLocked = { ...wrapper, overflowY: 'auto' };
 
   useEffect(() => {
     // document.title wordt centraal beheerd door usePwaManifest()
