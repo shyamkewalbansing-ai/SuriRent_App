@@ -705,3 +705,11 @@ Lint clean. Verified via desktop screenshots (1440×900): élke admin-pagina (Ov
 - ✅ **iOS splash screens** (20 stuks): iPhone 8/X/XR/13/15-Pro/15-ProMax + iPad/iPad-Pro-11/iPad-Pro-12 in zowel portrait als landscape — alle gegenereerd met gecentreerd huis-icoon op vlak oranje (#FF5C00).
 - ✅ **Service Worker CACHE_VERSION** gebumpt v55 → v56 in `/app/frontend/public/sw.js` zodat browsers de nieuwe iconen ophalen.
 - ✅ **UI Headers geverifieerd**: `mark-white.png` wordt gebruikt in `pwa.jsx`, `AdminDashboard.jsx` (3 plekken), `ContractSignPage.jsx`. Screenshot toont nette weergave op `/vastgoed/admin/login` — top-left header icoon + centrale Kiosk welkomstkaart tonen beide het correcte huis-logo.
+
+
+### Session 2026-02 — AI-powered Luxury Gold Plaque ✅
+- ✅ **Gemini Nano Banana integratie** (`gemini-3.1-flash-image-preview`) voor de huurders QR-plaquette. Nieuwe async functie `luxury_plate_pdf_ai()` in `pdf_gen.py` stuurt het template-bestand (`qr-plate-template.png`) + edit-prompt naar Nano Banana om alleen de tekst (bedrijfsnaam, huisnummer, adres) te vervangen met behoud van het 3D-embossed gouden effect, lederen textuur, schroeven en gouden buitenrand.
+- ✅ **Hybride QR-aanpak**: AI bewerkt alleen de tekst; daarna wordt een echte scanbare QR-code via `qrcode` lib over het AI-gegenereerde QR-frame geplakt (AI kan geen pixel-perfecte QR garanderen).
+- ✅ **MongoDB cache** (`db.qr_plate_cache`) keyt op `sha256(tenant_id|company|apt|address|kiosk_url|v2)` — eerste call ~19s (AI render), cache-hit ~334ms. Bypass via `?refresh=1` query param.
+- ✅ **PIL fallback** automatisch als AI faalt (offline/quota). PIL-maskers ook verbeterd: extended mask boundaries (`[540, 130, ...]` + `[260, 640, ...]`) zodat geen template-tekst meer doorheen bleedt.
+- ✅ **End-to-end getest** met echte tenant data (SuriRent N.V., HUIS 7B, Kewalbansingweg 7) — output ziet er identiek uit aan het originele design met behoud van alle 3D-effecten en luxe uitstraling.

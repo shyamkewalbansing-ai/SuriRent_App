@@ -1315,3 +1315,155 @@ def luxury_plate_pdf(*, tenant_name: str, apartment_number: str,
     c.save()
     pdf_buf.seek(0)
     return pdf_buf.getvalue()
+
+
+
+# ---------------------------------------------------------------------------
+# AI-powered "Luxury Gold Plaque" generator — gebruikt Gemini Nano Banana om
+# de dynamische tekst in de template afbeelding te vervangen met behoud van
+# het 3D-embossed gouden effect, lederen textuur en schroef-details.
+# ---------------------------------------------------------------------------
+
+async def _nano_banana_edit_plate(template_bytes: bytes, *, company_name: str,
+                                  apartment_number: str, address: str,
+                                  session_suffix: str = "") -> bytes:
+    """Stuurt template + edit-instructies naar Gemini Nano Banana.
+
+    Returns: edited PNG bytes (1536x1024).
+    Raises: RuntimeError als generatie faalt of geen image teruggegeven wordt.
+    """
+    import os
+    import base64
+    import uuid
+    from emergentintegrations.llm.chat import LlmChat, UserMessage, ImageContent
+
+    api_key = os.getenv("EMERGENT_LLM_KEY")
+    if not api_key:
+        raise RuntimeError("EMERGENT_LLM_KEY ontbreekt in environment")
+
+    # Normaliseer huisnummer ("HUIS 7B" stijl)
+    apt = (apartment_number or "").strip()
+    upper = apt.upper()
+    if upper.startswith("HUIS "):
+        apt = apt[5:].strip()
+    elif upper.startswith("APPARTEMENT "):
+        apt = apt[12:].strip()
+    huis_label = f"HUIS {apt}".upper() if apt else "HUIS"
+
+    company_clean = (company_name or "").strip() or "Bedrijf"
+    address_clean = (address or "").strip()
+
+    # Prompt — uiterst expliciet zodat de AI alléén de tekst vervangt en
+    # niet de hele compositie hertekent. Engels werkt het meest betrouwbaar.
+    prompt = (
+        "You are editing a luxury 3D-embossed gold-on-black house plaque. "
+        "Keep the EXACT same composition, materials, lighting, leather texture, "
+        "polished gold outer border, the S-shaped house logo on the left, the "
+        "QR code frame in the top-right, the horizontal gold divider line, and "
+        "the two metal screw heads in the bottom corners. Do NOT redesign the "
+        "plaque. Only replace the text content as follows, preserving the same "
+        "embossed gold typography (3D extruded letters with realistic highlights "
+        "and shadows, matching the existing engraving depth):\n\n"
+        f"1. Replace the large company-name text (currently 'Gopi') with: '{company_clean}'\n"
+        f"2. Keep the smaller subtext 'Appartement\u2019s' directly underneath it.\n"
+        f"3. Replace the large bottom heading (currently 'HUIS 7B') with: '{huis_label}'\n"
+        f"4. Replace the address line with pin icon (currently 'Kewalbansingweg 7 B') with: "
+        f"'{address_clean or 'Adres niet ingevuld'}'\n"
+        "5. Leave the QR code area exactly as-is — do not modify the QR pattern.\n"
+        "6. Keep the small 'Scan voor mijn huurportaal / Betalen \u00b7 Kwitanties \u00b7 Onderhoud melden' "
+        "text under the QR exactly as it appears.\n\n"
+        "Output: a single full-resolution photorealistic PNG of the edited plaque, "
+        "identical aspect ratio and dimensions to the input (1536\u00d71024). "
+        "No extra borders, no white margins, no captions."
+    )
+
+    image_b64 = base64.b64encode(template_bytes).decode("utf-8")
+
+    chat = LlmChat(
+        api_key=api_key,
+        session_id=f"plate-{uuid.uuid4().hex[:8]}{session_suffix}",
+        system_message="You are a precision image editor that preserves source compositions while replacing only the specified text.",
+    )
+    chat.with_model("gemini", "gemini-3.1-flash-image-preview").with_params(modalities=["image", "text"])
+
+    msg = UserMessage(text=prompt, file_contents=[ImageContent(image_b64)])
+    _text, images = await chat.send_message_multimodal_response(msg)
+
+    if not images:
+        raise RuntimeError("Nano Banana gaf geen afbeelding terug")
+    img_bytes = base64.b64decode(images[0]["data"])
+    return img_bytes
+
+
+async def luxury_plate_pdf_ai(*, tenant_name: str, apartment_number: str,
+                              address: str, company_name: str,
+                              kiosk_url: str, company_logo: bytes | None = None,
+                              accent_hex: str = "#D4AF37") -> bytes:
+    """AI-versie van :func:`luxury_plate_pdf`. Gebruikt Gemini Nano Banana om
+    de dynamische tekst in de template te vervangen met behoud van het
+    3D-embossed gouden effect, en plakt vervolgens een echte scanbare QR-code
+    over het door de AI gegenereerde QR-gebied (anders is de QR niet
+    betrouwbaar scanbaar).
+    """
+    import os
+    from PIL import Image as PILImage
+    import qrcode
+
+    template_path = "/app/backend/assets/qr-plate-template.png"
+    if not os.path.exists(template_path):
+        raise FileNotFoundError(f"QR plate template ontbreekt: {template_path}")
+    with open(template_path, "rb") as f:
+        template_bytes = f.read()
+
+    # 1) AI-edit van de plaat
+    edited_png = await _nano_banana_edit_plate(
+        template_bytes,
+        company_name=company_name,
+        apartment_number=apartment_number,
+        address=address,
+    )
+
+    # 2) Echte scanbare QR genereren en op het QR-gebied plakken.
+    # Nano Banana kan geen pixel-perfecte scanbare QR-code garanderen, dus we
+    # overlayen een echte QR op de bekende positie van het QR-frame.
+    img = PILImage.open(io.BytesIO(edited_png)).convert("RGB")
+    # Resize naar canonieke 1536x1024 voor consistente coördinaten.
+    if img.size != (1536, 1024):
+        img = img.resize((1536, 1024), PILImage.LANCZOS)
+
+    GOLD = (212, 174, 92)
+    PLATE_BLACK = (14, 13, 10)
+    # QR-frame coördinaten in het template
+    qr_x0, qr_y0, qr_x1, _qr_y1 = 1120, 160, 1395, 440
+    inner = 14
+    qr_box_size = qr_x1 - qr_x0 - 2 * inner
+
+    qr = qrcode.QRCode(box_size=10, border=0,
+                       error_correction=qrcode.constants.ERROR_CORRECT_H)
+    qr.add_data(kiosk_url)
+    qr.make(fit=True)
+    qr_pil = qr.make_image(fill_color=GOLD, back_color=PLATE_BLACK).convert("RGB")
+    qr_resized = qr_pil.resize((qr_box_size, qr_box_size), PILImage.NEAREST)
+    img.paste(qr_resized, (qr_x0 + inner, qr_y0 + inner))
+
+    # 3) PNG → PDF (zelfde layout als de PIL-versie)
+    pdf_buf = io.BytesIO()
+    from reportlab.pdfgen import canvas as rl_canvas
+    from reportlab.lib.utils import ImageReader
+    PAGE_W = 200 * mm
+    PAGE_H = 133 * mm
+    c = rl_canvas.Canvas(pdf_buf, pagesize=(PAGE_W, PAGE_H))
+    c.setFillColor(colors.HexColor("#dcd6cd"))
+    c.rect(0, 0, PAGE_W, PAGE_H, fill=1, stroke=0)
+    margin = 4 * mm
+    plate_w = PAGE_W - 2 * margin
+    plate_h = PAGE_H - 2 * margin
+    out = io.BytesIO()
+    img.save(out, format="PNG", optimize=True)
+    out.seek(0)
+    c.drawImage(ImageReader(out), margin, margin, plate_w, plate_h,
+                preserveAspectRatio=True, anchor='c')
+    c.showPage()
+    c.save()
+    pdf_buf.seek(0)
+    return pdf_buf.getvalue()

@@ -3526,11 +3526,15 @@ async def apartment_kiosk_sticker(apt_id: str, request: Request):
 
 
 @api.get("/tenants/{tenant_id}/qr-plate.pdf")
-async def tenant_qr_plate(tenant_id: str, request: Request):
+async def tenant_qr_plate(tenant_id: str, request: Request, refresh: int = 0):
     """Luxueuze "gouden plaat" QR-poster per huurder voor naast de voordeur.
     Bevat persoonlijke QR (?t=<tenant_id>) zodat huurder bij eerste scan
     een eigen PIN kan kiezen. Publiek (geen auth) zodat beheerder de link
-    direct in een nieuw tabblad kan openen voor afdrukken."""
+    direct in een nieuw tabblad kan openen voor afdrukken.
+
+    Query params:
+        refresh=1  → bypass de cache en regenereer via AI.
+    """
     t = await db.tenants.find_one(
         {"id": tenant_id},
         {"_id": 0, "id": 1, "name": 1, "company_id": 1, "apartment_id": 1},
@@ -3571,16 +3575,57 @@ async def tenant_qr_plate(tenant_id: str, request: Request):
         kiosk_url = f"{base}/c/{slug}/kiosk/huurder?t={tenant_id}"
     else:
         kiosk_url = f"{base}/kiosk/huurder?t={tenant_id}"
-    from pdf_gen import luxury_plate_pdf
-    pdf = luxury_plate_pdf(
-        tenant_name=t.get("name") or "",
-        apartment_number=apt_number,
-        address=address,
-        company_name=company_name,
-        kiosk_url=kiosk_url,
-        company_logo=company_logo_bytes,
-        accent_hex=accent_hex,
-    )
+    from pdf_gen import luxury_plate_pdf, luxury_plate_pdf_ai
+    import hashlib as _hashlib
+    # Cache key: tenant + alle dynamische inputs. Voorkomt herhaald LLM-budget
+    # verbruik bij elke download.
+    cache_inputs = f"{tenant_id}|{company_name}|{apt_number}|{address}|{kiosk_url}|v2"
+    cache_hash = _hashlib.sha256(cache_inputs.encode("utf-8")).hexdigest()
+    cached = await db.qr_plate_cache.find_one(
+        {"hash": cache_hash}, {"_id": 0, "pdf_b64": 1}
+    ) if not refresh else None
+    if cached and cached.get("pdf_b64"):
+        import base64 as _b64
+        pdf = _b64.b64decode(cached["pdf_b64"])
+    else:
+        try:
+            pdf = await luxury_plate_pdf_ai(
+                tenant_name=t.get("name") or "",
+                apartment_number=apt_number,
+                address=address,
+                company_name=company_name,
+                kiosk_url=kiosk_url,
+                company_logo=company_logo_bytes,
+                accent_hex=accent_hex,
+            )
+        except Exception as e:
+            # Fallback naar PIL-versie als AI faalt (offline, quota, etc.)
+            import logging as _logging
+            _logging.getLogger("uvicorn.error").warning(
+                f"AI plaque generatie faalde, fallback naar PIL: {e}"
+            )
+            pdf = luxury_plate_pdf(
+                tenant_name=t.get("name") or "",
+                apartment_number=apt_number,
+                address=address,
+                company_name=company_name,
+                kiosk_url=kiosk_url,
+                company_logo=company_logo_bytes,
+                accent_hex=accent_hex,
+            )
+        else:
+            # Alleen succesvolle AI-renders cachen
+            import base64 as _b64
+            await db.qr_plate_cache.update_one(
+                {"hash": cache_hash},
+                {"$set": {
+                    "hash": cache_hash,
+                    "tenant_id": tenant_id,
+                    "pdf_b64": _b64.b64encode(pdf).decode("ascii"),
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                }},
+                upsert=True,
+            )
     safe_name = (t.get("name") or "huurder").split()[0].lower()
     return _pdf_response(pdf, f"qr-plaat-{safe_name}-{apt_number}.pdf")
 
