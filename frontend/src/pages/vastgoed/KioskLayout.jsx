@@ -307,12 +307,6 @@ function TenantOverview({ apartment, onBack, onPay }) {
       icon: Wallet,
       highlight: true,
       sub: openSub,
-      breakdown: openInvoices.length > 0 ? openInvoices.map((inv) => ({
-        label: inv.period_month && inv.period_year
-          ? `${MONTHS_NL[inv.period_month - 1]} ${inv.period_year}`
-          : (inv.label || 'Factuur'),
-        value: inv.outstanding,
-      })) : null,
     }] : []),
     { key: 'svc', label: 'Servicekosten', value: 0, icon: FileText, muted: true },
     { key: 'fines', label: 'Boetes', value: 0, icon: FileText, muted: true },
@@ -361,19 +355,6 @@ function TenantOverview({ apartment, onBack, onPay }) {
                     </div>
                     <p className={`font-bold text-sm sm:text-base ${it.highlight ? 'font-extrabold' : ''}`}>{fmtMoney(it.value, cur)}</p>
                   </div>
-                  {/* Breakdown: ingeklapte maandregels in een licht vak onder
-                      de samenvattende regel. Alleen voor de "Openstaande huur"-
-                      regel met meerdere facturen. */}
-                  {it.breakdown && it.breakdown.length > 0 && (
-                    <div className="mt-2 ml-9 rounded-lg bg-orange-50/70 border border-orange-100 px-2.5 py-2 space-y-1">
-                      {it.breakdown.map((b, idx) => (
-                        <div key={idx} className="flex items-center justify-between text-[11px]">
-                          <span className="text-orange-700/90 font-semibold">{b.label}</span>
-                          <span className="text-orange-800 font-bold font-mono">{fmtMoney(b.value, cur)}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
                 </div>
               );
             })}
@@ -578,6 +559,10 @@ function PaySelect({ overview, onBack, onConfirm }) {
   }, [tenant.id]);
 
   const planItemKey = (it) => `plan:${it.planId}:${it.seq}`;
+  const invItemKey = (inv) => `inv:${inv.id}`;
+  // Splitsmodus: wanneer er meerdere open facturen zijn, vervangen we de
+  // enkele "Huur"-knop door één selecteerbare regel per maand.
+  const splitHuur = openInvoices.length > 1;
 
   const toggle = (id) => {
     setSelected((cur) => {
@@ -589,9 +574,13 @@ function PaySelect({ overview, onBack, onConfirm }) {
   };
 
   const isDisabled = (id) => (amounts[id] || 0) <= 0;
-  const enabled = PAY_ITEMS_TEMPLATE.filter((t) => !isDisabled(t.id));
+  // In splitmodus tellen we niet de generieke "huur"-knop mee in enabled.
+  const enabled = PAY_ITEMS_TEMPLATE
+    .filter((t) => !(splitHuur && t.id === 'huur'))
+    .filter((t) => !isDisabled(t.id));
   const allSelectableKeys = [
     ...enabled.map((t) => t.id),
+    ...(splitHuur ? openInvoices.map(invItemKey) : []),
     ...planInstallments.map(planItemKey),
   ];
   const allSelected = allSelectableKeys.length > 0
@@ -605,17 +594,28 @@ function PaySelect({ overview, onBack, onConfirm }) {
   const selectedPlanItems = [...selected].filter((k) => k.startsWith('plan:'))
     .map((k) => planInstallments.find((x) => planItemKey(x) === k))
     .filter(Boolean);
-  const selectedPlainKeys = [...selected].filter((k) => !k.startsWith('plan:'));
+  const selectedInvItems = [...selected].filter((k) => k.startsWith('inv:'))
+    .map((k) => openInvoices.find((x) => invItemKey(x) === k))
+    .filter(Boolean);
+  const selectedPlainKeys = [...selected].filter((k) => !k.startsWith('plan:') && !k.startsWith('inv:'));
   const selectedPlainTotal = selectedPlainKeys.reduce((s, id) => s + (amounts[id] || 0), 0);
   const selectedPlanTotal = selectedPlanItems.reduce((s, x) => s + x.amount, 0);
-  const selectedTotal = selectedPlainTotal + selectedPlanTotal;
+  const selectedInvTotal = selectedInvItems.reduce((s, x) => s + (x.outstanding || 0), 0);
+  const selectedTotal = selectedPlainTotal + selectedPlanTotal + selectedInvTotal;
   const hasCustom = custom && parseFloat(custom) > 0;
   const activeAmount = hasCustom ? parseFloat(custom) : selectedTotal;
   const canProceed = activeAmount > 0;
 
   const buildDescription = () => {
     const labels = [];
-    if (selected.has('huur')) labels.push('Huur');
+    if (selectedInvItems.length > 0) {
+      const months = selectedInvItems
+        .map((inv) => inv.period_month ? MONTHS_NL[inv.period_month - 1].slice(0, 3) : null)
+        .filter(Boolean);
+      labels.push(`Huur ${months.join(', ')}`);
+    } else if (selected.has('huur')) {
+      labels.push('Huur');
+    }
     if (selected.has('servicekosten')) labels.push('Servicekosten');
     if (selected.has('boete')) labels.push('Boetes');
     if (selected.has('internet')) labels.push('Internet');
@@ -710,58 +710,85 @@ function PaySelect({ overview, onBack, onConfirm }) {
           )}
 
           <div className="flex flex-col gap-1 sm:gap-1.5 flex-1">
-            {PAY_ITEMS_TEMPLATE.map((t) => {
+            {/* In splitmodus: één regel per open factuur (met eigen checkbox).
+                Buiten splitmodus: één enkele "Huur"-regel zoals voorheen. */}
+            {splitHuur && openInvoices.length > 0 && (
+              <>
+                <div className="flex items-center gap-2 mt-1 mb-0.5 px-1">
+                  <div className="h-px flex-1 bg-orange-200" />
+                  <span className="text-[10px] font-black uppercase tracking-widest text-orange-500">
+                    Openstaande huur · {openInvoices.length} maanden
+                  </span>
+                  <div className="h-px flex-1 bg-orange-200" />
+                </div>
+                {openInvoices.map((inv) => {
+                  const key = invItemKey(inv);
+                  const sel = selected.has(key);
+                  return (
+                    <button key={key} onClick={() => toggle(key)} data-testid={`pay-inv-${inv.id}`}
+                      className={`flex items-center justify-between w-full rounded-lg border-2 transition px-2.5 py-2 sm:px-3 sm:py-2.5 ${
+                        sel ? 'bg-orange-50 border-orange-400' : 'bg-white border-slate-200 hover:border-orange-300'
+                      }`}>
+                      <div className="flex items-center gap-2">
+                        <div className={`flex items-center justify-center rounded border-2 flex-shrink-0 w-5 h-5 ${sel ? 'bg-orange-500 border-orange-500' : 'border-slate-300'}`}>
+                          {sel && <Check className="text-white w-3.5 h-3.5" strokeWidth={3} />}
+                        </div>
+                        <div className={`rounded-lg flex items-center justify-center flex-shrink-0 w-8 h-8 sm:w-9 sm:h-9 ${sel ? 'bg-orange-100' : 'bg-slate-50'}`}>
+                          <Banknote className={`w-4 h-4 sm:w-5 sm:h-5 ${sel ? 'text-orange-500' : 'text-slate-400'}`} />
+                        </div>
+                        <div className="text-left">
+                          <span className="text-sm font-bold text-slate-900 block">
+                            Huur {inv.period_month && inv.period_year
+                              ? `${MONTHS_NL[inv.period_month - 1]} ${inv.period_year}`
+                              : ''}
+                          </span>
+                          {inv.due_date && (
+                            <span className="text-[10px] text-slate-400">
+                              Vervalt {new Date(inv.due_date).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <p className={`text-sm sm:text-base flex-shrink-0 ml-2 whitespace-nowrap font-semibold ${sel ? 'text-orange-600' : 'text-slate-900'}`}>
+                        {fmt(inv.outstanding)}
+                      </p>
+                    </button>
+                  );
+                })}
+                {(amounts.servicekosten > 0 || amounts.boete > 0 || amounts.internet > 0) && (
+                  <div className="flex items-center gap-2 mt-1 mb-0.5 px-1">
+                    <div className="h-px flex-1 bg-slate-200" />
+                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Overig</span>
+                    <div className="h-px flex-1 bg-slate-200" />
+                  </div>
+                )}
+              </>
+            )}
+            {PAY_ITEMS_TEMPLATE
+              .filter((t) => !(splitHuur && t.id === 'huur'))
+              .map((t) => {
               const disabled = isDisabled(t.id);
               const sel = selected.has(t.id);
               const Icon = t.icon;
-              // Voor de Huur-regel: als er meerdere open facturen zijn, toon
-              // direct onder de regel een breakdown per maand zodat huurders
-              // zien welke achterstanden zij betalen.
-              const showHuurBreakdown = t.id === 'huur' && openInvoices.length > 1 && openRent > 0;
               return (
-                <div key={t.id}>
-                  <button disabled={disabled} onClick={() => toggle(t.id)} data-testid={`pay-type-${t.id}`}
-                    className={`flex items-center justify-between w-full rounded-lg border-2 transition px-2.5 py-2 sm:px-3 sm:py-2.5 ${
-                      disabled ? 'bg-slate-50 border-slate-100 opacity-40 cursor-not-allowed' :
-                      sel ? 'bg-orange-50 border-orange-400' : 'bg-white border-slate-200 hover:border-orange-300'
-                    }`}>
-                    <div className="flex items-center gap-2">
-                      <div className={`flex items-center justify-center rounded border-2 flex-shrink-0 w-5 h-5 ${sel ? 'bg-orange-500 border-orange-500' : 'border-slate-300'}`}>
-                        {sel && <Check className="text-white w-3.5 h-3.5" strokeWidth={3} />}
-                      </div>
-                      <div className={`rounded-lg flex items-center justify-center flex-shrink-0 w-8 h-8 sm:w-9 sm:h-9 ${sel ? 'bg-orange-100' : 'bg-slate-50'}`}>
-                        <Icon className={`w-4 h-4 sm:w-5 sm:h-5 ${sel ? 'text-orange-500' : 'text-slate-400'}`} />
-                      </div>
-                      <div className="text-left">
-                        <span className="text-sm font-bold text-slate-900 block">{t.label}</span>
-                        {t.id === 'huur' && openInvoices.length > 1 && (
-                          <span className="text-[10px] text-orange-600 font-bold">
-                            {openInvoices.length} maand{openInvoices.length === 1 ? '' : 'en'} achterstand
-                          </span>
-                        )}
-                      </div>
+                <button key={t.id} disabled={disabled} onClick={() => toggle(t.id)} data-testid={`pay-type-${t.id}`}
+                  className={`flex items-center justify-between w-full rounded-lg border-2 transition px-2.5 py-2 sm:px-3 sm:py-2.5 ${
+                    disabled ? 'bg-slate-50 border-slate-100 opacity-40 cursor-not-allowed' :
+                    sel ? 'bg-orange-50 border-orange-400' : 'bg-white border-slate-200 hover:border-orange-300'
+                  }`}>
+                  <div className="flex items-center gap-2">
+                    <div className={`flex items-center justify-center rounded border-2 flex-shrink-0 w-5 h-5 ${sel ? 'bg-orange-500 border-orange-500' : 'border-slate-300'}`}>
+                      {sel && <Check className="text-white w-3.5 h-3.5" strokeWidth={3} />}
                     </div>
-                    <p className={`text-sm sm:text-base flex-shrink-0 ml-2 whitespace-nowrap font-semibold ${disabled ? 'text-slate-300' : sel ? 'text-orange-600' : 'text-slate-900'}`}>
-                      {fmt(amounts[t.id] || 0)}
-                    </p>
-                  </button>
-                  {showHuurBreakdown && (
-                    <div className="ml-9 mt-1 mb-0.5 rounded-lg bg-orange-50/70 border border-orange-100 px-2.5 py-1.5 space-y-0.5">
-                      {openInvoices.map((inv, idx) => (
-                        <div key={inv.id || idx} className="flex items-center justify-between text-[11px]">
-                          <span className="text-orange-700/90 font-semibold">
-                            {inv.period_month && inv.period_year
-                              ? `${MONTHS_NL[inv.period_month - 1]} ${inv.period_year}`
-                              : 'Factuur'}
-                          </span>
-                          <span className="text-orange-800 font-bold font-mono">
-                            {fmt(inv.outstanding)}
-                          </span>
-                        </div>
-                      ))}
+                    <div className={`rounded-lg flex items-center justify-center flex-shrink-0 w-8 h-8 sm:w-9 sm:h-9 ${sel ? 'bg-orange-100' : 'bg-slate-50'}`}>
+                      <Icon className={`w-4 h-4 sm:w-5 sm:h-5 ${sel ? 'text-orange-500' : 'text-slate-400'}`} />
                     </div>
-                  )}
-                </div>
+                    <span className="text-sm font-bold text-slate-900">{t.label}</span>
+                  </div>
+                  <p className={`text-sm sm:text-base flex-shrink-0 ml-2 whitespace-nowrap font-semibold ${disabled ? 'text-slate-300' : sel ? 'text-orange-600' : 'text-slate-900'}`}>
+                    {fmt(amounts[t.id] || 0)}
+                  </p>
+                </button>
               );
             })}
             {planInstallments.length > 0 && (

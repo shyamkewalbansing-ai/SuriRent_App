@@ -1,5 +1,14 @@
 # Vastgoed Kiosk - PRD
 
+## Session 2026-02-26 — Breakdown weg in overzicht + per-maand selectie in betaalscherm ✅
+- **Financieel overzicht**: het uitgeklapte breakdown-vak onder "Openstaande huur (N maanden)" is verwijderd. Sub-tekst `jan, feb, maa, apr, mei 2026` blijft als compacte hint. Overzicht is nu minimaal.
+- **PaySelect "Wat wilt u betalen?"**: bij ≥2 open facturen wordt de enkele "Huur"-knop vervangen door een sectie **"Openstaande huur · N maanden"** met één selecteerbare regel per maand (`Huur januari 2026`, `februari 2026`, ...). Elke knop heeft eigen checkbox + bedrag + vervaldatum sub-tekst. Huurder kan deelbetalingen kiezen (bv. alleen Jan+Feb).
+- `selectedInvItems`, `selectedInvTotal`, en `buildDescription` aangepast om `inv:<id>` selecties correct mee te tellen. "Alles betalen"-knop selecteert ook alle invoice-keys.
+- Bij 0 of 1 open factuur blijft de oude enkele "Huur"-knop behavior gehandhaafd (geen onnodige UI-verandering).
+- Visual geverifieerd voor Melano: 5 invoice-buttons, generieke Huur-knop verdwenen in split-modus, financieel overzicht zonder breakdown lijst.
+
+
+
 ## Session 2026-02-26 — Financieel overzicht consolideren + breakdown in betaalscherm ✅
 - **Financieel overzicht**: terug naar één enkele "Openstaande huur (N maanden)"-regel met sub-tekst `jan, feb, ...` i.p.v. één regel per maand. Direct onder deze regel wordt een light-orange **breakdown-vak** getoond met alle openstaande maanden + bedragen. Compactere visuele weergave maar alle data blijft direct zichtbaar.
 - **PaySelect "Wat wilt u betalen?"** verwerkt nu `open_invoices` + `open_invoices_total` vanuit overview:
