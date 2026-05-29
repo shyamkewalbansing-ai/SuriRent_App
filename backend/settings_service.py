@@ -50,6 +50,7 @@ SECTION_SECRETS = {
     "uni5pay": ["api_key", "webhook_secret"],
     "shelly": ["cloud_token"],
     "domain": [],
+    "invoicing": [],
 }
 
 
@@ -66,6 +67,20 @@ def empty_section(section: str) -> dict:
                     "callback_url": "", "env": "sandbox", "enabled": False},
         "shelly": {"cloud_token": None, "server": "shelly-cloud.shelly.cloud", "enabled": False},
         "domain": {"custom_domain": "", "dns_verified": False, "enabled": False},
+        # Invoicing — automatische factuur-generatie + grace period
+        # `grace_workdays`: aantal werkdagen NA de laatste dag van de maand
+        # waarin de huurder nog moet betalen. Pas DAARNA wordt de volgende
+        # maand-factuur automatisch aangemaakt. Voorbeeld: maart-factuur
+        # verloopt 31 maart + 10 werkdagen = ~14 april → april-factuur
+        # wordt op 15 april automatisch gegenereerd.
+        # `last_auto_run`: laatste datum (YYYY-MM-DD) dat de auto-loop heeft
+        # gedraaid voor deze company, gebruikt om idempotent te blijven.
+        "invoicing": {
+            "auto_generate": False,
+            "grace_workdays": 10,
+            "last_auto_run": None,
+            "enabled": False,
+        },
     }.get(section, {})
 
 

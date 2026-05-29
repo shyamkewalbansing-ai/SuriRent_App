@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   Loader2, Check, KeySquare, Mail, MessageCircle, CreditCard, Zap, Globe,
-  AlertCircle, ChevronRight, Shield, Power, PowerOff,
+  AlertCircle, ChevronRight, Shield, Power, PowerOff, FileText,
 } from 'lucide-react';
 import { api, formatError } from '../../../lib/api';
 
@@ -11,6 +11,7 @@ const SECTIONS = [
   { id: 'mope', label: 'Mope betalingen', icon: CreditCard, desc: 'Online betalingen via Mope (Suriname).' },
   { id: 'uni5pay', label: 'Uni5Pay betalingen', icon: CreditCard, desc: 'Online betalingen via Uni5Pay.' },
   { id: 'shelly', label: 'Shelly elektriciteit', icon: Zap, desc: 'Smart breakers per appartement (Shelly Cloud).' },
+  { id: 'invoicing', label: 'Facturen automatisering', icon: FileText, desc: 'Automatische maand-facturen na grace periode.' },
   { id: 'domain', label: 'Eigen domein', icon: Globe, desc: 'Koppel een eigen domein aan dit bedrijf.' },
   { id: 'kiosk', label: 'Kiosk PIN', icon: KeySquare, desc: 'Stel de 4-cijferige toegangs-PIN voor de Kiosk in.' },
 ];
@@ -245,6 +246,47 @@ TTL:    3600`}
   );
 }
 
+function InvoicingForm({ initial }) {
+  const s = useSection('invoicing', initial);
+  const d = s.data;
+  return (
+    <SectionShell msg={s.msg} err={s.err}>
+      <SwitchField label="Ingeschakeld" testid="invoicing-enabled"
+        value={d.enabled} onChange={(v) => s.onField('enabled', v)}
+        desc="Wanneer aan, kan het systeem automatisch maandelijkse huur-facturen aanmaken." />
+      <SwitchField label="Automatisch genereren" testid="invoicing-auto"
+        value={d.auto_generate} onChange={(v) => s.onField('auto_generate', v)}
+        desc="Genereer facturen automatisch voor elke bewoonde woning na het verlopen van de grace-periode." />
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <TextField label="Grace periode (werkdagen)" testid="invoicing-grace"
+          type="number"
+          value={d.grace_workdays} onChange={(v) => s.onField('grace_workdays', parseInt(v, 10) || 0)}
+          placeholder="10"
+          helper="Aantal werkdagen na einde van de maand voordat de volgende factuur automatisch wordt aangemaakt." />
+        <div>
+          <FieldLabel>Laatst uitgevoerd</FieldLabel>
+          <input type="text" value={d.last_auto_run || '—'} disabled
+            data-testid="invoicing-last-run"
+            className="w-full mt-1 h-11 px-3 rounded-xl border-2 border-slate-200 bg-slate-50 text-slate-400" />
+          <p className="text-[11px] text-slate-400 mt-1">Read-only: laatste keer dat de auto-generatie liep.</p>
+        </div>
+      </div>
+      <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 text-xs text-slate-700">
+        <p className="font-bold text-emerald-800 mb-1">Hoe werkt het?</p>
+        <ol className="list-decimal pl-5 space-y-1">
+          <li>Aan het einde van elke maand wordt de huidige huur als verlopen beschouwd.</li>
+          <li>De huurder krijgt <b>{d.grace_workdays || 10}</b> werkdagen om alsnog te betalen.</li>
+          <li>Daarna genereert het systeem automatisch de volgende factuur voor elke bewoonde woning.</li>
+          <li>Eventueel vooruitbetaald saldo (positief saldo van de huurder) wordt automatisch verrekend.</li>
+        </ol>
+        <p className="mt-2 text-slate-500">De achtergrond-taak loopt elke 6 uur — meestal binnen 1 dag na de deadline staat alles klaar.</p>
+      </div>
+      <ActionRow onSave={s.save} saving={s.saving} canTest={false} />
+    </SectionShell>
+  );
+}
+
+
 function KioskPinForm() {
   const [pin, setPin] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -361,6 +403,7 @@ export default function SettingsPage() {
               {section === 'mope' && <PaymentGatewayForm section="mope" initial={settings.mope} />}
               {section === 'uni5pay' && <PaymentGatewayForm section="uni5pay" initial={settings.uni5pay} />}
               {section === 'shelly' && <ShellyForm initial={settings.shelly} />}
+              {section === 'invoicing' && <InvoicingForm initial={settings.invoicing} />}
               {section === 'domain' && <DomainForm initial={settings.domain} />}
               {section === 'kiosk' && <KioskPinForm />}
             </>

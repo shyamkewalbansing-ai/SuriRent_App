@@ -242,10 +242,11 @@ function TenantOverview({ apartment, onBack, onPay }) {
   if (loading) return <div className="h-full bg-orange-500 flex items-center justify-center"><Loader2 className="w-10 h-10 text-white animate-spin" /></div>;
   if (err || !data) return <div className="h-full bg-orange-500 flex items-center justify-center text-white p-8">{err || 'Geen data'}</div>;
 
-  const { tenant, apartment: apt, balance } = data;
+  const { tenant, apartment: apt, balance, credit_balance: credit = 0 } = data;
   const internet = Number(tenant.internet_amount || 0);
   const openRent = balance.balance > 0 ? balance.balance : 0;
   const totalDue = openRent + internet;
+  const allPaid = totalDue <= 0;
   const cur = balance.currency || apt.currency || 'SRD';
 
   const items = [
@@ -308,20 +309,51 @@ function TenantOverview({ apartment, onBack, onPay }) {
         </div>
 
         <div className="bg-white rounded-2xl md:flex-[2] flex flex-col items-center justify-center text-center p-6 sm:p-8 min-h-[260px]">
-          <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-orange-100 flex items-center justify-center mb-3">
-            <Wallet className="w-7 h-7 sm:w-9 sm:h-9 text-orange-500" />
-          </div>
-          <p className="text-xs sm:text-sm font-bold uppercase tracking-widest text-slate-400">Te betalen</p>
-          <p className="text-4xl sm:text-5xl font-extrabold text-slate-900 tracking-tight mt-1 mb-6">{fmtMoney(totalDue, cur)}</p>
-          <button onClick={() => onPay({ ...data, internet, total_due: totalDue })}
-            data-testid="overview-pay-btn"
-            className="w-full max-w-xs bg-orange-500 hover:bg-orange-600 text-white text-base sm:text-lg font-bold rounded-xl flex items-center justify-center gap-2 transition py-3 sm:py-3.5 active:scale-[0.98]">
-            Volgende <ArrowRight className="w-5 h-5" />
-          </button>
-          <button onClick={() => setShowHistory(true)} data-testid="overview-history-btn"
-            className="mt-2 w-full max-w-xs bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold rounded-xl flex items-center justify-center gap-2 py-2.5 text-sm">
-            <ClockIcon className="w-4 h-4" /> Betalingsgeschiedenis
-          </button>
+          {allPaid ? (
+            <>
+              <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-emerald-100 flex items-center justify-center mb-3">
+                <Check className="w-8 h-8 sm:w-10 sm:h-10 text-emerald-600" />
+              </div>
+              <p className="text-xs sm:text-sm font-bold uppercase tracking-widest text-emerald-700">Alles voldaan</p>
+              <p className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight mt-1">
+                Geen openstaande facturen
+              </p>
+              {credit > 0 && (
+                <div className="mt-3 mb-2 px-4 py-2.5 bg-emerald-50 border border-emerald-200 rounded-xl">
+                  <p className="text-xs font-semibold text-emerald-700 uppercase tracking-wide">Positief saldo</p>
+                  <p className="text-xl font-extrabold text-emerald-700">{fmtMoney(credit, cur)}</p>
+                  <p className="text-[10px] text-emerald-600 mt-0.5">Wordt verrekend met volgende factuur</p>
+                </div>
+              )}
+              {!credit && <div className="h-3" />}
+              <button onClick={() => onPay({ ...data, internet, total_due: 0, isAdvance: true })}
+                data-testid="overview-advance-pay-btn"
+                className="mt-2 w-full max-w-xs bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl flex items-center justify-center gap-2 transition py-2.5 text-sm active:scale-[0.98]">
+                Vooruitbetaling registreren
+              </button>
+              <button onClick={() => setShowHistory(true)} data-testid="overview-history-btn"
+                className="mt-2 w-full max-w-xs bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold rounded-xl flex items-center justify-center gap-2 py-2.5 text-sm">
+                <ClockIcon className="w-4 h-4" /> Betalingsgeschiedenis
+              </button>
+            </>
+          ) : (
+            <>
+              <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-orange-100 flex items-center justify-center mb-3">
+                <Wallet className="w-7 h-7 sm:w-9 sm:h-9 text-orange-500" />
+              </div>
+              <p className="text-xs sm:text-sm font-bold uppercase tracking-widest text-slate-400">Te betalen</p>
+              <p className="text-4xl sm:text-5xl font-extrabold text-slate-900 tracking-tight mt-1 mb-6">{fmtMoney(totalDue, cur)}</p>
+              <button onClick={() => onPay({ ...data, internet, total_due: totalDue })}
+                data-testid="overview-pay-btn"
+                className="w-full max-w-xs bg-orange-500 hover:bg-orange-600 text-white text-base sm:text-lg font-bold rounded-xl flex items-center justify-center gap-2 transition py-3 sm:py-3.5 active:scale-[0.98]">
+                Volgende <ArrowRight className="w-5 h-5" />
+              </button>
+              <button onClick={() => setShowHistory(true)} data-testid="overview-history-btn"
+                className="mt-2 w-full max-w-xs bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold rounded-xl flex items-center justify-center gap-2 py-2.5 text-sm">
+                <ClockIcon className="w-4 h-4" /> Betalingsgeschiedenis
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -428,7 +460,7 @@ const PAY_ITEMS_TEMPLATE = [
 ];
 
 function PaySelect({ overview, onBack, onConfirm }) {
-  const { tenant, apartment: apt, balance, internet, total_due } = overview;
+  const { tenant, apartment: apt, balance, internet, total_due, isAdvance = false } = overview;
   const cur = (balance.currency || apt.currency || 'SRD').toUpperCase();
   const fmt = (v) => fmtMoney(v, cur);
   const openRent = balance.balance > 0 ? balance.balance : 0;
@@ -519,6 +551,21 @@ function PaySelect({ overview, onBack, onConfirm }) {
 
   const handleNext = () => {
     if (!canProceed) return;
+    // Vooruitbetaling: huurder heeft niets openstaand maar betaalt vooruit.
+    // Wordt opgeslagen met category=vooruitbetaling zodat het als krediet
+    // bewaard wordt voor de volgende factuur (auto-generatie verrekent het
+    // automatisch FIFO).
+    if (isAdvance && hasCustom) {
+      onConfirm({
+        tenant_id: tenant.id, apartment_id: apt.id,
+        amount: parseFloat(custom), currency: cur,
+        category: 'vooruitbetaling', method: 'contant',
+        period_month: null, period_year: null,
+        note: `Vooruitbetaling — wordt verrekend met volgende factuur`,
+        plan_items: [], plain_amount: parseFloat(custom),
+      });
+      return;
+    }
     if (hasCustom) {
       onConfirm({
         tenant_id: tenant.id, apartment_id: apt.id,
@@ -553,7 +600,7 @@ function PaySelect({ overview, onBack, onConfirm }) {
           className="flex items-center gap-1.5 text-white font-bold bg-white/20 backdrop-blur-sm rounded-lg px-3 py-1.5 sm:px-4 sm:py-2">
           <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5" /> <span className="text-xs sm:text-sm">Terug</span>
         </button>
-        <span className="text-sm sm:text-base font-semibold text-white">Wat wilt u betalen?</span>
+        <span className="text-sm sm:text-base font-semibold text-white">{isAdvance ? 'Vooruitbetaling registreren' : 'Wat wilt u betalen?'}</span>
         <div className="text-right text-white hidden sm:block">
           <p className="text-xs sm:text-sm font-semibold">{tenant.name}</p>
           <p className="text-[10px] sm:text-xs opacity-70">Appt. {apt.number}</p>

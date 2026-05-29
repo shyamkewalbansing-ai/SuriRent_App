@@ -313,7 +313,7 @@ class PaymentIn(BaseModel):
     amount: float
     currency: Literal["SRD", "USD", "EUR"] = "SRD"
     method: Literal["contant", "bank", "mope", "sumup", "uni5pay"] = "contant"
-    category: Literal["huur", "servicekosten", "borg", "boete", "internet", "overig"] = "huur"
+    category: Literal["huur", "servicekosten", "borg", "boete", "internet", "overig", "vooruitbetaling"] = "huur"
     period_month: Optional[int] = None
     period_year: Optional[int] = None
     note: Optional[str] = ""
@@ -564,16 +564,24 @@ async def lifespan(app: FastAPI):
         import asyncio as _aio
         _overdue_task_handle = _aio.create_task(_overdue_push_loop())
 
+    # --- Start auto-invoice generation loop (per-company grace deadline) ---
+    if os.environ.get("DISABLE_AUTO_INVOICE") != "1":
+        import asyncio as _aio
+        _auto_invoice_task_handle = _aio.create_task(_auto_invoice_loop())
+
     yield
     if _reminder_task_handle:
         _reminder_task_handle.cancel()
     if _overdue_task_handle:
         _overdue_task_handle.cancel()
+    if _auto_invoice_task_handle:
+        _auto_invoice_task_handle.cancel()
     client.close()
 
 
 _reminder_task_handle = None
 _overdue_task_handle = None
+_auto_invoice_task_handle = None
 
 
 async def _send_trial_reminders():
@@ -3155,7 +3163,7 @@ class TenantPaymentIn(BaseModel):
     amount: float
     currency: Literal["SRD", "USD", "EUR"] = "SRD"
     method: Literal["contant", "bank", "mope", "sumup", "uni5pay"] = "contant"
-    category: Literal["huur", "servicekosten", "borg", "boete", "internet", "overig"] = "huur"
+    category: Literal["huur", "servicekosten", "borg", "boete", "internet", "overig", "vooruitbetaling"] = "huur"
     period_month: Optional[int] = None
     period_year: Optional[int] = None
     note: Optional[str] = ""
@@ -3905,6 +3913,12 @@ async def _create_payment_doc(body: PaymentIn, company_id: Optional[str] = None,
         "approved_at": approved_at,
         "approved_by_user_id": approved_by_user_id,
     }
+    # Vooruitbetaling: bewaar het bedrag als beschikbaar krediet zodat de
+    # volgende factuur-generatie het automatisch kan verrekenen (FIFO oudst
+    # eerst). Wordt alleen bij approved status meegerekend.
+    if body.category == "vooruitbetaling" and status == "approved":
+        doc["credit_remaining"] = float(body.amount or 0)
+        doc["credit_applied_at"] = None
     await db.payments.insert_one(doc)
     doc.pop("_id", None)
     # Factuur sluiten — alleen voor approved payments. Pending betalingen krijgen
@@ -3947,10 +3961,22 @@ async def _create_payment_doc(body: PaymentIn, company_id: Optional[str] = None,
                 ).sort([("period_year", 1), ("period_month", 1)]):
                     other_inv_ids.append(inv["id"])
                 if other_inv_ids:
-                    await _allocate_payment_to_invoices(
+                    applied_overflow = await _allocate_payment_to_invoices(
                         other_inv_ids, overflow,
                         payment_id=doc["id"], paid_at=paid_at,
                         method=body.method, receipt_number=receipt_no,
+                    )
+                    leftover = round(overflow - applied_overflow, 2)
+                else:
+                    leftover = overflow
+                # Als er nog steeds overflow over is na alle openstaande
+                # facturen → bewaar als krediet op de huurder voor de
+                # volgende auto-generatie.
+                if leftover and leftover > 0:
+                    await db.payments.update_one(
+                        {"id": doc["id"]},
+                        {"$set": {"credit_remaining": float(leftover),
+                                  "credit_origin": "overflow"}},
                     )
         except Exception as e:
             print(f"[payments] invoice apply failed: {e}")
@@ -4400,6 +4426,19 @@ async def kiosk_tenant_overview(tenant_id: str, _session=Depends(get_kiosk_sessi
     if t.get("apartment_id"):
         apt = await db.apartments.find_one({"id": t["apartment_id"]}, {"_id": 0})
     balance = await _calc_balance(t)
+    # Bereken huidig positief saldo (vooruitbetaald krediet, nog niet
+    # verrekend met een factuur). Wordt zichtbaar gemaakt in de Kiosk
+    # Financieel Overzicht zodat huurder/medewerker zien dat ze
+    # vooruit hebben betaald.
+    credit = 0.0
+    async for p in db.payments.find(
+        {"tenant_id": tenant_id, "credit_remaining": {"$gt": 0},
+         "status": "approved"},
+        {"_id": 0, "credit_remaining": 1, "currency": 1},
+    ):
+        # Aanname: huurder werkt in 1 valuta (SRD) — anders zou je per
+        # valuta moeten optellen. Voor nu enkel SRD/lokaal.
+        credit += float(p.get("credit_remaining") or 0)
     return {
         "tenant": {
             "id": t["id"],
@@ -4416,6 +4455,7 @@ async def kiosk_tenant_overview(tenant_id: str, _session=Depends(get_kiosk_sessi
             "currency": apt["currency"],
         },
         "balance": balance,
+        "credit_balance": round(credit, 2),
     }
 
 
@@ -5594,33 +5634,205 @@ async def generate_month_invoices(body: GenerateMonthIn, user=Depends(get_curren
     cid = company_id_of(user)
     if not cid:
         raise HTTPException(status_code=400, detail="Geen actief bedrijf geselecteerd")
-    apts = await db.apartments.find({**scope(user), "status": "occupied"}, {"_id": 0}).to_list(1000)
+    return await _generate_month_invoices_for_company(
+        cid, body.period_month, body.period_year, scope_user=user,
+    )
+
+
+# =====================================================================
+# Automatische factuur-generatie + krediet-verrekening
+# =====================================================================
+
+def _add_workdays(start_date, n_workdays: int):
+    """Tel `n_workdays` werkdagen (ma-vr) op bij `start_date`. Houdt geen
+    rekening met lokale feestdagen — voldoende precies voor huur-deadlines."""
+    from datetime import timedelta
+    d = start_date
+    added = 0
+    while added < n_workdays:
+        d = d + timedelta(days=1)
+        if d.weekday() < 5:  # ma=0 ... vr=4
+            added += 1
+    return d
+
+
+def _last_day_of_month(year: int, month: int):
+    """Laatste dag van de gegeven (jaar, maand) als date object."""
+    from datetime import date
+    import calendar
+    return date(year, month, calendar.monthrange(year, month)[1])
+
+
+def _next_month(year: int, month: int) -> tuple[int, int]:
+    return (year + 1, 1) if month == 12 else (year, month + 1)
+
+
+async def _apply_tenant_credit_to_invoice(
+    tenant_id: str, invoice_id: str, company_id: str
+) -> float:
+    """Verrekent eventueel positief saldo van een huurder met de nieuw
+    aangemaakte factuur (FIFO op datum). Returns het toegepaste bedrag.
+
+    Krediet wordt gevormd door betalingen waar `category == "vooruitbetaling"`
+    of door betalingen die meer waren dan het openstaande bedrag op het
+    moment van registratie (overflow → krediet ipv naar volgende factuur
+    wanneer geen volgende factuur bestond).
+    """
+    inv = await db.invoices.find_one(
+        {"id": invoice_id}, {"_id": 0, "amount": 1, "paid_amount": 1, "currency": 1}
+    )
+    if not inv:
+        return 0.0
+    open_amt = float(inv.get("amount") or 0) - float(inv.get("paid_amount") or 0)
+    if open_amt <= 0:
+        return 0.0
+    cur = inv.get("currency") or "SRD"
+
+    total_applied = 0.0
+    # FIFO: oudste vooruitbetalingen eerst
+    async for credit in db.payments.find(
+        {"tenant_id": tenant_id, "currency": cur,
+         "category": "vooruitbetaling",
+         "credit_remaining": {"$gt": 0},
+         "status": "approved"},
+        {"_id": 0, "id": 1, "credit_remaining": 1, "method": 1, "receipt_number": 1},
+    ).sort("paid_at", 1):
+        if open_amt <= 0:
+            break
+        avail = float(credit.get("credit_remaining") or 0)
+        chunk = min(avail, open_amt)
+        if chunk <= 0:
+            continue
+        await _apply_payment_to_invoice(
+            invoice_id, chunk,
+            payment_id=credit["id"], paid_at=iso(now_utc()),
+            method=credit.get("method"), receipt_number=credit.get("receipt_number"),
+        )
+        new_remaining = round(avail - chunk, 2)
+        await db.payments.update_one(
+            {"id": credit["id"]},
+            {"$set": {"credit_remaining": new_remaining,
+                      "credit_applied_at": iso(now_utc()) if new_remaining == 0 else credit.get("credit_applied_at")}},
+        )
+        total_applied += chunk
+        open_amt -= chunk
+    return round(total_applied, 2)
+
+
+async def _generate_month_invoices_for_company(
+    company_id: str, period_month: int, period_year: int, *, scope_user=None
+) -> dict:
+    """Gedeelde factuur-generatie. Maakt facturen voor elk bewoond appartement,
+    skipt duplicates, en verrekent automatisch eventueel krediet."""
+    q = {"company_id": company_id, "status": "occupied"}
+    apts = await db.apartments.find(q, {"_id": 0}).to_list(1000)
     created = 0
     skipped = 0
+    credit_applied_total = 0.0
     for a in apts:
-        t = await db.tenants.find_one({"id": a.get("tenant_id"), **scope(user)}, {"_id": 0}) if a.get("tenant_id") else None
+        if not a.get("tenant_id"):
+            skipped += 1
+            continue
+        t = await db.tenants.find_one(
+            {"id": a["tenant_id"], "company_id": company_id}, {"_id": 0}
+        )
         if not t:
             skipped += 1
             continue
         dup = await db.invoices.find_one({
-            **scope(user),
-            "tenant_id": t["id"], "period_month": body.period_month, "period_year": body.period_year
+            "company_id": company_id, "tenant_id": t["id"],
+            "period_month": period_month, "period_year": period_year,
         })
         if dup:
             skipped += 1
             continue
-        seq = await _next_seq(f"invoice_{body.period_year}")
+        seq = await _next_seq(f"invoice_{period_year}")
+        inv_id = new_id()
         await db.invoices.insert_one({
-            "id": new_id(),
-            "company_id": cid,
-            "invoice_number": f"F{body.period_year}-{seq:05d}",
+            "id": inv_id,
+            "company_id": company_id,
+            "invoice_number": f"F{period_year}-{seq:05d}",
             "tenant_id": t["id"], "apartment_id": a["id"],
             "amount": a["rent_amount"], "currency": a.get("currency", "SRD"),
-            "period_month": body.period_month, "period_year": body.period_year,
+            "paid_amount": 0.0,
+            "period_month": period_month, "period_year": period_year,
             "status": "open", "created_at": iso(now_utc()),
         })
+        # Verreken positief saldo van deze huurder met de nieuwe factuur
+        applied = await _apply_tenant_credit_to_invoice(t["id"], inv_id, company_id)
+        credit_applied_total += applied
         created += 1
-    return {"created": created, "skipped": skipped}
+    return {
+        "created": created,
+        "skipped": skipped,
+        "credit_applied": round(credit_applied_total, 2),
+    }
+
+
+async def _auto_invoice_tick():
+    """Eén keer per dag uitgevoerde achtergrond-taak.
+    Voor elk bedrijf met `invoicing.auto_generate=true`:
+      - bepaalt deadline = laatste dag VORIGE maand + grace_workdays
+      - als vandaag >= deadline en huidige maand-factuur nog niet bestaat,
+        genereer hem nu + verreken krediet
+      - markeer last_auto_run = vandaag zodat we niet 2× per dag draaien
+    """
+    from datetime import date
+    today = date.today()
+    today_iso = today.isoformat()
+    async for cs in db.company_settings.find({"invoicing.auto_generate": True}, {"_id": 0}):
+        cfg = cs.get("invoicing") or {}
+        if not cfg.get("auto_generate"):
+            continue
+        if cfg.get("last_auto_run") == today_iso:
+            continue
+        try:
+            grace = int(cfg.get("grace_workdays") or 10)
+        except (TypeError, ValueError):
+            grace = 10
+        company_id = cs["company_id"]
+        # Deadline van vorige maand verloopt: einde vorige maand + grace werkdagen
+        prev_year = today.year if today.month > 1 else today.year - 1
+        prev_month = today.month - 1 if today.month > 1 else 12
+        prev_last = _last_day_of_month(prev_year, prev_month)
+        deadline = _add_workdays(prev_last, grace)
+        if today < deadline:
+            continue
+        # Genereer huidige maand
+        try:
+            res = await _generate_month_invoices_for_company(
+                company_id, today.month, today.year
+            )
+            await db.company_settings.update_one(
+                {"company_id": company_id},
+                {"$set": {"invoicing.last_auto_run": today_iso,
+                          "invoicing.last_auto_result": res}},
+            )
+            print(f"[auto-invoice] {company_id} {today.month}/{today.year}: {res}")
+            # Notify admins
+            try:
+                await _notify_company_admins(
+                    company_id,
+                    "Maandelijkse facturen gegenereerd",
+                    f"{res['created']} nieuwe facturen voor {today.month}/{today.year}"
+                    + (f" — {res['credit_applied']:.2f} aan krediet verrekend." if res.get("credit_applied") else "."),
+                    {"kind": "auto_invoice", "result": res},
+                )
+            except Exception:  # noqa: BLE001
+                pass
+        except Exception as e:  # noqa: BLE001
+            print(f"[auto-invoice] error company {company_id}: {e}")
+
+
+async def _auto_invoice_loop():
+    """Achtergrond-loop: roept _auto_invoice_tick elke 6 uur aan zodat we
+    altijd binnen 6h reageren op een deadline-overschrijding."""
+    while True:
+        try:
+            await _auto_invoice_tick()
+        except Exception as e:  # noqa: BLE001
+            print(f"[auto-invoice] tick failed: {e}")
+        await asyncio.sleep(6 * 3600)  # 6 uur
 
 
 @api.delete("/invoices/{invoice_id}")
@@ -6480,7 +6692,7 @@ from settings_service import (
     SECTION_SECRETS as _SECTION_SECRETS,
 )
 
-VALID_SETTINGS_SECTIONS = ["smtp", "twilio", "mope", "uni5pay", "shelly", "domain"]
+VALID_SETTINGS_SECTIONS = ["smtp", "twilio", "mope", "uni5pay", "shelly", "domain", "invoicing"]
 
 
 async def _get_company_settings_doc(company_id: str) -> dict:
