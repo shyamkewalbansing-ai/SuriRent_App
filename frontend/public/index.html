@@ -121,9 +121,9 @@
     </script>
     <script>
       // First-paint background: voorkomt witte flits + witte strook onderaan
-      // op iOS PWA standalone bij start van /login, /kiosk. Voor admin (alle
-      // andere routes) blijven we op brand-cream zodat Safari's URL-bar en
-      // status-bar de cream kleur erven i.p.v. oranje (en niet meebewegen).
+      // op iOS PWA standalone. Voor /login en /kiosk → oranje (brand). Voor
+      // alle andere routes (admin, huurder) → cream zodat Safari's URL-bar
+      // de cream kleur erft i.p.v. oranje.
       (function () {
         try {
           var p = (window.location.pathname || '').toLowerCase();
@@ -136,29 +136,6 @@
           };
           if (document.body) applyBody();
           else document.addEventListener('DOMContentLoaded', applyBody);
-          // BIJ ELKE ROUTE-CHANGE: reset naar cream wanneer geen kiosk/login.
-          // React Router patcht history — luister hierop.
-          var lastP = p;
-          var resync = function () {
-            var np = (window.location.pathname || '').toLowerCase();
-            if (np === lastP) return;
-            lastP = np;
-            var k = np === '/kiosk' || np.indexOf('/kiosk') === 0;
-            var l = np === '/login' || np.indexOf('/login') === 0;
-            var nbg = (k || l) ? '#FF5C00' : '#FFF7F0';
-            document.documentElement.style.backgroundColor = nbg;
-            if (document.body) document.body.style.backgroundColor = nbg;
-            var th = document.querySelectorAll('meta[name="theme-color"]');
-            for (var i = 0; i < th.length; i++) {
-              th[i].setAttribute('content', k ? '#2563EB' : (l ? '#FF5C00' : '#FFF7F0'));
-            }
-          };
-          window.addEventListener('popstate', resync);
-          // Patch pushState/replaceState (React Router gebruikt deze)
-          var _ps = history.pushState;
-          history.pushState = function () { _ps.apply(this, arguments); setTimeout(resync, 0); };
-          var _rs = history.replaceState;
-          history.replaceState = function () { _rs.apply(this, arguments); setTimeout(resync, 0); };
         } catch (e) { /* no-op */ }
       })();
     </script>
