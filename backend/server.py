@@ -5576,25 +5576,34 @@ async def kiosk_tenant_overview(tenant_id: str, _session=Depends(get_kiosk_sessi
         # valuta moeten optellen. Voor nu enkel SRD/lokaal.
         credit += float(p.get("credit_remaining") or 0)
 
-    # ----- Open facturen ophalen (sinds 2026-02-26) -----
-    # Toon EXPLICIET in de kiosk welke maanden nog openstaan met hun
-    # bedrag — voorheen lieten we alleen de "volgende periode" zien
-    # waardoor 5 openstaande maanden er als 1 enkele regel uitzagen.
-    # FILTER: alleen achterstanden tonen (periode < huidige maand). De
-    # huidige maand-factuur is technisch nog "open" maar is geen
-    # achterstand — die hoort bij de reguliere "Maandhuur"-regel. Dit
-    # houdt kiosk + admin in sync (admin gebruikt dezelfde regel in
-    # `Invoices.jsx`).
-    now_local = now_utc()
-    cur_year, cur_month = now_local.year, now_local.month
-    open_invoices = []
-    open_total = 0.0
-    current_month_invoice = None  # de mei-factuur (huidige maand) — apart!
+    # ----- Open facturen ophalen — 3 buckets -----
+    # achterstand (overdue): periode-einde + grace_workdays is verstreken
+    # current: huidige kalendermaand of vorige maand nog binnen grace-window
+    # future: vooruit gefactureerde periode (periode > huidige maand)
+    #
+    # `open_invoices` blijft achterstand (achterwaartse compat met FE).
+    # `current_invoices` is een array — kan mei + (vroeg in juni nog mei) bevatten.
+    # `current_month_invoice` is de eerste current voor backwards-compat (één regel).
+    grace_wd = 10
+    try:
+        cs = await db.company_settings.find_one({"company_id": _session.get("company_id")}, {"_id": 0, "invoicing": 1})
+        if cs and isinstance(cs.get("invoicing"), dict):
+            grace_wd = int(cs["invoicing"].get("grace_workdays") or 10)
+    except Exception:  # noqa: BLE001
+        pass
+    today_local = now_utc().date()
+    overdue_invoices: list[dict] = []
+    current_invoices: list[dict] = []
+    future_invoices: list[dict] = []
+    overdue_total = 0.0
+    current_total = 0.0
+    future_total = 0.0
     async for inv in db.invoices.find(
         {"tenant_id": tenant_id, "status": {"$ne": "paid"}},
         {"_id": 0, "id": 1, "period_month": 1, "period_year": 1,
          "amount_due": 1, "amount": 1, "paid_amount": 1, "currency": 1,
-         "due_date": 1, "status": 1, "kind": 1, "label": 1},
+         "due_date": 1, "status": 1, "kind": 1, "label": 1,
+         "invoice_number": 1},
     ).sort([("period_year", 1), ("period_month", 1), ("due_date", 1)]):
         total = float(inv.get("amount_due") or inv.get("amount") or 0)
         paid = float(inv.get("paid_amount") or 0)
@@ -5603,27 +5612,10 @@ async def kiosk_tenant_overview(tenant_id: str, _session=Depends(get_kiosk_sessi
             continue
         py = inv.get("period_year") or 0
         pm = inv.get("period_month") or 0
-        # Toekomst: skip (vooruit gefactureerd, geen achterstand én geen huidige maand)
-        if py > cur_year or (py == cur_year and pm > cur_month):
-            continue
-        # Huidige maand: apart bucket (NIET in open_invoices, NIET in totaal)
-        if py == cur_year and pm == cur_month:
-            current_month_invoice = {
-                "id": inv["id"],
-                "period_month": pm,
-                "period_year": py,
-                "amount": total,
-                "amount_paid": paid,
-                "outstanding": outstanding,
-                "currency": inv.get("currency") or balance.get("currency") or "SRD",
-                "due_date": inv.get("due_date"),
-                "status": inv.get("status") or "open",
-                "is_partial": paid > 0 and outstanding > 0,
-            }
-            continue
-        # Anders: echte achterstand (periode < huidige maand)
-        open_invoices.append({
+        bucket = _classify_invoice_bucket(pm, py, today_local, grace_wd)
+        item = {
             "id": inv["id"],
+            "invoice_number": inv.get("invoice_number") or "",
             "period_month": pm,
             "period_year": py,
             "amount": total,
@@ -5635,8 +5627,18 @@ async def kiosk_tenant_overview(tenant_id: str, _session=Depends(get_kiosk_sessi
             "is_partial": paid > 0 and outstanding > 0,
             "kind": inv.get("kind") or "huur",
             "label": inv.get("label") or "",
-        })
-        open_total += outstanding
+            "bucket": bucket,
+        }
+        if bucket == "future":
+            future_invoices.append(item)
+            future_total += outstanding
+        elif bucket == "current":
+            current_invoices.append(item)
+            current_total += outstanding
+        else:
+            overdue_invoices.append(item)
+            overdue_total += outstanding
+    current_month_invoice = current_invoices[0] if current_invoices else None
     return {
         "tenant": {
             "id": t["id"],
@@ -5654,9 +5656,14 @@ async def kiosk_tenant_overview(tenant_id: str, _session=Depends(get_kiosk_sessi
         },
         "balance": balance,
         "credit_balance": round(credit, 2),
-        "open_invoices": open_invoices,
-        "open_invoices_total": round(open_total, 2),
+        "open_invoices": overdue_invoices,
+        "open_invoices_total": round(overdue_total, 2),
+        "current_invoices": current_invoices,
+        "current_invoices_total": round(current_total, 2),
+        "future_invoices": future_invoices,
+        "future_invoices_total": round(future_total, 2),
         "current_month_invoice": current_month_invoice,
+        "grace_workdays": grace_wd,
     }
 
 
@@ -6727,6 +6734,7 @@ class InvoiceOut(BaseModel):
     receipt_number: Optional[str] = None
     paid_method: Optional[str] = None
     plans: List[InvoicePlanRef] = []
+    bucket: Optional[str] = None  # 'overdue' | 'current' | 'future' (alleen voor open facturen relevant)
 
 
 async def _enrich_invoice(i: dict) -> dict:
@@ -6781,7 +6789,32 @@ async def _enrich_invoice(i: dict) -> dict:
 @api.get("/invoices", response_model=List[InvoiceOut])
 async def list_invoices(user=Depends(get_current_user)):
     docs = await db.invoices.find(scope(user), {"_id": 0}).sort("created_at", -1).to_list(500)
-    return [await _enrich_invoice(d) for d in docs]
+    # Bucket berekening — gebruik company-instelling voor grace_workdays
+    cid = company_id_of(user)
+    grace_wd = 10
+    if cid:
+        try:
+            cs = await db.company_settings.find_one({"company_id": cid}, {"_id": 0, "invoicing": 1})
+            if cs and isinstance(cs.get("invoicing"), dict):
+                grace_wd = int(cs["invoicing"].get("grace_workdays") or 10)
+        except Exception:  # noqa: BLE001
+            pass
+    today_local = now_utc().date()
+    out: list[dict] = []
+    for d in docs:
+        enriched = await _enrich_invoice(d)
+        # Alleen bucket voor onbetaalde facturen — betaalde laten we leeg.
+        if (enriched.get("status") or "open") != "paid":
+            try:
+                enriched["bucket"] = _classify_invoice_bucket(
+                    int(enriched.get("period_month") or 0),
+                    int(enriched.get("period_year") or 0),
+                    today_local, grace_wd,
+                )
+            except Exception:  # noqa: BLE001
+                enriched["bucket"] = None
+        out.append(enriched)
+    return out
 
 
 @api.post("/invoices", response_model=InvoiceOut)
@@ -6983,6 +7016,26 @@ def _last_day_of_month(year: int, month: int):
     from datetime import date
     import calendar
     return date(year, month, calendar.monthrange(year, month)[1])
+
+
+def _classify_invoice_bucket(period_month: int, period_year: int, today, grace_workdays: int = 10) -> str:
+    """Bepaal in welke bucket een (open) factuur valt:
+       - "overdue"  : periode eindigde + grace-werkdagen geleden (achterstand)
+       - "current"  : periode == huidige kalendermaand, of vorige maand maar
+                      nog binnen de grace-window (huurder mag nog betalen)
+       - "future"   : periode is later dan de huidige kalendermaand
+    """
+    cur_y, cur_m = today.year, today.month
+    if period_year > cur_y or (period_year == cur_y and period_month > cur_m):
+        return "future"
+    if period_year == cur_y and period_month == cur_m:
+        return "current"
+    # Periode ligt VOOR de huidige maand → check grace
+    period_end = _last_day_of_month(period_year, period_month)
+    deadline = _add_workdays(period_end, max(0, int(grace_workdays or 0)))
+    if today > deadline:
+        return "overdue"
+    return "current"
 
 
 def _next_month(year: int, month: int) -> tuple[int, int]:

@@ -55,31 +55,41 @@ function groupByTenant(invoices) {
     const g = map.get(key);
     g.all.push(inv);
     if (isUnpaid(inv)) g.open.push(inv);
-    // Houd het meest recente bekende appartement-nummer + locatie aan.
     if (inv.apartment_number) g.apartment_number = inv.apartment_number;
     if (inv.location_name) g.location_name = inv.location_name;
   }
-  // Bepaal de huidige (1-based) periode-cursor. Alleen facturen voor periodes
-  // NA de huidige maand zijn "komende" (Komt nog). De huidige maand en alles
-  // ervoor telt als achterstand / openstaand zodra de factuur niet betaald is.
+  // Bucket-classificatie komt RECHTSTREEKS van de backend (`inv.bucket`):
+  //   "overdue"  → Achterstallige huur (vervaltermijn + grace verstreken)
+  //   "current"  → Openstaande huidige maand (binnen grace-window)
+  //   "future"   → Vooruit gefactureerd
+  // Fallback (oude clients zonder backend-bucket): periode < huidige maand
+  //   = overdue, == huidige = current, > huidige = future.
   const now = new Date();
   const curY = now.getFullYear();
   const curM = now.getMonth() + 1;
-  const isOverdueInv = (inv) => (
-    inv.period_year < curY || (inv.period_year === curY && inv.period_month <= curM)
-  );
+  const fallbackBucket = (inv) => {
+    if (inv.period_year > curY || (inv.period_year === curY && inv.period_month > curM)) return 'future';
+    if (inv.period_year === curY && inv.period_month === curM) return 'current';
+    return 'overdue';
+  };
+  const bucketOf = (inv) => inv.bucket || fallbackBucket(inv);
   for (const g of map.values()) {
     g.open.sort((a, b) => (a.period_year - b.period_year) || (a.period_month - b.period_month));
     g.all.sort((a, b) => (a.period_year - b.period_year) || (a.period_month - b.period_month));
-    g.overdue = g.open.filter(isOverdueInv);
-    g.upcoming = g.open.filter((i) => !isOverdueInv(i));
+    g.overdue = g.open.filter((i) => bucketOf(i) === 'overdue');
+    g.current = g.open.filter((i) => bucketOf(i) === 'current');
+    g.upcoming = g.open.filter((i) => bucketOf(i) === 'future');
     g.openCount = g.open.length;
     g.overdueCount = g.overdue.length;
+    g.currentCount = g.current.length;
     g.upcomingCount = g.upcoming.length;
-    g.totalOpen = g.open.reduce((s, i) => s + Number(i.remaining_amount != null ? i.remaining_amount : i.amount || 0), 0);
-    g.totalOverdue = g.overdue.reduce((s, i) => s + Number(i.remaining_amount != null ? i.remaining_amount : i.amount || 0), 0);
-    g.totalUpcoming = g.upcoming.reduce((s, i) => s + Number(i.remaining_amount != null ? i.remaining_amount : i.amount || 0), 0);
-    // Severity baseert nu op échte achterstand (niet toekomstige facturen).
+    const sumOf = (arr) => arr.reduce((s, i) => s + Number(i.remaining_amount != null ? i.remaining_amount : i.amount || 0), 0);
+    g.totalOpen = sumOf(g.open);
+    g.totalOverdue = sumOf(g.overdue);
+    g.totalCurrent = sumOf(g.current);
+    g.totalUpcoming = sumOf(g.upcoming);
+    // Severity baseert op échte achterstand. Huidige maand telt NIET als
+    // achterstand zolang de grace-window niet verstreken is.
     g.severity = g.overdueCount >= 2 ? 'critical' : g.overdueCount === 1 ? 'late' : 'ok';
     g.lastOpen = g.open[g.open.length - 1];
     g.lastOverdue = g.overdue[g.overdue.length - 1];
@@ -225,7 +235,7 @@ function MobileTenantCard({ group, onClick }) {
             {sub}
           </p>
           <div className="mt-1.5">
-            <StatusPill severity={sev} overdueCount={group.overdueCount} upcomingCount={group.upcomingCount} />
+            <StatusPill severity={sev} overdueCount={group.overdueCount} currentCount={group.currentCount} upcomingCount={group.upcomingCount} />
           </div>
         </div>
         <div className="text-right shrink-0 flex flex-col items-end gap-0.5">
@@ -251,8 +261,16 @@ function MobileTenantCard({ group, onClick }) {
 // =====================================================================
 // Tenant row
 // =====================================================================
-function StatusPill({ severity, overdueCount, upcomingCount }) {
+function StatusPill({ severity, overdueCount, currentCount, upcomingCount }) {
   if (severity === 'ok') {
+    if (currentCount > 0) {
+      return (
+        <span className="inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-md bg-amber-50 text-amber-700">
+          <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+          {currentCount === 1 ? 'Lopende maand open' : `${currentCount} lopende maanden`}
+        </span>
+      );
+    }
     if (upcomingCount > 0) {
       return (
         <span className="inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-md bg-blue-50 text-blue-700">
@@ -286,23 +304,94 @@ function MonthChip({ month, severity }) {
   );
 }
 
+// =====================================================================
+// Single invoice row used inside expanded TenantRow
+// `bucket`: 'overdue' | 'current' | 'future' — bepaalt de styling/badge.
+// =====================================================================
+function InvoiceRow({ inv, bucket, severity }) {
+  const isPartial = inv.status === 'partial' || (Number(inv.paid_amount || 0) > 0 && Number(inv.paid_amount || 0) < Number(inv.amount || 0) * 0.95);
+  const dotCls = bucket === 'future' ? 'bg-blue-500'
+    : bucket === 'current' ? 'bg-amber-500'
+    : isPartial ? 'bg-amber-500'
+    : severity === 'critical' ? 'bg-red-500'
+    : 'bg-orange-500';
+  return (
+    <div className="flex items-center justify-between gap-2 text-sm"
+      data-testid={`invoice-row-${inv.id}`}>
+      <div className="flex items-center gap-2.5 min-w-0 flex-1">
+        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dotCls}`} />
+        <span className="text-slate-700 capitalize truncate">{MONTHS_NL[inv.period_month - 1]} {inv.period_year}</span>
+        {bucket === 'future' && (
+          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 uppercase tracking-wider">Komt nog</span>
+        )}
+        {bucket === 'current' && (
+          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 uppercase tracking-wider">Lopende maand</span>
+        )}
+        {isPartial && (
+          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 uppercase tracking-wider"
+            title={`SRD ${Number(inv.paid_amount || 0).toLocaleString('nl-NL')} van SRD ${Number(inv.amount || 0).toLocaleString('nl-NL')} betaald`}>
+            Deels betaald
+          </span>
+        )}
+        {(inv.plans || []).map((pl) => {
+          const isDone = pl.status === 'completed' || pl.paid_installments >= pl.total_installments;
+          return (
+            <button key={pl.id} type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                try { window.dispatchEvent(new CustomEvent('go-tab', { detail: 'payment_plans' })); } catch { /* noop */ }
+              }}
+              data-testid={`invoice-plan-badge-${inv.id}-${pl.id}`}
+              title="Bekijk betalingsregeling"
+              className={`inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider transition hover:scale-105 ${
+                isDone ? 'bg-emerald-100 text-emerald-700' : 'bg-orange-100 text-orange-700'
+              }`}>
+              <Calendar className="w-2.5 h-2.5" />
+              Regeling {pl.paid_installments}/{pl.total_installments}
+            </button>
+          );
+        })}
+        <span className="text-[10px] text-slate-400 hidden sm:inline">· {inv.invoice_number}</span>
+      </div>
+      <div className="text-right shrink-0 whitespace-nowrap">
+        <span className={bucket === 'future' ? 'text-slate-500 font-semibold' : 'text-slate-700 font-semibold'}>
+          {fmtMoney(Number(inv.paid_amount) > 0 ? inv.remaining_amount : inv.amount, inv.currency)}
+        </span>
+      </div>
+      {/* Snelbetaal-knop alleen voor achterstand + lopende maand, NIET voor vooruit gefactureerd */}
+      {bucket !== 'future' && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            try { window.dispatchEvent(new CustomEvent('quick-pay-open', { detail: { invoice: inv } })); } catch { /* noop */ }
+            try { window.dispatchEvent(new CustomEvent('go-tab', { detail: 'payments' })); } catch { /* noop */ }
+          }}
+          data-testid={`invoice-pay-btn-${inv.id}`}
+          title="Registreer betaling"
+          className="shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-full bg-emerald-500 hover:bg-emerald-600 text-white shadow-sm active:scale-95 transition"
+        >
+          <Check className="w-3.5 h-3.5" strokeWidth={3} />
+        </button>
+      )}
+    </div>
+  );
+}
+
 function TenantRow({ group, expanded, onToggle, onReminder, tenants }) {
   const sev = group.severity;
-  const _now = new Date();
-  const curY = _now.getFullYear();
-  const curM = _now.getMonth() + 1;
   const left = sev === 'critical' ? 'border-l-red-500'
     : sev === 'late' ? 'border-l-orange-500'
+    : group.currentCount > 0 ? 'border-l-amber-400'
     : group.upcomingCount > 0 ? 'border-l-blue-400'
     : 'border-l-emerald-500';
   const amtCls = sev === 'critical' ? 'text-red-600'
     : sev === 'late' ? 'text-orange-600'
+    : group.currentCount > 0 ? 'text-amber-600'
     : group.upcomingCount > 0 ? 'text-blue-600'
     : 'text-slate-900';
   const avatar = avatarColor(group.tenant_name);
-  // Wanneer er achterstand is → toon achterstand-cijfers (mei was laatste,
-  // SRD 30k). Komende facturen (juni) worden apart in de uitgeklapte weergave
-  // getoond en NIET meegerekend in de hoofdregel.
+  // Hoofdregel toont alleen ECHTE achterstand. Lopende maand + vooruit
+  // gefactureerd staan apart met eigen subtotaal in de uitklap.
   const showOverdueStats = sev !== 'ok' && group.overdueCount > 0;
   const last = showOverdueStats ? group.lastOverdue : group.lastOpen;
   const displayTotal = showOverdueStats ? group.totalOverdue : group.totalOpen;
@@ -332,13 +421,13 @@ function TenantRow({ group, expanded, onToggle, onReminder, tenants }) {
             </p>
             {/* Mobiel: status pill onder de naam (geen aparte Open maanden kolom op mobiel) */}
             <div className="mt-1 md:hidden">
-              <StatusPill severity={sev} overdueCount={group.overdueCount} upcomingCount={group.upcomingCount} />
+              <StatusPill severity={sev} overdueCount={group.overdueCount} currentCount={group.currentCount} upcomingCount={group.upcomingCount} />
             </div>
           </div>
 
           {/* Open maanden kolom — alleen status pill, details verschijnen bij uitklappen */}
           <div className="hidden md:flex items-center">
-            <StatusPill severity={sev} overdueCount={group.overdueCount} upcomingCount={group.upcomingCount} />
+            <StatusPill severity={sev} overdueCount={group.overdueCount} currentCount={group.currentCount} upcomingCount={group.upcomingCount} />
           </div>
 
           {/* Laatste periode — desktop only, compact */}
@@ -388,132 +477,95 @@ function TenantRow({ group, expanded, onToggle, onReminder, tenants }) {
               : 'bg-blue-50'
           }`}>
             <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-4">
-              {/* LEFT — list of open months: split achterstand + komende */}
+              {/* LEFT — Drie buckets: Achterstand, Huidige maand, Vooruit gefactureerd */}
               <div>
-                <p className={`text-sm font-bold mb-3 ${
-                  sev === 'critical' ? 'text-red-700'
-                    : sev === 'late' ? 'text-orange-700'
-                    : 'text-blue-700'
-                }`}>
-                  {sev === 'ok'
-                    ? `Komende facturen (${group.upcomingCount})`
-                    : `Openstaande maanden (${group.overdueCount})`}
-                </p>
-                <div className="space-y-1.5">
-                  {(sev === 'ok' ? group.upcoming : group.overdue).map((inv) => {
-                    const isOverdue = (inv.period_year < curY) || (inv.period_year === curY && inv.period_month <= curM);
-                    const isPartial = inv.status === 'partial' || (Number(inv.paid_amount || 0) > 0 && Number(inv.paid_amount || 0) < Number(inv.amount || 0) * 0.95);
-                    return (
-                    <div key={inv.id} className="flex items-center justify-between gap-2 text-sm"
-                      data-testid={`invoice-row-${inv.id}`}>
-                      <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                          !isOverdue ? 'bg-blue-500'
-                            : isPartial ? 'bg-amber-500'
-                            : sev === 'critical' ? 'bg-red-500'
-                            : 'bg-orange-500'
-                        }`} />
-                        <span className="text-slate-700 capitalize truncate">{MONTHS_NL[inv.period_month - 1]} {inv.period_year}</span>
-                        {!isOverdue && (
-                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 uppercase tracking-wider">Komt nog</span>
-                        )}
-                        {isPartial && (
-                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 uppercase tracking-wider"
-                            title={`SRD ${Number(inv.paid_amount || 0).toLocaleString('nl-NL')} van SRD ${Number(inv.amount || 0).toLocaleString('nl-NL')} betaald`}>
-                            Deels betaald
-                          </span>
-                        )}
-                        {(inv.plans || []).map((pl) => {
-                          const isDone = pl.status === 'completed' || pl.paid_installments >= pl.total_installments;
-                          return (
-                            <button key={pl.id} type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                try { window.dispatchEvent(new CustomEvent('go-tab', { detail: 'payment_plans' })); } catch { /* noop */ }
-                              }}
-                              data-testid={`invoice-plan-badge-${inv.id}-${pl.id}`}
-                              title="Bekijk betalingsregeling"
-                              className={`inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider transition hover:scale-105 ${
-                                isDone ? 'bg-emerald-100 text-emerald-700' : 'bg-orange-100 text-orange-700'
-                              }`}>
-                              <Calendar className="w-2.5 h-2.5" />
-                              Regeling {pl.paid_installments}/{pl.total_installments}
-                            </button>
-                          );
-                        })}
-                        <span className="text-[10px] text-slate-400 hidden sm:inline">· {inv.invoice_number}</span>
-                      </div>
-                      <div className="text-right shrink-0 whitespace-nowrap">
-                        <span className="text-slate-700 font-semibold">
-                          {fmtMoney(Number(inv.paid_amount) > 0 ? inv.remaining_amount : inv.amount, inv.currency)}
-                        </span>
-                      </div>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          // Open de payment-form direct met deze factuur vooringevuld.
-                          try {
-                            window.dispatchEvent(new CustomEvent('quick-pay-open', { detail: { invoice: inv } }));
-                          } catch { /* noop */ }
-                          try { window.dispatchEvent(new CustomEvent('go-tab', { detail: 'payments' })); } catch { /* noop */ }
-                        }}
-                        data-testid={`invoice-pay-btn-${inv.id}`}
-                        title="Registreer betaling"
-                        className="shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-full bg-emerald-500 hover:bg-emerald-600 text-white shadow-sm active:scale-95 transition"
-                      >
-                        <Check className="w-3.5 h-3.5" strokeWidth={3} />
-                      </button>
+                {/* SECTION 1 — Achterstallige huur */}
+                {group.overdueCount > 0 && (
+                  <>
+                    <p className={`text-sm font-bold mb-3 ${
+                      sev === 'critical' ? 'text-red-700' : 'text-orange-700'
+                    }`}>
+                      Achterstallige huur ({group.overdueCount}) · {fmtMoney(group.totalOverdue, group.currency)}
+                    </p>
+                    <div className="space-y-1.5">
+                      {group.overdue.map((inv) => (
+                        <InvoiceRow key={inv.id} inv={inv} bucket="overdue" severity={sev} />
+                      ))}
                     </div>
-                    );
-                  })}
-                </div>
-                {/* Komende facturen (niet meegerekend in achterstand-totaal) —
-                    alleen tonen wanneer er achterstand IS én er ook komende
-                    facturen zijn. Bij sev === 'ok' staan de komende facturen
-                    al in de hoofd-lijst hierboven. */}
-                {sev !== 'ok' && group.upcomingCount > 0 && (
-                  <div className="mt-4 pt-3 border-t border-slate-200/70">
+                  </>
+                )}
+
+                {/* SECTION 2 — Openstaande huidige maand */}
+                {group.currentCount > 0 && (
+                  <div className={group.overdueCount > 0 ? 'mt-4 pt-3 border-t border-slate-200/70' : ''}>
+                    <p className="text-xs font-bold mb-2 text-amber-700">
+                      Openstaande huidige maand ({group.currentCount}) · {fmtMoney(group.totalCurrent, group.currency)}
+                    </p>
+                    <div className="space-y-1.5">
+                      {group.current.map((inv) => (
+                        <InvoiceRow key={inv.id} inv={inv} bucket="current" severity={sev} />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* SECTION 3 — Vooruit gefactureerd */}
+                {group.upcomingCount > 0 && (
+                  <div className={(group.overdueCount + group.currentCount) > 0 ? 'mt-4 pt-3 border-t border-slate-200/70' : ''}>
                     <p className="text-xs font-bold mb-2 text-blue-700">
-                      Komende facturen ({group.upcomingCount}) · {fmtMoney(group.totalUpcoming, group.currency)}
+                      Vooruit gefactureerd ({group.upcomingCount}) · {fmtMoney(group.totalUpcoming, group.currency)}
                     </p>
                     <div className="space-y-1.5">
                       {group.upcoming.map((inv) => (
-                        <div key={inv.id} className="flex items-center justify-between gap-2 text-sm"
-                          data-testid={`invoice-row-${inv.id}`}>
-                          <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                            <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-blue-500" />
-                            <span className="text-slate-700 capitalize truncate">{MONTHS_NL[inv.period_month - 1]} {inv.period_year}</span>
-                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 uppercase tracking-wider">Komt nog</span>
-                            <span className="text-[10px] text-slate-400 hidden sm:inline">· {inv.invoice_number}</span>
-                          </div>
-                          <div className="text-right shrink-0 whitespace-nowrap">
-                            <span className="text-slate-500 font-semibold">
-                              {fmtMoney(Number(inv.paid_amount) > 0 ? inv.remaining_amount : inv.amount, inv.currency)}
-                            </span>
-                          </div>
-                        </div>
+                        <InvoiceRow key={inv.id} inv={inv} bucket="future" severity={sev} />
                       ))}
                     </div>
                   </div>
                 )}
               </div>
 
-              {/* RIGHT — totaal (apart blok met dunne separator op desktop) */}
-              <div className={`md:pl-4 md:min-w-[160px] flex md:flex-col justify-between md:justify-center items-end md:items-end md:border-l ${
+              {/* RIGHT — totaal-stack: Achterstand (groot) + sub-totalen */}
+              <div className={`md:pl-4 md:min-w-[180px] flex md:flex-col gap-3 justify-between md:justify-center items-end md:items-end md:border-l ${
                 sev === 'critical' ? 'md:border-red-200'
                   : sev === 'late' ? 'md:border-orange-200'
+                  : group.currentCount > 0 ? 'md:border-amber-200'
                   : 'md:border-blue-200'
               }`}>
-                <p className="text-xs font-bold text-slate-500">
-                  {sev === 'ok' ? 'Totaal komend' : 'Totaal achterstand'}
-                </p>
-                <p className={`text-xl sm:text-2xl font-black tracking-tight ${
-                  sev === 'critical' ? 'text-red-600'
-                    : sev === 'late' ? 'text-orange-600'
-                    : 'text-blue-600'
-                }`}>
-                  {fmtMoney(displayTotal, group.currency)}
-                </p>
+                {group.overdueCount > 0 ? (
+                  <div className="text-right">
+                    <p className="text-xs font-bold text-slate-500">Totaal achterstand</p>
+                    <p className={`text-xl sm:text-2xl font-black tracking-tight ${
+                      sev === 'critical' ? 'text-red-600' : 'text-orange-600'
+                    }`}>
+                      {fmtMoney(group.totalOverdue, group.currency)}
+                    </p>
+                  </div>
+                ) : group.currentCount > 0 ? (
+                  <div className="text-right">
+                    <p className="text-xs font-bold text-slate-500">Huidige maand open</p>
+                    <p className="text-xl sm:text-2xl font-black tracking-tight text-amber-600">
+                      {fmtMoney(group.totalCurrent, group.currency)}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="text-right">
+                    <p className="text-xs font-bold text-slate-500">Vooruit gefactureerd</p>
+                    <p className="text-xl sm:text-2xl font-black tracking-tight text-blue-600">
+                      {fmtMoney(group.totalUpcoming, group.currency)}
+                    </p>
+                  </div>
+                )}
+                {/* Sub-totalen voor de andere buckets — alleen tonen wanneer relevant */}
+                {(group.overdueCount > 0 && group.currentCount > 0) && (
+                  <p className="text-[10px] text-amber-600 font-semibold">
+                    + huidige maand {fmtMoney(group.totalCurrent, group.currency)}
+                  </p>
+                )}
+                {((group.overdueCount > 0 || group.currentCount > 0) && group.upcomingCount > 0) && (
+                  <p className="text-[10px] text-blue-500 font-semibold">
+                    + vooruit {fmtMoney(group.totalUpcoming, group.currency)}
+                  </p>
+                )}
               </div>
             </div>
 
