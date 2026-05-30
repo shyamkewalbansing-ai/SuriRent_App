@@ -28,6 +28,7 @@ import json
 
 from pdf_gen import (
     receipt_pdf, contract_pdf, invoice_pdf, deposit_refund_pdf, payslip_pdf,
+    payment_plan_pdf,
     onboarding_pdf, _make_qr_png,
 )
 from landing_content import (
@@ -9182,7 +9183,47 @@ async def kiosk_quick_payment_plan(body: KioskQuickPlanIn, request: Request):
         "num_installments": n,
         "first_due_date": installments_docs[0]["due_date"],
         "monthly_amount": installments_docs[0]["amount"],
+        "installment_amount": installments_docs[0]["amount"],
+        "pdf_url": f"/api/kiosk/payment-plans/{plan_id}/pdf",
     }
+
+
+@app.get("/api/kiosk/payment-plans/{plan_id}/pdf")
+async def kiosk_payment_plan_pdf(plan_id: str):
+    """Genereert PDF-bonnetje voor een betalingsregeling. Publiek toegankelijk
+    via plan_id (zoals receipts) zodat huurder de link kan delen / opslaan."""
+    plan = await db.payment_plans.find_one({"id": plan_id}, {"_id": 0})
+    if not plan:
+        raise HTTPException(status_code=404, detail="Regeling niet gevonden")
+    insts = await db.payment_plan_installments.find(
+        {"plan_id": plan_id}, {"_id": 0}
+    ).sort("sequence", 1).to_list(50)
+    plan["installments"] = insts
+    plan["num_installments"] = len(insts)
+    plan["first_due_date"] = insts[0]["due_date"] if insts else ""
+    plan["installment_amount"] = insts[0]["amount"] if insts else 0
+    # Enrich met huurder + appartement + bedrijfsnaam
+    if plan.get("tenant_id"):
+        t = await db.tenants.find_one({"id": plan["tenant_id"]}, {"_id": 0})
+        if t:
+            plan["tenant_name"] = plan.get("tenant_name") or t.get("name", "")
+            apt = None
+            if t.get("apartment_id"):
+                apt = await db.apartments.find_one({"id": t["apartment_id"]}, {"_id": 0})
+            if apt:
+                plan["apartment_number"] = apt.get("number", "")
+    if plan.get("company_id"):
+        c = await db.companies.find_one({"id": plan["company_id"]}, {"_id": 0})
+        if c:
+            plan["company_name"] = c.get("name", "")
+            plan["company_address"] = c.get("address", "")
+    plan["plan_number"] = f"BR{plan.get('created_at', '')[:4]}-{plan_id[:6].upper()}"
+    pdf_bytes = payment_plan_pdf(plan)
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="regeling_{plan_id[:8]}.pdf"'},
+    )
 
 
 

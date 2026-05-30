@@ -465,6 +465,94 @@ def _build_a6(doc_elements):
 
 
 # ============== Receipt PDF (KWITANTIE-look) ==============
+def payment_plan_pdf(plan: dict) -> bytes:
+    """Bonnetje voor een betalingsregeling die zojuist is aangemaakt in de Kiosk.
+    Toont totaal, aantal termijnen, per-termijn-bedrag en tabel met alle
+    vervaldatums + bedragen. Huurder krijgt dit mee voor administratie.
+    """
+    el = []
+    accent = colors.HexColor("#FF5C00")
+    _brand_header(el, plan)
+    _brand_title(el, "Betalingsregeling", plan.get("plan_number") or plan.get("id", "")[:8].upper())
+
+    rows = [
+        ("Datum afspraak", _fmt_date_nl(plan.get("created_at"))),
+        ("Huurder", plan.get("tenant_name", "")),
+        ("Appartement", plan.get("apartment_number") or "—"),
+        ("Aantal termijnen", f"{plan.get('num_installments', 0)}× termijn"),
+        ("Eerste vervaldatum", _fmt_date_nl(plan.get("first_due_date") or "")),
+    ]
+    if plan.get("notes"):
+        rows.append(("Betreft", plan["notes"]))
+    _two_col_block(el, rows, label_col_mm=48, gap_after=14, accent=accent)
+
+    total = float(plan.get("total_amount") or 0)
+    currency = plan.get("currency") or "SRD"
+    _amount_block(el, "Totaal regeling", total, currency, accent=accent)
+    el.append(Spacer(1, 6))
+
+    n = int(plan.get("num_installments") or 0)
+    per = float(plan.get("installment_amount") or (total / n if n else 0))
+    _status_row(el, "Per termijn", _fmt_money(per, currency), is_paid=False, accent=accent)
+
+    # Termijnen-tabel
+    insts = plan.get("installments") or []
+    if insts:
+        s = _styles()
+        el.append(Spacer(1, 12))
+        el.append(Paragraph("<b>Termijn-overzicht</b>", s["Body"]))
+        el.append(Spacer(1, 4))
+        data = [["#", "Vervaldatum", "Bedrag", "Status"]]
+        for inst in insts:
+            data.append([
+                str(inst.get("sequence", "")),
+                _fmt_date_nl(inst.get("due_date", "")),
+                _fmt_money(float(inst.get("amount") or 0), currency),
+                (inst.get("status") or "open").capitalize(),
+            ])
+        t = Table(data, colWidths=[12 * mm, 50 * mm, 40 * mm, 30 * mm])
+        t.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), accent),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTSIZE", (0, 0), (-1, -1), 9),
+            ("ALIGN", (2, 0), (2, -1), "RIGHT"),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, LIGHT]),
+            ("GRID", (0, 0), (-1, -1), 0.25, HAIRLINE),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+            ("TOPPADDING", (0, 0), (-1, -1), 5),
+        ]))
+        el.append(t)
+
+    # Footer note
+    s = _styles()
+    el.append(Spacer(1, 14))
+    el.append(Paragraph(
+        "<b>Belangrijk:</b> de huurder verbindt zich tot betaling van bovenstaande "
+        "termijnen op de aangegeven vervaldatums. Betaling kan via de Kiosk, "
+        "Mope, contant of bankoverschrijving. Bij niet-nakoming behoudt de "
+        "verhuurder het recht de regeling te annuleren.",
+        s["Body"],
+    ))
+
+    _signature_block(
+        el,
+        received_by=plan.get("tenant_name") or "Huurder",
+        approved_by=plan.get("company_name") or "",
+        company_name=plan.get("company_name") or "",
+        signature_data=plan.get("signature_data") or "",
+    )
+
+    _verification_footer(
+        el,
+        plan.get("plan_number") or plan.get("id", "")[:8].upper(),
+        plan.get("company_name") or "",
+        plan.get("company_address") or "",
+        total, currency, plan.get("tenant_id", ""),
+    )
+    return _build(el)
+
+
 def receipt_pdf(payment: dict) -> bytes:
     """Genereert de gestilte SuriRent kwitantie met grijze achtergrond,
     centrale titel, two-col details, groot bedrag, status + signature blok,

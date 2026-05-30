@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Plus, X, Check, Loader2, FileText, Wand2, Mail, Search,
   SlidersHorizontal, CalendarDays, CheckCircle2, Info, ChevronRight,
-  ChevronDown, MessageCircle, Send, SkipForward, Users, Calendar,
+  ChevronDown, MessageCircle, Send, SkipForward, Users, Calendar, Trash2,
 } from 'lucide-react';
 import { api, formatError, fmtMoney, MONTHS_NL } from '../../../lib/api';
 import { useAutoRefresh } from '../../../lib/auto-refresh';
@@ -378,6 +378,25 @@ function InvoiceRow({ inv, bucket, severity }) {
           className="shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-full bg-emerald-500 hover:bg-emerald-600 text-white shadow-sm active:scale-95 transition"
         >
           <Check className="w-3.5 h-3.5" strokeWidth={3} />
+        </button>
+      )}
+      {/* Verwijder-knop: alleen voor onbetaalde HUIDIGE maand en VOORUIT gefactureerde
+          facturen. Achterstand kan NIET verwijderd worden — moet eerst betaald
+          of via een credit-actie afgeschreven worden. Partial-paid facturen
+          ook niet (anders verlies van betaling-spoor). */}
+      {(bucket === 'future' || bucket === 'current') && !isPartial && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            const periodLabel = `${MONTHS_NL[inv.period_month - 1]} ${inv.period_year}`;
+            if (!window.confirm(`Factuur ${inv.invoice_number} (${periodLabel}) definitief verwijderen?\n\nDit kan niet ongedaan worden gemaakt.`)) return;
+            window.dispatchEvent(new CustomEvent('invoice-delete', { detail: { invoice: inv } }));
+          }}
+          data-testid={`invoice-delete-btn-${inv.id}`}
+          title="Factuur verwijderen"
+          className="shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-full bg-red-100 hover:bg-red-500 hover:text-white text-red-500 active:scale-95 transition"
+        >
+          <Trash2 className="w-3.5 h-3.5" />
         </button>
       )}
     </div>
@@ -872,6 +891,23 @@ export default function Invoices() {
   useEffect(() => { load(); }, [load]);
   // Stille polling — geen spinner / scroll-reset tijdens auto-refresh.
   useAutoRefresh(() => load({ silent: true }), { interval: 10000, enabled: !creating && !reminding && !bulkOpen });
+
+  // Luister naar `invoice-delete` event vanaf <InvoiceRow> en voer DELETE uit.
+  useEffect(() => {
+    const handler = async (ev) => {
+      const inv = ev.detail?.invoice;
+      if (!inv?.id) return;
+      try {
+        await api.delete(`/invoices/${inv.id}`);
+        setToast({ type: 'success', msg: `Factuur ${inv.invoice_number} verwijderd` });
+        load({ silent: true });
+      } catch (e) {
+        setToast({ type: 'error', msg: formatError(e) || 'Kon factuur niet verwijderen' });
+      }
+    };
+    window.addEventListener('invoice-delete', handler);
+    return () => window.removeEventListener('invoice-delete', handler);
+  }, [load]);
 
   const generateMonth = async () => {
     if (!window.confirm(`Maandfacturen voor ${MONTHS_NL[today.getMonth()]} ${today.getFullYear()} aanmaken voor alle bezette appartementen?`)) return;

@@ -1239,7 +1239,10 @@ function ArrangePlanModal({ tenantId, currency, totalAmount, invoiceIds, monthsL
 // =====================================================================
 function PlanArrangedReceipt({ plan, currency, tenant, onClose }) {
   const fmt = (v) => fmtMoney(v, currency);
-  const per = plan.installment_amount || (plan.total_amount / plan.num_installments);
+  const per = plan.installment_amount || plan.monthly_amount || (plan.total_amount / plan.num_installments);
+  const pdfUrl = plan.pdf_url
+    ? `${process.env.REACT_APP_BACKEND_URL}${plan.pdf_url}`
+    : `${process.env.REACT_APP_BACKEND_URL}/api/kiosk/payment-plans/${plan.id}/pdf`;
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
       data-testid="plan-arranged-receipt">
@@ -1270,10 +1273,15 @@ function PlanArrangedReceipt({ plan, currency, tenant, onClose }) {
             Beheer ontvangt een melding. Termijnen verschijnen automatisch bij het volgende kiosk-bezoek.
           </div>
         </div>
-        <div className="px-6 py-4 bg-slate-50 border-t border-slate-100">
+        <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 grid grid-cols-2 gap-2">
+          <a href={pdfUrl} target="_blank" rel="noreferrer"
+            data-testid="plan-arranged-pdf"
+            className="py-3 rounded-lg bg-white border-2 border-orange-300 text-orange-600 font-bold text-sm hover:bg-orange-50 flex items-center justify-center gap-2">
+            <Download className="w-4 h-4" /> PDF
+          </a>
           <button onClick={onClose}
             data-testid="plan-arranged-close"
-            className="w-full py-3 rounded-lg bg-emerald-500 text-white font-bold text-sm hover:bg-emerald-600">
+            className="py-3 rounded-lg bg-emerald-500 text-white font-bold text-sm hover:bg-emerald-600">
             Sluiten
           </button>
         </div>
