@@ -3136,23 +3136,50 @@ async def seed_company_admin(cid: str, body: RegisterIn, user=Depends(require_ro
 
 # Kiosk PIN
 @api.post("/auth/admin-to-kiosk")
-async def admin_open_kiosk(response: Response, user=Depends(require_role("admin", "superadmin"))):
+async def admin_open_kiosk(
+    request: Request,
+    response: Response,
+    user=Depends(require_role("admin", "superadmin")),
+):
     """Laat een ingelogde admin/superadmin direct een kiosk-token verkrijgen
     voor zijn huidige actieve bedrijf — zonder dat er een PIN ingevoerd hoeft
     te worden. Gebruikt door de 'Open Kiosk' knop in het Beheer-dashboard.
     Het admin-token blijft behouden zodat de admin terug kan naar Beheer.
+
+    Fallback-keten voor het bepalen van het bedrijf:
+      1. `company_id` uit de request body
+      2. `x-active-company` header (frontend axios interceptor)
+      3. `user.company_id` (gewone admin → eigen bedrijf)
+      4. Voor superadmin zonder selectie: eerste bedrijf in het systeem
     """
-    cid = company_id_of(user)
+    cid: Optional[str] = None
+    try:
+        body = await request.json()
+    except Exception:  # noqa: BLE001
+        body = {}
+    if isinstance(body, dict) and body.get("company_id"):
+        cid = str(body["company_id"])
     if not cid:
-        raise HTTPException(status_code=400, detail="Geen actief bedrijf ingesteld")
+        cid = company_id_of(user)
+    if not cid and user.get("role") == "superadmin":
+        c0 = await db.companies.find_one({}, {"_id": 0, "id": 1})
+        if c0:
+            cid = c0["id"]
+    if not cid:
+        raise HTTPException(
+            status_code=400,
+            detail="Geen actief bedrijf ingesteld. Selecteer eerst een bedrijf in de menubalk.",
+        )
     c = await db.companies.find_one({"id": cid}, {"_id": 0})
+    if not c:
+        raise HTTPException(status_code=404, detail="Bedrijf niet gevonden")
     token = create_token({
         "sub": "kiosk", "type": "kiosk", "company_id": cid,
     }, KIOSK_TOKEN_MIN)
     _set_access_cookie(response, token, name="kiosk_token", minutes=KIOSK_TOKEN_MIN)
     return {
         "token": token,
-        "company": c and {k: c.get(k) for k in ("id", "slug", "name")},
+        "company": {k: c.get(k) for k in ("id", "slug", "name")},
     }
 
 

@@ -294,7 +294,8 @@ function MobileSheet({ open, onClose, active, onChange, onLogout, user, tabs, ac
                 // Vraag een kiosk-token aan via het admin-to-kiosk endpoint.
                 // Admin behoudt zijn admin_token, krijgt apart kiosk_token erbij.
                 try {
-                  const { data } = await api.post('/auth/admin-to-kiosk', {});
+                  const activeCid = localStorage.getItem('active_company_id') || undefined;
+                  const { data } = await api.post('/auth/admin-to-kiosk', activeCid ? { company_id: activeCid } : {});
                   if (data?.token) localStorage.setItem('kiosk_token', data.token);
                   if (data?.company) localStorage.setItem('kiosk_company', JSON.stringify(data.company));
                 } catch (e) {
@@ -744,7 +745,8 @@ function Overview() {
         <button onClick={async () => {
             try { localStorage.setItem('pwa_preferred_role', 'kiosk'); } catch { /* noop */ }
             try {
-              const { data } = await api.post('/auth/admin-to-kiosk', {});
+              const activeCid = localStorage.getItem('active_company_id') || undefined;
+              const { data } = await api.post('/auth/admin-to-kiosk', activeCid ? { company_id: activeCid } : {});
               if (data?.token) localStorage.setItem('kiosk_token', data.token);
               if (data?.company) localStorage.setItem('kiosk_company', JSON.stringify(data.company));
             } catch (e) {
