@@ -88,6 +88,13 @@ function groupByTenant(invoices) {
     g.totalOverdue = sumOf(g.overdue);
     g.totalCurrent = sumOf(g.current);
     g.totalUpcoming = sumOf(g.upcoming);
+    // "Echt openstaand" = achterstand + huidige maand. Vooruit gefactureerd
+    // is toekomst en hoort NIET in dit bedrag of in de telling.
+    g.totalDue = g.totalOverdue + g.totalCurrent;
+    g.dueCount = g.overdueCount + g.currentCount;
+    g.dueMonths = [...g.overdue, ...g.current]
+      .sort((a, b) => (a.period_year - b.period_year) || (a.period_month - b.period_month));
+    g.lastDue = g.dueMonths[g.dueMonths.length - 1];  // mei in plaats van apr
     // Severity baseert op échte achterstand. Huidige maand telt NIET als
     // achterstand zolang de grace-window niet verstreken is.
     g.severity = g.overdueCount >= 2 ? 'critical' : g.overdueCount === 1 ? 'late' : 'ok';
@@ -390,12 +397,12 @@ function TenantRow({ group, expanded, onToggle, onReminder, tenants }) {
     : group.upcomingCount > 0 ? 'text-blue-600'
     : 'text-slate-900';
   const avatar = avatarColor(group.tenant_name);
-  // Hoofdregel toont alleen ECHTE achterstand. Lopende maand + vooruit
-  // gefactureerd staan apart met eigen subtotaal in de uitklap.
-  const showOverdueStats = sev !== 'ok' && group.overdueCount > 0;
-  const last = showOverdueStats ? group.lastOverdue : group.lastOpen;
-  const displayTotal = showOverdueStats ? group.totalOverdue : group.totalOpen;
-  const displayCount = showOverdueStats ? group.overdueCount : group.openCount;
+  // Hoofdregel toont "Totaal openstaand" = achterstand + huidige maand
+  // (vooruit-gefactureerd telt NIET mee). "Laatste" = meest recente open
+  // factuur exclusief vooruit (dus mei i.p.v. juni).
+  const last = group.lastDue || group.lastOverdue || group.lastOpen;
+  const displayTotal = group.totalDue;
+  const displayCount = group.dueCount;
 
   return (
     <div className={`bg-white rounded-2xl border border-orange-100 border-l-4 ${left} overflow-hidden transition`}
