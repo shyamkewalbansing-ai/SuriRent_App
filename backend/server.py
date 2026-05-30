@@ -9065,15 +9065,24 @@ async def kiosk_pay_installment(
 
 
 class KioskQuickPlanIn(BaseModel):
-    """Snelle betalingsregeling vanuit de kiosk-flow nadat een partial
-    betaling is geregistreerd. Bedrijf-context komt van de bestaande
-    kiosk-sessie (niet van de gebruiker — kiosk heeft geen user)."""
+    """Snelle betalingsregeling vanuit de kiosk-flow. Twee scenarios:
+    1. NA een partial-payment → backend geeft auto-suggestie voor restbedrag
+       (single invoice_id, total_amount = restbedrag)
+    2. PROACTIEF — huurder kan huidige maand of achterstand niet betalen en
+       maakt regeling-afspraak vóór betaling. invoice_ids = lijst van
+       geselecteerde facturen, total_amount = som van outstanding.
+
+    Bedrijf-context komt van de bestaande kiosk-sessie (niet van de
+    gebruiker — kiosk heeft geen user).
+    """
     tenant_id: str
-    invoice_id: Optional[str] = None
+    invoice_id: Optional[str] = None  # legacy: enkele factuur
+    invoice_ids: Optional[List[str]] = None  # nieuw: multi-factuur regeling
     total_amount: float = Field(gt=0)
     num_installments: int = Field(ge=2, le=12)
     currency: Literal["SRD", "USD", "EUR"] = "SRD"
     start_date: Optional[str] = None  # yyyy-mm-dd, default = vandaag + 30 dagen
+    notes: Optional[str] = None
 
 
 @app.post("/api/kiosk/payment-plans/quick")
@@ -9139,10 +9148,13 @@ async def kiosk_quick_payment_plan(body: KioskQuickPlanIn, request: Request):
         "company_id": cid,
         "tenant_id": body.tenant_id,
         "tenant_name": tenant.get("name") or "",
-        "invoice_ids": [body.invoice_id] if body.invoice_id else [],
+        "invoice_ids": (
+            body.invoice_ids if body.invoice_ids
+            else ([body.invoice_id] if body.invoice_id else [])
+        ),
         "total_amount": round(body.total_amount, 2),
         "currency": body.currency,
-        "notes": "Automatisch aangemaakt vanuit kiosk na gedeeltelijke betaling",
+        "notes": body.notes or "Aangemaakt vanuit kiosk",
         "status": "active",
         "created_by": "kiosk",
         "created_at": now_iso,

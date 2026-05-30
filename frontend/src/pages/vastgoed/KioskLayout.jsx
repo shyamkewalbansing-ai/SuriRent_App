@@ -595,6 +595,8 @@ function PaySelect({ overview, onBack, onConfirm }) {
   const [custom, setCustom] = useState('');
   const [showMobileKeypad, setShowMobileKeypad] = useState(false);
   const [planInstallments, setPlanInstallments] = useState([]);
+  const [planModalOpen, setPlanModalOpen] = useState(false);
+  const [planSuccess, setPlanSuccess] = useState(null);  // {id, num_installments, total_amount}
 
   useEffect(() => {
     api.get(`/kiosk/tenants/${tenant.id}/payment-plans`)
@@ -1038,8 +1040,19 @@ function PaySelect({ overview, onBack, onConfirm }) {
 
           <button onClick={handleNext} disabled={!canProceed} data-testid="payment-next-btn"
             className="w-full bg-orange-500 hover:bg-orange-600 disabled:bg-slate-200 disabled:text-slate-400 text-white rounded-xl flex items-center justify-center gap-2 transition active:scale-[0.98] py-3 sm:py-3.5 mt-1.5 text-sm sm:text-base font-bold">
-            <span>Volgende — {fmt(activeAmount)}</span> <ArrowRight className="w-5 h-5" />
+            <span>Direct betalen — {fmt(activeAmount)}</span> <ArrowRight className="w-5 h-5" />
           </button>
+
+          {/* Regeling-afspraak knop: alleen tonen wanneer er échte facturen
+              geselecteerd zijn (achterstand / huidige / vooruit). Werkt NIET
+              voor vooruitbetaling-modus. */}
+          {(selectedInvItems.length > 0 || selectedSynCurrent > 0) && !isAdvance && (
+            <button onClick={() => setPlanModalOpen(true)}
+              data-testid="payment-plan-arrange-btn"
+              className="w-full bg-white border-2 border-orange-300 hover:border-orange-500 text-orange-600 hover:bg-orange-50 rounded-xl flex items-center justify-center gap-2 transition active:scale-[0.98] py-2.5 mt-1.5 text-sm font-bold">
+              <Calendar className="w-4 h-4" /> <span>Regeling afspreken — {fmt(selectedInvTotal + selectedSynCurrent)}</span>
+            </button>
+          )}
 
           {/* Mobile keypad toggle */}
           <div className="md:hidden mt-1.5">
@@ -1089,6 +1102,180 @@ function PaySelect({ overview, onBack, onConfirm }) {
                 }`}>{k}</button>
             ))}
           </div>
+        </div>
+      </div>
+
+      {planModalOpen && !planSuccess && (
+        <ArrangePlanModal
+          tenantId={tenant.id}
+          currency={cur}
+          totalAmount={selectedInvTotal + selectedSynCurrent}
+          invoiceIds={selectedInvItems.map((x) => x.id).filter((id) => id && id !== '__syn_current__')}
+          monthsLabel={selectedInvItems
+            .map((inv) => inv.period_month ? `${MONTHS_NL[inv.period_month - 1]} ${inv.period_year}` : null)
+            .filter(Boolean).join(', ') + (selectedSynCurrent > 0 ? ' (huidige maand)' : '')}
+          onClose={() => setPlanModalOpen(false)}
+          onArranged={(result) => {
+            setPlanSuccess(result);
+            setPlanModalOpen(false);
+          }}
+        />
+      )}
+      {planSuccess && (
+        <PlanArrangedReceipt
+          plan={planSuccess}
+          currency={cur}
+          tenant={tenant}
+          onClose={() => { setPlanSuccess(null); onBack(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+// =====================================================================
+// Arrange Plan Modal — proactieve betalingsregeling vanuit PaySelect.
+// Toont 2/3/4/6/8 termijn-opties met live "per maand"-bedrag en stuurt
+// dit door naar POST /kiosk/payment-plans/quick met multi-invoice_ids.
+// =====================================================================
+function ArrangePlanModal({ tenantId, currency, totalAmount, invoiceIds, monthsLabel, onClose, onArranged }) {
+  const [n, setN] = useState(3);
+  const [startDate, setStartDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 30);
+    return d.toISOString().slice(0, 10);
+  });
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const per = totalAmount / n;
+  const fmt = (v) => fmtMoney(v, currency);
+
+  const submit = async () => {
+    setBusy(true); setErr('');
+    try {
+      const body = {
+        tenant_id: tenantId,
+        invoice_ids: invoiceIds,
+        total_amount: Number(totalAmount.toFixed(2)),
+        num_installments: n,
+        currency,
+        start_date: startDate,
+        notes: `Regeling afgesproken voor: ${monthsLabel || 'huurfacturen'}`,
+      };
+      const { data } = await api.post('/kiosk/payment-plans/quick', body);
+      onArranged(data);
+    } catch (e) {
+      setErr(formatError(e) || 'Kon regeling niet aanmaken');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
+      data-testid="arrange-plan-modal" onClick={onClose}>
+      <div className="bg-white rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl"
+        onClick={(e) => e.stopPropagation()}>
+        <div className="px-6 py-4 bg-orange-500 text-white">
+          <p className="text-xs uppercase tracking-widest font-bold opacity-80">Betalingsregeling afspreken</p>
+          <p className="text-xl font-extrabold mt-1">{fmt(totalAmount)}</p>
+          {monthsLabel && <p className="text-xs opacity-80 mt-0.5">Voor: {monthsLabel}</p>}
+        </div>
+        <div className="p-6">
+          <p className="text-sm font-bold text-slate-700 mb-2">In hoeveel termijnen?</p>
+          <div className="grid grid-cols-5 gap-2 mb-4">
+            {[2, 3, 4, 6, 8].map((opt) => (
+              <button key={opt} onClick={() => setN(opt)}
+                data-testid={`arrange-plan-n-${opt}`}
+                className={`rounded-lg py-3 font-bold text-sm transition ${
+                  n === opt ? 'bg-orange-500 text-white ring-2 ring-orange-300'
+                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                }`}>
+                {opt}×
+              </button>
+            ))}
+          </div>
+
+          <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 mb-4">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-slate-700 font-semibold">Per maand</span>
+              <span className="font-extrabold text-orange-600">{fmt(per)}</span>
+            </div>
+            <div className="flex items-center justify-between text-xs text-slate-500 mt-1">
+              <span>{n} termijnen, maandelijks</span>
+              <span>Eerste op {startDate}</span>
+            </div>
+          </div>
+
+          <label className="block">
+            <span className="text-sm font-bold text-slate-700">Startdatum eerste termijn</span>
+            <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)}
+              data-testid="arrange-plan-start-date"
+              className="mt-1 w-full px-3 py-2 border-2 border-slate-200 rounded-lg text-sm font-medium" />
+          </label>
+
+          {err && <p className="text-xs text-red-600 mt-3 bg-red-50 border border-red-200 rounded-lg p-2">{err}</p>}
+        </div>
+        <div className="px-6 py-4 bg-slate-50 flex gap-2 border-t border-slate-100">
+          <button onClick={onClose} disabled={busy}
+            data-testid="arrange-plan-cancel"
+            className="flex-1 py-2.5 rounded-lg bg-white border-2 border-slate-200 text-slate-700 font-bold text-sm hover:bg-slate-100 disabled:opacity-50">
+            Annuleren
+          </button>
+          <button onClick={submit} disabled={busy}
+            data-testid="arrange-plan-confirm"
+            className="flex-[2] py-2.5 rounded-lg bg-orange-500 text-white font-bold text-sm hover:bg-orange-600 disabled:opacity-50 flex items-center justify-center gap-2">
+            {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+            Regeling bevestigen
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// =====================================================================
+// Plan Arranged Receipt — bevestiging na succesvolle regeling-creatie.
+// =====================================================================
+function PlanArrangedReceipt({ plan, currency, tenant, onClose }) {
+  const fmt = (v) => fmtMoney(v, currency);
+  const per = plan.installment_amount || (plan.total_amount / plan.num_installments);
+  return (
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
+      data-testid="plan-arranged-receipt">
+      <div className="bg-white rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl">
+        <div className="px-6 py-5 bg-emerald-500 text-white text-center">
+          <div className="w-14 h-14 rounded-full bg-white/20 mx-auto flex items-center justify-center mb-2">
+            <Check className="w-8 h-8 text-white" strokeWidth={3} />
+          </div>
+          <p className="text-xs uppercase tracking-widest font-bold opacity-90">Regeling aangemaakt</p>
+          <p className="text-2xl font-extrabold mt-1">{fmt(plan.total_amount)}</p>
+        </div>
+        <div className="p-6 space-y-3">
+          <div className="flex justify-between text-sm">
+            <span className="text-slate-500">Huurder</span>
+            <span className="font-bold">{tenant.name}</span>
+          </div>
+          <div className="flex justify-between text-sm">
+            <span className="text-slate-500">Termijnen</span>
+            <span className="font-bold">{plan.num_installments}× {fmt(per)}</span>
+          </div>
+          {plan.first_due_date && (
+            <div className="flex justify-between text-sm">
+              <span className="text-slate-500">Eerste vervaldatum</span>
+              <span className="font-bold">{plan.first_due_date}</span>
+            </div>
+          )}
+          <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-xs text-emerald-700">
+            Beheer ontvangt een melding. Termijnen verschijnen automatisch bij het volgende kiosk-bezoek.
+          </div>
+        </div>
+        <div className="px-6 py-4 bg-slate-50 border-t border-slate-100">
+          <button onClick={onClose}
+            data-testid="plan-arranged-close"
+            className="w-full py-3 rounded-lg bg-emerald-500 text-white font-bold text-sm hover:bg-emerald-600">
+            Sluiten
+          </button>
         </div>
       </div>
     </div>

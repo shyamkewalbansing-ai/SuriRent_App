@@ -1,0 +1,35 @@
+{
+  "summary": "Regression testing of 3-bucket invoice classification, multi-invoice quick payment plan, and partial payment flow. Backend tests: 9/9 passed. Frontend Kiosk verified: Financieel overzicht has NO Servicekosten row, totalDue includes current month huur, PaySelect shows section header 'OPENSTAANDE HUIDIGE MAAND' and excludes Servicekosten. Admin Facturen page renders KPI cards correctly.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter27_buckets_and_kiosk_plan.py",
+    "/app/test_reports/pytest/iter27_buckets.xml"
+  ],
+  "action_items": [
+    "Optional: Re-verify Admin Facturen expanded TenantRow shows the 3 sub-sections (Achterstallige huur / Openstaande huidige maand / Vooruit gefactureerd) once a tenant in the visible company actually has overdue+current+future invoices. In testing, the visible company (Gopi) had all rows with totalDue=0, so expanded body could not be exercised. Backend buckets verified for Bharat (SuriRent) via API: F2026-00032 (1/2026) → bucket=overdue is confirmed in /api/invoices and /api/kiosk/tenants/{id}/overview open_invoices.",
+    "Optional: ArrangePlanModal interactive flow not exercised in UI because the visible Rayshree apt only had a synthetic current-month item without a real invoice_id (plan button gated on selected invoice rows). Backend POST /api/kiosk/payment-plans/quick with both invoice_id (legacy) and invoice_ids (multi) confirmed working."
+  ],
+  "critical_code_review_comments": [
+    "server.py is 9315 lines — consider splitting kiosk, invoices, payments into modules.",
+    "_classify_invoice_bucket logic verified working: month-based classification correctly maps Jan/2026 → overdue, May/2026 → current, Jul/2026 → future when today=May 30, 2026.",
+    "Existing tenant credit auto-applies to new future invoices on creation; this is the desired behavior but tests must accommodate it (we did)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter27_buckets_and_kiosk_plan.py"
+  ],
+  "success_rate": {"backend": "100% (9/9)", "frontend": "90% (visible flows OK; 2 deep-flows not exercised because tenant data didn't have all 3 bucket categories simultaneously)"},
+  "test_credentials": "Admin: admin@vastgoed.sr / admin123 (currently default-scoped to Gopi Appartement company). Kiosk PIN: 1234 with company_slug=surirent. Bharat Kewalbansing in SuriRent has overdue invoice F2026-00032 (1/2026, 7000 SRD).",
+  "seed_data_creation": "Tests created future invoice for Bharat (month+2/2026) and old invoice (month-4/2026) — these were auto-paid from existing tenant credit or appear in correct bucket. Also created TEST_iter27 payment plans (legacy single-invoice and multi-invoice).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "All 4 core changes verified working at API level: (1) /api/kiosk/tenants/{id}/overview returns open_invoices/current_invoices/future_invoices with *_total fields and grace_workdays; each item has bucket field. (2) /api/invoices returns bucket on every unpaid invoice. (3) POST /api/kiosk/payment-plans/quick accepts BOTH invoice_id (legacy) and invoice_ids (multi-invoice). (4) Partial payment with amount < 95% of invoice → status='partial' with paid_amount updated. Frontend Kiosk PaySelect verified: NO 'Servicekosten' row anywhere; totaal-openstaand = current huur + internet. Admin login currently lands on Gopi company; tenants Bharat/Rayshree/Yashveer all show totalDue=0 in that company.",
+  "rca of the issue": "N/A — no bugs found in scope."
+}
