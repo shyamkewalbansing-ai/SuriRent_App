@@ -991,22 +991,27 @@ export default function Payments() {
                         <DetailRow label="Goedgekeurd door" value={p.approved_by} />
                       )}
                       {p.note && <DetailRow label="Notitie" value={p.note} />}
-                      <div className="grid grid-cols-3 gap-1.5 pt-2">
+                      <div className="grid grid-cols-4 gap-1.5 pt-2">
                         <a href={`${apiBase}/payments/${p.id}/pdf`} target="_blank" rel="noreferrer"
                           data-testid={`mp-pdf-${p.id}`}
-                          className="inline-flex items-center justify-center gap-1 px-2 py-2 bg-white border border-slate-200 text-slate-700 font-bold rounded-xl text-[11px]">
+                          className="inline-flex items-center justify-center gap-1 px-1.5 py-2 bg-white border border-slate-200 text-slate-700 font-bold rounded-xl text-[11px]">
                           <FileText className="w-3.5 h-3.5" /> PDF
                         </a>
                         <button onClick={() => setEmailing(p)} type="button"
                           data-testid={`mp-email-${p.id}`}
-                          className="inline-flex items-center justify-center gap-1 px-2 py-2 bg-white border border-blue-200 text-blue-700 font-bold rounded-xl text-[11px]">
-                          <Mail className="w-3.5 h-3.5" /> Verstuur
+                          className="inline-flex items-center justify-center gap-1 px-1.5 py-2 bg-white border border-blue-200 text-blue-700 font-bold rounded-xl text-[11px]">
+                          <Mail className="w-3.5 h-3.5" /> Mail
                         </button>
                         <a href={`${apiBase}/payments/${p.id}/secure-pdf`} target="_blank" rel="noreferrer"
                           data-testid={`mp-secure-${p.id}`}
-                          className="inline-flex items-center justify-center gap-1 px-2 py-2 bg-white border border-orange-200 text-[#FF5C00] font-bold rounded-xl text-[11px]">
+                          className="inline-flex items-center justify-center gap-1 px-1.5 py-2 bg-white border border-orange-200 text-[#FF5C00] font-bold rounded-xl text-[11px]">
                           <ShieldCheck className="w-3.5 h-3.5" /> QR
                         </a>
+                        <button onClick={() => setDeleting(p)} type="button"
+                          data-testid={`mp-delete-${p.id}`}
+                          className="inline-flex items-center justify-center gap-1 px-1.5 py-2 bg-white border border-red-200 text-red-600 font-bold rounded-xl text-[11px]">
+                          <Trash2 className="w-3.5 h-3.5" /> Wis
+                        </button>
                       </div>
                     </div>
                   </div>
