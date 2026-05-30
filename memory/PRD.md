@@ -1,5 +1,18 @@
 # Vastgoed Kiosk - PRD
 
+## Session 2026-05-30 — 3-bucket invoice classification + Multi-invoice Regeling vanaf Kiosk ✅
+- **Backend**: nieuwe helper `_classify_invoice_bucket(period_month, period_year, today, grace_workdays)` retourneert `"overdue" | "current" | "future"`. Achterstand vereist dat periode-einde + `grace_workdays` (uit `company_settings.invoicing.grace_workdays`, default 10) verstreken is.
+- **`GET /api/kiosk/tenants/{id}/overview`** retourneert nu 3 buckets: `open_invoices` (overdue), `current_invoices`, `future_invoices` + matching `*_total`. Plus `grace_workdays` voor frontend-info.
+- **`GET /api/invoices`** voegt `bucket` veld toe aan elke onbetaalde factuur (`overdue|current|future|null`).
+- **Frontend Admin Facturen**: `groupByTenant` gebruikt `inv.bucket` direct. TenantRow hoofdregel toont `totalDue` (achterstand + huidige, géén vooruit) en `lastDue` (meest recente non-future). Uitklap bevat 3 secties met eigen subtotaal. KPI "Totaal openstaand" excludeert vooruit.
+- **Frontend Kiosk TenantOverview**: Servicekosten regel verwijderd. Totaal openstaand = achterstand + huidige + internet (vooruit alleen informatief).
+- **Frontend Kiosk PaySelect**: 3 secties (Achterstand ROOD · Huidige maand AMBER · Vooruit gefactureerd BLAUW opt-in). Per-factuur checkbox-rijen i.p.v. generieke "Huur"-knop.
+- **NIEUW: "Regeling afspreken" knop in PaySelect** → `<ArrangePlanModal>`. Huurder selecteert achterstand/huidige/vooruit-facturen, kiest 2/3/4/6/8 termijnen, optionele startdatum. POST `/api/kiosk/payment-plans/quick` met `invoice_ids` (multi-invoice support nieuw toegevoegd aan `KioskQuickPlanIn`, achterwaarts compatibel met legacy `invoice_id`). Bevestiging via `<PlanArrangedReceipt>`.
+- **Bucket-overgangen automatisch** op systeemdatum: bv. op 1 juni schuift mei → current (binnen grace), juni-factuur → current (huidige maand), juli → future. Rond juni 14 schuift mei → overdue.
+- Volledig regression-getest via testing agent: backend 9/9, frontend visible flows ✅.
+
+
+
 ## Session 2026-02-26 — Dynamische betalingsregeling-suggestie na partial ✅
 - **Nieuw backend endpoint** `POST /api/kiosk/payment-plans/quick` (kiosk-token authenticated, geen admin-PIN nodig). Body: `tenant_id, invoice_id?, total_amount, num_installments (2-12), currency`. Maakt direct een actief `payment_plans` document + `payment_plan_installments` records (één per termijn, gelijke verdeling met laatste termijn afronding). Eerste vervaldatum: vandaag + 30 dagen. Push-notificatie naar admins.
 - **Nieuw frontend component** `<PartialPlanSuggestion>` — bottom-sheet op mobiel / center-modal op desktop. Toont:
