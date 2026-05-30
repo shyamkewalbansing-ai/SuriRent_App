@@ -891,13 +891,27 @@ export default function Invoices() {
   }, [items]);
 
   const allCount = groups.length;
-  const openCount = useMemo(() => groups.filter((g) => g.openCount > 0).length, [groups]);
+  // "Achterstallige huurders" = huurders met ECHTE achterstand (niet huurders
+  // die alleen de lopende maand of vooruit-facturen open hebben).
+  const openCount = useMemo(() => groups.filter((g) => (g.overdueCount || 0) > 0).length, [groups]);
   const paidCount = useMemo(() => groups.filter((g) => g.openCount === 0).length, [groups]);
 
-  const totalOpenAmount = useMemo(() => groups.reduce((s, g) => s + g.totalOpen, 0), [groups]);
+  // "Totaal openstaand" = achterstand + huidige maand. Vooruit gefactureerd
+  // telt NIET mee — dat is toekomst en geen schuld nu.
+  const totalOpenAmount = useMemo(
+    () => groups.reduce((s, g) => s + (g.totalOverdue || 0) + (g.totalCurrent || 0), 0),
+    [groups]
+  );
   const totalOpenCurrency = groups[0]?.currency || 'SRD';
+  // Aantal openstaande maanden = unieke periodes uit achterstand + huidige
+  // maand (exclusief vooruit gefactureerd).
   const totalOpenMonths = useMemo(
-    () => new Set(items.filter(isUnpaid).map((i) => `${i.period_year}-${i.period_month}`)).size,
+    () => new Set(
+      items
+        .filter(isUnpaid)
+        .filter((i) => (i.bucket || '') !== 'future')
+        .map((i) => `${i.period_year}-${i.period_month}`)
+    ).size,
     [items]
   );
   const thisMonthExpected = useMemo(() => {
@@ -909,7 +923,10 @@ export default function Invoices() {
   const filteredGroups = useMemo(() => {
     const q = search.trim().toLowerCase();
     return groups.filter((g) => {
-      if (tab === 'open' && g.openCount === 0) return false;
+      // "Achterstand" tab toont ALLEEN huurders met echte achterstand.
+      // Huurders met alleen lopende maand of vooruit-facturen verschijnen
+      // niet in dit tabblad maar wel in "Alle".
+      if (tab === 'open' && (g.overdueCount || 0) === 0) return false;
       if (tab === 'paid' && g.openCount > 0) return false;
       if (filterSeverity === 'critical' && g.severity !== 'critical') return false;
       if (filterSeverity === 'late' && g.severity !== 'late') return false;
