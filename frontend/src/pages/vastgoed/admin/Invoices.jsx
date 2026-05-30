@@ -249,12 +249,12 @@ function MobileTenantCard({ group, onClick }) {
           <p className={`font-black tracking-tight whitespace-nowrap ${amtCls}`}
             data-testid={`mi-amount-${group.tenant_id}`}
             style={{ fontSize: 'clamp(15px, 4.2vw, 19px)' }}>
-            {group.currency} {fmtAmountWhole(group.totalOpen)}
+            {group.currency} {fmtAmountWhole(group.totalDue || group.totalOpen)}
           </p>
-          {group.openCount > 0 && (
+          {(group.dueCount || group.openCount) > 0 && (
             <p className="text-slate-500 font-bold"
               style={{ fontSize: 'clamp(10px, 2.8vw, 12px)' }}>
-              {group.openCount}× open
+              {group.dueCount || group.openCount}× open
             </p>
           )}
           <ChevronRight className="text-slate-400/80 mt-0.5"
@@ -308,6 +308,50 @@ function MonthChip({ month, severity }) {
     : { bg: 'bg-orange-50', fg: 'text-orange-700' };
   return (
     <span className={`text-[10px] sm:text-[11px] font-bold px-2 py-0.5 rounded-md ${t.bg} ${t.fg}`}>{month}</span>
+  );
+}
+
+// =====================================================================
+// Mobile invoice line — compact regel met bucket-badge + delete-knop voor
+// huidige/vooruit facturen. Gebruikt in MobileTenantCard uitklap.
+// =====================================================================
+function MobileInvoiceLine({ inv, bucket, g }) {
+  const isPartial = inv.status === 'partial' || (Number(inv.paid_amount || 0) > 0 && Number(inv.paid_amount || 0) < Number(inv.amount || 0) * 0.95);
+  const canDelete = (bucket === 'future' || bucket === 'current') && !isPartial;
+  return (
+    <div className="flex items-center justify-between gap-2 text-[12px]"
+      data-testid={`mi-invoice-${inv.id}`}>
+      <div className="flex items-center gap-1.5 min-w-0 flex-1">
+        <span className="text-slate-700 capitalize truncate">
+          {MONTHS_NL[inv.period_month - 1]} {inv.period_year}
+        </span>
+        {bucket === 'future' && (
+          <span className="text-[9px] font-bold px-1 py-0.5 rounded bg-blue-100 text-blue-700 uppercase">Komt nog</span>
+        )}
+        {bucket === 'current' && (
+          <span className="text-[9px] font-bold px-1 py-0.5 rounded bg-amber-100 text-amber-700 uppercase">Lopend</span>
+        )}
+        {isPartial && (
+          <span className="text-[9px] font-bold px-1 py-0.5 rounded bg-amber-100 text-amber-700 uppercase">Deels</span>
+        )}
+      </div>
+      <span className={`font-bold whitespace-nowrap ${bucket === 'future' ? 'text-slate-500' : 'text-slate-700'}`}>
+        {inv.currency} {fmtAmountWhole(Number(inv.paid_amount) > 0 ? inv.remaining_amount : inv.amount)}
+      </span>
+      {canDelete && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            const periodLabel = `${MONTHS_NL[inv.period_month - 1]} ${inv.period_year}`;
+            if (!window.confirm(`Factuur ${inv.invoice_number} (${periodLabel}) verwijderen?`)) return;
+            window.dispatchEvent(new CustomEvent('invoice-delete', { detail: { invoice: inv } }));
+          }}
+          data-testid={`mi-invoice-delete-${inv.id}`}
+          className="shrink-0 inline-flex items-center justify-center w-6 h-6 rounded-full bg-red-100 text-red-500 active:scale-95 transition">
+          <Trash2 className="w-3 h-3" />
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -1091,38 +1135,67 @@ export default function Invoices() {
                     <div className={`rounded-2xl p-3.5 ${
                       g.severity === 'critical' ? 'bg-red-50'
                         : g.severity === 'late' ? 'bg-orange-50'
+                        : g.currentCount > 0 ? 'bg-amber-50'
                         : 'bg-blue-50'
                     }`}>
-                      <p className={`text-[12px] font-bold mb-2 ${
-                        g.severity === 'critical' ? 'text-red-700'
-                          : g.severity === 'late' ? 'text-orange-700'
-                          : 'text-blue-700'
-                      }`}>
-                        {g.severity === 'ok' ? `Komende facturen (${g.upcomingCount})` : `Openstaande maanden (${g.openCount})`}
-                      </p>
-                      <div className="space-y-1.5">
-                        {g.open.map((inv) => (
-                          <div key={inv.id} className="flex items-center justify-between gap-2 text-[12px]"
-                            data-testid={`mi-invoice-${inv.id}`}>
-                            <span className="text-slate-700 capitalize truncate">
-                              {MONTHS_NL[inv.period_month - 1]} {inv.period_year}
-                            </span>
-                            <span className="text-slate-700 font-bold whitespace-nowrap">
-                              {inv.currency} {fmtAmountWhole(Number(inv.paid_amount) > 0 ? inv.remaining_amount : inv.amount)}
-                            </span>
+                      {/* SECTIE 1 — Achterstallige huur */}
+                      {g.overdueCount > 0 && (
+                        <>
+                          <p className={`text-[12px] font-bold mb-2 ${
+                            g.severity === 'critical' ? 'text-red-700' : 'text-orange-700'
+                          }`}>
+                            Achterstallige huur ({g.overdueCount}) · {g.currency} {fmtAmountWhole(g.totalOverdue)}
+                          </p>
+                          <div className="space-y-1.5">
+                            {g.overdue.map((inv) => (
+                              <MobileInvoiceLine key={inv.id} inv={inv} bucket="overdue" g={g} />
+                            ))}
                           </div>
-                        ))}
-                      </div>
+                        </>
+                      )}
+
+                      {/* SECTIE 2 — Openstaande huidige maand */}
+                      {g.currentCount > 0 && (
+                        <div className={g.overdueCount > 0 ? 'mt-3 pt-3 border-t border-slate-200/60' : ''}>
+                          <p className="text-[12px] font-bold mb-2 text-amber-700">
+                            Openstaande huidige maand ({g.currentCount}) · {g.currency} {fmtAmountWhole(g.totalCurrent)}
+                          </p>
+                          <div className="space-y-1.5">
+                            {g.current.map((inv) => (
+                              <MobileInvoiceLine key={inv.id} inv={inv} bucket="current" g={g} />
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* SECTIE 3 — Vooruit gefactureerd */}
+                      {g.upcomingCount > 0 && (
+                        <div className={(g.overdueCount + g.currentCount) > 0 ? 'mt-3 pt-3 border-t border-slate-200/60' : ''}>
+                          <p className="text-[12px] font-bold mb-2 text-blue-700">
+                            Vooruit gefactureerd ({g.upcomingCount}) · {g.currency} {fmtAmountWhole(g.totalUpcoming)}
+                          </p>
+                          <div className="space-y-1.5">
+                            {g.upcoming.map((inv) => (
+                              <MobileInvoiceLine key={inv.id} inv={inv} bucket="future" g={g} />
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
                       <div className="mt-3 pt-3 border-t border-slate-200/60 flex items-center justify-between">
-                        <span className="text-[11px] font-bold text-slate-500">Totaal</span>
+                        <span className="text-[11px] font-bold text-slate-500">
+                          {g.overdueCount > 0 ? 'Totaal achterstand' : g.currentCount > 0 ? 'Huidige maand' : 'Vooruit'}
+                        </span>
                         <span className={`text-[15px] font-black tracking-tight ${
                           g.severity === 'critical' ? 'text-red-600'
                             : g.severity === 'late' ? 'text-orange-600'
+                            : g.currentCount > 0 ? 'text-amber-600'
                             : 'text-blue-600'
                         }`}>
-                          {g.currency} {fmtAmountWhole(g.totalOpen)}
+                          {g.currency} {fmtAmountWhole(g.totalDue)}
                         </span>
                       </div>
+
                       <div className="grid grid-cols-2 gap-2 mt-3">
                         <button onClick={(e) => { e.stopPropagation(); openReminder(g, 'email'); }}
                           data-testid={`mi-email-${g.tenant_id}`}
@@ -1134,8 +1207,8 @@ export default function Invoices() {
                           const t = tenants?.find((x) => x.id === g.tenant_id);
                           const phone = (t?.phone || '').replace(/\D/g, '');
                           if (!phone) { alert(`${g.tenant_name} heeft geen telefoonnummer.`); return; }
-                          const list = g.open.map((i) => `• ${MONTHS_NL[i.period_month - 1]} ${i.period_year}: ${g.currency} ${Number(i.amount).toFixed(2)}`).join('\n');
-                          const msg = `Beste ${g.tenant_name},\n\nVriendelijke herinnering — u heeft ${g.openCount} openstaande factu${g.openCount > 1 ? 'ren' : 'ur'}:\n\n${list}\n\n*Totaal openstaand: ${g.currency} ${Number(g.totalOpen).toFixed(2)}*\n\n— SuriRent`;
+                          const list = g.overdue.map((i) => `• ${MONTHS_NL[i.period_month - 1]} ${i.period_year}: ${g.currency} ${Number(i.amount).toFixed(2)}`).join('\n');
+                          const msg = `Beste ${g.tenant_name},\n\nVriendelijke herinnering — u heeft ${g.overdueCount} openstaande factu${g.overdueCount > 1 ? 'ren' : 'ur'}:\n\n${list}\n\n*Totaal openstaand: ${g.currency} ${Number(g.totalOverdue).toFixed(2)}*\n\n— SuriRent`;
                           openWhatsApp(phone, msg);
                         }}
                           data-testid={`mi-wa-${g.tenant_id}`}
