@@ -78,14 +78,16 @@ function groupByTenant(invoices) {
     g.upcomingCount = g.upcoming.length;
     g.totalOpen = g.open.reduce((s, i) => s + Number(i.remaining_amount != null ? i.remaining_amount : i.amount || 0), 0);
     g.totalOverdue = g.overdue.reduce((s, i) => s + Number(i.remaining_amount != null ? i.remaining_amount : i.amount || 0), 0);
+    g.totalUpcoming = g.upcoming.reduce((s, i) => s + Number(i.remaining_amount != null ? i.remaining_amount : i.amount || 0), 0);
     // Severity baseert nu op échte achterstand (niet toekomstige facturen).
     g.severity = g.overdueCount >= 2 ? 'critical' : g.overdueCount === 1 ? 'late' : 'ok';
     g.lastOpen = g.open[g.open.length - 1];
-    g.periodLabel = g.open
+    g.lastOverdue = g.overdue[g.overdue.length - 1];
+    g.periodLabel = g.overdue
       .map((i) => `${MONTHS_NL[i.period_month - 1]}`)
       .join(', ');
-    if (g.open.length > 0) {
-      const lastYear = g.open[g.open.length - 1].period_year;
+    if (g.overdue.length > 0) {
+      const lastYear = g.overdue[g.overdue.length - 1].period_year;
       g.periodLabel += ` ${lastYear}`;
     }
   }
@@ -298,7 +300,13 @@ function TenantRow({ group, expanded, onToggle, onReminder, tenants }) {
     : group.upcomingCount > 0 ? 'text-blue-600'
     : 'text-slate-900';
   const avatar = avatarColor(group.tenant_name);
-  const last = group.lastOpen;
+  // Wanneer er achterstand is → toon achterstand-cijfers (mei was laatste,
+  // SRD 30k). Komende facturen (juni) worden apart in de uitgeklapte weergave
+  // getoond en NIET meegerekend in de hoofdregel.
+  const showOverdueStats = sev !== 'ok' && group.overdueCount > 0;
+  const last = showOverdueStats ? group.lastOverdue : group.lastOpen;
+  const displayTotal = showOverdueStats ? group.totalOverdue : group.totalOpen;
+  const displayCount = showOverdueStats ? group.overdueCount : group.openCount;
 
   return (
     <div className={`bg-white rounded-2xl border border-orange-100 border-l-4 ${left} overflow-hidden transition`}
@@ -355,11 +363,11 @@ function TenantRow({ group, expanded, onToggle, onReminder, tenants }) {
           <div className="text-right shrink-0 whitespace-nowrap">
             <p className={`text-base sm:text-lg font-black tracking-tight ${amtCls}`}
               data-testid={`tenant-total-${group.tenant_id}`}>
-              {group.currency} {fmtAmount(group.totalOpen, group.currency)}
+              {group.currency} {fmtAmount(displayTotal, group.currency)}
             </p>
-            {group.openCount > 1 && (
+            {displayCount > 1 && (
               <p className="text-[10px] text-slate-400 mt-0.5">
-                {group.openCount} × {fmtAmount(group.totalOpen / group.openCount, group.currency)}
+                {displayCount} × {fmtAmount(displayTotal / displayCount, group.currency)}
               </p>
             )}
           </div>
@@ -380,17 +388,19 @@ function TenantRow({ group, expanded, onToggle, onReminder, tenants }) {
               : 'bg-blue-50'
           }`}>
             <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-4">
-              {/* LEFT — list of open months */}
+              {/* LEFT — list of open months: split achterstand + komende */}
               <div>
                 <p className={`text-sm font-bold mb-3 ${
                   sev === 'critical' ? 'text-red-700'
                     : sev === 'late' ? 'text-orange-700'
                     : 'text-blue-700'
                 }`}>
-                  {sev === 'ok' ? `Komende facturen (${group.upcomingCount})` : `Openstaande maanden (${group.openCount})`}
+                  {sev === 'ok'
+                    ? `Komende facturen (${group.upcomingCount})`
+                    : `Openstaande maanden (${group.overdueCount})`}
                 </p>
                 <div className="space-y-1.5">
-                  {group.open.map((inv) => {
+                  {(sev === 'ok' ? group.upcoming : group.overdue).map((inv) => {
                     const isOverdue = (inv.period_year < curY) || (inv.period_year === curY && inv.period_month <= curM);
                     const isPartial = inv.status === 'partial' || (Number(inv.paid_amount || 0) > 0 && Number(inv.paid_amount || 0) < Number(inv.amount || 0) * 0.95);
                     return (
@@ -457,6 +467,35 @@ function TenantRow({ group, expanded, onToggle, onReminder, tenants }) {
                     );
                   })}
                 </div>
+                {/* Komende facturen (niet meegerekend in achterstand-totaal) —
+                    alleen tonen wanneer er achterstand IS én er ook komende
+                    facturen zijn. Bij sev === 'ok' staan de komende facturen
+                    al in de hoofd-lijst hierboven. */}
+                {sev !== 'ok' && group.upcomingCount > 0 && (
+                  <div className="mt-4 pt-3 border-t border-slate-200/70">
+                    <p className="text-xs font-bold mb-2 text-blue-700">
+                      Komende facturen ({group.upcomingCount}) · {fmtMoney(group.totalUpcoming, group.currency)}
+                    </p>
+                    <div className="space-y-1.5">
+                      {group.upcoming.map((inv) => (
+                        <div key={inv.id} className="flex items-center justify-between gap-2 text-sm"
+                          data-testid={`invoice-row-${inv.id}`}>
+                          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                            <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-blue-500" />
+                            <span className="text-slate-700 capitalize truncate">{MONTHS_NL[inv.period_month - 1]} {inv.period_year}</span>
+                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 uppercase tracking-wider">Komt nog</span>
+                            <span className="text-[10px] text-slate-400 hidden sm:inline">· {inv.invoice_number}</span>
+                          </div>
+                          <div className="text-right shrink-0 whitespace-nowrap">
+                            <span className="text-slate-500 font-semibold">
+                              {fmtMoney(Number(inv.paid_amount) > 0 ? inv.remaining_amount : inv.amount, inv.currency)}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* RIGHT — totaal (apart blok met dunne separator op desktop) */}
@@ -465,13 +504,15 @@ function TenantRow({ group, expanded, onToggle, onReminder, tenants }) {
                   : sev === 'late' ? 'md:border-orange-200'
                   : 'md:border-blue-200'
               }`}>
-                <p className="text-xs font-bold text-slate-500">Totaal openstaand</p>
+                <p className="text-xs font-bold text-slate-500">
+                  {sev === 'ok' ? 'Totaal komend' : 'Totaal achterstand'}
+                </p>
                 <p className={`text-xl sm:text-2xl font-black tracking-tight ${
                   sev === 'critical' ? 'text-red-600'
                     : sev === 'late' ? 'text-orange-600'
                     : 'text-blue-600'
                 }`}>
-                  {fmtMoney(group.totalOpen, group.currency)}
+                  {fmtMoney(displayTotal, group.currency)}
                 </p>
               </div>
             </div>
@@ -501,10 +542,10 @@ function TenantRow({ group, expanded, onToggle, onReminder, tenants }) {
                     return;
                   }
                   const cur = group.currency;
-                  const list = group.open
+                  const list = group.overdue
                     .map((i) => `• ${MONTHS_NL[i.period_month - 1]} ${i.period_year}: ${cur} ${Number(i.amount).toFixed(2)}`)
                     .join('\n');
-                  const msg = `Beste ${group.tenant_name},\n\nVriendelijke herinnering — u heeft ${group.openCount} openstaande factu${group.openCount > 1 ? 'ren' : 'ur'}:\n\n${list}\n\n*Totaal openstaand: ${cur} ${Number(group.totalOpen).toFixed(2)}*\n\nGelieve zo spoedig mogelijk te betalen.\n\n— SuriRent`;
+                  const msg = `Beste ${group.tenant_name},\n\nVriendelijke herinnering — u heeft ${group.overdueCount} openstaande factu${group.overdueCount > 1 ? 'ren' : 'ur'}:\n\n${list}\n\n*Totaal openstaand: ${cur} ${Number(group.totalOverdue).toFixed(2)}*\n\nGelieve zo spoedig mogelijk te betalen.\n\n— SuriRent`;
                   openWhatsApp(phone, msg);
                 }}
                 data-testid={`reminder-wa-manual-${group.tenant_id}`}
