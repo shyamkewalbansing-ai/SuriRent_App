@@ -289,8 +289,18 @@ function MobileSheet({ open, onClose, active, onChange, onLogout, user, tabs, ac
         {user?.role !== 'superadmin' && (
           <div className="px-5 md:px-6 pb-3">
             <button
-              onClick={() => {
+              onClick={async () => {
                 try { localStorage.setItem('pwa_preferred_role', 'kiosk'); } catch { /* noop */ }
+                // Vraag een kiosk-token aan via het admin-to-kiosk endpoint.
+                // Admin behoudt zijn admin_token, krijgt apart kiosk_token erbij.
+                try {
+                  const { data } = await api.post('/auth/admin-to-kiosk', {});
+                  if (data?.token) localStorage.setItem('kiosk_token', data.token);
+                  if (data?.company) localStorage.setItem('kiosk_company', JSON.stringify(data.company));
+                } catch (e) {
+                  alert('Kon kiosk niet openen: ' + (e?.response?.data?.detail || e.message));
+                  return;
+                }
                 onClose();
                 navigate('/kiosk');
               }}
@@ -731,7 +741,18 @@ function Overview() {
 
       {/* CTA's onderaan — strakker, kleinere padding */}
       <div className="grid sm:grid-cols-2 gap-3">
-        <button onClick={() => navigate('/kiosk')} data-testid="quick-kiosk"
+        <button onClick={async () => {
+            try { localStorage.setItem('pwa_preferred_role', 'kiosk'); } catch { /* noop */ }
+            try {
+              const { data } = await api.post('/auth/admin-to-kiosk', {});
+              if (data?.token) localStorage.setItem('kiosk_token', data.token);
+              if (data?.company) localStorage.setItem('kiosk_company', JSON.stringify(data.company));
+            } catch (e) {
+              alert('Kon kiosk niet openen: ' + (e?.response?.data?.detail || e.message));
+              return;
+            }
+            navigate('/kiosk');
+          }} data-testid="quick-kiosk"
           className="bg-gradient-to-br from-[#FF8A3D] via-[#FF5C00] to-[#C74600] rounded-2xl p-5 text-white text-left hover:shadow-[0_18px_36px_-12px_rgba(255,92,0,0.45)] transition-shadow flex items-center gap-3.5">
           <div className="w-11 h-11 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
             <Building2 className="w-5 h-5" />

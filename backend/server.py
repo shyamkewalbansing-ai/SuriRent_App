@@ -3135,6 +3135,27 @@ async def seed_company_admin(cid: str, body: RegisterIn, user=Depends(require_ro
 
 
 # Kiosk PIN
+@api.post("/auth/admin-to-kiosk")
+async def admin_open_kiosk(response: Response, user=Depends(require_role("admin", "superadmin"))):
+    """Laat een ingelogde admin/superadmin direct een kiosk-token verkrijgen
+    voor zijn huidige actieve bedrijf — zonder dat er een PIN ingevoerd hoeft
+    te worden. Gebruikt door de 'Open Kiosk' knop in het Beheer-dashboard.
+    Het admin-token blijft behouden zodat de admin terug kan naar Beheer.
+    """
+    cid = company_id_of(user)
+    if not cid:
+        raise HTTPException(status_code=400, detail="Geen actief bedrijf ingesteld")
+    c = await db.companies.find_one({"id": cid}, {"_id": 0})
+    token = create_token({
+        "sub": "kiosk", "type": "kiosk", "company_id": cid,
+    }, KIOSK_TOKEN_MIN)
+    _set_access_cookie(response, token, name="kiosk_token", minutes=KIOSK_TOKEN_MIN)
+    return {
+        "token": token,
+        "company": c and {k: c.get(k) for k in ("id", "slug", "name")},
+    }
+
+
 @api.post("/auth/kiosk-pin")
 async def kiosk_pin(body: PinIn, request: Request, response: Response):
     """Verifieer een PIN binnen de SCOPE van één bedrijf.
