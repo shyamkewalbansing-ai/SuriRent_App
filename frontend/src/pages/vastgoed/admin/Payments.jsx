@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   Plus, X, Check, Loader2, Search, FileText, Mail, ShieldCheck, ChevronRight, ChevronLeft,
   ChevronDown, CalendarDays, Banknote, CheckCircle2, Clock,
-  TrendingUp, Receipt, Wallet, Home as HomeIcon,
+  TrendingUp, Receipt, Wallet, Home as HomeIcon, Trash2, AlertTriangle,
 } from 'lucide-react';
 import { api, formatError, fmtMoney, MONTHS_NL } from '../../../lib/api';
 import { useAutoRefresh } from '../../../lib/auto-refresh';
@@ -374,7 +374,7 @@ function MobilePaymentCard({ p, onClick }) {
 // =====================================================================
 // Payment row
 // =====================================================================
-function PaymentRow({ p, expanded, onToggle, onEmail, apiBase }) {
+function PaymentRow({ p, expanded, onToggle, onEmail, onDelete, apiBase }) {
   const avatar = avatarColor(p.tenant_name);
   const tenantSub = (() => {
     if (p.location_name && p.apartment_number) return `${p.location_name} · ${p.apartment_number}`;
@@ -468,7 +468,7 @@ function PaymentRow({ p, expanded, onToggle, onEmail, apiBase }) {
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-2 mt-4">
+            <div className="grid grid-cols-4 gap-2 mt-4">
               <a href={`${apiBase}/payments/${p.id}/pdf`} target="_blank" rel="noreferrer"
                 data-testid={`payment-pdf-${p.id}`}
                 onClick={(e) => e.stopPropagation()}
@@ -486,6 +486,11 @@ function PaymentRow({ p, expanded, onToggle, onEmail, apiBase }) {
                 className="inline-flex items-center justify-center gap-2 px-2 py-2.5 bg-white border-2 border-orange-300 hover:bg-orange-50 text-[#FF5C00] font-bold rounded-xl text-xs sm:text-sm">
                 <ShieldCheck className="w-4 h-4" /> <span className="hidden sm:inline">Beveiligd</span><span className="sm:hidden">QR</span>
               </a>
+              <button onClick={(e) => { e.stopPropagation(); onDelete(p); }}
+                data-testid={`payment-delete-${p.id}`}
+                className="inline-flex items-center justify-center gap-2 px-2 py-2.5 bg-white border-2 border-red-300 hover:bg-red-500 hover:text-white text-red-600 font-bold rounded-xl text-xs sm:text-sm transition">
+                <Trash2 className="w-4 h-4" /> <span className="hidden sm:inline">Verwijder</span><span className="sm:hidden">Wis</span>
+              </button>
             </div>
           </div>
         </div>
@@ -707,6 +712,8 @@ export default function Payments() {
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [emailing, setEmailing] = useState(null);
+  const [deleting, setDeleting] = useState(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
   const [search, setSearch] = useState('');
   const [tab] = useState('month'); // altijd op Maand; vandaag-tab/methodes verwijderd
   const [expanded, setExpanded] = useState(null);
@@ -1122,6 +1129,7 @@ export default function Payments() {
               expanded={expanded === p.id}
               onToggle={() => toggleExpand(p.id)}
               onEmail={(item) => setEmailing(item)}
+              onDelete={(item) => setDeleting(item)}
               apiBase={apiBase} />
           ))}
         </div>
@@ -1149,6 +1157,63 @@ export default function Payments() {
           tenantPhone={tenants.find((t) => t.id === emailing.tenant_id)?.phone || ''}
           tenantName={emailing.tenant_name}
           onClose={() => setEmailing(null)} />
+      )}
+
+      {deleting && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
+          data-testid="payment-delete-modal" onClick={() => !deleteBusy && setDeleting(null)}>
+          <div className="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-2xl"
+            onClick={(e) => e.stopPropagation()}>
+            <div className="px-6 py-5 bg-red-500 text-white">
+              <div className="flex items-center gap-3">
+                <AlertTriangle className="w-6 h-6" />
+                <p className="text-lg font-extrabold">Betaling verwijderen?</p>
+              </div>
+            </div>
+            <div className="p-6 space-y-3">
+              <p className="text-sm text-slate-700">
+                Je staat op het punt betaling <span className="font-mono font-bold">{deleting.receipt_number}</span> van
+                <span className="font-bold"> {deleting.tenant_name}</span> ter waarde van
+                <span className="font-bold"> {fmtMoney(deleting.amount, deleting.currency)}</span> permanent te verwijderen.
+              </p>
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800">
+                <p className="font-bold mb-1">Belangrijk:</p>
+                <ul className="list-disc list-inside space-y-1">
+                  <li>De <b>gekoppelde factuur(en)</b> worden ook verwijderd (mits er geen andere betalingen aan hangen).</li>
+                  <li>Indien meerdere betalingen aan dezelfde factuur hangen, wordt alleen het bedrag teruggedraaid.</li>
+                  <li>Gekoppelde betalingsregeling-termijnen worden teruggezet naar "open".</li>
+                </ul>
+              </div>
+              <p className="text-xs text-red-600 font-bold">
+                Deze actie kan niet ongedaan gemaakt worden.
+              </p>
+            </div>
+            <div className="px-6 py-4 bg-slate-50 flex gap-2 border-t border-slate-100">
+              <button onClick={() => setDeleting(null)} disabled={deleteBusy}
+                data-testid="payment-delete-cancel"
+                className="flex-1 py-2.5 rounded-lg bg-white border-2 border-slate-200 text-slate-700 font-bold text-sm hover:bg-slate-100 disabled:opacity-50">
+                Annuleren
+              </button>
+              <button onClick={async () => {
+                setDeleteBusy(true);
+                try {
+                  await api.delete(`/payments/${deleting.id}`);
+                  setDeleting(null);
+                  load();
+                } catch (e) {
+                  alert(formatError(e) || 'Kon betaling niet verwijderen');
+                } finally {
+                  setDeleteBusy(false);
+                }
+              }} disabled={deleteBusy}
+                data-testid="payment-delete-confirm"
+                className="flex-[2] py-2.5 rounded-lg bg-red-500 text-white font-bold text-sm hover:bg-red-600 disabled:opacity-50 flex items-center justify-center gap-2">
+                {deleteBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                Definitief verwijderen
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -5142,6 +5142,111 @@ async def list_payments(
     return await _enrich_payments_bulk(docs)
 
 
+@api.delete("/payments/{payment_id}")
+async def delete_payment(
+    payment_id: str,
+    also_delete_invoices: bool = Query(True, description="Verwijder ook gekoppelde facturen wanneer deze geen andere betalingen meer hebben"),
+    user=Depends(require_role("superadmin", "admin")),
+):
+    """Verwijder een betaling. Wanneer `also_delete_invoices=true` (default)
+    worden gekoppelde facturen óók verwijderd indien er geen andere
+    approved betalingen aan hangen — anders krijgt elke factuur zijn
+    `paid_amount` teruggedraaid met deze betaling, status herberekend.
+
+    Plan-installments die met deze betaling zijn voldaan worden ook
+    teruggezet naar `pending`.
+    """
+    pay = await db.payments.find_one({**scope(user), "id": payment_id}, {"_id": 0})
+    if not pay:
+        raise HTTPException(status_code=404, detail="Betaling niet gevonden")
+
+    pay_amount = float(pay.get("amount") or 0)
+    deleted_invoices = []
+    reverted_invoices = []
+
+    # Verzamel alle gekoppelde factuur-ids (zowel uit invoice_id legacy als invoice_ids array)
+    inv_ids = set()
+    if pay.get("invoice_id"):
+        inv_ids.add(pay["invoice_id"])
+    for x in (pay.get("invoice_ids") or []):
+        if x:
+            inv_ids.add(x)
+    # Ook via allocations (FIFO-toewijzingen)
+    allocs = pay.get("allocations") or []
+    alloc_map = {}  # invoice_id -> bedrag dat deze payment naar die factuur stuurde
+    for a in allocs:
+        if a.get("invoice_id"):
+            inv_ids.add(a["invoice_id"])
+            alloc_map[a["invoice_id"]] = float(a.get("amount") or 0)
+
+    for inv_id in inv_ids:
+        inv = await db.invoices.find_one({"id": inv_id}, {"_id": 0})
+        if not inv:
+            continue
+        # Hoeveel deze betaling naar deze factuur stuurde
+        share = alloc_map.get(inv_id, pay_amount if len(inv_ids) == 1 else 0)
+        # Andere approved payments die naar deze factuur verwijzen?
+        other_count = await db.payments.count_documents({
+            "id": {"$ne": payment_id},
+            "status": {"$ne": "pending_approval"},
+            "$or": [
+                {"invoice_id": inv_id},
+                {"invoice_ids": inv_id},
+                {"allocations": {"$elemMatch": {"invoice_id": inv_id}}},
+            ],
+        })
+        if other_count == 0 and also_delete_invoices:
+            # Geen andere betalingen → verwijder factuur volledig
+            await db.invoices.delete_one({"id": inv_id})
+            deleted_invoices.append({"id": inv_id, "invoice_number": inv.get("invoice_number")})
+        else:
+            # Andere betalingen bestaan of admin wil factuur behouden:
+            # draai paid_amount terug en herbereken status.
+            new_paid = max(float(inv.get("paid_amount") or 0) - share, 0)
+            amount = float(inv.get("amount_due") or inv.get("amount") or 0)
+            if new_paid <= 0:
+                new_status = "open"
+            elif new_paid >= amount * 0.95:
+                new_status = "paid"
+            else:
+                new_status = "partial"
+            await db.invoices.update_one(
+                {"id": inv_id},
+                {"$set": {
+                    "paid_amount": round(new_paid, 2),
+                    "status": new_status,
+                    "remaining_amount": round(max(amount - new_paid, 0), 2),
+                }},
+            )
+            reverted_invoices.append({"id": inv_id, "invoice_number": inv.get("invoice_number"), "new_status": new_status})
+
+    # Plan-installments terugzetten (als betaling daaraan gekoppeld was)
+    plan_items = pay.get("plan_items") or []
+    for item in plan_items:
+        pid = item.get("plan_id")
+        seq = item.get("sequence") or item.get("seq")
+        if pid and seq is not None:
+            await db.payment_plan_installments.update_one(
+                {"plan_id": pid, "sequence": int(seq)},
+                {"$set": {"status": "pending", "paid_at": None, "payment_id": None}},
+            )
+            # Decrement plan.paid_installments
+            await db.payment_plans.update_one(
+                {"id": pid},
+                {"$inc": {"paid_installments": -1}, "$set": {"status": "active"}},
+            )
+
+    # Verwijder de betaling zelf
+    await db.payments.delete_one({"id": payment_id})
+
+    return {
+        "ok": True,
+        "deleted_payment_id": payment_id,
+        "deleted_invoices": deleted_invoices,
+        "reverted_invoices": reverted_invoices,
+    }
+
+
 @api.get("/payments/pending-count")
 async def payments_pending_count(user=Depends(get_current_user)):
     """Lichte endpoint voor de bell-badge: telling + meta van de meest
