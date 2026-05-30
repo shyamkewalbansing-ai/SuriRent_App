@@ -3161,6 +3161,24 @@ async def admin_open_kiosk(
         cid = str(body["company_id"])
     if not cid:
         cid = company_id_of(user)
+    # Voor admin zonder company_id koppeling: zoek bedrijf op contact_email
+    # (account is admin van het bedrijf maar user-doc had geen company_id veld).
+    if not cid and user.get("role") == "admin" and user.get("email"):
+        c_owned = await db.companies.find_one(
+            {"contact_email": user["email"], "active": {"$ne": False}},
+            {"_id": 0, "id": 1},
+        )
+        if c_owned:
+            cid = c_owned["id"]
+            # Self-heal: schrijf company_id ook in user-doc zodat dit niet
+            # opnieuw fout gaat. Niet-fataal.
+            try:
+                await db.users.update_one(
+                    {"id": user.get("id")},
+                    {"$set": {"company_id": cid}},
+                )
+            except Exception:  # noqa: BLE001
+                pass
     if not cid and user.get("role") == "superadmin":
         c0 = await db.companies.find_one({}, {"_id": 0, "id": 1})
         if c0:
@@ -3168,7 +3186,7 @@ async def admin_open_kiosk(
     if not cid:
         raise HTTPException(
             status_code=400,
-            detail="Geen actief bedrijf ingesteld. Selecteer eerst een bedrijf in de menubalk.",
+            detail="Geen actief bedrijf gekoppeld aan dit account. Neem contact op met de beheerder.",
         )
     c = await db.companies.find_one({"id": cid}, {"_id": 0})
     if not c:
