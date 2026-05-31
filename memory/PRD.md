@@ -1,5 +1,16 @@
 # Vastgoed Kiosk - PRD
 
+## Session 2026-05-31 (v8) — Fresh modern editorial redesign (geen video) ✅
+- **Volledig herschreven** `MarketingLandingV2.jsx` (rewrite, geen patch). Video volledig verwijderd, alleen screenshots.
+- **Hero (editorial split)**: links bold zwarte headline "De complete **huurbeheer** oplossing voor vastgoed." (oranje accent woord + perzik highlight onderlijn), 2 CTAs + trust badges. Rechts: 2 overlappende gekantelde browser mockups (Overzicht -3°, Betalingen +4°) ipv video.
+- **Stats**: 4 grote stats met dividers (3 valuta, ∞ bedrijven, 24/7, AI).
+- **Editorial Features (nieuw)**: 5 alternerende rijen (text↔screenshot per rij), elk met eyebrow + grote title + intro + 3 bullets + macOS browser screenshot. Toont Overzicht, Locaties, Appartementen, Betalingen, Facturen.
+- **Bento Gallery (nieuw)**: donkere sectie met asymmetrische 12-koloms mosaic — Overzicht 8-cols/2-rows, anderen 4-cols/6-cols.
+- **Kiosk Section**: 4 tablet-screenshots in 2x2 grid (i.p.v. video).
+- **Compact Features**: 8-icoon grid voor "en meer" categorie (Multi-bedrijf, WhatsApp, OCR, Werknemers, QR codes, etc.).
+- **Pricing / FAQ / CTA banner / Footer**: behouden uit vorige versie maar styling-consistent gehouden.
+- Video assets (`/app/frontend/public/landing/demo.mp4` + poster) **opgeruimd**.
+
 ## Session 2026-05-31 (v7) — Video codec fix + landing design polish ✅
 - **Bug fix**: video speelde niet in Chrome/Firefox/Edge omdat het **HEVC/H.265** was (iPhone screen recording). Alleen Safari kon het renderen.
 - **Fix**: Video gedownload, gehertranscodeerd naar **H.264 + faststart MP4** (815 KB, 720px wide, geen audio) via ffmpeg, opgeslagen op `/app/frontend/public/landing/demo.mp4`. Universeel afspeelbaar op alle browsers.
