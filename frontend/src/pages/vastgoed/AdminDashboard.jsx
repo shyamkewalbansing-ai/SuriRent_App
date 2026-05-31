@@ -563,6 +563,273 @@ function ActivityRow({ item }) {
   );
 }
 
+// =====================================================================
+// GlobalSearch — debounced cross-collection search for the Overview page.
+// Searches huurders, appartementen en facturen (client-side fuzzy match)
+// en navigeert bij klik direct naar de juiste tab.
+// =====================================================================
+function GlobalSearch() {
+  const [q, setQ] = useState('');
+  const [data, setData] = useState({ tenants: [], apartments: [], invoices: [] });
+  const [open, setOpen] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+
+  // Lazy-load alle data één keer wanneer de gebruiker begint te typen.
+  // Voor een SaaS van deze grootte (1-200 huurders) is dit ruim snel
+  // genoeg en bespaart het multiple round-trips per keystroke.
+  const loadAll = useCallback(async () => {
+    if (loaded) return;
+    try {
+      const [t, a, i] = await Promise.all([
+        api.get('/tenants'),
+        api.get('/apartments'),
+        api.get('/invoices'),
+      ]);
+      setData({ tenants: t.data || [], apartments: a.data || [], invoices: i.data || [] });
+      setLoaded(true);
+    } catch { /* keep empty — UI degrades gracefully */ }
+  }, [loaded]);
+
+  const norm = (s) => (s || '').toString().toLowerCase();
+  const term = norm(q.trim());
+  const results = term.length < 2 ? { tenants: [], apartments: [], invoices: [] } : {
+    tenants: data.tenants.filter((t) =>
+      norm(t.name).includes(term) || norm(t.phone).includes(term) || norm(t.email).includes(term),
+    ).slice(0, 5),
+    apartments: data.apartments.filter((a) =>
+      norm(a.number).includes(term) || norm(a.address).includes(term),
+    ).slice(0, 5),
+    invoices: data.invoices.filter((i) =>
+      norm(i.invoice_number).includes(term)
+      || norm(i.tenant_name).includes(term)
+      || norm(`${MONTHS_NL[(i.period_month || 1) - 1]} ${i.period_year}`).includes(term),
+    ).slice(0, 5),
+  };
+  const totalResults = results.tenants.length + results.apartments.length + results.invoices.length;
+
+  const go = (tab) => {
+    setQ('');
+    setOpen(false);
+    window.dispatchEvent(new CustomEvent('go-tab', { detail: tab }));
+  };
+
+  return (
+    <div className="relative">
+      <div className="group flex items-center gap-2.5 p-3 rounded-xl bg-gradient-to-br from-slate-50 to-slate-100/60 border border-slate-200 hover:border-[#FF5C00] focus-within:border-[#FF5C00] focus-within:ring-2 focus-within:ring-orange-100 transition-all h-full">
+        <div className="w-10 h-10 rounded-lg bg-white/80 flex items-center justify-center shrink-0">
+          <Search className="w-5 h-5 text-[#FF5C00]" />
+        </div>
+        <input
+          value={q}
+          onChange={(e) => { setQ(e.target.value); setOpen(true); loadAll(); }}
+          onFocus={() => { setOpen(true); loadAll(); }}
+          onBlur={() => setTimeout(() => setOpen(false), 180)}
+          data-testid="overview-global-search"
+          placeholder="Zoek huurder, appartement of factuur…"
+          className="flex-1 min-w-0 bg-transparent outline-none text-sm font-bold text-slate-900 placeholder:text-slate-400 placeholder:font-semibold"
+        />
+        {q && (
+          <button onClick={() => setQ('')}
+            data-testid="overview-search-clear"
+            className="text-slate-400 hover:text-slate-700 shrink-0">
+            <X className="w-4 h-4" />
+          </button>
+        )}
+      </div>
+
+      {open && term.length >= 2 && (
+        <div className="absolute left-0 right-0 top-[calc(100%+6px)] z-30 bg-white rounded-2xl border border-slate-200 shadow-[0_24px_48px_-12px_rgba(15,23,42,0.18)] overflow-hidden max-h-[420px] overflow-y-auto"
+          data-testid="overview-search-results">
+          {totalResults === 0 ? (
+            <div className="p-5 text-center text-sm text-slate-400">
+              Geen resultaten voor "<span className="font-bold text-slate-600">{q}</span>"
+            </div>
+          ) : (
+            <>
+              {results.tenants.length > 0 && (
+                <div className="py-1.5">
+                  <p className="px-4 pt-2 pb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Huurders</p>
+                  {results.tenants.map((t) => (
+                    <button key={t.id} onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => go('tenants')}
+                      data-testid={`search-tenant-${t.id}`}
+                      className="w-full text-left px-4 py-2.5 hover:bg-orange-50/60 flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                        <Users className="w-4 h-4" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-bold text-slate-900 truncate">{t.name}</p>
+                        <p className="text-[11px] text-slate-500 truncate">
+                          {t.phone || ''}{t.phone && t.email ? ' · ' : ''}{t.email || ''}
+                        </p>
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-slate-300 shrink-0" />
+                    </button>
+                  ))}
+                </div>
+              )}
+              {results.apartments.length > 0 && (
+                <div className="py-1.5 border-t border-slate-100">
+                  <p className="px-4 pt-2 pb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Appartementen</p>
+                  {results.apartments.map((a) => (
+                    <button key={a.id} onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => go('apartments')}
+                      data-testid={`search-apartment-${a.id}`}
+                      className="w-full text-left px-4 py-2.5 hover:bg-orange-50/60 flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-lg bg-orange-100 text-[#FF5C00] flex items-center justify-center shrink-0">
+                        <Building2 className="w-4 h-4" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-bold text-slate-900 truncate">{a.number}</p>
+                        <p className="text-[11px] text-slate-500 truncate">{a.address || '—'}</p>
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-slate-300 shrink-0" />
+                    </button>
+                  ))}
+                </div>
+              )}
+              {results.invoices.length > 0 && (
+                <div className="py-1.5 border-t border-slate-100">
+                  <p className="px-4 pt-2 pb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Facturen</p>
+                  {results.invoices.map((i) => (
+                    <button key={i.id} onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => go('invoices')}
+                      data-testid={`search-invoice-${i.id}`}
+                      className="w-full text-left px-4 py-2.5 hover:bg-orange-50/60 flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-lg bg-orange-100 text-[#FF5C00] flex items-center justify-center shrink-0">
+                        <FileText className="w-4 h-4" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-bold text-slate-900 truncate">
+                          {i.invoice_number || '#—'} · {MONTHS_NL[(i.period_month || 1) - 1]} {i.period_year}
+                        </p>
+                        <p className="text-[11px] text-slate-500 truncate">
+                          {i.tenant_name || '—'} · {fmtMoney(i.amount, i.currency)}
+                        </p>
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-slate-300 shrink-0" />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// =====================================================================
+// PaymentPlansList — toont ALLE actieve betalingsregelingen in een
+// scrollable lijst op de Overzicht-pagina (vervangt het oude
+// "Status Overzicht" blok). Klik op een regeling navigeert naar de
+// Betalingsregelingen-tab.
+// =====================================================================
+function PaymentPlansList() {
+  const [plans, setPlans] = useState(null);
+  const reload = useCallback(() => {
+    api.get('/payment-plans?status=active')
+      .then((r) => setPlans(r.data || []))
+      .catch(() => setPlans([]));
+  }, []);
+  useEffect(() => { reload(); }, [reload]);
+  useAutoRefresh(reload, 15000);
+
+  const go = () => window.dispatchEvent(new CustomEvent('go-tab', { detail: 'payment_plans' }));
+
+  return (
+    <div className="bg-white rounded-2xl border border-slate-100 shadow-[0_1px_4px_-2px_rgba(15,23,42,0.06)] p-4 lg:p-5 lg:col-span-2"
+      data-testid="payment-plans-overview-card">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <Calendar className="w-4 h-4 text-[#FF5C00]" />
+          <p className="text-[10px] lg:text-[11px] font-bold uppercase tracking-widest text-slate-400">
+            Actieve Betalingsregelingen
+          </p>
+          {plans && plans.length > 0 && (
+            <span className="ml-1 px-2 py-0.5 rounded-full bg-orange-100 text-[10px] font-black text-[#FF5C00]"
+              data-testid="payment-plans-count">{plans.length}</span>
+          )}
+        </div>
+        <button onClick={go} data-testid="payment-plans-view-all"
+          className="text-xs font-bold text-[#FF5C00] hover:underline">
+          Bekijk alle →
+        </button>
+      </div>
+
+      {plans === null ? (
+        <div className="py-10 text-center text-sm text-slate-400">
+          <Loader2 className="w-5 h-5 mx-auto mb-2 animate-spin text-slate-300" />
+          Regelingen laden…
+        </div>
+      ) : plans.length === 0 ? (
+        <div className="py-10 text-center text-sm text-slate-400">
+          <Calendar className="w-6 h-6 mx-auto mb-2 text-slate-300" />
+          Geen actieve betalingsregelingen
+        </div>
+      ) : (
+        <div className="max-h-[420px] overflow-y-auto -mx-2 px-2">
+          {plans.map((p) => {
+            const pct = p.total_amount > 0
+              ? Math.min(100, Math.round((p.paid_amount / p.total_amount) * 100))
+              : 0;
+            const overdue = (p.overdue_count || 0) > 0;
+            return (
+              <button key={p.id} onClick={go}
+                data-testid={`payment-plan-${p.id}`}
+                className="w-full text-left p-3 rounded-xl hover:bg-orange-50/40 border border-transparent hover:border-orange-100 transition-all mb-1.5 last:mb-0">
+                <div className="flex items-start gap-3">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                    overdue ? 'bg-red-50 text-red-600' : 'bg-orange-50 text-[#FF5C00]'
+                  }`}>
+                    <Calendar className="w-4 h-4" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2 mb-0.5">
+                      <p className="text-sm font-black text-slate-900 truncate">
+                        {p.tenant_name || '—'}
+                        {p.apartment_number && (
+                          <span className="text-slate-400 font-bold"> · Appt. {p.apartment_number}</span>
+                        )}
+                      </p>
+                      <p className="text-sm font-black text-slate-900 shrink-0">
+                        {fmtMoney(p.remaining_amount, p.currency)}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 text-[11px]">
+                      <span className="text-slate-500 font-semibold">
+                        {fmtMoney(p.paid_amount, p.currency)} / {fmtMoney(p.total_amount, p.currency)}
+                      </span>
+                      {overdue && (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-red-50 text-red-700 font-bold">
+                          <AlertCircle className="w-2.5 h-2.5" />
+                          {p.overdue_count} achterstand
+                        </span>
+                      )}
+                      {p.next_due_date && !overdue && (
+                        <span className="text-slate-400 font-semibold">
+                          Volgende: {new Date(p.next_due_date).toLocaleDateString('nl-NL', { day: '2-digit', month: 'short' })}
+                        </span>
+                      )}
+                    </div>
+                    <div className="mt-2 h-1.5 w-full rounded-full bg-slate-100 overflow-hidden">
+                      <div className={`h-full transition-all ${
+                        overdue ? 'bg-gradient-to-r from-red-400 to-red-600'
+                          : 'bg-gradient-to-r from-[#F8C260] to-[#FF5C00]'
+                      }`} style={{ width: `${pct}%` }} />
+                    </div>
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Overview() {
   const [stats, setStats] = useState(null);
   const navigate = useBrandedNavigate();
@@ -889,17 +1156,7 @@ function Overview() {
                 <p className="text-[10px] text-slate-500 font-semibold">Huurder toevoegen</p>
               </div>
             </button>
-            <button onClick={() => window.dispatchEvent(new CustomEvent('go-tab', { detail: 'payments' }))}
-              data-testid="quick-new-payment"
-              className="group flex items-center gap-3 p-3 rounded-xl bg-gradient-to-br from-emerald-50 to-emerald-100/40 hover:from-emerald-100 hover:to-emerald-200/60 border border-emerald-100 hover:border-emerald-300 transition-all">
-              <div className="w-10 h-10 rounded-lg bg-white/80 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-                <Banknote className="w-5 h-5 text-emerald-600" />
-              </div>
-              <div className="text-left">
-                <p className="text-sm font-black text-slate-900">Nieuwe betaling</p>
-                <p className="text-[10px] text-slate-500 font-semibold">Kwitantie boeken</p>
-              </div>
-            </button>
+            <GlobalSearch />
             <button onClick={openKioskFn}
               data-testid="quick-kiosk-desktop"
               className="group flex items-center gap-3 p-3 rounded-xl text-white hover:shadow-[0_10px_24px_-8px_rgba(255,92,0,0.5)] transition-shadow border border-orange-600"
@@ -952,53 +1209,11 @@ function Overview() {
         </div>
       </div>
 
-      {/* Status overzicht + Laatste activiteiten — 2 koloms op desktop */}
+      {/* Betalingsregelingen + Laatste activiteiten — 2 koloms op desktop.
+          Status Overzicht (donut + huurstatus) is vervangen door een
+          scrollable lijst van actieve betalingsregelingen. */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-5 mb-4 lg:mb-5">
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-[0_1px_4px_-2px_rgba(15,23,42,0.06)] p-4 lg:p-5 lg:col-span-2" data-testid="status-overview-card">
-          <div className="flex items-center justify-between mb-3.5">
-            <p className="text-[10px] lg:text-[11px] font-bold uppercase tracking-widest text-slate-400">Status Overzicht</p>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 lg:gap-5">
-            {/* Donut: Betalingsstatus */}
-            <div>
-              <p className="text-sm font-bold text-slate-900 mb-3">Betalingsstatus</p>
-              <div className="flex items-center gap-4 lg:gap-5">
-                <StatusDonut paid={invStatus.paid} open={invStatus.open} overdue={invStatus.overdue} />
-                <div className="space-y-2.5">
-                  <StatusLegendItem color="#10B981" label="Betaald" count={invStatus.paid} percent={pct(invStatus.paid)} />
-                  <StatusLegendItem color="#FF5C00" label="Openstaand" count={invStatus.open} percent={pct(invStatus.open)} />
-                  <StatusLegendItem color="#94A3B8" label="Achterstand" count={invStatus.overdue} percent={pct(invStatus.overdue)} />
-                </div>
-              </div>
-            </div>
-            {/* Huurstatus: bezet/totaal + vacancy card */}
-            <div>
-              <p className="text-sm font-bold text-slate-900 mb-3">Huurstatus</p>
-              <div className="h-2.5 w-full rounded-full bg-slate-100 overflow-hidden mb-2">
-                <div className="h-full bg-emerald-500 transition-all" style={{ width: `${occupiedPct}%` }} />
-              </div>
-              <div className="flex items-center justify-between text-xs mb-4">
-                <span className="text-slate-600 font-semibold">{stats.apartments_occupied} van {stats.apartments_total} bezet</span>
-                <span className="text-slate-900 font-black">{occupiedPct}%</span>
-              </div>
-              <div className={`rounded-xl border p-3.5 ${vacantCount === 0 ? 'bg-emerald-50/60 border-emerald-100' : 'bg-amber-50/60 border-amber-100'}`}>
-                <div className="flex items-start gap-3">
-                  <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${vacantCount === 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
-                    <Home className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <p className={`text-sm font-black ${vacantCount === 0 ? 'text-emerald-800' : 'text-amber-800'}`}>
-                      {vacantCount === 0 ? 'Geen vacancies' : `${vacantCount} vacant${vacantCount === 1 ? '' : 'e'}`}
-                    </p>
-                    <p className={`text-xs ${vacantCount === 0 ? 'text-emerald-700' : 'text-amber-700'}`}>
-                      {vacantCount === 0 ? 'Alle eenheden zijn bezet.' : 'Eenheden beschikbaar voor verhuur.'}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+        <PaymentPlansList />
 
         <div className="bg-white rounded-2xl border border-slate-100 shadow-[0_1px_4px_-2px_rgba(15,23,42,0.06)] p-4 lg:p-5" data-testid="recent-activity-card">
           <div className="flex items-center justify-between mb-2">
@@ -1912,7 +2127,7 @@ function DesktopTopBar({ user, activeCompany, tab, tabs }) {
   if (user?.role === 'superadmin') return null;
   const current = tabs.find((t) => t.id === tab);
   return (
-    <div className="hidden md:flex items-center justify-between gap-4 px-6 lg:px-8 pt-5 lg:pt-6 pb-2 sticky top-0 z-20 bg-[#FFF7F0]/85 backdrop-blur-md"
+    <div className="hidden md:flex items-center justify-between gap-4 px-6 lg:px-8 pt-5 lg:pt-6 pb-2 sticky top-0 z-20 bg-[#F7F8FA]/90 backdrop-blur-md"
       data-testid="desktop-top-bar">
       <div className="min-w-0 flex items-center gap-3">
         {current?.icon && (

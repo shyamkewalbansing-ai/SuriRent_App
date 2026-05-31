@@ -1,0 +1,31 @@
+{
+  "summary": "Frontend-only regression of new luxe Admin Overzicht (/admin/overview) redesign. All 12 acceptance criteria from review_request PASS. Login → /admin/overview lands directly. Hero Kas saldo card with 3 currency tiles (SRD/EUR/USD) renders correctly with banking-style luxe gradient. 4 KPI cards (apartments=4, tenants=3, current-open=0, overdue=0) all render and navigate properly. Quick actions row works (new-invoice, new-tenant, global-search, kiosk-desktop). Global search 'kew' shows Bharat Kewalbansing + Rayshree + Yashveer huurders and HUIS 7A apartment in dropdown; clicking Bharat navigates to /admin/tenants. Active Payment Plans list shows 7 plans with count badge; clicking plan or 'Bekijk alle' navigates to /admin/payment_plans. Beheer kasgeld → /admin/kasgeld. Open Kiosk → /kiosk. Status Overzicht donut chart correctly REMOVED from desktop. Mobile (390x844) still renders portfolio-card-mobile + income-total (SRD 1.078.399,80) + outstanding-total (SRD 0,00). No console errors except expected 401 on initial /api/auth/me before login. All required icons rendered (no missing icon warnings).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/admin/overview hero Kas saldo card", "issues": ["SRD tile shows '-6.550' (negative cash balance) — data-driven (Gopi company has negative kas) but the luxe banking-card aesthetic with a negative number looks unusual. Consider an accent/badge style for negative values or hide minus-sign formatting in luxe view. Cosmetic only — not a functional bug."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Optional cosmetic: consider styling treatment for negative cash balance in luxe hero card (e.g. red accent or '-' formatting like '−SRD 6.550')."
+  ],
+  "critical_code_review_comments": [
+    "AdminDashboard.jsx is now very large; consider extracting Overview(), GlobalSearch(), PaymentPlansList() into separate files under /pages/vastgoed/overview/ for maintainability.",
+    "PaymentPlansList polls every 15s via useAutoRefresh — fine for now, but ensure cleanup on unmount to avoid stale fetch on tab switch.",
+    "Global search dropdown shows 'kew' matches by partial email (Rayshree shyamkewalbansing@gmail.com); good UX, but verify it doesn't leak emails from other companies once superadmin scope is added in future."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a", "frontend": "100% (12/12 criteria pass)"},
+  "test_credentials": "admin@vastgoed.sr / admin123 (currently default-scoped to Gopi Appartement company, slug surirent). Bharat Kewalbansing, Rayshree, Yashveer are visible tenants. 7 active payment plans exist.",
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Overzicht desktop redesign fully verified. Selectors confirmed: hero-cash-tile-{srd|eur|usd}, hero-cash-balance, hero-cash-cta, kpi-apartments, kpi-tenants, kpi-tenants-cta, kpi-current-open, kpi-overdue, quick-new-invoice, quick-new-tenant, quick-kiosk-desktop, overview-global-search, overview-search-clear, payment-plans-overview-card, payment-plans-count, payment-plans-view-all, payment-plan-{id}, recent-activity-card. Mobile retains portfolio-card-mobile, income-total, outstanding-total. Navigation flows verified: hero-cash-cta→/admin/kasgeld, payment-plans→/admin/payment_plans, kpi-current-open & kpi-overdue→/admin/invoices, kpi-tenants & search-tenant-click→/admin/tenants, quick-kiosk-desktop→/kiosk. quick-new-invoice navigates to /admin/invoices (does NOT open modal directly on overview — the modal opens on /admin/invoices via global event; main agent should confirm this is desired UX).",
+  "rca of the issue": "N/A — no bugs found in scope."
+}
