@@ -1,0 +1,146 @@
+{
+  "theme": "LIGHT",
+  "archetype": "4 (Swiss & High-Contrast)",
+  "vibe": "Architectural, Brutalist, Structured, Confident, Professional B2B SaaS",
+  "colors": {
+    "primary": "#FF5C00",
+    "primary_hover": "#FF8A3D",
+    "primary_dark": "#C74600",
+    "accent": "#F8C260",
+    "accent_dark": "#D4A037",
+    "background": "#FFFFFF",
+    "surface": "#F5F5F0",
+    "surface_alt": "#EDEDE8",
+    "text_main": "#0A0A0A",
+    "text_muted": "#52525B",
+    "border": "#E5E5E5",
+    "border_hard": "#0A0A0A"
+  },
+  "typography": {
+    "headings": "Cabinet Grotesk",
+    "body": "IBM Plex Sans",
+    "rules": [
+      "H1 must use tracking-tighter and font-black for maximum structural impact",
+      "Overlines must be tracking-[0.2em] and uppercase",
+      "Use strict left alignment for most text, never center-align everything to avoid 'generic SaaS slop'"
+    ]
+  },
+  "layout_strategy": {
+    "grid": "Strict border-collapse style grids. Elements should have visible hard boundaries (1px solid black or dark gray border-[#0A0A0A] or border-gray-300).",
+    "borders": "Heavy use of border-b, border-r on structural containers to create a 'Blueprint/Matrix' feel. No soft drop shadows, use hard 1px borders instead.",
+    "spacing": "Generous internal padding (p-8 to p-16) inside bordered containers to prevent text collision.",
+    "radius": "rounded-none or max rounded-sm to maintain the brutalist architectural feel."
+  },
+  "sections": [
+    {
+      "name": "Navigation",
+      "layout": "Fixed top. White background, hard 1px border-b border-black. Flex between. Logo on left, links in center, 'Demo aanvragen' solid orange button on right."
+    },
+    {
+      "name": "Hero",
+      "layout": "2-column grid (md:grid-cols-2) with a hard vertical divider (border-r border-black). Left: Massive typography, overline, subtext, primary CTA. Right: The 'Overzicht/KPI dashboard' screenshot cropped aggressively in a structured box. Background uses the abstract_grid_bg.",
+      "media_requirements": ["abstract_grid_bg", "desktop_overzicht_screenshot"]
+    },
+    {
+      "name": "Feature Matrix (Beheer Suite)",
+      "layout": "Sticky Split Layout. Left column (sticky, 35vw) acts as an index/menu with 4 large numbered items. Right column (65vw) contains a vertical stack of the 4 remaining desktop screenshots (Locaties, Appartementen, Betalingen, Facturen) housed in strict bordered boxes with generous padding.",
+      "media_requirements": [
+        "desktop_locaties_screenshot",
+        "desktop_appartementen_screenshot",
+        "desktop_betalingen_screenshot",
+        "desktop_facturen_screenshot"
+      ]
+    },
+    {
+      "name": "Kiosk Flow (Tablet)",
+      "layout": "Horizontal Scrolling 'Filmstrip' or 4-column strict grid. Massive full-width section. Top half has section header. Bottom half is a horizontally scrolling track (or CSS grid if fits) of 4 tablet screenshots, showing the exact step-by-step payment flow. Each has an Orange/Cream theme background.",
+      "media_requirements": [
+        "tablet_kiosk_step1",
+        "tablet_kiosk_step2",
+        "tablet_kiosk_step3",
+        "tablet_kiosk_step4"
+      ]
+    },
+    {
+      "name": "Pricing",
+      "layout": "3-column grid Matrix. No shadows, no floating cards. Just stark cells with border-r and border-b. Pro tier (SRD 950) is highlighted by inverted colors (Black background, white text, orange button).",
+      "media_requirements": []
+    },
+    {
+      "name": "FAQ",
+      "layout": "Minimalist accordion. Each item has a strong 1px border-b. No backgrounds, just pure typography and high contrast.",
+      "media_requirements": []
+    },
+    {
+      "name": "Final CTA",
+      "layout": "Massive solid Orange (#FF5C00) full-width block. Giant black typography. 'Klaar om uw vastgoed te digitaliseren?'. 2 buttons: 'Demo proberen' (Black) and 'WhatsApp ons' (Transparent with black border).",
+      "media_requirements": []
+    },
+    {
+      "name": "Footer",
+      "layout": "Dark architectural footer (Black background, white text). Strict grid columns for links. Massive 'SuriRent' logo/text spanning the bottom.",
+      "media_requirements": []
+    }
+  ],
+  "media_urls": {
+    "abstract_grid_bg": {
+      "url": "https://static.prod-images.emergentagent.com/jobs/112f335e-34a5-41f6-964a-ace72b419b81/images/47831d937ec66ad2eac29ee630213ff18ab5537d6e0a0fba674374d50af2c41b.png",
+      "description": "Abstract grid background for hero section",
+      "category": "background"
+    },
+    "desktop_overzicht_screenshot": {
+      "url": "https://images.unsplash.com/photo-1551288049-bebda4e38f71?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NzB8MHwxfHNlYXJjaHwxfHxkYXNoYm9hcmQlMjBpbnRlcmZhY2V8ZW58MHx8fHwxNzgwMjUxOTMxfDA&ixlib=rb-4.1.0&q=85",
+      "description": "CRITICAL: MUST REPLACE THIS WITH THE ACTUAL Overzicht/KPI dashboard desktop screenshot URL provided in your context",
+      "category": "hero_image"
+    },
+    "desktop_locaties_screenshot": {
+      "url": "https://images.unsplash.com/photo-1560472354-b33ff0c44a43?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NzB8MHwxfHNlYXJjaHw0fHxkYXNoYm9hcmQlMjBpbnRlcmZhY2V8ZW58MHx8fHwxNzgwMjUxOTMxfDA&ixlib=rb-4.1.0&q=85",
+      "description": "CRITICAL: MUST REPLACE THIS WITH THE ACTUAL Locaties desktop screenshot URL provided in your context",
+      "category": "feature_image"
+    },
+    "desktop_appartementen_screenshot": {
+      "url": "https://images.unsplash.com/photo-1686061594225-3e92c0cd51b0?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NzB8MHwxfHNlYXJjaHwzfHxkYXNoYm9hcmQlMjBpbnRlcmZhY2V8ZW58MHx8fHwxNzgwMjUxOTMxfDA&ixlib=rb-4.1.0&q=85",
+      "description": "CRITICAL: MUST REPLACE THIS WITH THE ACTUAL Appartementen desktop screenshot URL provided in your context",
+      "category": "feature_image"
+    },
+    "desktop_betalingen_screenshot": {
+      "url": "https://images.unsplash.com/photo-1526628953301-3e589a6a8b74?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NzB8MHwxfHNlYXJjaHwyfHxkYXNoYm9hcmQlMjBpbnRlcmZhY2V8ZW58MHx8fHwxNzgwMjUxOTMxfDA&ixlib=rb-4.1.0&q=85",
+      "description": "CRITICAL: MUST REPLACE THIS WITH THE ACTUAL Betalingen log desktop screenshot URL provided in your context",
+      "category": "feature_image"
+    },
+    "desktop_facturen_screenshot": {
+      "url": "https://images.unsplash.com/photo-1551288049-bebda4e38f71?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NzB8MHwxfHNlYXJjaHwxfHxkYXNoYm9hcmQlMjBpbnRlcmZhY2V8ZW58MHx8fHwxNzgwMjUxOTMxfDA&ixlib=rb-4.1.0&q=85",
+      "description": "CRITICAL: MUST REPLACE THIS WITH THE ACTUAL Facturen desktop screenshot URL provided in your context",
+      "category": "feature_image"
+    },
+    "tablet_kiosk_step1": {
+      "url": "https://images.unsplash.com/photo-1560472354-b33ff0c44a43?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NzB8MHwxfHNlYXJjaHw0fHxkYXNoYm9hcmQlMjBpbnRlcmZhY2V8ZW58MHx8fHwxNzgwMjUxOTMxfDA&ixlib=rb-4.1.0&q=85",
+      "description": "CRITICAL: MUST REPLACE THIS WITH THE ACTUAL Kiosk tablet screenshot 1 (Locatie kiezen) from your context",
+      "category": "kiosk_image"
+    },
+    "tablet_kiosk_step2": {
+      "url": "https://images.unsplash.com/photo-1686061594225-3e92c0cd51b0?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NzB8MHwxfHNlYXJjaHwzfHxkYXNoYm9hcmQlMjBpbnRlcmZhY2V8ZW58MHx8fHwxNzgwMjUxOTMxfDA&ixlib=rb-4.1.0&q=85",
+      "description": "CRITICAL: MUST REPLACE THIS WITH THE ACTUAL Kiosk tablet screenshot 2 (Appartement) from your context",
+      "category": "kiosk_image"
+    },
+    "tablet_kiosk_step3": {
+      "url": "https://images.unsplash.com/photo-1526628953301-3e589a6a8b74?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NzB8MHwxfHNlYXJjaHwyfHxkYXNoYm9hcmQlMjBpbnRlcmZhY2V8ZW58MHx8fHwxNzgwMjUxOTMxfDA&ixlib=rb-4.1.0&q=85",
+      "description": "CRITICAL: MUST REPLACE THIS WITH THE ACTUAL Kiosk tablet screenshot 3 (Bedrag bekijken) from your context",
+      "category": "kiosk_image"
+    },
+    "tablet_kiosk_step4": {
+      "url": "https://images.unsplash.com/photo-1551288049-bebda4e38f71?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NzB8MHwxfHNlYXJjaHwxfHxkYXNoYm9hcmQlMjBpbnRlcmZhY2V8ZW58MHx8fHwxNzgwMjUxOTMxfDA&ixlib=rb-4.1.0&q=85",
+      "description": "CRITICAL: MUST REPLACE THIS WITH THE ACTUAL Kiosk tablet screenshot 4 (Betalen numpad) from your context",
+      "category": "kiosk_image"
+    }
+  },
+  "instructions_to_main_agent": [
+    "CRITICAL: Replace all unsplash placeholder URLs in media_urls with the ACTUAL 9 CDN screenshot URLs provided in your system prompt.",
+    "Do NOT use typical SaaS 'bento' or floating center-card templates.",
+    "Rely heavily on 'border-black/10' or 'border-black' on major layout elements to create a strict, architectural, blueprint-like grid.",
+    "Use Cabinet Grotesk for all headings. Ensure leading-tight and tracking-tighter for a modern editorial feel.",
+    "Ensure the screenshots are placed inside containers with padding, rather than stretching edge-to-edge randomly. They represent professional tools.",
+    "Every button and interactive element MUST have a 'data-testid' attribute.",
+    "For the Kiosk section, use an overflow-x-auto or a strict 4-column grid (if they fit) to show the flow chronologically."
+  ]
+}
