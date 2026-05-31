@@ -568,11 +568,12 @@ function ActivityRow({ item }) {
 // Searches huurders, appartementen en facturen (client-side fuzzy match)
 // en navigeert bij klik direct naar de juiste tab.
 // =====================================================================
-function GlobalSearch() {
+function GlobalSearch({ variant = 'quick' }) {
   const [q, setQ] = useState('');
   const [data, setData] = useState({ tenants: [], apartments: [], invoices: [] });
   const [open, setOpen] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const compact = variant === 'topbar';
 
   // Lazy-load alle data één keer wanneer de gebruiker begint te typen.
   // Voor een SaaS van deze grootte (1-200 huurders) is dit ruim snel
@@ -614,19 +615,31 @@ function GlobalSearch() {
   };
 
   return (
-    <div className="relative">
-      <div className="group flex items-center gap-2.5 p-3 rounded-xl bg-gradient-to-br from-slate-50 to-slate-100/60 border border-slate-200 hover:border-[#FF5C00] focus-within:border-[#FF5C00] focus-within:ring-2 focus-within:ring-orange-100 transition-all h-full">
-        <div className="w-10 h-10 rounded-lg bg-white/80 flex items-center justify-center shrink-0">
-          <Search className="w-5 h-5 text-[#FF5C00]" />
-        </div>
+    <div className={compact ? 'relative w-72 xl:w-96' : 'relative'}>
+      <div className={
+        compact
+          ? 'group flex items-center gap-2 h-10 px-3 rounded-full bg-white border border-slate-200 hover:border-[#FF5C00] focus-within:border-[#FF5C00] focus-within:ring-2 focus-within:ring-orange-100 shadow-sm transition-all'
+          : 'group flex items-center gap-2.5 p-3 rounded-xl bg-gradient-to-br from-slate-50 to-slate-100/60 border border-slate-200 hover:border-[#FF5C00] focus-within:border-[#FF5C00] focus-within:ring-2 focus-within:ring-orange-100 transition-all h-full'
+      }>
+        {compact ? (
+          <Search className="w-4 h-4 text-slate-400 shrink-0" />
+        ) : (
+          <div className="w-10 h-10 rounded-lg bg-white/80 flex items-center justify-center shrink-0">
+            <Search className="w-5 h-5 text-[#FF5C00]" />
+          </div>
+        )}
         <input
           value={q}
           onChange={(e) => { setQ(e.target.value); setOpen(true); loadAll(); }}
           onFocus={() => { setOpen(true); loadAll(); }}
           onBlur={() => setTimeout(() => setOpen(false), 180)}
           data-testid="overview-global-search"
-          placeholder="Zoek huurder, appartement of factuur…"
-          className="flex-1 min-w-0 bg-transparent outline-none text-sm font-bold text-slate-900 placeholder:text-slate-400 placeholder:font-semibold"
+          placeholder={compact ? 'Zoeken…' : 'Zoek huurder, appartement of factuur…'}
+          className={
+            compact
+              ? 'flex-1 min-w-0 bg-transparent outline-none text-sm font-semibold text-slate-900 placeholder:text-slate-400'
+              : 'flex-1 min-w-0 bg-transparent outline-none text-sm font-bold text-slate-900 placeholder:text-slate-400 placeholder:font-semibold'
+          }
         />
         {q && (
           <button onClick={() => setQ('')}
@@ -1156,7 +1169,17 @@ function Overview() {
                 <p className="text-[10px] text-slate-500 font-semibold">Huurder toevoegen</p>
               </div>
             </button>
-            <GlobalSearch />
+            <button onClick={() => window.dispatchEvent(new CustomEvent('go-tab', { detail: 'payments' }))}
+              data-testid="quick-new-payment"
+              className="group flex items-center gap-3 p-3 rounded-xl bg-gradient-to-br from-emerald-50 to-emerald-100/40 hover:from-emerald-100 hover:to-emerald-200/60 border border-emerald-100 hover:border-emerald-300 transition-all">
+              <div className="w-10 h-10 rounded-lg bg-white/80 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                <Banknote className="w-5 h-5 text-emerald-600" />
+              </div>
+              <div className="text-left">
+                <p className="text-sm font-black text-slate-900">Nieuwe betaling</p>
+                <p className="text-[10px] text-slate-500 font-semibold">Kwitantie boeken</p>
+              </div>
+            </button>
             <button onClick={openKioskFn}
               data-testid="quick-kiosk-desktop"
               className="group flex items-center gap-3 p-3 rounded-xl text-white hover:shadow-[0_10px_24px_-8px_rgba(255,92,0,0.5)] transition-shadow border border-orange-600"
@@ -2145,7 +2168,7 @@ function DesktopTopBar({ user, activeCompany, tab, tabs }) {
         </div>
       </div>
       <div className="flex items-center gap-2.5 shrink-0">
-        <QuickPayButton />
+        <GlobalSearch variant="topbar" />
         <ApartmentsBell />
         <PendingApprovalBell />
         <OverdueBell />

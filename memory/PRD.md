@@ -1,5 +1,10 @@
 # Vastgoed Kiosk - PRD
 
+## Session 2026-05-31 (v3) — Zoekbalk verplaatst naar Top Bar ✅
+- Gebruiker correctie: `GlobalSearch` is verhuisd vanuit "Snelle Acties" naar de **DesktopTopBar**, ter vervanging van `QuickPayButton` (de groene "Nieuwe betaling" snelknop bovenaan rechts). Nieuwe `variant="topbar"` prop maakt slanke pill-stijl (h-10, w-72 → xl:w-96) passend in de header.
+- "Nieuwe betaling" knop is **teruggezet** in de Snelle Acties rij — alle 4 originele knoppen zijn terug: Nieuwe factuur · Nieuwe huurder · Nieuwe betaling · Open Kiosk.
+- `QuickPayButton` import in `AdminDashboard.jsx` blijft (component nog beschikbaar voor andere views indien nodig).
+
 ## Session 2026-05-31 — Admin Overzicht: luxe banking-hero, payment plans lijst, globale zoekbalk ✅
 - **Hero Kas saldo** (banking-stijl) bovenaan de Overzicht: donkere bodem met goud/oranje radial glow, gradient-text titel, 3 valuta tegels (SRD/EUR/USD) elk met TrendingUp indicator. "Beheer kasgeld" pill-knop opent kasgeld tab.
 - **KPI rij — 4 tegels**: Appartementen (met bezettingsgraad bar), Actieve huurders (CTA naar Huurders), Open · lopende maand (count + €), Achterstand (rood gradient bij overdue > 0). Alle klikbaar.
