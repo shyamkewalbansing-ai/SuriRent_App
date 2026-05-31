@@ -506,18 +506,27 @@ function TenantRow({ group, expanded, onToggle, onReminder, tenants }) {
           </div>
 
           {/* Laatste periode — desktop only, compact. Toont voor 'paid'-
-              huurders het laatst-betaalde maand-jaar i.p.v. "Geen". */}
+              huurders het laatst-betaalde maand-jaar i.p.v. "Geen". Het
+              label onderaan beschrijft de bucket van die maand precies:
+              - "Achterstand"  → overdue (vervaltermijn verstreken)
+              - "Lopende maand" → current (binnen grace)
+              - "Komt nog"     → future
+              - "Laatst betaald" → geen open facturen meer */}
           <div className="hidden md:block text-right text-xs whitespace-nowrap min-w-0">
             {last ? (
               <>
                 <p className="text-slate-700 font-semibold capitalize truncate">{MONTHS_NL[last.period_month - 1].slice(0, 3)} {last.period_year}</p>
                 <p className={`font-bold ${
-                  sev === 'critical' ? 'text-red-500'
-                    : sev === 'late' ? 'text-orange-500'
-                    : group.openCount === 0 ? 'text-emerald-600'
-                    : 'text-blue-500'
+                  group.openCount === 0 ? 'text-emerald-600'
+                    : (last.bucket || '') === 'future' ? 'text-blue-500'
+                    : (last.bucket || '') === 'current' ? 'text-amber-600'
+                    : sev === 'critical' ? 'text-red-500'
+                    : 'text-orange-500'
                 }`}>
-                  {group.openCount === 0 ? 'Laatst betaald' : (sev === 'ok' ? 'Komt nog' : 'Niet betaald')}
+                  {group.openCount === 0 ? 'Laatst betaald'
+                    : (last.bucket || '') === 'future' ? 'Komt nog'
+                    : (last.bucket || '') === 'current' ? 'Lopende maand'
+                    : 'Achterstand'}
                 </p>
               </>
             ) : (
