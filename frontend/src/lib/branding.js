@@ -90,6 +90,9 @@ export function applyBranding(branding) {
     if (branding.logo_url) localStorage.setItem(LOGO_KEY, branding.logo_url);
     if (branding.slug) setStoredSlug(branding.slug);
   } catch { /* ignore */ }
+  // Broadcast naar componenten (zoals Sidebar) die het cache willen herlezen.
+  try { window.dispatchEvent(new CustomEvent('branding-updated', { detail: branding })); }
+  catch { /* SSR-safe noop */ }
 }
 
 export function clearBrandingCache() {

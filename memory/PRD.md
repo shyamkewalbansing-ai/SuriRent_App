@@ -1,5 +1,11 @@
 # Vastgoed Kiosk - PRD
 
+## Session 2026-05-31 (v4) — Sidebar logo = bedrijfslogo (white-label) ✅
+- `Sidebar` haalt nu logo op uit `readCachedBranding()` (localStorage `pwa_company_logo`) of `activeCompany.logo_url`. Wanneer aanwezig: witte tile met klant-logo. Wanneer afwezig: fallback naar oranje `SuriRent` icoon.
+- **Live update**: `applyBranding()` in `/app/frontend/src/lib/branding.js` dispatcht nu een `branding-updated` CustomEvent op `window`. De Sidebar luistert en ververst direct zonder page reload.
+- Bestaande `LogoUploader` in `/admin/branding` (met PNG/SVG upload max 5 MB via `POST /api/companies/me/branding/upload`) is ongewijzigd — wiring was reeds compleet, alleen Sidebar miste de live binding.
+- White-label SaaS is nu visueel compleet: elk bedrijf in de multi-tenant SaaS toont zijn eigen logo + naam in de zijbalk.
+
 ## Session 2026-05-31 (v3) — Zoekbalk verplaatst naar Top Bar ✅
 - Gebruiker correctie: `GlobalSearch` is verhuisd vanuit "Snelle Acties" naar de **DesktopTopBar**, ter vervanging van `QuickPayButton` (de groene "Nieuwe betaling" snelknop bovenaan rechts). Nieuwe `variant="topbar"` prop maakt slanke pill-stijl (h-10, w-72 → xl:w-96) passend in de header.
 - "Nieuwe betaling" knop is **teruggezet** in de Snelle Acties rij — alle 4 originele knoppen zijn terug: Nieuwe factuur · Nieuwe huurder · Nieuwe betaling · Open Kiosk.

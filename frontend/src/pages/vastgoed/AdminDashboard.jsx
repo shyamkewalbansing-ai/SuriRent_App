@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { api, formatError, fmtMoney, MONTHS_NL, openAuthedPdf } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
+import { resolveLogoUrl, readCachedBranding } from '../../lib/branding';
 import { EmailDialog, SendDialog } from '../../components/EmailDialog';
 import Contracts from './admin/Contracts';
 import Invoices from './admin/Invoices';
@@ -114,14 +115,39 @@ function Sidebar({ active, onChange, onLogout, user, tabs, badgeCount, activeCom
     nameA = fullName.slice(0, mid);
     nameB = fullName.slice(mid);
   }
+  // Bedrijfslogo (uit Branding tab) overschrijft het standaard SuriRent-icoon
+  // wanneer aanwezig. Live-update via branding-updated event uit Branding.jsx.
+  const [logoUrl, setLogoUrl] = useState(() => {
+    const cached = readCachedBranding();
+    return cached?.logo_url || (activeCompany?.logo_url || '');
+  });
+  useEffect(() => {
+    const refresh = () => {
+      const cached = readCachedBranding();
+      setLogoUrl(cached?.logo_url || activeCompany?.logo_url || '');
+    };
+    refresh();
+    window.addEventListener('branding-updated', refresh);
+    return () => window.removeEventListener('branding-updated', refresh);
+  }, [activeCompany?.logo_url]);
+  const resolvedLogo = resolveLogoUrl(logoUrl);
   return (
     <aside className="hidden md:flex flex-col w-56 lg:w-64 sticky top-0 h-screen bg-white border-r border-slate-100 shadow-[1px_0_3px_0_rgba(15,23,42,0.04)]"
       data-testid="sidebar">
       {/* HEADER — logo + bedrijfsnaam, vaste hoogte */}
       <div className="px-5 pt-6 pb-5 flex items-center gap-3 border-b border-slate-100">
-        <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#FF8A3D] to-[#C74600] p-1.5 shadow-[0_8px_18px_-6px_rgba(255,92,0,0.45)] shrink-0">
-          <img src="/kiosk-icons/mark-white.png" alt="Logo" className="w-full h-full object-contain" />
-        </div>
+        {resolvedLogo ? (
+          <div className="w-12 h-12 rounded-2xl bg-white border border-slate-100 p-1.5 shadow-[0_8px_18px_-6px_rgba(15,23,42,0.10)] shrink-0 overflow-hidden"
+            data-testid="sidebar-company-logo">
+            <img src={resolvedLogo} alt={fullName}
+              className="w-full h-full object-contain"
+              onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+          </div>
+        ) : (
+          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#FF8A3D] to-[#C74600] p-1.5 shadow-[0_8px_18px_-6px_rgba(255,92,0,0.45)] shrink-0">
+            <img src="/kiosk-icons/mark-white.png" alt="Logo" className="w-full h-full object-contain" />
+          </div>
+        )}
         <div className="min-w-0">
           <p className="text-base font-black tracking-tight leading-tight truncate"
             data-testid="sidebar-company-name" title={fullName}>
