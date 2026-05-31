@@ -13,6 +13,12 @@
   50%      { transform: translateY(-8px); }
 }
 
+/* Marquee animatie voor de horizontale ticker op de landingspagina */
+@keyframes marquee {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-33.333%); }
+}
+
 * { -webkit-tap-highlight-color: transparent; }
 
 html, body, #root { height: 100%; }

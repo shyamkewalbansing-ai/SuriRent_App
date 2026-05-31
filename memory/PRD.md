@@ -1,5 +1,35 @@
 # Vastgoed Kiosk - PRD
 
+## Session 2026-05-31 (v10) — Local Hero · Premium SaaS · Warme aardetinten ✅
+- Gebruiker verwierp v9 (Swiss Brutalist) en koos voor **"Local Hero (Surinaams trots) + Premium SaaS"** combinatie met warme aardetinten + goud/oranje.
+- **Volledige rewrite** `MarketingLandingV2.jsx`. Palette: cream `#FDF6EC/#FAF1E1`, chocolate `#1F1308/#3D2817`, burnt orange `#FF5C00/#C74600`, gold `#F8C260/#D4A037/#B8860B`, terracotta.
+- **TopNav**: cream glass-blur (`bg-[#FDF6EC]/85`), scroll-aware, "SuriRent" met chocolate/oranje split, oranje gradient demo-knop.
+- **Hero**: warme gradient (cream → perzik), 🇸🇷 "Gemaakt in Suriname" badge, massieve Outfit display "Vastgoed beheren, *zoals het hoort.*" met goud gradient italic accent op laatste regel. Tropical leaf SVG silhouette als subtiele textuur. Browser mockup rechts met gouden glow blur achter. Zwevende "Volledige Beheer · 12+ modules" callout kaart. 5-sterren rating "Surinaams gebouwd, lokaal vertrouwd".
+- **Stats strip**: 4 stats (∞ bedrijven, 3 valuta, 24/7 Kiosk, AI OCR) met chocolate gradient cijfers en cream/gold divider.
+- **Editorial Features**: 5 alternerende tekst↔screenshot rijen, elk met cream `#FAEAD0` of `#F5E6D3` decoratieve blob achter de screenshot, gouden checkmark-tile icons. Eyebrows in burnt orange, headlines met goud gradient accent woorden.
+- **Kiosk Section**: Diep chocolate radial gradient achtergrond met gouden ellipse glow, 4 tablet-mockups in 2x2 grid genummerd 01-04 met goud gradient nummers, bottom pills met goud accenten ("Offline-first · Multi-currency · PIN beveiligd · Gemini AI OCR · WhatsApp bevestiging").
+- **Pricing**: 3 tiers waarvan Pro (950) chocolate gradient met **gouden "Aanbevolen" pill** + gouden CTA knop. Starter en Enterprise cream/wit met gold-accented border hover.
+- **FAQ**: Premium cream cards met goud accent border bij open state.
+- **CTA Banner**: Oranje gradient block met gouden mesh radial overlays + grid texture, 🇸🇷 "Speciaal voor Suriname" badge, "Klaar voor het volgende **hoofdstuk?**" met cream gradient.
+- **Footer**: Chocolate radial gradient met gouden accenten — top hairline divider (gold linear), gouden mail/phone icons, "🇸🇷 Met trots gemaakt in Paramaribo" pill, gouden "Rent" in logo.
+- Body font: Outfit. Selection color: `bg-[#C74600]`. Body bg `#FDF6EC`.
+
+## Session 2026-05-31 (v9) — Architectural/Brutalist Swiss redesign ✅
+- Gebruiker rejecteerde v5/v6/v7/v8 (Premium SaaS / Editorial). Design-expert `design_agent_full_stack` ingeschakeld voor blueprint in `/app/design_guidelines.json`. Gekozen: **Archetype 4 — Swiss & High-Contrast** (Light Theme, hard borders, brutalist).
+- **Volledige rewrite** `MarketingLandingV2.jsx` (overwrite). Geen video, geen blur, geen soft shadows. Strict 1px black borders overal.
+- **TopNav**: Hard `border-b-black`, links als "01 / PRODUCT" tracking-wide uppercase, "DEMO AANVRAGEN" solid orange knop.
+- **Top meta strip**: Architectural data ribbon (Live·Paramaribo / v2.5 / Multi-Tenant SaaS / SRD·EUR·USD / PWA / Vastgoed Suite) in 6 bordered cells.
+- **Hero**: 2-koloms split met harde vertical divider. Links massieve typography "Eén platform. Alle huur. Nul Excel." (clamp 3rem-7.5rem, leading-0.85, oranje accent op laatste regel), spec-metrics onderaan (12+ modules / 3 valuta / ∞ bedrijven). Rechts cream `#F5F5F0` panel met "Fig. 01 / Beheer Suite — Overzicht" label + hard-bordered screenshot container.
+- **Marquee strip**: Zwart full-width met horizontaal scrollende ticker (`@keyframes marquee` toegevoegd aan index.css) — 12 feature items roterend.
+- **ProductIntro**: Manifest-stijl statement met "[01] Wat is SuriRent?" links en grote text rechts.
+- **FeatureMatrix**: **Sticky split layout** — links 40% kolom met 4 numerieke modules (01-04) als clickable index die actief wordt op klik, rechts 60% kolom met gestackte screenshots in bordered viewports, elk met "Fig. 02 / Locaties → /admin/locaties" architectural labels en 3 spec-bullets per module.
+- **Kiosk Filmstrip**: Zwarte sectie, 4 tablets in chronologische 4-koloms rij (genummerd 01-04 STEP), bottom strip met "● Offline-first ● Multi-currency ● PIN ● Gemini AI OCR".
+- **Pricing**: 3-koloms strikte matrix met hard borders. Pro tier (950) inverted (black bg, white text, orange Aanbevolen badge). Genummerd 01/02/03 STARTER/PRO/ENTERPRISE.
+- **FAQ**: Minimal accordion met 4-koloms label ("Vragen? Antwoorden.") + 8-koloms genummerde lijst (01-05) met plus/minus icons, harde border-b per item.
+- **Final CTA**: Volledig oranje block (`#FF5C00`) met grid pattern overlay en clamp 3rem-8rem typography "Digitaliseer uw vastgoed. Vandaag nog." (laatste regel wit).
+- **Footer**: Zwart architectural met 12-col grid + **massieve "SuriRent®" logo statement** onderaan (clamp 4rem-18rem) voor brand presence.
+- IBM Plex Sans als body font, ingesteld via inline style op root div.
+
 ## Session 2026-05-31 (v8) — Fresh modern editorial redesign (geen video) ✅
 - **Volledig herschreven** `MarketingLandingV2.jsx` (rewrite, geen patch). Video volledig verwijderd, alleen screenshots.
 - **Hero (editorial split)**: links bold zwarte headline "De complete **huurbeheer** oplossing voor vastgoed." (oranje accent woord + perzik highlight onderlijn), 2 CTAs + trust badges. Rechts: 2 overlappende gekantelde browser mockups (Overzicht -3°, Betalingen +4°) ipv video.
