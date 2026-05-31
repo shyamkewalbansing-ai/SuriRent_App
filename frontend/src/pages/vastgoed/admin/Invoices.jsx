@@ -462,10 +462,15 @@ function TenantRow({ group, expanded, onToggle, onReminder, tenants }) {
   const avatar = avatarColor(group.tenant_name);
   // Hoofdregel toont "Totaal openstaand" = achterstand + huidige maand
   // (vooruit-gefactureerd telt NIET mee). "Laatste" = meest recente open
-  // factuur exclusief vooruit (dus mei i.p.v. juni).
-  const last = group.lastDue || group.lastOverdue || group.lastOpen;
+  // factuur exclusief vooruit (dus mei i.p.v. juni). Wanneer er GEEN open
+  // facturen zijn (huurder is helemaal bij), tonen we de meest recente
+  // betaalde factuur als referentie ("laatst betaald: mei 2026").
+  const last = group.lastDue || group.lastOverdue || group.lastOpen
+    || (group.all && group.all[group.all.length - 1]);
   const displayTotal = group.totalDue;
   const displayCount = group.dueCount;
+  // Voor de paid-modus: lijst van betaalde facturen sorted desc
+  const paidInvoices = (group.all || []).filter((i) => (i.status || '') === 'paid');
 
   return (
     <div className={`bg-white rounded-2xl border border-orange-100 border-l-4 ${left} overflow-hidden transition`}
@@ -500,7 +505,8 @@ function TenantRow({ group, expanded, onToggle, onReminder, tenants }) {
             <StatusPill severity={sev} overdueCount={group.overdueCount} currentCount={group.currentCount} upcomingCount={group.upcomingCount} />
           </div>
 
-          {/* Laatste periode — desktop only, compact */}
+          {/* Laatste periode — desktop only, compact. Toont voor 'paid'-
+              huurders het laatst-betaalde maand-jaar i.p.v. "Geen". */}
           <div className="hidden md:block text-right text-xs whitespace-nowrap min-w-0">
             {last ? (
               <>
@@ -508,13 +514,14 @@ function TenantRow({ group, expanded, onToggle, onReminder, tenants }) {
                 <p className={`font-bold ${
                   sev === 'critical' ? 'text-red-500'
                     : sev === 'late' ? 'text-orange-500'
+                    : group.openCount === 0 ? 'text-emerald-600'
                     : 'text-blue-500'
                 }`}>
-                  {sev === 'ok' ? 'Komt nog' : 'Niet betaald'}
+                  {group.openCount === 0 ? 'Laatst betaald' : (sev === 'ok' ? 'Komt nog' : 'Niet betaald')}
                 </p>
               </>
             ) : (
-              <p className="text-emerald-600 font-semibold">Geen</p>
+              <p className="text-slate-400 font-semibold">Geen facturen</p>
             )}
           </div>
 
@@ -522,8 +529,15 @@ function TenantRow({ group, expanded, onToggle, onReminder, tenants }) {
           <div className="text-right shrink-0 whitespace-nowrap">
             <p className={`text-base sm:text-lg font-black tracking-tight ${amtCls}`}
               data-testid={`tenant-total-${group.tenant_id}`}>
-              {group.currency} {fmtAmount(displayTotal, group.currency)}
+              {group.openCount === 0 && paidInvoices.length > 0
+                ? `${group.currency} ${fmtAmount(paidInvoices.reduce((s, i) => s + Number(i.amount || 0), 0), group.currency)}`
+                : `${group.currency} ${fmtAmount(displayTotal, group.currency)}`}
             </p>
+            {group.openCount === 0 && paidInvoices.length > 0 && (
+              <p className="text-[10px] text-emerald-600 font-bold mt-0.5">
+                {paidInvoices.length} {paidInvoices.length === 1 ? 'maand' : 'maanden'} betaald
+              </p>
+            )}
             {displayCount > 1 && (
               <p className="text-[10px] text-slate-400 mt-0.5">
                 {displayCount} × {fmtAmount(displayTotal / displayCount, group.currency)}
@@ -538,7 +552,7 @@ function TenantRow({ group, expanded, onToggle, onReminder, tenants }) {
         </div>
       </button>
 
-      {/* Uitgeklapte details */}
+      {/* Uitgeklapte details — open facturen */}
       {expanded && group.openCount > 0 && (
         <div className="px-3 sm:px-4 pb-4 -mt-1" data-testid={`tenant-detail-${group.tenant_id}`}>
           <div className={`rounded-2xl p-4 ${
@@ -688,6 +702,51 @@ function TenantRow({ group, expanded, onToggle, onReminder, tenants }) {
                   className="text-[11px] font-mono font-bold text-slate-600 bg-white hover:bg-slate-50 px-2 py-1 rounded-md border border-slate-200 inline-flex items-center gap-1">
                   <FileText className="w-3 h-3" /> {inv.invoice_number}
                 </a>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Uitgeklapte details — betaalde facturen (alleen wanneer er GEEN open
+          facturen zijn, anders staan ze al in 'open' uitklap als referentie) */}
+      {expanded && group.openCount === 0 && paidInvoices.length > 0 && (
+        <div className="px-3 sm:px-4 pb-4 -mt-1" data-testid={`tenant-paid-detail-${group.tenant_id}`}>
+          <div className="rounded-2xl p-4 bg-emerald-50">
+            <p className="text-sm font-bold mb-3 text-emerald-700">
+              Betaalde maanden ({paidInvoices.length}) · {fmtMoney(paidInvoices.reduce((s, i) => s + Number(i.amount || 0), 0), group.currency)}
+            </p>
+            <div className="space-y-1.5">
+              {paidInvoices.map((inv) => (
+                <div key={inv.id} className="flex items-center justify-between gap-2 text-sm"
+                  data-testid={`paid-invoice-row-${inv.id}`}>
+                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                    <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-emerald-500" />
+                    <span className="text-slate-700 capitalize truncate">
+                      {MONTHS_NL[inv.period_month - 1]} {inv.period_year}
+                    </span>
+                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 uppercase tracking-wider">
+                      Betaald
+                    </span>
+                    <span className="text-[10px] text-slate-400 hidden sm:inline">· {inv.invoice_number}</span>
+                    {inv.paid_at && (
+                      <span className="text-[10px] text-slate-500 hidden md:inline">
+                        op {new Date(inv.paid_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' })}
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-right shrink-0 whitespace-nowrap">
+                    <span className="text-slate-700 font-semibold">{fmtMoney(inv.amount, inv.currency)}</span>
+                  </div>
+                  <a href={`${process.env.REACT_APP_BACKEND_URL}/api/invoices/${inv.id}/pdf`}
+                    target="_blank" rel="noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    data-testid={`paid-invoice-pdf-${inv.id}`}
+                    title="Download factuur PDF"
+                    className="shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-full bg-white hover:bg-emerald-100 text-emerald-700 border border-emerald-200 active:scale-95 transition">
+                    <FileText className="w-3.5 h-3.5" />
+                  </a>
+                </div>
               ))}
             </div>
           </div>
@@ -1215,6 +1274,33 @@ export default function Invoices() {
                           className="h-10 rounded-xl bg-emerald-500 text-white font-bold text-[12px] inline-flex items-center justify-center gap-1.5">
                           <MessageCircle className="w-3.5 h-3.5" /> WhatsApp
                         </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {/* Mobile: betaalde maanden uitklap voor groups zonder open */}
+                {expanded === g.tenant_id && g.openCount === 0 && (g.all || []).some((i) => i.status === 'paid') && (
+                  <div className="mt-2 mx-1" data-testid={`mi-paid-detail-${g.tenant_id}`}>
+                    <div className="rounded-2xl p-3.5 bg-emerald-50">
+                      <p className="text-[12px] font-bold mb-2 text-emerald-700">
+                        Betaalde maanden ({(g.all || []).filter((i) => i.status === 'paid').length})
+                      </p>
+                      <div className="space-y-1.5">
+                        {(g.all || []).filter((i) => i.status === 'paid').map((inv) => (
+                          <div key={inv.id} className="flex items-center justify-between gap-2 text-[12px]"
+                            data-testid={`mi-paid-invoice-${inv.id}`}>
+                            <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                              <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-emerald-500" />
+                              <span className="text-slate-700 capitalize truncate">
+                                {MONTHS_NL[inv.period_month - 1]} {inv.period_year}
+                              </span>
+                              <span className="text-[9px] font-bold px-1 py-0.5 rounded bg-emerald-100 text-emerald-700 uppercase">Betaald</span>
+                            </div>
+                            <span className="text-slate-700 font-bold whitespace-nowrap">
+                              {inv.currency} {fmtAmountWhole(Number(inv.amount))}
+                            </span>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   </div>
