@@ -1,5 +1,16 @@
 # Vastgoed Kiosk - PRD
 
+## Session 2026-05-31 — Admin Overzicht: luxe banking-hero, payment plans lijst, globale zoekbalk ✅
+- **Hero Kas saldo** (banking-stijl) bovenaan de Overzicht: donkere bodem met goud/oranje radial glow, gradient-text titel, 3 valuta tegels (SRD/EUR/USD) elk met TrendingUp indicator. "Beheer kasgeld" pill-knop opent kasgeld tab.
+- **KPI rij — 4 tegels**: Appartementen (met bezettingsgraad bar), Actieve huurders (CTA naar Huurders), Open · lopende maand (count + €), Achterstand (rood gradient bij overdue > 0). Alle klikbaar.
+- **Snelle Acties — herontworpen**: Nieuwe factuur · Nieuwe huurder · **GlobalSearch input** (vervangt "Nieuwe betaling" knop op gebruikers verzoek) · Open Kiosk. De zoekbalk doorzoekt client-side huurders (naam/telefoon/e-mail), appartementen (nummer/adres) en facturen (nummer/huurdernaam/periode). Lazy-load van alle data op eerste focus. Resultaten in dropdown met 5 per categorie + navigatie naar juiste tab bij klik.
+- **PaymentPlansList** vervangt het oude "Status Overzicht" (donut + huurstatus): scrollable lijst (max-h 420px) met alle actieve `payment-plans`, toont huurder + appartement + remaining/total + per-plan voortgangsbalk + overdue-badge + volgende vervaldatum. Tellend badge naast titel. "Bekijk alle →" knop linkt naar Betalingsregelingen tab. Auto-refresh elke 15s.
+- **Top bar bg fix**: `DesktopTopBar` (`#FFF7F0/85` cream) gelijk getrokken aan main content wrapper (`#F7F8FA`) zodat er geen kleurverschil meer is tussen sticky header en page-body.
+- **Iconen fix**: ontbrekende imports `AlertCircle`, `UserPlus`, `TrendingUp`, `ArrowUpRight` toegevoegd aan `lucide-react`-import in `AdminDashboard.jsx`.
+- **Quick fix**: `kpi-cash-cta` go-tab `cash` → `kasgeld` (matched de tab-id, was kapot).
+- Mobile/tablet UI ongewijzigd — `lg:hidden` Portfolio in één oogopslag + Inkomsten/Openstaand card blijven werken.
+- Tests via `testing_agent_v3_fork` (iteration 28): **12/12 acceptance criteria PASS** (login → Overzicht, hero Kas tiles, 4 KPIs, quick actions, global search "kew" toont 3 huurders + 1 appartement, click-through navigatie, payment plans lijst met 7 actieve regelingen, kiosk-open flow, mobile fallback, geen console errors).
+
 ## Session 2026-05-30 — 3-bucket invoice classification + Multi-invoice Regeling vanaf Kiosk ✅
 - **Backend**: nieuwe helper `_classify_invoice_bucket(period_month, period_year, today, grace_workdays)` retourneert `"overdue" | "current" | "future"`. Achterstand vereist dat periode-einde + `grace_workdays` (uit `company_settings.invoicing.grace_workdays`, default 10) verstreken is.
 - **`GET /api/kiosk/tenants/{id}/overview`** retourneert nu 3 buckets: `open_invoices` (overdue), `current_invoices`, `future_invoices` + matching `*_total`. Plus `grace_workdays` voor frontend-info.
