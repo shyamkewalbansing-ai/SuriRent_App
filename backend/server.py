@@ -6814,14 +6814,67 @@ async def admin_stats(user=Depends(get_current_user)):
     recent.sort(key=lambda x: x.get("at") or "", reverse=True)
     recent = recent[:8]
 
+    # Achterstallige huurders (unieke tenants met écht overdue facturen)
+    # — gebruik dezelfde grace logica als de overview/invoices endpoints
+    grace_wd = 10
+    try:
+        cs = await db.company_settings.find_one(
+            {"company_id": user.get("active_company_id") or user.get("company_id")},
+            {"_id": 0, "invoicing": 1},
+        )
+        if cs and isinstance(cs.get("invoicing"), dict):
+            grace_wd = int(cs["invoicing"].get("grace_workdays") or 10)
+    except Exception:  # noqa: BLE001
+        pass
+    today_local = today.date()
+    overdue_tenants_set: set[str] = set()
+    open_current_month_count = 0
+    open_current_month_amount: dict[str, float] = {}
+    async for inv in db.invoices.find(
+        {**sc, "status": {"$nin": ["paid", "cancelled"]}},
+        {"_id": 0, "tenant_id": 1, "period_month": 1, "period_year": 1,
+         "amount": 1, "amount_due": 1, "paid_amount": 1, "currency": 1},
+    ):
+        py = int(inv.get("period_year") or 0)
+        pm = int(inv.get("period_month") or 0)
+        bucket = _classify_invoice_bucket(pm, py, today_local, grace_wd)
+        outstanding = max(
+            float(inv.get("amount_due") or inv.get("amount") or 0) - float(inv.get("paid_amount") or 0),
+            0,
+        )
+        if bucket == "overdue" and inv.get("tenant_id"):
+            overdue_tenants_set.add(inv["tenant_id"])
+        if bucket == "current" and outstanding > 0:
+            open_current_month_count += 1
+            cur = inv.get("currency") or "SRD"
+            open_current_month_amount[cur] = open_current_month_amount.get(cur, 0) + outstanding
+
+    # Bank/Kas balance per valuta (uit kasgeld collectie)
+    cash_balance: dict[str, float] = {}
+    async for r in db.kasgeld.aggregate([
+        {"$match": sc},
+        {"$group": {
+            "_id": "$currency",
+            "total": {"$sum": {"$cond": [
+                {"$eq": ["$kind", "in"]}, "$amount", {"$multiply": ["$amount", -1]},
+            ]}},
+        }},
+    ]):
+        cash_balance[r["_id"] or "SRD"] = round(r["total"], 2)
+
     return {
         "apartments_total": total_apts,
         "apartments_occupied": occupied,
         "apartments_vacant": total_apts - occupied,
         "tenants_total": total_tenants,
+        "tenants_active": total_tenants,  # alias voor frontend (gelijk aan total nu)
         "month_payments_by_currency": by_currency,
         "outstanding_by_currency": outstanding,
         "invoice_status": {"paid": inv_paid, "open": inv_open, "overdue": inv_overdue},
+        "overdue_tenants_count": len(overdue_tenants_set),
+        "current_month_open_count": open_current_month_count,
+        "current_month_open_by_currency": open_current_month_amount,
+        "cash_balance_by_currency": cash_balance,
         "recent_activity": recent,
     }
 

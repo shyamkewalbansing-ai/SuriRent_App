@@ -599,6 +599,27 @@ function Overview() {
 
   const recent = stats.recent_activity || [];
 
+  // ===== Desktop KPI tegels =====
+  const overdueCount = stats.overdue_tenants_count || 0;
+  const currentMonthOpenCount = stats.current_month_open_count || 0;
+  const currentMonthOpenBy = stats.current_month_open_by_currency || {};
+  const currentOpenTotal = currentMonthOpenBy[primaryCur] || 0;
+  const cashByCur = stats.cash_balance_by_currency || {};
+
+  const openKioskFn = async () => {
+    try { localStorage.setItem('pwa_preferred_role', 'kiosk'); } catch { /* noop */ }
+    try {
+      const activeCid = localStorage.getItem('active_company_id') || undefined;
+      const { data } = await api.post('/auth/admin-to-kiosk', activeCid ? { company_id: activeCid } : {});
+      if (data?.token) localStorage.setItem('kiosk_token', data.token);
+      if (data?.company) localStorage.setItem('kiosk_company', JSON.stringify(data.company));
+    } catch (e) {
+      alert('Kon kiosk niet openen: ' + (e?.response?.data?.detail || e.message));
+      return;
+    }
+    navigate('/kiosk');
+  };
+
   return (
     <div>
       <PageHeader title="Overzicht" subtitle="Snelle blik op uw vastgoedportefeuille" />
@@ -622,54 +643,249 @@ function Overview() {
         </div>
       </div>
 
-      {/* Desktop: 4 separate stat-kaarten — strakker, kleinere padding, slate-100 borders */}
-      <div className="hidden lg:grid grid-cols-4 gap-3 mb-5">
-        {cards.map((c) => {
-          const Icon = c.icon;
-          return (
-            <div key={c.label} className="bg-white rounded-2xl border border-slate-100 shadow-[0_1px_4px_-2px_rgba(15,23,42,0.06)] p-5 hover:border-slate-200 transition-colors">
-              <div className={`w-10 h-10 rounded-xl ${c.accent} flex items-center justify-center mb-3.5`}>
-                <Icon className="w-[18px] h-[18px]" />
+      {/* ============================================================
+          DESKTOP REDESIGN — Modern Professional met Gold/Oranje accent
+          ============================================================
+          Hero KPI grid (3 kolommen, 2 rijen):
+            Rij 1: Appartementen | Actieve huurders | Achterstallige huurders
+            Rij 2: Openstaand huidige maand | Bank/Kas balans (multi-currency)
+          + Snelle acties bar
+          + Status overzicht + activiteiten (zelfde plek)
+      */}
+      <div className="hidden lg:block">
+        {/* Hero KPI rij 1 — 3 grote kaarten met sub-labels */}
+        <div className="grid grid-cols-3 gap-4 mb-4">
+          {/* Appartementen */}
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-[0_1px_4px_-2px_rgba(15,23,42,0.06)] p-5 relative overflow-hidden group hover:border-orange-200 transition-colors">
+            <div className="absolute top-0 right-0 w-28 h-28 bg-gradient-to-br from-orange-100/40 to-transparent rounded-full -translate-y-8 translate-x-8 pointer-events-none" />
+            <div className="flex items-start gap-3.5 relative">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-orange-100 to-orange-50 flex items-center justify-center shrink-0 shadow-inner">
+                <Building2 className="w-6 h-6 text-[#FF5C00]" />
               </div>
-              <p className="text-3xl font-black text-slate-900 tracking-tight leading-none" data-testid={`stat-${c.label.toLowerCase()}`}>{c.value}</p>
-              <p className="text-[12px] text-slate-500 font-semibold mt-1.5">{c.label}</p>
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Appartementen</p>
+                <p className="text-4xl font-black text-slate-900 tracking-tight leading-none mt-1.5" data-testid="kpi-apartments">
+                  {stats.apartments_total}
+                </p>
+                <div className="flex items-center gap-3 mt-2 text-[11px]">
+                  <span className="inline-flex items-center gap-1 text-emerald-600 font-bold">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> {stats.apartments_occupied} bezet
+                  </span>
+                  <span className="inline-flex items-center gap-1 text-slate-400 font-semibold">
+                    <span className="w-1.5 h-1.5 rounded-full bg-slate-300" /> {vacantCount} vacant
+                  </span>
+                </div>
+              </div>
             </div>
-          );
-        })}
-      </div>
-
-      {/* Inkomsten + Openstaand — strakke witte card op alle viewports, geen oranje gradient meer */}
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-[0_1px_4px_-2px_rgba(15,23,42,0.06)] p-4 lg:p-5 mb-4 lg:mb-5 grid grid-cols-2 gap-3 lg:gap-5">
-        <div className="flex flex-col lg:flex-row lg:items-center gap-2 lg:gap-3.5 min-w-0">
-          <div className="w-10 h-10 lg:w-11 lg:h-11 rounded-xl bg-orange-50 flex items-center justify-center shrink-0">
-            <Wallet className="w-5 h-5 lg:w-[22px] lg:h-[22px] text-[#FF5C00]" />
+            <div className="mt-3 h-1.5 w-full rounded-full bg-slate-100 overflow-hidden">
+              <div className="h-full bg-gradient-to-r from-[#FF8A3D] to-[#FF5C00] transition-all" style={{ width: `${occupiedPct}%` }} />
+            </div>
+            <p className="text-[10px] text-slate-400 font-bold mt-1.5">{occupiedPct}% bezettingsgraad</p>
           </div>
-          <div className="min-w-0">
-            <p className="text-[10px] lg:text-[11px] font-bold uppercase tracking-widest text-slate-400">Inkomsten deze maand</p>
-            <p className="text-xl lg:text-2xl font-black text-slate-900 tracking-tight mt-0.5 truncate" data-testid="income-total">
-              {fmtMoney(incomeTotal, primaryCur)}
-            </p>
-            <p className="text-[11px] text-slate-400 font-semibold mt-0.5">{incomeCount} betalingen</p>
+
+          {/* Actieve huurders */}
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-[0_1px_4px_-2px_rgba(15,23,42,0.06)] p-5 relative overflow-hidden hover:border-amber-200 transition-colors">
+            <div className="absolute top-0 right-0 w-28 h-28 bg-gradient-to-br from-amber-100/40 to-transparent rounded-full -translate-y-8 translate-x-8 pointer-events-none" />
+            <div className="flex items-start gap-3.5 relative">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-100 to-amber-50 flex items-center justify-center shrink-0 shadow-inner">
+                <Users className="w-6 h-6 text-amber-600" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Actieve huurders</p>
+                <p className="text-4xl font-black text-slate-900 tracking-tight leading-none mt-1.5" data-testid="kpi-tenants">
+                  {stats.tenants_total}
+                </p>
+                <p className="text-[11px] text-slate-500 font-semibold mt-2">
+                  In {stats.apartments_occupied} {stats.apartments_occupied === 1 ? 'appartement' : 'appartementen'}
+                </p>
+              </div>
+            </div>
+            <button onClick={() => window.dispatchEvent(new CustomEvent('go-tab', { detail: 'tenants' }))}
+              data-testid="kpi-tenants-cta"
+              className="mt-3 w-full text-[11px] text-[#FF5C00] font-bold hover:underline text-left">
+              Bekijk alle huurders →
+            </button>
+          </div>
+
+          {/* Achterstallige huurders — rood/urgentie */}
+          <button onClick={() => window.dispatchEvent(new CustomEvent('go-tab', { detail: 'invoices' }))}
+            data-testid="kpi-overdue"
+            className={`text-left rounded-2xl p-5 relative overflow-hidden transition-shadow ${
+              overdueCount > 0
+                ? 'bg-gradient-to-br from-red-500 via-red-600 to-red-700 text-white border border-red-700 hover:shadow-[0_12px_28px_-8px_rgba(220,38,38,0.5)]'
+                : 'bg-white border border-slate-100 shadow-[0_1px_4px_-2px_rgba(15,23,42,0.06)] hover:border-emerald-200'
+            }`}>
+            <div className="absolute top-0 right-0 w-28 h-28 bg-gradient-to-br from-white/10 to-transparent rounded-full -translate-y-8 translate-x-8 pointer-events-none" />
+            <div className="flex items-start gap-3.5 relative">
+              <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 shadow-inner ${
+                overdueCount > 0 ? 'bg-white/20' : 'bg-gradient-to-br from-emerald-100 to-emerald-50'
+              }`}>
+                <AlertCircle className={`w-6 h-6 ${overdueCount > 0 ? 'text-white' : 'text-emerald-600'}`} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className={`text-[10px] font-black uppercase tracking-widest ${overdueCount > 0 ? 'text-white/80' : 'text-slate-400'}`}>
+                  Achterstallige huurders
+                </p>
+                <p className={`text-4xl font-black tracking-tight leading-none mt-1.5 ${overdueCount > 0 ? 'text-white' : 'text-slate-900'}`}>
+                  {overdueCount}
+                </p>
+                <p className={`text-[11px] font-semibold mt-2 ${overdueCount > 0 ? 'text-white/90' : 'text-emerald-600'}`}>
+                  {overdueCount > 0 ? 'Direct opvolgen vereist' : 'Geen achterstand — perfect!'}
+                </p>
+              </div>
+              <ChevronRight className={`w-5 h-5 shrink-0 ${overdueCount > 0 ? 'text-white/80' : 'text-slate-300'}`} />
+            </div>
+          </button>
+        </div>
+
+        {/* Hero KPI rij 2 — Openstaand huidige maand + Bank/Kas (multi-currency) */}
+        <div className="grid grid-cols-2 gap-4 mb-4">
+          {/* Openstaand huidige maand */}
+          <button onClick={() => window.dispatchEvent(new CustomEvent('go-tab', { detail: 'invoices' }))}
+            data-testid="kpi-current-open"
+            className="text-left bg-white rounded-2xl border border-slate-100 shadow-[0_1px_4px_-2px_rgba(15,23,42,0.06)] p-5 hover:border-orange-200 transition-colors relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-orange-100/40 to-transparent rounded-full -translate-y-10 translate-x-10 pointer-events-none" />
+            <div className="flex items-start gap-3.5 relative">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-orange-100 to-orange-50 flex items-center justify-center shrink-0 shadow-inner">
+                <Receipt className="w-6 h-6 text-[#FF5C00]" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Openstaand huidige maand</p>
+                <p className="text-3xl font-black text-[#FF5C00] tracking-tight leading-none mt-1.5">
+                  {fmtMoney(currentOpenTotal, primaryCur)}
+                </p>
+                <div className="flex items-center justify-between mt-2.5">
+                  <p className="text-[11px] text-slate-500 font-semibold">{currentMonthOpenCount} {currentMonthOpenCount === 1 ? 'factuur' : 'facturen'}</p>
+                  <ChevronRight className="w-4 h-4 text-slate-300" />
+                </div>
+              </div>
+            </div>
+          </button>
+
+          {/* Bank / Kas — multi-currency stack */}
+          <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 rounded-2xl p-5 text-white relative overflow-hidden shadow-[0_10px_24px_-10px_rgba(15,23,42,0.4)]" data-testid="kpi-cash">
+            <div className="absolute top-0 right-0 w-40 h-40 bg-gradient-to-br from-orange-500/20 to-transparent rounded-full -translate-y-12 translate-x-12 pointer-events-none" />
+            <div className="flex items-start gap-3.5 relative">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#FF8A3D]/30 to-[#FF5C00]/30 flex items-center justify-center shrink-0 backdrop-blur-sm border border-white/10">
+                <Wallet className="w-6 h-6 text-[#FFB07A]" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-white/60">Bank · Kas balans</p>
+                  <button onClick={() => window.dispatchEvent(new CustomEvent('go-tab', { detail: 'cash' }))}
+                    data-testid="kpi-cash-cta"
+                    className="text-[10px] font-bold text-[#FFB07A] hover:text-orange-300">
+                    Bekijk →
+                  </button>
+                </div>
+                <div className="grid grid-cols-3 gap-3 mt-2.5">
+                  {['SRD', 'EUR', 'USD'].map((cur) => {
+                    const v = cashByCur[cur] || 0;
+                    const symbol = cur === 'EUR' ? '€' : cur === 'USD' ? '$' : 'SRD';
+                    return (
+                      <div key={cur} className="bg-white/5 rounded-lg p-2.5 border border-white/10 backdrop-blur-sm">
+                        <p className="text-[9px] font-black uppercase tracking-widest text-white/50">{cur}</p>
+                        <p className="text-lg font-black text-white tracking-tight leading-tight mt-0.5"
+                          data-testid={`kpi-cash-${cur.toLowerCase()}`}>
+                          {symbol === 'SRD' ? '' : symbol}{Math.round(v).toLocaleString('nl-NL')}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
-        <button onClick={() => window.dispatchEvent(new CustomEvent('go-tab', { detail: 'invoices' }))}
-          data-testid="outstanding-cta"
-          className="flex flex-col lg:flex-row lg:items-center gap-2 lg:gap-3.5 text-left hover:opacity-90 transition-opacity group min-w-0 border-l border-slate-100 pl-3 lg:pl-5">
-          <div className="w-10 h-10 lg:w-11 lg:h-11 rounded-xl bg-orange-50 flex items-center justify-center shrink-0">
-            <Gauge className="w-5 h-5 lg:w-[22px] lg:h-[22px] text-[#FF5C00]" />
+
+        {/* Snelle acties bar — alle 4 acties op één rij, compact */}
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-[0_1px_4px_-2px_rgba(15,23,42,0.06)] p-3.5 mb-4">
+          <div className="flex items-center justify-between mb-2.5 px-1.5">
+            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Snelle acties</p>
           </div>
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-[10px] lg:text-[11px] font-bold uppercase tracking-widest text-slate-400">Openstaand saldo</p>
-              <ChevronRight className="lg:hidden w-4 h-4 text-[#FF5C00] shrink-0" />
+          <div className="grid grid-cols-4 gap-2.5">
+            <button onClick={() => window.dispatchEvent(new CustomEvent('go-tab', { detail: 'invoices' }))}
+              data-testid="quick-new-invoice"
+              className="group flex items-center gap-3 p-3 rounded-xl bg-gradient-to-br from-orange-50 to-orange-100/40 hover:from-orange-100 hover:to-orange-200/60 border border-orange-100 hover:border-orange-300 transition-all">
+              <div className="w-10 h-10 rounded-lg bg-white/80 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                <FileText className="w-5 h-5 text-[#FF5C00]" />
+              </div>
+              <div className="text-left">
+                <p className="text-sm font-black text-slate-900">Nieuwe factuur</p>
+                <p className="text-[10px] text-slate-500 font-semibold">Maak een huurfactuur aan</p>
+              </div>
+            </button>
+            <button onClick={() => window.dispatchEvent(new CustomEvent('go-tab', { detail: 'tenants' }))}
+              data-testid="quick-new-tenant"
+              className="group flex items-center gap-3 p-3 rounded-xl bg-gradient-to-br from-amber-50 to-amber-100/40 hover:from-amber-100 hover:to-amber-200/60 border border-amber-100 hover:border-amber-300 transition-all">
+              <div className="w-10 h-10 rounded-lg bg-white/80 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                <UserPlus className="w-5 h-5 text-amber-600" />
+              </div>
+              <div className="text-left">
+                <p className="text-sm font-black text-slate-900">Nieuwe huurder</p>
+                <p className="text-[10px] text-slate-500 font-semibold">Voeg huurder toe</p>
+              </div>
+            </button>
+            <button onClick={() => window.dispatchEvent(new CustomEvent('go-tab', { detail: 'payments' }))}
+              data-testid="quick-new-payment"
+              className="group flex items-center gap-3 p-3 rounded-xl bg-gradient-to-br from-emerald-50 to-emerald-100/40 hover:from-emerald-100 hover:to-emerald-200/60 border border-emerald-100 hover:border-emerald-300 transition-all">
+              <div className="w-10 h-10 rounded-lg bg-white/80 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                <Banknote className="w-5 h-5 text-emerald-600" />
+              </div>
+              <div className="text-left">
+                <p className="text-sm font-black text-slate-900">Registreer betaling</p>
+                <p className="text-[10px] text-slate-500 font-semibold">Nieuwe kwitantie</p>
+              </div>
+            </button>
+            <button onClick={openKioskFn}
+              data-testid="quick-kiosk-desktop"
+              className="group flex items-center gap-3 p-3 rounded-xl bg-gradient-to-br from-[#FF8A3D] via-[#FF5C00] to-[#C74600] text-white hover:shadow-[0_10px_24px_-8px_rgba(255,92,0,0.5)] transition-shadow border border-orange-600">
+              <div className="w-10 h-10 rounded-lg bg-white/20 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                <Building2 className="w-5 h-5 text-white" />
+              </div>
+              <div className="text-left">
+                <p className="text-sm font-black">Open Kiosk</p>
+                <p className="text-[10px] text-white/80 font-semibold">Selfservice terminal</p>
+              </div>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* MOBIEL/TABLET — bestaande hero behouden + verborgen op lg */}
+      <div className="lg:hidden">
+        {/* Inkomsten + Openstaand — strakke witte card */}
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-[0_1px_4px_-2px_rgba(15,23,42,0.06)] p-4 mb-4 grid grid-cols-2 gap-3">
+          <div className="flex flex-col gap-2 min-w-0">
+            <div className="w-10 h-10 rounded-xl bg-orange-50 flex items-center justify-center shrink-0">
+              <Wallet className="w-5 h-5 text-[#FF5C00]" />
             </div>
-            <p className={`text-xl lg:text-2xl font-black tracking-tight mt-0.5 truncate ${outstandingTotal > 0 ? 'text-[#FF5C00]' : 'text-slate-900'}`} data-testid="outstanding-total">
-              {fmtMoney(outstandingTotal, primaryCur)}
-            </p>
-            <p className="text-[11px] text-slate-400 font-semibold mt-0.5">{outstandingCount} openstaand</p>
+            <div className="min-w-0">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Inkomsten deze maand</p>
+              <p className="text-xl font-black text-slate-900 tracking-tight mt-0.5 truncate" data-testid="income-total">
+                {fmtMoney(incomeTotal, primaryCur)}
+              </p>
+              <p className="text-[11px] text-slate-400 font-semibold mt-0.5">{incomeCount} betalingen</p>
+            </div>
           </div>
-          <ChevronRight className="hidden lg:block w-4 h-4 text-slate-300 group-hover:text-[#FF5C00] transition-colors shrink-0" />
-        </button>
+          <button onClick={() => window.dispatchEvent(new CustomEvent('go-tab', { detail: 'invoices' }))}
+            data-testid="outstanding-cta"
+            className="flex flex-col gap-2 text-left hover:opacity-90 transition-opacity group min-w-0 border-l border-slate-100 pl-3">
+            <div className="w-10 h-10 rounded-xl bg-orange-50 flex items-center justify-center shrink-0">
+              <Gauge className="w-5 h-5 text-[#FF5C00]" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Openstaand saldo</p>
+                <ChevronRight className="w-4 h-4 text-[#FF5C00] shrink-0" />
+              </div>
+              <p className={`text-xl font-black tracking-tight mt-0.5 truncate ${outstandingTotal > 0 ? 'text-[#FF5C00]' : 'text-slate-900'}`} data-testid="outstanding-total">
+                {fmtMoney(outstandingTotal, primaryCur)}
+              </p>
+              <p className="text-[11px] text-slate-400 font-semibold mt-0.5">{outstandingCount} openstaand</p>
+            </div>
+          </button>
+        </div>
       </div>
 
       {/* Status overzicht + Laatste activiteiten — 2 koloms op desktop */}
