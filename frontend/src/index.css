@@ -7,6 +7,12 @@
   --kiosk-cream: #FFF7F0;
 }
 
+/* Subtiele floating animatie voor zwevende notification-cards op landingspagina */
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-8px); }
+}
+
 * { -webkit-tap-highlight-color: transparent; }
 
 html, body, #root { height: 100%; }

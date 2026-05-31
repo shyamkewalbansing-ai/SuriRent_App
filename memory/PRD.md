@@ -1,5 +1,17 @@
 # Vastgoed Kiosk - PRD
 
+## Session 2026-05-31 (v7) — Video codec fix + landing design polish ✅
+- **Bug fix**: video speelde niet in Chrome/Firefox/Edge omdat het **HEVC/H.265** was (iPhone screen recording). Alleen Safari kon het renderen.
+- **Fix**: Video gedownload, gehertranscodeerd naar **H.264 + faststart MP4** (815 KB, 720px wide, geen audio) via ffmpeg, opgeslagen op `/app/frontend/public/landing/demo.mp4`. Universeel afspeelbaar op alle browsers.
+- **Hero polish**:
+  - Toegevoegd: 2 zwevende notification-cards ("Betaling ontvangen +SRD 5.000" + "AI OCR voltooid - 3 betalingen verwerkt") met `@keyframes float` animation in `index.css`
+  - Versie pill "v2.5" in de top-badge
+  - Subtiele dot-grid achtergrond (radial-gradient)
+- **Features Bento Grid**:
+  - 2 grote hero-tiles: Multi-bedrijf SaaS (oranje gradient + decorative orb) + Kiosk PWA (donker met witte tekst)
+  - 10 kleinere features in 5-koloms grid voor visuele variatie
+  - "Meer info" arrow CTA per hero-tile
+
 ## Session 2026-05-31 (v6) — Live demo video op landingspagina ✅
 - Gebruiker upload screen recording (1290×2796 portrait iPhone, 34s, 14 MB).
 - **Hero**: kleine iPhone (240px) met `<video autoPlay loop muted playsInline>` overlay, vervangt de TabletFrame in de hero-mockup.

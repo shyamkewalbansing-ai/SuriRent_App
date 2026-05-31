@@ -25,7 +25,7 @@ const SHOTS = {
   kioskNumpad: 'https://customer-assets.emergentagent.com/job_vastgoed-app/artifacts/mjshklb8_14.png',
 };
 
-const DEMO_VIDEO = 'https://customer-assets.emergentagent.com/job_vastgoed-app/artifacts/7ku70qrp_ScreenRecording_05-31-2026%2019-49-22_1.MP4';
+const DEMO_VIDEO = '/landing/demo.mp4';
 const DEMO_POSTER = '/landing/demo-poster.jpg';
 
 // =============================================================================
@@ -179,29 +179,39 @@ function TopNav({ onLogin, onDemo }) {
 }
 
 // =============================================================================
-// Hero — big headline + dual device showcase
+// Hero — big headline + dual device showcase + floating notifications
 // =============================================================================
 function Hero({ onDemo, onWhatsApp }) {
   return (
-    <section className="relative pt-32 pb-16 lg:pt-40 lg:pb-24 overflow-hidden">
-      {/* Background blobs */}
+    <section className="relative pt-32 pb-24 lg:pt-40 lg:pb-32 overflow-hidden">
+      {/* Background blobs + grid pattern */}
       <div className="absolute inset-0 -z-10">
-        <div className="absolute top-20 left-1/4 w-[480px] h-[480px] rounded-full opacity-30 blur-3xl"
+        <div className="absolute top-20 left-1/4 w-[520px] h-[520px] rounded-full opacity-30 blur-3xl"
           style={{ background: 'radial-gradient(circle, #FF8A3D, transparent 70%)' }} />
-        <div className="absolute bottom-0 right-1/4 w-[400px] h-[400px] rounded-full opacity-20 blur-3xl"
+        <div className="absolute bottom-0 right-1/4 w-[420px] h-[420px] rounded-full opacity-20 blur-3xl"
           style={{ background: 'radial-gradient(circle, #F8C260, transparent 70%)' }} />
+        {/* Subtle dot grid */}
+        <div className="absolute inset-0 opacity-[0.025]"
+          style={{
+            backgroundImage: 'radial-gradient(circle, #0F172A 1px, transparent 1px)',
+            backgroundSize: '32px 32px',
+          }} />
       </div>
 
       <div className="max-w-7xl mx-auto px-5 lg:px-8">
         <div className="max-w-4xl mx-auto text-center">
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-orange-50 border border-orange-100 mb-6"
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white border border-orange-100 shadow-sm mb-6"
             data-testid="hero-badge">
             <span className="w-1.5 h-1.5 rounded-full bg-[#FF5C00] animate-pulse" />
             <span className="text-xs font-bold text-[#C74600] tracking-wide uppercase">Vastgoed SaaS · Suriname</span>
+            <span className="text-slate-300">·</span>
+            <span className="text-xs font-bold text-slate-600">v2.5</span>
           </div>
-          <h1 className="text-4xl sm:text-5xl lg:text-7xl font-black tracking-tighter text-slate-900 leading-[1.05]"
+          <h1 className="text-4xl sm:text-5xl lg:text-7xl font-black tracking-tighter text-slate-900 leading-[1.02]"
             data-testid="hero-title">
-            Het volledige vastgoed&shy;platform.
+            Het volledige
+            <br />
+            vastgoedplatform.
             <br />
             <span className="bg-gradient-to-r from-[#FF8A3D] via-[#FF5C00] to-[#C74600] bg-clip-text text-transparent">
               Beheer & Kiosk.
@@ -222,7 +232,7 @@ function Hero({ onDemo, onWhatsApp }) {
               <MessageCircle className="w-5 h-5 text-emerald-600" /> WhatsApp ons
             </button>
           </div>
-          <p className="mt-5 text-xs text-slate-500 font-medium flex items-center justify-center gap-2"
+          <p className="mt-5 text-xs text-slate-500 font-medium flex items-center justify-center gap-2 flex-wrap"
             data-testid="hero-trust">
             <Check className="w-3.5 h-3.5 text-emerald-600" />
             Geen creditcard nodig
@@ -235,12 +245,37 @@ function Hero({ onDemo, onWhatsApp }) {
           </p>
         </div>
 
-        {/* Dual device showcase — desktop browser + floating phone playing demo video */}
+        {/* Dual device showcase — desktop browser + floating phone + notification cards */}
         <div className="mt-16 lg:mt-24 relative">
           <div className="relative">
             {/* Desktop browser (back layer) */}
             <BrowserFrame src={SHOTS.overzicht} alt="Beheer Overzicht"
               className="max-w-5xl mx-auto" />
+
+            {/* Floating notification card — top-left */}
+            <div className="hidden lg:flex absolute -top-4 -left-2 z-20 items-center gap-3 px-4 py-3 rounded-2xl bg-white shadow-[0_20px_50px_-15px_rgba(15,23,42,0.25)] border border-slate-100 animate-[float_6s_ease-in-out_infinite]"
+              data-testid="hero-float-payment">
+              <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center shrink-0">
+                <Check className="w-5 h-5 text-emerald-600" strokeWidth={3} />
+              </div>
+              <div>
+                <p className="text-sm font-black text-slate-900">Betaling ontvangen</p>
+                <p className="text-[11px] text-slate-500">+ SRD 5.000 · Bharat K.</p>
+              </div>
+            </div>
+
+            {/* Floating notification card — top-right */}
+            <div className="hidden lg:flex absolute top-12 -right-6 z-20 items-center gap-3 px-4 py-3 rounded-2xl bg-white shadow-[0_20px_50px_-15px_rgba(15,23,42,0.25)] border border-slate-100 animate-[float_7s_ease-in-out_infinite_0.5s]"
+              data-testid="hero-float-tenant">
+              <div className="w-10 h-10 rounded-xl bg-orange-100 flex items-center justify-center shrink-0">
+                <Sparkles className="w-5 h-5 text-[#FF5C00]" />
+              </div>
+              <div>
+                <p className="text-sm font-black text-slate-900">AI OCR voltooid</p>
+                <p className="text-[11px] text-slate-500">3 betalingen verwerkt</p>
+              </div>
+            </div>
+
             {/* iPhone met live demo video (front layer, overlaps bottom-right) */}
             <div className="hidden md:block absolute -bottom-12 lg:-bottom-20 -right-2 lg:-right-8 z-10"
               data-testid="hero-demo-phone">
@@ -304,6 +339,10 @@ const FEATURES = [
 ];
 
 function FeaturesSection() {
+  // Bento grid: groot featured tile + medium + smaller tiles voor visual interest.
+  // Eerste 2 zijn "hero features" (groter), rest is standaard.
+  const HERO_FEATURES = FEATURES.slice(0, 2);
+  const REST_FEATURES = FEATURES.slice(2);
   return (
     <section id="features" className="py-20 lg:py-28">
       <div className="max-w-7xl mx-auto px-5 lg:px-8">
@@ -314,18 +353,59 @@ function FeaturesSection() {
             <span className="text-slate-400 block">Niets dat u niet nodig heeft.</span>
           </h2>
         </div>
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-5">
-          {FEATURES.map((f) => {
+
+        {/* Bento rij 1 — 2 grote hero tiles (Multi-bedrijf + Kiosk PWA) */}
+        <div className="grid lg:grid-cols-2 gap-4 lg:gap-5 mb-4 lg:mb-5">
+          {HERO_FEATURES.map((f, idx) => {
+            const Icon = f.icon;
+            const isDark = idx === 1;
+            return (
+              <div key={f.title}
+                data-testid={`feature-hero-${f.title.toLowerCase().replace(/\s+/g, '-')}`}
+                className={`group relative p-8 lg:p-10 rounded-3xl overflow-hidden transition-all ${
+                  isDark
+                    ? 'bg-slate-950 text-white border border-slate-900 hover:shadow-[0_30px_60px_-20px_rgba(15,23,42,0.5)]'
+                    : 'bg-gradient-to-br from-orange-50 via-white to-white border border-orange-100 hover:shadow-[0_30px_60px_-20px_rgba(255,92,0,0.15)]'
+                }`}>
+                {/* Decorative gradient orb */}
+                <div className={`absolute -top-20 -right-20 w-72 h-72 rounded-full blur-3xl pointer-events-none ${
+                  isDark ? 'opacity-20' : 'opacity-50'
+                }`}
+                  style={{ background: isDark ? '#FF5C00' : '#FFD1A8' }} />
+
+                <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mb-6 ${
+                  isDark ? 'bg-white/10 backdrop-blur-sm border border-white/20' : 'bg-white shadow-[0_8px_20px_-8px_rgba(255,92,0,0.4)]'
+                }`}>
+                  <Icon className={`w-7 h-7 ${isDark ? 'text-[#FF8A3D]' : 'text-[#FF5C00]'}`} strokeWidth={2.2} />
+                </div>
+                <h3 className={`text-2xl lg:text-3xl font-black tracking-tight leading-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                  {f.title}
+                </h3>
+                <p className={`mt-3 text-base leading-relaxed max-w-md ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                  {f.desc}
+                </p>
+                <div className="mt-6 inline-flex items-center gap-1.5 text-sm font-bold"
+                  style={{ color: isDark ? '#F8C260' : '#FF5C00' }}>
+                  Meer info <ArrowUpRight className="w-4 h-4 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Bento rij 2 — 5 reguliere features in 5-col grid (10 items / 2 rijen) */}
+        <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-4 lg:gap-5">
+          {REST_FEATURES.map((f) => {
             const Icon = f.icon;
             return (
               <div key={f.title}
-                className="group p-6 rounded-2xl bg-white border border-slate-200/70 hover:border-orange-200 hover:shadow-[0_18px_40px_-12px_rgba(255,92,0,0.12)] transition-all"
-                data-testid={`feature-${f.title.toLowerCase().replace(/\s+/g, '-')}`}>
-                <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-orange-50 to-orange-100/40 border border-orange-100 flex items-center justify-center mb-4 group-hover:scale-105 transition-transform">
+                data-testid={`feature-${f.title.toLowerCase().replace(/\s+/g, '-')}`}
+                className="group p-5 rounded-2xl bg-white border border-slate-200/70 hover:border-orange-200 hover:shadow-[0_18px_40px_-12px_rgba(255,92,0,0.12)] transition-all">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-50 to-orange-100/40 border border-orange-100 flex items-center justify-center mb-3 group-hover:scale-105 transition-transform">
                   <Icon className="w-5 h-5 text-[#FF5C00]" strokeWidth={2.2} />
                 </div>
-                <h3 className="text-base font-black text-slate-900 mb-1.5">{f.title}</h3>
-                <p className="text-sm text-slate-600 leading-relaxed">{f.desc}</p>
+                <h3 className="text-sm font-black text-slate-900 mb-1">{f.title}</h3>
+                <p className="text-xs text-slate-600 leading-relaxed">{f.desc}</p>
               </div>
             );
           })}
