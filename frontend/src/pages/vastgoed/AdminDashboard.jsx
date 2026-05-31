@@ -96,19 +96,36 @@ function groupTabs(tabs) {
   })).filter((g) => g.items.length > 0);
 }
 
-function Sidebar({ active, onChange, onLogout, user, tabs, badgeCount }) {
+function Sidebar({ active, onChange, onLogout, user, tabs, badgeCount, activeCompany }) {
   const groups = groupTabs(tabs);
+  // Splits de bedrijfsnaam in 2 delen voor de "zwart + oranje" branding stijl.
+  // Multi-woord namen: eerste woord zwart, rest oranje (bv. "GOPI APPARTEMENT'S").
+  // Single-woord: split rond het midden (bv. "SuriRent" → "Suri" + "Rent").
+  const fullName = activeCompany?.name
+    || (user?.role === 'superadmin' ? 'Superadmin' : 'SuriRent');
+  let nameA = fullName;
+  let nameB = '';
+  const spaceIdx = fullName.indexOf(' ');
+  if (spaceIdx > 0) {
+    nameA = fullName.slice(0, spaceIdx);
+    nameB = fullName.slice(spaceIdx); // behoud spatie
+  } else if (fullName.length >= 6) {
+    const mid = Math.ceil(fullName.length / 2);
+    nameA = fullName.slice(0, mid);
+    nameB = fullName.slice(mid);
+  }
   return (
     <aside className="hidden md:flex flex-col w-56 lg:w-64 sticky top-0 h-screen bg-white border-r border-slate-100 shadow-[1px_0_3px_0_rgba(15,23,42,0.04)]"
       data-testid="sidebar">
-      {/* HEADER — logo + naam, vaste hoogte */}
+      {/* HEADER — logo + bedrijfsnaam, vaste hoogte */}
       <div className="px-5 pt-6 pb-5 flex items-center gap-3 border-b border-slate-100">
         <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#FF8A3D] to-[#C74600] p-1.5 shadow-[0_8px_18px_-6px_rgba(255,92,0,0.45)] shrink-0">
-          <img src="/kiosk-icons/mark-white.png" alt="SuriRent" className="w-full h-full object-contain" />
+          <img src="/kiosk-icons/mark-white.png" alt="Logo" className="w-full h-full object-contain" />
         </div>
         <div className="min-w-0">
-          <p className="text-base font-black tracking-tight leading-tight">
-            <span className="text-slate-900">Suri</span><span className="text-[#FF5C00]">Rent</span>
+          <p className="text-base font-black tracking-tight leading-tight truncate"
+            data-testid="sidebar-company-name" title={fullName}>
+            <span className="text-slate-900">{nameA}</span><span className="text-[#FF5C00]">{nameB}</span>
           </p>
           <p className="text-[9px] text-slate-500 font-bold tracking-[0.22em] uppercase">
             {user?.role === 'superadmin' ? 'Superadmin' : 'Beheer Suite'}
@@ -2291,7 +2308,7 @@ export default function AdminDashboard() {
   return (
     <div className="min-h-screen bg-[#F7F8FA] flex">
       <Sidebar active={tab} onChange={handleSetTab} onLogout={doLogout}
-        user={user} tabs={tabs} badgeCount={badgeCount} />
+        user={user} tabs={tabs} badgeCount={badgeCount} activeCompany={activeCompany} />
       <div className="flex-1 flex flex-col min-w-0">
         <MobileTopLogo user={user} activeCompany={activeCompany} />
         <DesktopTopBar user={user} activeCompany={activeCompany} tab={tab} tabs={tabs} />
