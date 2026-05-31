@@ -25,6 +25,9 @@ const SHOTS = {
   kioskNumpad: 'https://customer-assets.emergentagent.com/job_vastgoed-app/artifacts/mjshklb8_14.png',
 };
 
+const DEMO_VIDEO = 'https://customer-assets.emergentagent.com/job_vastgoed-app/artifacts/7ku70qrp_ScreenRecording_05-31-2026%2019-49-22_1.MP4';
+const DEMO_POSTER = '/landing/demo-poster.jpg';
+
 // =============================================================================
 // Reusable: macOS Browser frame for desktop screenshots
 // =============================================================================
@@ -68,18 +71,27 @@ function TabletFrame({ src, alt, className = '' }) {
 }
 
 // =============================================================================
-// Reusable: iPhone mockup frame (kept for future portrait screenshots)
+// Reusable: iPhone mockup frame — supports both image (src) and video (videoSrc)
 // =============================================================================
-function PhoneFrame({ src, alt, className = '' }) {
+function PhoneFrame({ src, videoSrc, poster, alt, width = 280, className = '' }) {
   return (
     <div className={`relative ${className}`}>
       <div className="relative mx-auto rounded-[2.5rem] bg-slate-950 p-2 shadow-[0_30px_80px_-20px_rgba(15,23,42,0.4)]"
-        style={{ width: 280 }}>
+        style={{ width }}>
         <div className="relative rounded-[2rem] overflow-hidden bg-white aspect-[9/19.5]">
           {/* Notch */}
           <div className="absolute top-2 left-1/2 -translate-x-1/2 w-24 h-6 rounded-full bg-slate-950 z-10" />
-          <img src={src} alt={alt} loading="lazy"
-            className="w-full h-full object-cover object-top" />
+          {videoSrc ? (
+            <video
+              src={videoSrc}
+              poster={poster}
+              autoPlay loop muted playsInline preload="metadata"
+              className="w-full h-full object-cover object-center"
+            />
+          ) : (
+            <img src={src} alt={alt} loading="lazy"
+              className="w-full h-full object-cover object-top" />
+          )}
         </div>
       </div>
     </div>
@@ -223,15 +235,17 @@ function Hero({ onDemo, onWhatsApp }) {
           </p>
         </div>
 
-        {/* Dual device showcase — desktop browser + floating tablet */}
+        {/* Dual device showcase — desktop browser + floating phone playing demo video */}
         <div className="mt-16 lg:mt-24 relative">
           <div className="relative">
             {/* Desktop browser (back layer) */}
             <BrowserFrame src={SHOTS.overzicht} alt="Beheer Overzicht"
               className="max-w-5xl mx-auto" />
-            {/* Tablet (front layer, overlaps bottom-right) showing Kiosk */}
-            <div className="hidden md:block absolute -bottom-10 lg:-bottom-16 -right-2 lg:-right-8 z-10 w-[42%] lg:w-[36%]">
-              <TabletFrame src={SHOTS.kioskOverview} alt="Kiosk huurder overzicht" />
+            {/* iPhone met live demo video (front layer, overlaps bottom-right) */}
+            <div className="hidden md:block absolute -bottom-12 lg:-bottom-20 -right-2 lg:-right-8 z-10"
+              data-testid="hero-demo-phone">
+              <PhoneFrame videoSrc={DEMO_VIDEO} poster={DEMO_POSTER}
+                alt="Demo van SuriRent" width={240} />
             </div>
           </div>
         </div>
@@ -315,6 +329,63 @@ function FeaturesSection() {
               </div>
             );
           })}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// =============================================================================
+// Video showcase — live demo van de app in actie
+// =============================================================================
+function VideoShowcase() {
+  return (
+    <section className="py-20 lg:py-28 bg-gradient-to-b from-white to-orange-50/40 overflow-hidden">
+      <div className="max-w-7xl mx-auto px-5 lg:px-8">
+        <div className="grid lg:grid-cols-[1fr,440px] gap-12 lg:gap-16 items-center">
+          <div>
+            <p className="text-xs font-black tracking-[0.3em] uppercase text-[#FF5C00] mb-3">Live demo</p>
+            <h2 className="text-3xl lg:text-5xl font-black tracking-tight text-slate-900 leading-tight">
+              Zie SuriRent
+              <span className="block text-slate-400">in actie.</span>
+            </h2>
+            <p className="mt-5 text-base lg:text-lg text-slate-600 font-medium leading-relaxed max-w-xl">
+              Een echte opname van de app op een telefoon. Van overzicht tot factuur,
+              van Kiosk tot betalingsregeling — alles wat uw vastgoedbedrijf nodig heeft,
+              ontworpen voor één-hand bediening.
+            </p>
+            <ul className="mt-7 space-y-3 max-w-md">
+              {[
+                ['Real-time KPI dashboard', 'Zie kas, achterstand en activiteit live'],
+                ['Multi-currency boekhouding', 'SRD, EUR en USD naast elkaar'],
+                ['Touchscreen optimized', 'Bedien alles met één duim'],
+              ].map(([t, d]) => (
+                <li key={t} className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-orange-100 text-[#FF5C00] flex items-center justify-center shrink-0 mt-0.5">
+                    <Check className="w-4 h-4" strokeWidth={3} />
+                  </div>
+                  <div>
+                    <p className="text-sm font-black text-slate-900">{t}</p>
+                    <p className="text-xs text-slate-500 mt-0.5">{d}</p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div className="relative flex justify-center">
+            {/* Achtergrond glow */}
+            <div className="absolute inset-0 -z-10 flex items-center justify-center">
+              <div className="w-[420px] h-[420px] rounded-full opacity-50 blur-3xl"
+                style={{ background: 'radial-gradient(circle, #FF8A3D, transparent 70%)' }} />
+            </div>
+            <PhoneFrame videoSrc={DEMO_VIDEO} poster={DEMO_POSTER}
+              alt="SuriRent live demo" width={360} />
+            {/* Live badge */}
+            <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-20 px-3 py-1.5 rounded-full bg-slate-900 text-white text-[10px] font-black tracking-[0.18em] uppercase shadow-lg flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              Live opname
+            </div>
+          </div>
         </div>
       </div>
     </section>
@@ -736,6 +807,7 @@ export default function MarketingLandingV2() {
       <Hero onDemo={onDemo} onWhatsApp={onWhatsApp} />
       <StatsStrip />
       <FeaturesSection />
+      <VideoShowcase />
       <ShowcaseSection />
       <KioskSection />
       <PricingSection onDemo={onDemo} onWhatsApp={onWhatsApp} />

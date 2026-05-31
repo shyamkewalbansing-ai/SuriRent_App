@@ -1,5 +1,13 @@
 # Vastgoed Kiosk - PRD
 
+## Session 2026-05-31 (v6) — Live demo video op landingspagina ✅
+- Gebruiker upload screen recording (1290×2796 portrait iPhone, 34s, 14 MB).
+- **Hero**: kleine iPhone (240px) met `<video autoPlay loop muted playsInline>` overlay, vervangt de TabletFrame in de hero-mockup.
+- **Nieuwe `VideoShowcase` sectie** tussen Features en Beheer Suite carousel: grote iPhone (360px) met video + "Live opname" badge + 3 bullet points (KPI dashboard, multi-currency, touchscreen optimized).
+- `PhoneFrame` component uitgebreid met `videoSrc` + `poster` props (fallback naar `<img src>`).
+- Poster image (JPG, 1 frame uit video) gegenereerd via ffmpeg en opgeslagen onder `/app/frontend/public/landing/demo-poster.jpg` voor snelle eerste render.
+- Auto-loop zonder geluid, native browser autoplay-friendly (muted + playsInline).
+
 ## Session 2026-05-31 (v5) — Marketing Landing volledig redesign (Premium SaaS) ✅
 - **Nieuwe `MarketingLandingV2.jsx`** vervangt de oude landing op de root route (`App.js` import gewijzigd). Oude `MarketingLanding.jsx` behouden voor LandingEditor preview compatibiliteit.
 - **9 echte app screenshots** geïntegreerd (5x Beheer + 4x Kiosk), gehost op Emergent Assets CDN.
