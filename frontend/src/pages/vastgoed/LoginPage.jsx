@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useBrandedNavigate } from '../../lib/branded-nav';
 import { RESERVED_SLUGS } from '../../lib/branded-nav';
-import { Loader2, Delete, KeyRound, ArrowLeft, Eye, EyeOff, UserPlus, LogIn, Check, Globe, X as XIcon } from 'lucide-react';
+import { Loader2, Delete, KeyRound, ArrowLeft, Eye, EyeOff, UserPlus, LogIn, Check, CheckCircle, Globe, X as XIcon } from 'lucide-react';
 import { api, formatError } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { setPreferredRole, isStandalonePWA, getPreferredRole, routeForRole } from '../../lib/pwaRole';
@@ -234,8 +234,16 @@ function PasswordView({ initialMode = 'login', onBack, onRegistered, branding })
   const navigate = useBrandedNavigate();
   const { login, register } = useAuth();
   const [mode, setMode] = useState(initialMode); // 'login' | 'register'
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState(() => {
+    try { return localStorage.getItem('saved_login_email') || ''; } catch { return ''; }
+  });
+  const [password, setPassword] = useState(() => {
+    try { return localStorage.getItem('saved_login_password') || ''; } catch { return ''; }
+  });
+  const [remember, setRemember] = useState(() => {
+    try { return localStorage.getItem('saved_login_email') !== null; } catch { return false; }
+  });
+  const [showForgot, setShowForgot] = useState(false);
   const [name, setName] = useState('');
   const [companyName, setCompanyName] = useState('');
   const [telefoon, setTelefoon] = useState('');
@@ -327,6 +335,18 @@ function PasswordView({ initialMode = 'login', onBack, onRegistered, branding })
     try {
       if (mode === 'login') {
         await login(email, password);
+        // "Onthoud mij": sla email + wachtwoord lokaal op (alleen op apparaten
+        // waar de gebruiker zelf toegang toe heeft — niet ideaal voor gedeelde
+        // kiosks, daarom uitvink-baar).
+        try {
+          if (remember) {
+            localStorage.setItem('saved_login_email', email);
+            localStorage.setItem('saved_login_password', password);
+          } else {
+            localStorage.removeItem('saved_login_email');
+            localStorage.removeItem('saved_login_password');
+          }
+        } catch { /* noop */ }
         setPreferredRole('admin');
         navigate('/admin');
       } else {
@@ -576,20 +596,34 @@ function PasswordView({ initialMode = 'login', onBack, onRegistered, branding })
                 <div>
                   <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">E-mailadres</label>
                   <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} data-testid="auth-email"
-                    required
+                    required autoComplete="username" name="email" id="login-email"
                     className="w-full h-12 text-base px-4 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] focus:ring-4 focus:ring-[#FF5C00]/10 bg-[#F9FAFB] outline-none transition"
-                    placeholder="admin@vastgoed.sr" />
+                    placeholder="naam@bedrijf.sr" />
                 </div>
                 <div>
                   <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Wachtwoord</label>
                   <div className="relative">
                     <input type={showPw ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)}
                       data-testid="auth-password" required minLength={6}
+                      autoComplete="current-password" name="password" id="login-password"
                       className="w-full h-12 text-base px-4 pr-11 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] focus:ring-4 focus:ring-[#FF5C00]/10 bg-[#F9FAFB] outline-none transition" />
                     <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
                       {showPw ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                     </button>
                   </div>
+                </div>
+                <div className="flex items-center justify-between mt-1">
+                  <label className="inline-flex items-center gap-2 text-sm text-slate-600 cursor-pointer select-none">
+                    <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)}
+                      data-testid="auth-remember"
+                      className="w-4 h-4 rounded border-2 border-slate-300 text-[#FF5C00] focus:ring-[#FF5C00]/30 cursor-pointer" />
+                    Onthoud mij
+                  </label>
+                  <button type="button" onClick={() => setShowForgot(true)}
+                    data-testid="auth-forgot-link"
+                    className="text-sm text-[#FF5C00] font-semibold hover:underline">
+                    Wachtwoord vergeten?
+                  </button>
                 </div>
               </>
             )}
@@ -613,11 +647,181 @@ function PasswordView({ initialMode = 'login', onBack, onRegistered, branding })
           </p>
 
           {mode === 'login' && (
-            <p className="text-center text-xs text-slate-300 mt-3">
-              Standaard: <span className="font-bold text-slate-400">admin@vastgoed.sr / admin123</span>
-            </p>
+            <div className="mt-5 p-3 bg-orange-50 border border-orange-200 rounded-xl text-center">
+              <p className="text-xs font-bold text-orange-700 mb-1">Demo proberen?</p>
+              <p className="text-[11px] text-orange-600 mb-2">Test alle functies in een gedeelde demo-omgeving (reset elke 30 min)</p>
+              <button type="button" onClick={async () => {
+                  setLoading(true); setError('');
+                  try {
+                    const { data } = await api.post('/auth/demo-login', {});
+                    if (data?.email && data?.password) {
+                      setEmail(data.email);
+                      setPassword(data.password);
+                      // Auto-submit
+                      await login(data.email, data.password);
+                      setPreferredRole('admin');
+                      navigate('/admin');
+                    }
+                  } catch (err) {
+                    setError(formatError(err, 'Demo niet beschikbaar'));
+                  } finally { setLoading(false); }
+                }}
+                data-testid="auth-demo-btn"
+                className="w-full py-2 rounded-lg bg-white border-2 border-orange-300 hover:bg-orange-100 text-orange-700 font-bold text-sm">
+                Direct in demo-omgeving →
+              </button>
+            </div>
           )}
         </div>
+      </div>
+
+      {showForgot && (
+        <ForgotPasswordModal initialEmail={email} onClose={() => setShowForgot(false)} />
+      )}
+    </div>
+  );
+}
+
+// =====================================================================
+// Forgot Password Modal — wachtwoord herstel via email + WhatsApp
+// =====================================================================
+function ForgotPasswordModal({ initialEmail, onClose }) {
+  const [stage, setStage] = useState('request');  // 'request' | 'verify' | 'done'
+  const [email, setEmail] = useState(initialEmail || '');
+  const [channel, setChannel] = useState('email');  // 'email' | 'whatsapp'
+  const [code, setCode] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [showPw, setShowPw] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState('');
+  const [info, setInfo] = useState('');
+
+  const requestCode = async (e) => {
+    e?.preventDefault();
+    setLoading(true); setErr(''); setInfo('');
+    try {
+      const { data } = await api.post('/auth/forgot-password', { email, channel });
+      setInfo(data?.message || `Code verzonden via ${channel === 'email' ? 'e-mail' : 'WhatsApp'}.`);
+      setStage('verify');
+    } catch (e) {
+      setErr(formatError(e, 'Kon code niet versturen'));
+    } finally { setLoading(false); }
+  };
+
+  const submitReset = async (e) => {
+    e?.preventDefault();
+    setLoading(true); setErr('');
+    try {
+      await api.post('/auth/reset-password', { email, code: code.trim(), new_password: newPassword });
+      setStage('done');
+    } catch (e) {
+      setErr(formatError(e, 'Reset mislukt'));
+    } finally { setLoading(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
+      data-testid="forgot-password-modal" onClick={onClose}>
+      <div className="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-2xl"
+        onClick={(e) => e.stopPropagation()}>
+        <div className="px-6 py-4 bg-[#FF5C00] text-white">
+          <p className="text-lg font-extrabold">Wachtwoord vergeten</p>
+          <p className="text-xs opacity-90 mt-0.5">
+            {stage === 'request' && 'Kies hoe je de herstelcode wilt ontvangen'}
+            {stage === 'verify' && 'Voer de ontvangen code in en kies een nieuw wachtwoord'}
+            {stage === 'done' && 'Wachtwoord succesvol gewijzigd'}
+          </p>
+        </div>
+
+        {stage === 'request' && (
+          <form onSubmit={requestCode} className="p-6 space-y-4">
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">E-mailadres</label>
+              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required
+                data-testid="forgot-email"
+                className="w-full h-12 text-base px-4 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] focus:ring-4 focus:ring-[#FF5C00]/10 bg-[#F9FAFB] outline-none transition" />
+            </div>
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Verstuur code via</label>
+              <div className="grid grid-cols-2 gap-2">
+                {[{ id: 'email', label: 'E-mail' }, { id: 'whatsapp', label: 'WhatsApp' }].map((c) => (
+                  <button key={c.id} type="button" onClick={() => setChannel(c.id)}
+                    data-testid={`forgot-channel-${c.id}`}
+                    className={`py-3 rounded-xl font-bold text-sm transition ${
+                      channel === c.id ? 'bg-[#FF5C00] text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}>
+                    {c.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {err && <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg p-2">{err}</p>}
+            <div className="flex gap-2 pt-2">
+              <button type="button" onClick={onClose} disabled={loading}
+                className="flex-1 py-2.5 rounded-lg bg-white border-2 border-slate-200 text-slate-700 font-bold text-sm">
+                Annuleren
+              </button>
+              <button type="submit" disabled={loading || !email}
+                data-testid="forgot-send-btn"
+                className="flex-[2] py-2.5 rounded-lg bg-[#FF5C00] text-white font-bold text-sm disabled:opacity-50 flex items-center justify-center gap-2">
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                Verstuur code
+              </button>
+            </div>
+          </form>
+        )}
+
+        {stage === 'verify' && (
+          <form onSubmit={submitReset} className="p-6 space-y-4">
+            {info && <p className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg p-2">{info}</p>}
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Herstelcode (6 cijfers)</label>
+              <input type="text" inputMode="numeric" pattern="[0-9]{6}" maxLength={6}
+                value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
+                required data-testid="forgot-code"
+                className="w-full h-14 text-center text-2xl font-mono tracking-[0.5em] px-4 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] focus:ring-4 focus:ring-[#FF5C00]/10 bg-[#F9FAFB] outline-none transition" />
+            </div>
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Nieuw wachtwoord</label>
+              <div className="relative">
+                <input type={showPw ? 'text' : 'password'} value={newPassword} onChange={(e) => setNewPassword(e.target.value)}
+                  required minLength={6} data-testid="forgot-new-password"
+                  className="w-full h-12 text-base px-4 pr-11 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] focus:ring-4 focus:ring-[#FF5C00]/10 bg-[#F9FAFB] outline-none transition" />
+                <button type="button" onClick={() => setShowPw(!showPw)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                  {showPw ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                </button>
+              </div>
+            </div>
+            {err && <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg p-2">{err}</p>}
+            <div className="flex gap-2 pt-2">
+              <button type="button" onClick={() => setStage('request')} disabled={loading}
+                className="flex-1 py-2.5 rounded-lg bg-white border-2 border-slate-200 text-slate-700 font-bold text-sm">
+                Terug
+              </button>
+              <button type="submit" disabled={loading || code.length !== 6 || newPassword.length < 6}
+                data-testid="forgot-reset-btn"
+                className="flex-[2] py-2.5 rounded-lg bg-[#FF5C00] text-white font-bold text-sm disabled:opacity-50 flex items-center justify-center gap-2">
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                Reset wachtwoord
+              </button>
+            </div>
+          </form>
+        )}
+
+        {stage === 'done' && (
+          <div className="p-6 text-center space-y-3">
+            <div className="w-16 h-16 mx-auto rounded-full bg-emerald-500/10 flex items-center justify-center">
+              <CheckCircle className="w-9 h-9 text-emerald-500" />
+            </div>
+            <p className="text-base font-bold text-slate-900">Wachtwoord gewijzigd</p>
+            <p className="text-sm text-slate-500">Je kunt nu inloggen met je nieuwe wachtwoord.</p>
+            <button onClick={onClose} data-testid="forgot-done-close"
+              className="w-full py-2.5 rounded-lg bg-[#FF5C00] text-white font-bold text-sm">
+              Sluiten
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

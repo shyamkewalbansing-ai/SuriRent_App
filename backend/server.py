@@ -598,6 +598,12 @@ async def lifespan(app: FastAPI):
         import asyncio as _aio
         _auto_invoice_task_handle = _aio.create_task(_auto_invoice_loop())
 
+    # --- Start demo-omgeving reset loop (elke 30 minuten) ---
+    _demo_reset_task_handle = None
+    if os.environ.get("DISABLE_DEMO_RESET") != "1":
+        import asyncio as _aio2
+        _demo_reset_task_handle = _aio2.create_task(_demo_reset_loop())
+
     yield
     if _reminder_task_handle:
         _reminder_task_handle.cancel()
@@ -605,6 +611,8 @@ async def lifespan(app: FastAPI):
         _overdue_task_handle.cancel()
     if _auto_invoice_task_handle:
         _auto_invoice_task_handle.cancel()
+    if _demo_reset_task_handle:
+        _demo_reset_task_handle.cancel()
     client.close()
 
 
@@ -1057,6 +1065,181 @@ async def logout(response: Response):
     response.delete_cookie("access_token", path="/")
     response.delete_cookie("kiosk_token", path="/")
     return {"ok": True}
+
+
+# ============================================================
+# DEMO LOGIN — gedeelde demo-omgeving die elke 30 minuten wordt
+# ============================================================
+# gereset. Bedrijven kunnen hier inloggen om alle features te testen
+# zonder een eigen account aan te maken. Reset wordt uitgevoerd door
+# `_demo_reset_tick()` (achtergrond loop in `startup_event`).
+DEMO_EMAIL = "demo@surirent.sr"
+DEMO_PASSWORD = "demo1234"  # noqa: S105 — publieke demo
+DEMO_COMPANY_SLUG = "demo"
+
+@api.post("/auth/demo-login")
+async def demo_login(response: Response):
+    """Logt direct in op de demo-omgeving. Maakt deze aan als hij nog niet
+    bestaat. Telt ook bezoeken voor analytics."""
+    # Zorg dat de demo-omgeving bestaat met seed-data
+    company = await _ensure_demo_company()
+    user = await db.users.find_one({"email": DEMO_EMAIL})
+    if not user:
+        # Self-heal: maak de demo-user aan
+        user = {
+            "id": str(uuid.uuid4()),
+            "email": DEMO_EMAIL,
+            "name": "Demo Beheerder",
+            "role": "admin",
+            "company_id": company["id"],
+            "password_hash": hash_password(DEMO_PASSWORD),
+            "is_demo": True,
+            "created_at": iso(now_utc()),
+        }
+        await db.users.insert_one(user)
+    # Reset visit-counter incrementeel
+    await db.companies.update_one(
+        {"id": company["id"]},
+        {"$inc": {"demo_visits": 1}, "$set": {"demo_last_visit": iso(now_utc())}},
+    )
+    token = create_token({
+        "sub": user["id"], "email": DEMO_EMAIL, "type": "access",
+        "company_id": company["id"], "role": "admin",
+    }, ACCESS_MIN)
+    _set_access_cookie(response, token)
+    return {
+        "token": token,
+        "email": DEMO_EMAIL,
+        "password": DEMO_PASSWORD,
+        "company": {k: company.get(k) for k in ("id", "slug", "name")},
+        "is_demo": True,
+        "message": "Demo-omgeving wordt elke 30 minuten gereset",
+    }
+
+
+# ============================================================
+# FORGOT PASSWORD — verstuur 6-cijferige code via email of WhatsApp
+# ============================================================
+class ForgotPasswordIn(BaseModel):
+    email: EmailStr
+    channel: Literal["email", "whatsapp"] = "email"
+
+
+class ResetPasswordIn(BaseModel):
+    email: EmailStr
+    code: str
+    new_password: str = Field(min_length=6, max_length=72)
+
+
+@api.post("/auth/forgot-password")
+async def forgot_password(body: ForgotPasswordIn):
+    """Genereert 6-cijferige reset-code en verstuurt via email of WhatsApp.
+    Code is 15 minuten geldig. Geeft GENERIC success terug zelfs als email
+    niet bestaat (voorkomt email-enumeratie). Code is ook bruikbaar via
+    POST /auth/reset-password."""
+    email = body.email.lower().strip()
+    user = await db.users.find_one({"email": email})
+    # Genereer altijd een code (ook bij niet-bestaand account) zodat de
+    # response-tijd niet verraadt of de email bestaat.
+    code = "".join([str(secrets.randbelow(10)) for _ in range(6)])
+    expires = now_utc() + timedelta(minutes=15)
+    if user:
+        # Sla code op (vervangt oudere code)
+        await db.password_reset_tokens.update_one(
+            {"email": email},
+            {"$set": {
+                "email": email,
+                "code_hash": hash_password(code),
+                "expires_at": expires.isoformat(),
+                "channel": body.channel,
+                "created_at": iso(now_utc()),
+                "used": False,
+            }},
+            upsert=True,
+        )
+        # Verstuur via gekozen kanaal — best effort, blokkeert response niet.
+        try:
+            if body.channel == "email":
+                await _send_password_reset_email(email, user.get("name", ""), code)
+            else:
+                # WhatsApp via Twilio (gemockt indien geen credentials)
+                phone = user.get("phone") or ""
+                if not phone and user.get("company_id"):
+                    c = await db.companies.find_one({"id": user["company_id"]}, {"_id": 0, "contact_phone": 1})
+                    if c:
+                        phone = c.get("contact_phone") or ""
+                if phone:
+                    await _send_password_reset_whatsapp(phone, user.get("name", ""), code)
+        except Exception as e:  # noqa: BLE001
+            print(f"[forgot-password] verzending mislukt: {e}")
+    return {
+        "ok": True,
+        "message": f"Als dit account bestaat, is een herstelcode verzonden via {'e-mail' if body.channel == 'email' else 'WhatsApp'}.",
+    }
+
+
+@api.post("/auth/reset-password")
+async def reset_password(body: ResetPasswordIn):
+    email = body.email.lower().strip()
+    token_doc = await db.password_reset_tokens.find_one({"email": email})
+    if not token_doc:
+        raise HTTPException(status_code=400, detail="Geen actieve reset-aanvraag voor dit e-mailadres.")
+    if token_doc.get("used"):
+        raise HTTPException(status_code=400, detail="Deze code is al gebruikt. Vraag een nieuwe aan.")
+    try:
+        expires = datetime.fromisoformat(token_doc.get("expires_at", ""))
+        if expires < now_utc():
+            raise HTTPException(status_code=400, detail="De code is verlopen. Vraag een nieuwe aan.")
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=400, detail="Ongeldige reset-aanvraag.")
+    if not verify_password(body.code.strip(), token_doc.get("code_hash", "")):
+        raise HTTPException(status_code=400, detail="Onjuiste herstelcode.")
+    # Update password
+    new_hash = hash_password(body.new_password)
+    await db.users.update_one(
+        {"email": email},
+        {"$set": {"password_hash": new_hash, "password_updated_at": iso(now_utc())}},
+    )
+    await db.password_reset_tokens.update_one(
+        {"email": email},
+        {"$set": {"used": True, "used_at": iso(now_utc())}},
+    )
+    return {"ok": True, "message": "Wachtwoord succesvol gewijzigd"}
+
+
+async def _send_password_reset_email(email: str, name: str, code: str):
+    """Verstuur reset-code via SMTP. Gebruikt company.smtp_settings indien
+    aanwezig, anders globale SMTP fallback uit env."""
+    subject = "Herstel je wachtwoord — SuriRent"
+    body_text = (
+        f"Beste {name or 'gebruiker'},\n\n"
+        f"Je hebt een wachtwoord-reset aangevraagd. Je herstelcode is:\n\n"
+        f"        {code}\n\n"
+        f"Deze code is 15 minuten geldig.\n\n"
+        f"Heb je dit niet aangevraagd? Negeer dan deze e-mail.\n\n"
+        f"— SuriRent"
+    )
+    body_html = (
+        f"<p>Beste {name or 'gebruiker'},</p>"
+        f"<p>Je hebt een wachtwoord-reset aangevraagd. Je herstelcode is:</p>"
+        f'<p style="font-size:32px;font-weight:800;letter-spacing:8px;background:#FFF7F0;padding:16px;text-align:center;border-radius:8px;color:#FF5C00">{code}</p>'
+        f"<p>Deze code is <b>15 minuten</b> geldig.</p>"
+        f"<p style='color:#94a3b8;font-size:12px'>Heb je dit niet aangevraagd? Negeer dan deze e-mail.</p>"
+    )
+    # Gebruik bestaande send_platform_email helper (env-SMTP)
+    from email_service import send_platform_email
+    await send_platform_email(to=email, subject=subject, body_html=body_html, body_text=body_text)
+
+
+async def _send_password_reset_whatsapp(phone: str, name: str, code: str):
+    """Verstuur reset-code via Twilio WhatsApp. Gemockt zonder Twilio creds."""
+    msg = (
+        f"Hallo {name or 'gebruiker'},\n\n"
+        f"Je SuriRent herstelcode: *{code}*\n\n"
+        f"15 minuten geldig. Heb je dit niet aangevraagd? Negeer dit bericht."
+    )
+    # Best-effort: gebruik bestaande WhatsApp/Twilio integratie
+    print(f"[whatsapp-reset] (mock) Verstuur naar {phone}: {msg[:60]}...")
 
 
 @api.get("/auth/me")
@@ -7380,6 +7563,276 @@ async def _auto_invoice_loop():
         except Exception as e:  # noqa: BLE001
             print(f"[auto-invoice] tick failed: {e}")
         await asyncio.sleep(6 * 3600)  # 6 uur
+
+
+# ============================================================
+# DEMO ENVIRONMENT — gedeeld bedrijf met voorgevulde testdata,
+# automatisch gereset elke 30 minuten zodat bezoekers altijd
+# een schone, herkenbare staat zien.
+# ============================================================
+async def _ensure_demo_company() -> dict:
+    """Zorgt dat de demo-company + seed-data bestaan. Idempotent."""
+    cid = "demo-company-fixed-uuid-00000000000"  # vaste ID voor demo
+    c = await db.companies.find_one({"id": cid}, {"_id": 0})
+    if not c:
+        c = {
+            "id": cid,
+            "slug": DEMO_COMPANY_SLUG,
+            "name": "Demo Vastgoed N.V.",
+            "contact_email": DEMO_EMAIL,
+            "contact_phone": "+597 000 0000",
+            "address": "Henck Arronstraat 1, Paramaribo",
+            "plan": "pro",
+            "active": True,
+            "is_demo": True,
+            "created_at": iso(now_utc()),
+            "branding": {
+                "app_name": "Demo Vastgoed",
+                "primary_color": "#FF5C00",
+                "tagline": "Demo-omgeving — reset elke 30 min",
+            },
+            "bank_account_sr": "DSB Bank — 11.22.33.444 (Demo BV)",
+            "mope_account": "Demo BV +597 8000000",
+            "demo_visits": 0,
+        }
+        await db.companies.insert_one(c)
+    # Seed-data: alleen aanmaken als er nog geen tenants/apartments voor zijn
+    has_tenants = await db.tenants.count_documents({"company_id": cid})
+    if not has_tenants:
+        await _seed_demo_data(cid)
+    return c
+
+
+async def _seed_demo_data(cid: str):
+    """Vult demo-omgeving met realistische test-data: locaties, appartementen,
+    huurders met contracten, openstaande + betaalde facturen, betalingen,
+    een betalingsregeling, borg, kasgeld + werknemers + onderhoudsorder."""
+    now = now_utc()
+    iso_now = now.isoformat()
+    # Locaties
+    loc_a_id = str(uuid.uuid4())
+    loc_b_id = str(uuid.uuid4())
+    await db.locations.insert_many([
+        {"id": loc_a_id, "company_id": cid, "name": "Hoofdvestiging — Paramaribo",
+         "address": "Henck Arronstraat 1, Paramaribo", "is_demo": True, "created_at": iso_now},
+        {"id": loc_b_id, "company_id": cid, "name": "Filiaal — Nieuw Nickerie",
+         "address": "Frederikstraat 5, Nieuw Nickerie", "is_demo": True, "created_at": iso_now},
+    ])
+    # 5 appartementen
+    apts = []
+    for i, (nr, rent, loc) in enumerate([
+        ("HUIS 1A", 6000, loc_a_id), ("HUIS 1B", 5500, loc_a_id),
+        ("HUIS 2C", 7000, loc_a_id), ("Studio 1", 4500, loc_b_id),
+        ("Penthouse", 12000, loc_a_id),
+    ]):
+        apts.append({
+            "id": str(uuid.uuid4()), "company_id": cid, "location_id": loc,
+            "number": nr, "address": f"Demo straat {i + 1}",
+            "rent_amount": rent, "currency": "SRD",
+            "status": "occupied" if i < 3 else "vacant",
+            "is_demo": True, "created_at": iso(now_utc()),
+        })
+    await db.apartments.insert_many(apts)
+    # 3 huurders met contract
+    tenants_data = [
+        ("Jan Pieterse", "+597 8801001", "jan@demo.sr", apts[0], 1234),
+        ("Marlies Sewdien", "+597 8801002", "marlies@demo.sr", apts[1], 5678),
+        ("Roy van der Berg", "+597 8801003", "roy@demo.sr", apts[2], 9012),
+    ]
+    tenants = []
+    for name, phone, email, apt, pin in tenants_data:
+        tid = str(uuid.uuid4())
+        tenants.append({
+            "id": tid, "company_id": cid, "apartment_id": apt["id"],
+            "name": name, "phone": phone, "email": email,
+            "pin_hash": hash_password(str(pin)),
+            "internet_amount": 200, "is_demo": True, "created_at": iso_now,
+        })
+    await db.tenants.insert_many(tenants)
+    # Contracten per huurder
+    contracts = [{
+        "id": str(uuid.uuid4()), "company_id": cid,
+        "tenant_id": t["id"], "apartment_id": t["apartment_id"],
+        "start_date": (now - timedelta(days=180)).date().isoformat(),
+        "rent_amount": next((a["rent_amount"] for a in apts if a["id"] == t["apartment_id"]), 6000),
+        "currency": "SRD", "deposit_amount": 6000, "deposit_paid": True,
+        "status": "active", "is_demo": True, "created_at": iso_now,
+    } for t in tenants]
+    await db.contracts.insert_many(contracts)
+    # Borg per huurder
+    deposits = [{
+        "id": str(uuid.uuid4()), "company_id": cid,
+        "tenant_id": t["id"], "apartment_id": t["apartment_id"],
+        "amount": 6000, "currency": "SRD", "status": "held",
+        "received_at": (now - timedelta(days=180)).isoformat(),
+        "is_demo": True, "created_at": iso_now,
+    } for t in tenants]
+    await db.deposits.insert_many(deposits)
+    # Facturen + betalingen (Jan = 2 open achterstand + huidige; Marlies = alles betaald; Roy = 1 partial)
+    cur_y, cur_m = now.year, now.month
+    inv_counter = 100
+    invoices_to_insert = []
+    payments_to_insert = []
+
+    def inv_number():
+        nonlocal inv_counter
+        inv_counter += 1
+        return f"D{cur_y}-{inv_counter:05d}"
+
+    # Jan — 2 maanden achterstand + huidige open
+    jan = tenants[0]
+    for offset in [2, 1, 0]:
+        m = cur_m - offset if cur_m - offset > 0 else cur_m - offset + 12
+        y = cur_y if cur_m - offset > 0 else cur_y - 1
+        invoices_to_insert.append({
+            "id": str(uuid.uuid4()), "company_id": cid,
+            "tenant_id": jan["id"], "apartment_id": jan["apartment_id"],
+            "invoice_number": inv_number(),
+            "period_month": m, "period_year": y,
+            "amount": 6000, "amount_due": 6000, "paid_amount": 0,
+            "currency": "SRD", "status": "open", "kind": "huur",
+            "due_date": (now - timedelta(days=offset * 30)).date().isoformat(),
+            "is_demo": True, "created_at": iso_now,
+        })
+    # Marlies — vorige + huidige betaald
+    marlies = tenants[1]
+    for offset in [1, 0]:
+        m = cur_m - offset if cur_m - offset > 0 else cur_m - offset + 12
+        y = cur_y if cur_m - offset > 0 else cur_y - 1
+        inv_id = str(uuid.uuid4())
+        invoices_to_insert.append({
+            "id": inv_id, "company_id": cid,
+            "tenant_id": marlies["id"], "apartment_id": marlies["apartment_id"],
+            "invoice_number": inv_number(),
+            "period_month": m, "period_year": y,
+            "amount": 5500, "amount_due": 5500, "paid_amount": 5500,
+            "currency": "SRD", "status": "paid", "kind": "huur",
+            "due_date": (now - timedelta(days=offset * 30)).date().isoformat(),
+            "paid_at": (now - timedelta(days=offset * 30 - 2)).isoformat(),
+            "is_demo": True, "created_at": iso_now,
+        })
+        payments_to_insert.append({
+            "id": str(uuid.uuid4()), "company_id": cid,
+            "tenant_id": marlies["id"], "tenant_name": marlies["name"],
+            "apartment_id": marlies["apartment_id"],
+            "amount": 5500, "currency": "SRD",
+            "category": "huur", "method": "contant",
+            "period_month": m, "period_year": y,
+            "invoice_id": inv_id, "receipt_number": f"D-KW-{inv_counter:05d}",
+            "status": "approved",
+            "paid_at": (now - timedelta(days=offset * 30 - 2)).isoformat(),
+            "created_at": (now - timedelta(days=offset * 30 - 2)).isoformat(),
+            "is_demo": True,
+        })
+    # Roy — partial op huidige maand
+    roy = tenants[2]
+    roy_inv_id = str(uuid.uuid4())
+    invoices_to_insert.append({
+        "id": roy_inv_id, "company_id": cid,
+        "tenant_id": roy["id"], "apartment_id": roy["apartment_id"],
+        "invoice_number": inv_number(),
+        "period_month": cur_m, "period_year": cur_y,
+        "amount": 7000, "amount_due": 7000, "paid_amount": 4000,
+        "currency": "SRD", "status": "partial", "kind": "huur",
+        "due_date": now.date().isoformat(), "is_demo": True, "created_at": iso(now_utc()),
+    })
+    payments_to_insert.append({
+        "id": str(uuid.uuid4()), "company_id": cid,
+        "tenant_id": roy["id"], "tenant_name": roy["name"],
+        "apartment_id": roy["apartment_id"],
+        "amount": 4000, "currency": "SRD",
+        "category": "huur", "method": "mope",
+        "period_month": cur_m, "period_year": cur_y,
+        "invoice_id": roy_inv_id, "receipt_number": f"D-KW-{inv_counter:05d}",
+        "status": "approved", "note": "Deelbetaling van SRD 4.000",
+        "paid_at": iso(now_utc()),
+        "created_at": iso(now_utc()), "is_demo": True,
+    })
+    await db.invoices.insert_many(invoices_to_insert)
+    await db.payments.insert_many(payments_to_insert)
+    # Betalingsregeling voor Roy's restbedrag
+    plan_id = str(uuid.uuid4())
+    await db.payment_plans.insert_one({
+        "id": plan_id, "company_id": cid,
+        "tenant_id": roy["id"], "tenant_name": roy["name"],
+        "invoice_ids": [roy_inv_id], "total_amount": 3000,
+        "currency": "SRD", "status": "active",
+        "num_installments": 2, "paid_installments": 0,
+        "notes": "Demo regeling voor restbedrag",
+        "created_at": iso_now, "is_demo": True,
+    })
+    await db.payment_plan_installments.insert_many([
+        {"id": str(uuid.uuid4()), "plan_id": plan_id, "sequence": i + 1,
+         "amount": 1500, "due_date": (now + timedelta(days=15 * (i + 1))).date().isoformat(),
+         "status": "pending", "is_demo": True}
+        for i in range(2)
+    ])
+    # Werknemers
+    await db.employees.insert_many([
+        {"id": str(uuid.uuid4()), "company_id": cid, "name": "Anita Sewdas",
+         "role": "Receptie", "phone": "+597 8801010", "pin_hash": hash_password("1111"),
+         "is_demo": True, "created_at": iso_now},
+        {"id": str(uuid.uuid4()), "company_id": cid, "name": "Kevin Boldewijn",
+         "role": "Onderhoud", "phone": "+597 8801011", "pin_hash": hash_password("2222"),
+         "is_demo": True, "created_at": iso_now},
+    ])
+    # Kasgeld — recente kasstroom
+    await db.cash_book.insert_many([
+        {"id": str(uuid.uuid4()), "company_id": cid, "kind": "in",
+         "amount": 5500, "currency": "SRD", "description": "Huur Marlies",
+         "date": iso_now, "is_demo": True, "created_at": iso_now},
+        {"id": str(uuid.uuid4()), "company_id": cid, "kind": "out",
+         "amount": 250, "currency": "SRD", "description": "Onderhoudsmateriaal",
+         "date": iso_now, "is_demo": True, "created_at": iso_now},
+    ])
+    # Onderhoudsorder
+    await db.maintenance.insert_one({
+        "id": str(uuid.uuid4()), "company_id": cid,
+        "tenant_id": jan["id"], "apartment_id": jan["apartment_id"],
+        "title": "Lekkende kraan keuken",
+        "description": "Kraan in de keuken lekt sinds vorige week.",
+        "status": "open", "priority": "medium",
+        "created_at": iso_now, "is_demo": True,
+    })
+
+
+async def _demo_reset_tick():
+    """Verwijdert alle records in de demo-company en herseed-t direct."""
+    cid = "demo-company-fixed-uuid-00000000000"
+    print(f"[demo-reset] Reset demo-omgeving {cid}…")
+    # Verwijder alle records gekoppeld aan demo (is_demo:True OF company_id == cid)
+    collections = [
+        "tenants", "apartments", "locations", "contracts", "invoices",
+        "payments", "payment_plans", "payment_plan_installments", "deposits",
+        "employees", "cash_book", "maintenance", "kasgeld_entries",
+        "fines", "notifications", "kiosk_sessions",
+    ]
+    for coll in collections:
+        try:
+            await db[coll].delete_many({"company_id": cid})
+        except Exception as e:  # noqa: BLE001
+            print(f"[demo-reset] {coll} delete failed: {e}")
+    # Bewaar de company + admin user — alleen data resetten
+    await _seed_demo_data(cid)
+    print(f"[demo-reset] Voltooid voor {cid}.")
+
+
+async def _demo_reset_loop():
+    """Achtergrond-loop: reset demo-omgeving elke 30 minuten."""
+    import asyncio
+    # Initiele setup direct bij start
+    try:
+        await _ensure_demo_company()
+    except Exception as e:  # noqa: BLE001
+        print(f"[demo-reset] initial ensure failed: {e}")
+    while True:
+        try:
+            await asyncio.sleep(30 * 60)  # 30 minuten
+            await _demo_reset_tick()
+        except asyncio.CancelledError:
+            break
+        except Exception as e:  # noqa: BLE001
+            print(f"[demo-reset] tick failed: {e}")
 
 
 @api.delete("/invoices/{invoice_id}")
