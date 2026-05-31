@@ -10,6 +10,7 @@ import {
   Zap, Power, Menu, MoreHorizontal, MapPin, Crown, Paintbrush, Palette,
   Gauge, Activity, Clock as ClockIcon, Monitor, QrCode, Printer,
   ReceiptText, UsersRound, Building, Calendar, Sparkles,
+  AlertCircle, UserPlus, TrendingUp, ArrowUpRight,
 } from 'lucide-react';
 import { api, formatError, fmtMoney, MONTHS_NL, openAuthedPdf } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
@@ -644,70 +645,187 @@ function Overview() {
       </div>
 
       {/* ============================================================
-          DESKTOP REDESIGN — Modern Professional met Gold/Oranje accent
+          DESKTOP REDESIGN — Modern Professional · Luxe Gold/Oranje
           ============================================================
-          Hero KPI grid (3 kolommen, 2 rijen):
-            Rij 1: Appartementen | Actieve huurders | Achterstallige huurders
-            Rij 2: Openstaand huidige maand | Bank/Kas balans (multi-currency)
-          + Snelle acties bar
-          + Status overzicht + activiteiten (zelfde plek)
+          Layout: Saldo's prominent bovenaan (luxe banking-stijl)
+                  → KPI's eronder (4 tegels)
+                  → Snelle acties (4 knoppen)
+                  → Status overzicht + Activiteiten (bestaand)
       */}
       <div className="hidden lg:block">
-        {/* Hero KPI rij 1 — 3 grote kaarten met sub-labels */}
-        <div className="grid grid-cols-3 gap-4 mb-4">
-          {/* Appartementen */}
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-[0_1px_4px_-2px_rgba(15,23,42,0.06)] p-5 relative overflow-hidden group hover:border-orange-200 transition-colors">
-            <div className="absolute top-0 right-0 w-28 h-28 bg-gradient-to-br from-orange-100/40 to-transparent rounded-full -translate-y-8 translate-x-8 pointer-events-none" />
-            <div className="flex items-start gap-3.5 relative">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-orange-100 to-orange-50 flex items-center justify-center shrink-0 shadow-inner">
-                <Building2 className="w-6 h-6 text-[#FF5C00]" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Appartementen</p>
-                <p className="text-4xl font-black text-slate-900 tracking-tight leading-none mt-1.5" data-testid="kpi-apartments">
-                  {stats.apartments_total}
-                </p>
-                <div className="flex items-center gap-3 mt-2 text-[11px]">
-                  <span className="inline-flex items-center gap-1 text-emerald-600 font-bold">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> {stats.apartments_occupied} bezet
-                  </span>
-                  <span className="inline-flex items-center gap-1 text-slate-400 font-semibold">
-                    <span className="w-1.5 h-1.5 rounded-full bg-slate-300" /> {vacantCount} vacant
-                  </span>
-                </div>
-              </div>
-            </div>
-            <div className="mt-3 h-1.5 w-full rounded-full bg-slate-100 overflow-hidden">
-              <div className="h-full bg-gradient-to-r from-[#FF8A3D] to-[#FF5C00] transition-all" style={{ width: `${occupiedPct}%` }} />
-            </div>
-            <p className="text-[10px] text-slate-400 font-bold mt-1.5">{occupiedPct}% bezettingsgraad</p>
-          </div>
+        {/* ============ HERO · Kas Saldo Banking-stijl ============ */}
+        <div
+          className="relative overflow-hidden rounded-3xl mb-5 p-7 text-white shadow-[0_24px_60px_-24px_rgba(15,23,42,0.55)]"
+          style={{
+            background:
+              'radial-gradient(circle at 0% 0%, #2A1A0A 0%, #1A1208 35%, #0B0805 100%)',
+          }}
+          data-testid="hero-cash-balance"
+        >
+          {/* Luxe achtergrondaccenten — goud glow */}
+          <div className="pointer-events-none absolute -top-32 -right-24 w-[28rem] h-[28rem] rounded-full"
+            style={{ background: 'radial-gradient(circle, rgba(255,176,99,0.32) 0%, rgba(255,92,0,0.08) 40%, transparent 70%)' }} />
+          <div className="pointer-events-none absolute -bottom-24 -left-24 w-[22rem] h-[22rem] rounded-full"
+            style={{ background: 'radial-gradient(circle, rgba(212,160,55,0.18) 0%, transparent 65%)' }} />
+          {/* Subtiele grid noise overlay */}
+          <div className="pointer-events-none absolute inset-0 opacity-[0.04]"
+            style={{
+              backgroundImage:
+                'linear-gradient(rgba(255,255,255,0.6) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.6) 1px, transparent 1px)',
+              backgroundSize: '32px 32px',
+            }} />
 
-          {/* Actieve huurders */}
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-[0_1px_4px_-2px_rgba(15,23,42,0.06)] p-5 relative overflow-hidden hover:border-amber-200 transition-colors">
-            <div className="absolute top-0 right-0 w-28 h-28 bg-gradient-to-br from-amber-100/40 to-transparent rounded-full -translate-y-8 translate-x-8 pointer-events-none" />
-            <div className="flex items-start gap-3.5 relative">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-100 to-amber-50 flex items-center justify-center shrink-0 shadow-inner">
-                <Users className="w-6 h-6 text-amber-600" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Actieve huurders</p>
-                <p className="text-4xl font-black text-slate-900 tracking-tight leading-none mt-1.5" data-testid="kpi-tenants">
-                  {stats.tenants_total}
-                </p>
-                <p className="text-[11px] text-slate-500 font-semibold mt-2">
-                  In {stats.apartments_occupied} {stats.apartments_occupied === 1 ? 'appartement' : 'appartementen'}
+          <div className="relative flex items-start justify-between gap-6 mb-6">
+            <div>
+              <div className="flex items-center gap-2.5 mb-1.5">
+                <span className="w-9 h-9 rounded-xl flex items-center justify-center"
+                  style={{ background: 'linear-gradient(135deg, #F8C260 0%, #D4A037 60%, #8B6914 100%)' }}>
+                  <Wallet className="w-4.5 h-4.5 text-[#1A1208]" />
+                </span>
+                <p className="text-[10px] font-black uppercase tracking-[0.22em]"
+                  style={{ color: '#F0C97A' }}>
+                  Kas saldo
                 </p>
               </div>
+              <h2 className="text-3xl font-black tracking-tight leading-tight"
+                style={{
+                  background: 'linear-gradient(90deg, #FFF6D6 0%, #F8C260 60%, #D4A037 100%)',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  backgroundClip: 'text',
+                }}>
+                Totaal beschikbaar
+              </h2>
+              <p className="text-xs text-white/50 font-semibold mt-1">
+                Live overzicht per valuta · Bron: Kasgeld
+              </p>
             </div>
-            <button onClick={() => window.dispatchEvent(new CustomEvent('go-tab', { detail: 'tenants' }))}
-              data-testid="kpi-tenants-cta"
-              className="mt-3 w-full text-[11px] text-[#FF5C00] font-bold hover:underline text-left">
-              Bekijk alle huurders →
+            <button onClick={() => window.dispatchEvent(new CustomEvent('go-tab', { detail: 'kasgeld' }))}
+              data-testid="hero-cash-cta"
+              className="group inline-flex items-center gap-2 px-4 h-10 rounded-full text-xs font-black tracking-wider uppercase transition-all border"
+              style={{
+                background: 'linear-gradient(135deg, rgba(248,194,96,0.18) 0%, rgba(212,160,55,0.08) 100%)',
+                borderColor: 'rgba(248,194,96,0.35)',
+                color: '#F8C260',
+              }}>
+              Beheer kasgeld
+              <ArrowUpRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
             </button>
           </div>
 
-          {/* Achterstallige huurders — rood/urgentie */}
+          {/* 3 Currency tiles — banking style */}
+          <div className="relative grid grid-cols-3 gap-4">
+            {[
+              { cur: 'SRD', label: 'Surinaamse Dollar', symbol: 'SRD' },
+              { cur: 'EUR', label: 'Euro', symbol: '€' },
+              { cur: 'USD', label: 'US Dollar', symbol: '$' },
+            ].map(({ cur, label, symbol }) => {
+              const v = cashByCur[cur] || 0;
+              const positive = v >= 0;
+              return (
+                <div key={cur}
+                  className="relative rounded-2xl p-4 overflow-hidden backdrop-blur-sm"
+                  style={{
+                    background: 'linear-gradient(160deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.015) 100%)',
+                    border: '1px solid rgba(248,194,96,0.18)',
+                  }}
+                  data-testid={`hero-cash-tile-${cur.toLowerCase()}`}>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-black tracking-[0.18em] uppercase"
+                        style={{ color: '#F0C97A' }}>{cur}</span>
+                      <span className="text-[10px] text-white/40 font-semibold">{label}</span>
+                    </div>
+                    <span className="inline-flex w-6 h-6 rounded-full items-center justify-center"
+                      style={{ background: 'rgba(248,194,96,0.12)' }}>
+                      <TrendingUp className="w-3 h-3" style={{ color: positive ? '#86EFAC' : '#FCA5A5' }} />
+                    </span>
+                  </div>
+                  <p className="text-3xl font-black tracking-tight leading-none text-white"
+                    data-testid={`kpi-cash-${cur.toLowerCase()}`}>
+                    <span className="text-base font-bold opacity-60 mr-1">{symbol === 'SRD' ? '' : symbol}</span>
+                    {Math.round(v).toLocaleString('nl-NL')}
+                  </p>
+                  <div className="mt-3 h-px w-full"
+                    style={{ background: 'linear-gradient(90deg, transparent 0%, rgba(248,194,96,0.4) 50%, transparent 100%)' }} />
+                  <p className="text-[10px] text-white/40 font-semibold mt-1.5">Beschikbaar saldo</p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* ============ KPI rij — 4 tegels ============ */}
+        <div className="grid grid-cols-4 gap-4 mb-5">
+          {/* Appartementen */}
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-[0_1px_4px_-2px_rgba(15,23,42,0.06)] p-5 relative overflow-hidden hover:border-orange-200 transition-colors">
+            <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-orange-100/40 to-transparent rounded-full -translate-y-6 translate-x-6 pointer-events-none" />
+            <div className="flex items-start gap-3 relative">
+              <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-orange-100 to-orange-50 flex items-center justify-center shrink-0 shadow-inner">
+                <Building2 className="w-5 h-5 text-[#FF5C00]" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Appartementen</p>
+                <p className="text-3xl font-black text-slate-900 tracking-tight leading-none mt-1" data-testid="kpi-apartments">
+                  {stats.apartments_total}
+                </p>
+                <p className="text-[11px] text-slate-500 font-semibold mt-1.5">
+                  <span className="text-emerald-600">{stats.apartments_occupied} bezet</span>
+                  {vacantCount > 0 && <span className="text-slate-400"> · {vacantCount} vacant</span>}
+                </p>
+              </div>
+            </div>
+            <div className="mt-3 h-1.5 w-full rounded-full bg-slate-100 overflow-hidden">
+              <div className="h-full bg-gradient-to-r from-[#F8C260] to-[#FF5C00] transition-all" style={{ width: `${occupiedPct}%` }} />
+            </div>
+            <p className="text-[10px] text-slate-400 font-bold mt-1.5">{occupiedPct}% bezetting</p>
+          </div>
+
+          {/* Actieve huurders */}
+          <button onClick={() => window.dispatchEvent(new CustomEvent('go-tab', { detail: 'tenants' }))}
+            data-testid="kpi-tenants-cta"
+            className="text-left bg-white rounded-2xl border border-slate-100 shadow-[0_1px_4px_-2px_rgba(15,23,42,0.06)] p-5 relative overflow-hidden hover:border-amber-200 transition-colors">
+            <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-amber-100/40 to-transparent rounded-full -translate-y-6 translate-x-6 pointer-events-none" />
+            <div className="flex items-start gap-3 relative">
+              <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-amber-100 to-amber-50 flex items-center justify-center shrink-0 shadow-inner">
+                <Users className="w-5 h-5 text-amber-600" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Actieve huurders</p>
+                <p className="text-3xl font-black text-slate-900 tracking-tight leading-none mt-1" data-testid="kpi-tenants">
+                  {stats.tenants_total}
+                </p>
+                <p className="text-[11px] text-slate-500 font-semibold mt-1.5">
+                  In {stats.apartments_occupied} {stats.apartments_occupied === 1 ? 'eenheid' : 'eenheden'}
+                </p>
+              </div>
+            </div>
+            <p className="mt-3 text-[11px] text-[#FF5C00] font-bold">Bekijk alle huurders →</p>
+          </button>
+
+          {/* Openstaand lopende maand */}
+          <button onClick={() => window.dispatchEvent(new CustomEvent('go-tab', { detail: 'invoices' }))}
+            data-testid="kpi-current-open"
+            className="text-left bg-white rounded-2xl border border-slate-100 shadow-[0_1px_4px_-2px_rgba(15,23,42,0.06)] p-5 relative overflow-hidden hover:border-orange-200 transition-colors">
+            <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-orange-100/40 to-transparent rounded-full -translate-y-6 translate-x-6 pointer-events-none" />
+            <div className="flex items-start gap-3 relative">
+              <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-orange-100 to-orange-50 flex items-center justify-center shrink-0 shadow-inner">
+                <Receipt className="w-5 h-5 text-[#FF5C00]" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Open · lopende maand</p>
+                <p className="text-3xl font-black text-[#FF5C00] tracking-tight leading-none mt-1">
+                  {currentMonthOpenCount}
+                </p>
+                <p className="text-[11px] text-slate-500 font-semibold mt-1.5 truncate">
+                  {currentOpenTotal > 0 ? fmtMoney(currentOpenTotal, primaryCur) : 'Nog te innen'}
+                </p>
+              </div>
+            </div>
+            <p className="mt-3 text-[11px] text-[#FF5C00] font-bold">Bekijk facturen →</p>
+          </button>
+
+          {/* Huurders met achterstand */}
           <button onClick={() => window.dispatchEvent(new CustomEvent('go-tab', { detail: 'invoices' }))}
             data-testid="kpi-overdue"
             className={`text-left rounded-2xl p-5 relative overflow-hidden transition-shadow ${
@@ -715,93 +833,38 @@ function Overview() {
                 ? 'bg-gradient-to-br from-red-500 via-red-600 to-red-700 text-white border border-red-700 hover:shadow-[0_12px_28px_-8px_rgba(220,38,38,0.5)]'
                 : 'bg-white border border-slate-100 shadow-[0_1px_4px_-2px_rgba(15,23,42,0.06)] hover:border-emerald-200'
             }`}>
-            <div className="absolute top-0 right-0 w-28 h-28 bg-gradient-to-br from-white/10 to-transparent rounded-full -translate-y-8 translate-x-8 pointer-events-none" />
-            <div className="flex items-start gap-3.5 relative">
-              <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 shadow-inner ${
+            <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-white/10 to-transparent rounded-full -translate-y-6 translate-x-6 pointer-events-none" />
+            <div className="flex items-start gap-3 relative">
+              <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 shadow-inner ${
                 overdueCount > 0 ? 'bg-white/20' : 'bg-gradient-to-br from-emerald-100 to-emerald-50'
               }`}>
-                <AlertCircle className={`w-6 h-6 ${overdueCount > 0 ? 'text-white' : 'text-emerald-600'}`} />
+                <AlertCircle className={`w-5 h-5 ${overdueCount > 0 ? 'text-white' : 'text-emerald-600'}`} />
               </div>
               <div className="flex-1 min-w-0">
                 <p className={`text-[10px] font-black uppercase tracking-widest ${overdueCount > 0 ? 'text-white/80' : 'text-slate-400'}`}>
-                  Achterstallige huurders
+                  Achterstand
                 </p>
-                <p className={`text-4xl font-black tracking-tight leading-none mt-1.5 ${overdueCount > 0 ? 'text-white' : 'text-slate-900'}`}>
+                <p className={`text-3xl font-black tracking-tight leading-none mt-1 ${overdueCount > 0 ? 'text-white' : 'text-slate-900'}`}>
                   {overdueCount}
                 </p>
-                <p className={`text-[11px] font-semibold mt-2 ${overdueCount > 0 ? 'text-white/90' : 'text-emerald-600'}`}>
-                  {overdueCount > 0 ? 'Direct opvolgen vereist' : 'Geen achterstand — perfect!'}
+                <p className={`text-[11px] font-semibold mt-1.5 ${overdueCount > 0 ? 'text-white/90' : 'text-emerald-600'}`}>
+                  {overdueCount > 0
+                    ? `Huurder${overdueCount === 1 ? '' : 's'} te laat`
+                    : 'Alles op tijd ✓'}
                 </p>
               </div>
-              <ChevronRight className={`w-5 h-5 shrink-0 ${overdueCount > 0 ? 'text-white/80' : 'text-slate-300'}`} />
             </div>
+            <p className={`mt-3 text-[11px] font-bold ${overdueCount > 0 ? 'text-white' : 'text-emerald-600'}`}>
+              {overdueCount > 0 ? 'Direct opvolgen →' : 'Geen actie nodig'}
+            </p>
           </button>
         </div>
 
-        {/* Hero KPI rij 2 — Openstaand huidige maand + Bank/Kas (multi-currency) */}
-        <div className="grid grid-cols-2 gap-4 mb-4">
-          {/* Openstaand huidige maand */}
-          <button onClick={() => window.dispatchEvent(new CustomEvent('go-tab', { detail: 'invoices' }))}
-            data-testid="kpi-current-open"
-            className="text-left bg-white rounded-2xl border border-slate-100 shadow-[0_1px_4px_-2px_rgba(15,23,42,0.06)] p-5 hover:border-orange-200 transition-colors relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-orange-100/40 to-transparent rounded-full -translate-y-10 translate-x-10 pointer-events-none" />
-            <div className="flex items-start gap-3.5 relative">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-orange-100 to-orange-50 flex items-center justify-center shrink-0 shadow-inner">
-                <Receipt className="w-6 h-6 text-[#FF5C00]" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Openstaand huidige maand</p>
-                <p className="text-3xl font-black text-[#FF5C00] tracking-tight leading-none mt-1.5">
-                  {fmtMoney(currentOpenTotal, primaryCur)}
-                </p>
-                <div className="flex items-center justify-between mt-2.5">
-                  <p className="text-[11px] text-slate-500 font-semibold">{currentMonthOpenCount} {currentMonthOpenCount === 1 ? 'factuur' : 'facturen'}</p>
-                  <ChevronRight className="w-4 h-4 text-slate-300" />
-                </div>
-              </div>
-            </div>
-          </button>
-
-          {/* Bank / Kas — multi-currency stack */}
-          <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 rounded-2xl p-5 text-white relative overflow-hidden shadow-[0_10px_24px_-10px_rgba(15,23,42,0.4)]" data-testid="kpi-cash">
-            <div className="absolute top-0 right-0 w-40 h-40 bg-gradient-to-br from-orange-500/20 to-transparent rounded-full -translate-y-12 translate-x-12 pointer-events-none" />
-            <div className="flex items-start gap-3.5 relative">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#FF8A3D]/30 to-[#FF5C00]/30 flex items-center justify-center shrink-0 backdrop-blur-sm border border-white/10">
-                <Wallet className="w-6 h-6 text-[#FFB07A]" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-white/60">Bank · Kas balans</p>
-                  <button onClick={() => window.dispatchEvent(new CustomEvent('go-tab', { detail: 'cash' }))}
-                    data-testid="kpi-cash-cta"
-                    className="text-[10px] font-bold text-[#FFB07A] hover:text-orange-300">
-                    Bekijk →
-                  </button>
-                </div>
-                <div className="grid grid-cols-3 gap-3 mt-2.5">
-                  {['SRD', 'EUR', 'USD'].map((cur) => {
-                    const v = cashByCur[cur] || 0;
-                    const symbol = cur === 'EUR' ? '€' : cur === 'USD' ? '$' : 'SRD';
-                    return (
-                      <div key={cur} className="bg-white/5 rounded-lg p-2.5 border border-white/10 backdrop-blur-sm">
-                        <p className="text-[9px] font-black uppercase tracking-widest text-white/50">{cur}</p>
-                        <p className="text-lg font-black text-white tracking-tight leading-tight mt-0.5"
-                          data-testid={`kpi-cash-${cur.toLowerCase()}`}>
-                          {symbol === 'SRD' ? '' : symbol}{Math.round(v).toLocaleString('nl-NL')}
-                        </p>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Snelle acties bar — alle 4 acties op één rij, compact */}
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-[0_1px_4px_-2px_rgba(15,23,42,0.06)] p-3.5 mb-4">
+        {/* ============ Snelle acties — 4 knoppen ============ */}
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-[0_1px_4px_-2px_rgba(15,23,42,0.06)] p-3.5 mb-5">
           <div className="flex items-center justify-between mb-2.5 px-1.5">
             <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Snelle acties</p>
+            <span className="text-[10px] text-slate-400 font-semibold">Klik om naar de sectie te springen</span>
           </div>
           <div className="grid grid-cols-4 gap-2.5">
             <button onClick={() => window.dispatchEvent(new CustomEvent('go-tab', { detail: 'invoices' }))}
@@ -812,7 +875,7 @@ function Overview() {
               </div>
               <div className="text-left">
                 <p className="text-sm font-black text-slate-900">Nieuwe factuur</p>
-                <p className="text-[10px] text-slate-500 font-semibold">Maak een huurfactuur aan</p>
+                <p className="text-[10px] text-slate-500 font-semibold">Huurfactuur aanmaken</p>
               </div>
             </button>
             <button onClick={() => window.dispatchEvent(new CustomEvent('go-tab', { detail: 'tenants' }))}
@@ -823,7 +886,7 @@ function Overview() {
               </div>
               <div className="text-left">
                 <p className="text-sm font-black text-slate-900">Nieuwe huurder</p>
-                <p className="text-[10px] text-slate-500 font-semibold">Voeg huurder toe</p>
+                <p className="text-[10px] text-slate-500 font-semibold">Huurder toevoegen</p>
               </div>
             </button>
             <button onClick={() => window.dispatchEvent(new CustomEvent('go-tab', { detail: 'payments' }))}
@@ -833,13 +896,14 @@ function Overview() {
                 <Banknote className="w-5 h-5 text-emerald-600" />
               </div>
               <div className="text-left">
-                <p className="text-sm font-black text-slate-900">Registreer betaling</p>
-                <p className="text-[10px] text-slate-500 font-semibold">Nieuwe kwitantie</p>
+                <p className="text-sm font-black text-slate-900">Nieuwe betaling</p>
+                <p className="text-[10px] text-slate-500 font-semibold">Kwitantie boeken</p>
               </div>
             </button>
             <button onClick={openKioskFn}
               data-testid="quick-kiosk-desktop"
-              className="group flex items-center gap-3 p-3 rounded-xl bg-gradient-to-br from-[#FF8A3D] via-[#FF5C00] to-[#C74600] text-white hover:shadow-[0_10px_24px_-8px_rgba(255,92,0,0.5)] transition-shadow border border-orange-600">
+              className="group flex items-center gap-3 p-3 rounded-xl text-white hover:shadow-[0_10px_24px_-8px_rgba(255,92,0,0.5)] transition-shadow border border-orange-600"
+              style={{ background: 'linear-gradient(135deg, #FF8A3D 0%, #FF5C00 55%, #C74600 100%)' }}>
               <div className="w-10 h-10 rounded-lg bg-white/20 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
                 <Building2 className="w-5 h-5 text-white" />
               </div>
@@ -956,8 +1020,8 @@ function Overview() {
         </div>
       </div>
 
-      {/* CTA's onderaan — strakker, kleinere padding */}
-      <div className="grid sm:grid-cols-2 gap-3">
+      {/* CTA's onderaan — alleen op mobiel/tablet (desktop heeft Quick Actions bar) */}
+      <div className="grid sm:grid-cols-2 gap-3 lg:hidden">
         <button onClick={async () => {
             try { localStorage.setItem('pwa_preferred_role', 'kiosk'); } catch { /* noop */ }
             try {
