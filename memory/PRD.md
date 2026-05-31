@@ -1,5 +1,26 @@
 # Vastgoed Kiosk - PRD
 
+## Session 2026-05-31 (v12) — Hero vergroot + functionele zoekbalk ✅
+- **Hero canvas** is nu volledig edge-to-edge (geen rounded wrapper meer), `minHeight: clamp(620px, 78vh, 880px)` voor ABN-AMRO dramatische schaal.
+- **Headline** vergroot naar clamp `2.75rem–5.5rem` (was 4.5rem max). Subkopie `text-2xl` met "**30% sneller**" highlight.
+- **2 CTA knoppen in hero** (Bekijk de demo · WhatsApp ons) ipv 1.
+- Dubbele oranje radial-glow blobs voor dramatischer effect.
+- **Functionele zoekbalk** in greeting card via nieuwe `SEARCH_INDEX` (8 categorieën, 50+ terms): typen ≥2 chars toont dropdown met max 6 resultaten naar `feature-0..4`, `kiosk`, `pricing`, `faq`. Enter-key opent eerste resultaat, Esc sluit. Smooth scroll naar target.
+- **Quick-pill suggestions** onder zoekbalk: "Veelgezocht" met 4 shortcuts (Prijzen · Kiosk PWA · OCR / AI · FAQ).
+- **Empty state**: "Geen resultaten voor [query]" wanneer geen match.
+
+## Session 2026-05-31 (v11) — ABN AMRO-stijl landing (zwart + oranje) ✅
+- Gebruiker stuurde ABN AMRO screenshot als referentie. **Volledige rewrite** in zwart `#0F0F0F` + oranje `#FF5C00` palette.
+- **Dubbele nav**: tier 1 (h-20) met SuriRent logo + "Beheerder · Huurder · Demo" segment selector (toggle state met border-active) + grote oranje "🔒 Inloggen" pill rechts. Tier 2 (h-14 sticky) met Home · Functies ▾ · Kiosk PWA · Prijzen · Service & FAQ + search icoon.
+- **Hero canvas**: rounded container met dashboard screenshot als bg-image + zwart gradient overlay (0.92 → 0.35), oranje radial glow accent. Links massieve headline "Voor als Excel uw vastgoed **niet meer trekt.**" (clamp 2.5rem-4.5rem), oranje "Bekijk de demo" CTA.
+- **Floating greeting card** (`#0F0F0F/95` met blur): tijd-aware greeting (Goedemorgen/Goedemiddag/Goedenavond), "Waarmee kunnen we u vooruit helpen?" subtitle, witte search input met focus-ring oranje, WhatsApp link onder.
+- **8 product cards** in 4x2 grid op slate-50 bg: Inloggen, Demo proberen, Beheer Suite, Kiosk PWA, Locaties, Appartementen, Betalingen, Facturen. Elk met oranje icoon-tile (`bg-orange-50` → `bg-[#FF5C00]` op hover, icoon wordt wit), titel + sub + chevron rechts. Hover: lichte translate-y + shadow.
+- **Feature rows**: alle 5 desktop screenshots in alternerende editorial layout (#feature-0..4) met macOS browser frame en oranje square-bullet check-icons.
+- **Kiosk section** (#0F0F0F): 4 tablet screenshots in 2x2 grid in `#1F1F1F` cards met oranje nummers (01-04).
+- **Pricing**: 3-tier waarvan Pro (950) zwart met oranje accents + oranje "Aanbevolen" pill + oranje CTA.
+- **FAQ** + **Footer**: zwart met oranje accenten, 5-sterren rating, contact info met oranje icons.
+- Body bg: wit. Selection: oranje. Max-width: `1280px` voor ABN-stijl content gewicht.
+
 ## Session 2026-05-31 (v10) — Local Hero · Premium SaaS · Warme aardetinten ✅
 - Gebruiker verwierp v9 (Swiss Brutalist) en koos voor **"Local Hero (Surinaams trots) + Premium SaaS"** combinatie met warme aardetinten + goud/oranje.
 - **Volledige rewrite** `MarketingLandingV2.jsx`. Palette: cream `#FDF6EC/#FAF1E1`, chocolate `#1F1308/#3D2817`, burnt orange `#FF5C00/#C74600`, gold `#F8C260/#D4A037/#B8860B`, terracotta.
