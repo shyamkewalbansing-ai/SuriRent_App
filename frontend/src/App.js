@@ -39,7 +39,7 @@ if (typeof window !== 'undefined') {
   setTimeout(() => { try { sessionStorage.removeItem('sr_chunk_reload_attempted'); } catch {} }, 5000);
 }
 
-const MarketingLanding = lazyWithRetry(() => import('./pages/vastgoed/MarketingLanding'));
+const MarketingLanding = lazyWithRetry(() => import('./pages/vastgoed/MarketingLandingV2'));
 const LoginPage = lazyWithRetry(() => import('./pages/vastgoed/LoginPage'));
 const AdminDashboard = lazyWithRetry(() => import('./pages/vastgoed/AdminDashboard'));
 const KioskLayout = lazyWithRetry(() => import('./pages/vastgoed/KioskLayout'));

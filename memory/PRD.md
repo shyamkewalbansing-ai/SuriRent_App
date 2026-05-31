@@ -1,5 +1,22 @@
 # Vastgoed Kiosk - PRD
 
+## Session 2026-05-31 (v5) — Marketing Landing volledig redesign (Premium SaaS) ✅
+- **Nieuwe `MarketingLandingV2.jsx`** vervangt de oude landing op de root route (`App.js` import gewijzigd). Oude `MarketingLanding.jsx` behouden voor LandingEditor preview compatibiliteit.
+- **9 echte app screenshots** geïntegreerd (5x Beheer + 4x Kiosk), gehost op Emergent Assets CDN.
+- **Hero**: grote H1 met gradient Orange "Beheer & Kiosk." kop, dual-device mockup (macOS browser frame + iPad landscape overlay), 2 CTAs (Demo proberen / WhatsApp), trust strip.
+- **Stats strip**: 3 valuta · ∞ bedrijven · 24/7 Kiosk · PWA
+- **Features**: 12-feature grid (Multi-bedrijf SaaS, Kiosk PWA, 3-bucket facturen, Betalingsregelingen, herinneringen, multi-currency, OCR, Kasgeld, werknemers, huurderportaal, iOS+Android PWA, QR codes per appartement).
+- **Beheer Suite showcase**: 5-tabs carousel met sidebar (Overzicht / Locaties / Appartementen / Betalingen / Facturen), elk in macOS browser frame.
+- **Kiosk PWA sectie** (donker `bg-slate-950`): 4 stappen in iPad landscape mockups met goud-oranje gradient titel.
+- **Pricing**: 3 tiers (Starter 450 SRD, Pro 950 SRD highlight, Enterprise Custom) met juiste CTA per tier.
+- **FAQ**: 5 vragen met accordion (setup tijd, iOS/Android, white-label, veiligheid, opzegging).
+- **CTA banner**: oranje gradient met grid overlay + dual CTA.
+- **Footer**: branding, productlinks, contact, status indicator.
+- **TabletFrame** component (custom): donkere bezel + home indicator, gebruikt landscape aspect-ratio passend bij de daadwerkelijke kiosk-resolutie (alle screenshots waren landscape 16:9 desktop browser captures).
+- **TopNav**: glass-blur sticky, scroll-aware, mobile drawer.
+- **WhatsApp link**: placeholder `+597XXXXXXX` — user moet vervangen met echte nummer.
+- Visueel geverifieerd via 5 screenshots in iteration_28 + 2 follow-up screenshots na Kiosk-fix.
+
 ## Session 2026-05-31 (v4) — Sidebar logo = bedrijfslogo (white-label) ✅
 - `Sidebar` haalt nu logo op uit `readCachedBranding()` (localStorage `pwa_company_logo`) of `activeCompany.logo_url`. Wanneer aanwezig: witte tile met klant-logo. Wanneer afwezig: fallback naar oranje `SuriRent` icoon.
 - **Live update**: `applyBranding()` in `/app/frontend/src/lib/branding.js` dispatcht nu een `branding-updated` CustomEvent op `window`. De Sidebar luistert en ververst direct zonder page reload.
