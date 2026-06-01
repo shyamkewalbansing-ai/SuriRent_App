@@ -67,6 +67,11 @@ function QrScannerModal({ onClose, primary = '#FF5C00' }) {
   const [status, setStatus] = useState('idle');  // idle | scanning | claiming | success | error
   const [message, setMessage] = useState('');
   const scannerRef = useRef(null);
+  // resolvedRef = true zodra we EEN resultaat hebben (success of expliciete
+  // error). Hierna negeren we eventuele aborted-promises van scanner.start()
+  // zodat de gebruiker geen valse "camera kan niet starten" melding krijgt
+  // nadat de QR-claim al was geslaagd.
+  const resolvedRef = useRef(false);
 
   const stopScanner = useCallback(async () => {
     try { await scannerRef.current?.stop(); } catch { /* ignore */ }
@@ -94,10 +99,12 @@ function QrScannerModal({ onClose, primary = '#FF5C00' }) {
         if (dqt) headers['X-Device-QR-Token'] = dqt;
       } catch { /* ignore */ }
       await api.post(`/auth/qr/claim/${encodeURIComponent(token)}`, undefined, { headers });
+      resolvedRef.current = true;
       setStatus('success');
       setMessage('Desktop sessie ingelogd!');
       setTimeout(onClose, 1500);
     } catch (e) {
+      resolvedRef.current = true;
       setStatus('error');
       setMessage(formatError(e, 'QR sessie kon niet worden geclaimd. Log eerst in op de PWA om scannen te activeren.'));
     }
@@ -106,6 +113,12 @@ function QrScannerModal({ onClose, primary = '#FF5C00' }) {
   useEffect(() => {
     let cancelled = false;
     let scanner = null;
+    // PRIORITY 1: Als er al een device_qr_token in localStorage staat, en
+    // we kennen een desktop QR token (URL param of vooraf doorgegeven),
+    // dan zou een direct-claim al hebben moeten plaatsvinden in QrLinkPage.
+    // Hier in de Scanner-modal hebben we GEEN voor-gescande token, dus we
+    // moeten altijd de camera openen. We voorkomen wel valse error-toasts
+    // wanneer claim al succes was.
     (async () => {
       try {
         // Probeer eerst beschikbare camera's op te halen — dit triggert
@@ -114,16 +127,17 @@ function QrScannerModal({ onClose, primary = '#FF5C00' }) {
         try {
           cameras = await Html5Qrcode.getCameras();
         } catch (e) {
+          if (cancelled) return;
           setStatus('error');
           setMessage('Geen camera toegang. Sta camera toe in de browser-instellingen en probeer opnieuw.');
           return;
         }
+        if (cancelled) return;
         if (!cameras || cameras.length === 0) {
           setStatus('error');
           setMessage('Geen camera gevonden op dit apparaat.');
           return;
         }
-        if (cancelled) return;
         // Kies de achterste camera als beschikbaar (label bevat 'back' of 'environment').
         const back = cameras.find((c) => /back|environment|rear/i.test(c.label || ''));
         const cameraId = (back || cameras[cameras.length - 1] || cameras[0]).id;
@@ -138,13 +152,25 @@ function QrScannerModal({ onClose, primary = '#FF5C00' }) {
           () => { /* silent decode-failure ignore */ },
         );
       } catch (e) {
+        // Cleanup-aborts (component unmount / handleScan stopt scanner) zijn
+        // GEEN echte fouten — we negeren ze. Anders krijgt de gebruiker een
+        // valse "camera kan niet starten" melding ondanks dat de QR al
+        // succesvol is geclaimed.
+        if (cancelled) return;
+        // Reeds afgehandeld door handleScan (success of expliciete error) —
+        // niet overschrijven met de aborted-promise van scanner.start().
+        if (resolvedRef.current) return;
         const msg = (e && e.message) || String(e || '');
+        if (/aborted|stopped|interrupt/i.test(msg)) {
+          // Camera was bewust gestopt (door handleScan-success of unmount).
+          return;
+        }
         setStatus('error');
         if (/NotAllowedError|Permission/i.test(msg)) {
           setMessage('Camera toegang geweigerd. Sta camera toe en herlaad de pagina.');
         } else if (/NotFoundError/i.test(msg)) {
           setMessage('Geen camera gevonden op dit apparaat.');
-        } else if (/NotReadableError|aborted/i.test(msg)) {
+        } else if (/NotReadableError/i.test(msg)) {
           setMessage('Camera is in gebruik door een andere app. Sluit andere camera-apps en probeer opnieuw.');
         } else {
           setMessage('Camera kon niet starten. Probeer opnieuw of gebruik de native camera-app om de QR te scannen.');
