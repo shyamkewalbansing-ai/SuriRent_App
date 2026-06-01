@@ -1,0 +1,37 @@
+{
+  "summary": "Verified QR cross-device login (qr/create + qr/status + qr/claim) + ABN-style PinLanding redesign + /qr-link deep-link page + existing PIN regression. Backend: 9/9 new tests pass (test_qr_cross_device.py) covering token creation, anonymous create, pending status, auth-required claim, double-claim 400, unknown token 404, and end-to-end issued access_token validates against /auth/me. Frontend: Desktop /login QR tab toggle works, renders qr-code-svg + 'Wachten op scan...' message. Mobile /surirent/login PinLanding redesign shows Welkom + GOPI APPARTEMENT + profile photo + 4-cijferige PIN prompt + 4 dots + numpad with letters + Scan QR (top-left) + Help (top-right). Help modal opens with 3 numbered steps. QR scanner modal opens and html5-qrcode shows expected 'Camera toegang geweigerd' state in headless playwright (no camera available — expected). /qr-link?token=X with auth shows confirm page, clicking 'Bevestig en log in' calls claim and shows 'Desktop ingelogd!' success state; backend status flips to 'claimed' with access_token. Existing kiosk PIN 1234 → /surirent/kiosk login still works (no regression). Fixed 1 bug: /qr-link?token=X unauthenticated redirect went to /qr-link/login instead of /login because 'qr-link' was being parsed as a company slug — added 'qr-link' + 'qr' to RESERVED_SLUGS in /app/frontend/src/lib/branded-nav.js. Re-verified: redirect now correctly goes to /login with sessionStorage.pending_qr_token preserved.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_qr_cross_device.py",
+    "/app/test_reports/pytest/iteration29_qr_cross_device.xml"
+  ],
+  "action_items": [
+    "Main agent: consider also adding 'qr-link' (and any other top-level non-branded routes) to backend RESERVED_SLUGS so a company cannot register that slug. Currently only the frontend nav list was patched; the backend reservation list should mirror it for safety. Check server.py RESERVED_SLUGS constant.",
+    "Optional: in QrScannerModal, when camera permission is denied, show a fallback 'Voer code handmatig in' input — current UX only offers 'Sluiten' which is fine but a fallback would be nicer for desktops without camera."
+  ],
+  "critical_code_review_comments": [
+    "qr_status endpoint correctly marks pending→expired on read; however it does not mark already-expired-but-pending sessions before checking status in qr_claim — qr_claim handles it inline (good), but the 'already claimed' check at line 1158 fires BEFORE the expiry check so a session that expired without being claimed will still return 'al gebruikt of verlopen' message; consider reversing the order so expired sessions return the more specific 'verlopen — vraag nieuwe aan' message.",
+    "qr_sessions Mongo collection lacks a TTL index on expires_at — sessions accumulate forever. Suggest creating a TTL index: db.qr_sessions.create_index('expires_at', expireAfterSeconds=600) so the collection self-cleans.",
+    "buildBrandedPath RESERVED_SLUGS list is duplicated between frontend (branded-nav.js) and backend (server.py); high risk of drift. Suggest exposing a public GET /api/_reserved_slugs endpoint that the frontend reads at startup, or move list to a shared JSON.",
+    "QrLinkPage uses sessionStorage.pending_qr_token but PasswordView/LoginPage does not appear to consume it after successful login to auto-resume the claim — main agent should verify that flow: user without auth scans QR → /qr-link → /login → logs in → expected to auto-resume claim. If not implemented, the deep-link UX has a dead-end after login."
+  ],
+  "updated_files": [
+    "/app/frontend/src/lib/branded-nav.js",
+    "/app/backend/tests/test_qr_cross_device.py (NEW)"
+  ],
+  "success_rate": {"backend": "100% (9/9)", "frontend": "100% (all UI selectors + flows verified)"},
+  "test_credentials": "admin@vastgoed.sr / admin123 (Company surirent, slug surirent, kiosk PIN 1234)",
+  "seed_data_creation": "None — used existing surirent company seed data",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "QR cross-device flow verified end-to-end. Selectors confirmed: tab-password, tab-qr, qr-code-svg, login-scan-qr-btn, login-help-btn, qr-scanner-modal, help-modal, qr-link-page, qr-link-confirm. Backend endpoints: POST /api/auth/qr/create (anon), GET /api/auth/qr/status/{token}, POST /api/auth/qr/claim/{token} (auth). Expired-session-claim test is partial — backend handles expiry inline in qr_claim but no test simulates TTL elapse (would need to monkey-patch DB or wait 5min); double-claim test exercises the same status guard path. To test the full e2e cross-device flow via Playwright, the agent_to_agent note's 2-incognito-context approach works — see this iteration's mobile test where we use page.evaluate to do API login + visit /qr-link?token=REAL and verify backend status flips to 'claimed'. Bug fix applied: 'qr-link' added to RESERVED_SLUGS in branded-nav.js.",
+  "rca of the issue": "Bug: /qr-link?token=X unauthenticated redirect landed on /qr-link/login instead of /login. RCA: useBrandedNavigate() in /app/frontend/src/lib/branded-nav.js parses the first URL segment as a company slug unless it appears in RESERVED_SLUGS. 'qr-link' was missing, so the hook prefixed nav('/login') with '/qr-link' producing '/qr-link/login'. Reproduction: open /qr-link?token=anything in a fresh browser with no admin_token in localStorage. Fix: added 'qr-link' and 'qr' to the RESERVED_SLUGS set. Verified post-fix that redirect now lands on /login with sessionStorage.pending_qr_token preserved."
+}

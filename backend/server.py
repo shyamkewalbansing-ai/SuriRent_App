@@ -1077,6 +1077,117 @@ DEMO_EMAIL = "demo@surirent.sr"
 DEMO_PASSWORD = "demo1234"  # noqa: S105 — publieke demo
 DEMO_COMPANY_SLUG = "demo"
 
+
+# ============================================================
+# QR CODE LOGIN — Cross-device authentication (WhatsApp Web style)
+# ============================================================
+# Flow:
+#   1. Desktop bezoekt /login → klikt op "QR code" tab.
+#   2. Desktop roept POST /auth/qr/create → krijgt token + qr_url.
+#   3. Desktop toont QR met deep-link → polt elke 2s /auth/qr/status/{token}.
+#   4. Mobiel (al ingelogd) scant QR via in-app scanner of native camera.
+#   5. Mobiel roept POST /auth/qr/claim/{token} met bearer token.
+#   6. Backend genereert nieuwe sessie voor desktop, koppelt aan QR-token.
+#   7. Desktop poll detecteert "claimed" → ontvangt nieuwe token → ingelogd.
+#
+# Veiligheid:
+#   - Tokens zijn 32-bytes urlsafe (cryptografisch sterk).
+#   - QR sessies verlopen na 5 minuten (anti-replay).
+#   - Eenmaal "claimed" kan QR niet opnieuw gebruikt worden.
+#   - Mobiel moet expliciet bevestigen via authenticated endpoint.
+
+QR_SESSION_TTL_MIN = 5  # noqa — anti-replay window
+
+@api.post("/auth/qr/create")
+async def qr_create(request: Request):
+    """Anonieme endpoint die een pending QR sessie aanmaakt."""
+    token = secrets.token_urlsafe(24)
+    now = datetime.now(timezone.utc)
+    expires = now + timedelta(minutes=QR_SESSION_TTL_MIN)
+    await db.qr_sessions.insert_one({
+        "_id": token,
+        "token": token,
+        "status": "pending",
+        "created_at": now.isoformat(),
+        "expires_at": expires.isoformat(),
+        "claimed_user_id": None,
+        "access_token": None,
+    })
+    # Bouw absolute qr_url uit Origin/Host headers — zo werkt deep-link voor
+    # elke deployment zonder dat FRONTEND_BASE_URL gezet hoeft te worden.
+    base = (os.environ.get("FRONTEND_BASE_URL") or "").rstrip("/")
+    if not base:
+        origin = request.headers.get("origin") or ""
+        if origin:
+            base = origin.rstrip("/")
+        else:
+            host = request.headers.get("host") or "localhost:8001"
+            scheme = request.headers.get("x-forwarded-proto", "https")
+            base = f"{scheme}://{host}"
+    qr_url = f"{base}/qr-link?token={token}"
+    return {"token": token, "qr_url": qr_url, "expires_in": QR_SESSION_TTL_MIN * 60}
+
+
+@api.get("/auth/qr/status/{token}")
+async def qr_status(token: str):
+    """Desktop polt deze endpoint elke 2s tot status='claimed'."""
+    sess = await db.qr_sessions.find_one({"token": token}, {"_id": 0})
+    if not sess:
+        raise HTTPException(status_code=404, detail="Onbekende QR sessie")
+    # Check expiry
+    try:
+        exp = datetime.fromisoformat(sess["expires_at"])
+        if exp < datetime.now(timezone.utc) and sess.get("status") == "pending":
+            await db.qr_sessions.update_one({"token": token}, {"$set": {"status": "expired"}})
+            sess["status"] = "expired"
+    except Exception:
+        pass
+    return {
+        "status": sess.get("status", "pending"),
+        "access_token": sess.get("access_token"),
+        "user": sess.get("user_summary"),
+    }
+
+
+@api.post("/auth/qr/claim/{token}")
+async def qr_claim(token: str, user=Depends(get_current_user)):
+    """Mobiel (geauthenticeerd) bevestigt de QR sessie — desktop wordt ingelogd."""
+    sess = await db.qr_sessions.find_one({"token": token})
+    if not sess:
+        raise HTTPException(status_code=404, detail="Onbekende QR sessie")
+    if sess.get("status") != "pending":
+        raise HTTPException(status_code=400, detail="QR sessie is al gebruikt of verlopen")
+    try:
+        exp = datetime.fromisoformat(sess["expires_at"])
+        if exp < datetime.now(timezone.utc):
+            await db.qr_sessions.update_one({"token": token}, {"$set": {"status": "expired"}})
+            raise HTTPException(status_code=400, detail="QR sessie is verlopen — vraag een nieuwe aan")
+    except HTTPException:
+        raise
+    except Exception:
+        pass
+    # Genereer een verse access token voor de DESKTOP sessie. Korte TTL.
+    desktop_token = create_token({
+        "sub": user["id"], "email": user["email"], "type": "access",
+        "company_id": user.get("company_id"), "role": user.get("role", "admin"),
+    }, ACCESS_MIN)
+    await db.qr_sessions.update_one(
+        {"token": token},
+        {"$set": {
+            "status": "claimed",
+            "claimed_user_id": user["id"],
+            "access_token": desktop_token,
+            "claimed_at": datetime.now(timezone.utc).isoformat(),
+            "user_summary": {
+                "name": user.get("name", ""),
+                "email": user.get("email", ""),
+                "role": user.get("role", "admin"),
+            },
+        }},
+    )
+    return {"ok": True, "message": "Desktop sessie is ingelogd"}
+
+
 @api.post("/auth/demo-login")
 async def demo_login(response: Response):
     """Logt direct in op de demo-omgeving. Maakt deze aan als hij nog niet

@@ -14,6 +14,7 @@ export const RESERVED_SLUGS = new Set([
   'www', 'app', 'mail', 'ftp', 'blog', 'support', 'docs', 'help',
   'register', 'settings', 'billing', 'checkout', 'auth', 'logout',
   'tenant', 'tenants', 'company', 'companies', 'superadmin',
+  'qr-link', 'qr',
 ]);
 
 /** Pak `<slug>` uit een pad. Ondersteunt zowel `/<slug>/...` (nieuw) als

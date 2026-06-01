@@ -1,8 +1,10 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useBrandedNavigate } from '../../lib/branded-nav';
 import { RESERVED_SLUGS } from '../../lib/branded-nav';
-import { Loader2, Delete, KeyRound, ArrowLeft, Eye, EyeOff, UserPlus, LogIn, Check, CheckCircle, Globe, X as XIcon } from 'lucide-react';
+import { Loader2, Delete, KeyRound, ArrowLeft, Eye, EyeOff, UserPlus, LogIn, Check, CheckCircle, Globe, X as XIcon, QrCode, HelpCircle, Camera, Smartphone } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
+import { Html5Qrcode } from 'html5-qrcode';
 import { api, formatError } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { setPreferredRole, isStandalonePWA, getPreferredRole, routeForRole } from '../../lib/pwaRole';
@@ -56,15 +58,518 @@ function Header({ branding }) {
   );
 }
 
+// =============================================================================
+// QrScannerModal — opent de camera om een QR code te scannen.
+// Bij detectie haalt het de `token` query parameter uit de URL en roept
+// `/api/auth/qr/claim/{token}` aan zodat de desktop sessie wordt ingelogd.
+// =============================================================================
+function QrScannerModal({ onClose, primary = '#FF5C00' }) {
+  const [status, setStatus] = useState('idle');  // idle | scanning | claiming | success | error
+  const [message, setMessage] = useState('');
+  const scannerRef = useRef(null);
+
+  const stopScanner = useCallback(async () => {
+    try { await scannerRef.current?.stop(); } catch { /* ignore */ }
+    try { scannerRef.current?.clear(); } catch { /* ignore */ }
+    scannerRef.current = null;
+  }, []);
+
+  const handleScan = useCallback(async (decoded) => {
+    if (status !== 'scanning') return;
+    setStatus('claiming');
+    await stopScanner();
+    try {
+      // Extract token from URL like https://app.surirent.sr/qr-link?token=XXX
+      let token = decoded;
+      try {
+        const u = new URL(decoded);
+        token = u.searchParams.get('token') || decoded;
+      } catch { /* not a URL — assume raw token */ }
+      await api.post(`/auth/qr/claim/${encodeURIComponent(token)}`);
+      setStatus('success');
+      setMessage('Desktop sessie ingelogd!');
+      setTimeout(onClose, 1500);
+    } catch (e) {
+      setStatus('error');
+      setMessage(formatError(e, 'QR sessie kon niet worden geclaimd. Vraag een nieuwe QR aan op desktop.'));
+    }
+  }, [status, stopScanner, onClose]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const html5QrCode = new Html5Qrcode('qr-reader');
+        scannerRef.current = html5QrCode;
+        if (cancelled) return;
+        setStatus('scanning');
+        await html5QrCode.start(
+          { facingMode: 'environment' },
+          { fps: 10, qrbox: 240 },
+          handleScan,
+          () => { /* silent ignore decode failures */ },
+        );
+      } catch (e) {
+        setStatus('error');
+        setMessage('Camera toegang geweigerd. Sta camera toe en probeer opnieuw.');
+      }
+    })();
+    return () => {
+      cancelled = true;
+      stopScanner();
+    };
+  }, [handleScan, stopScanner]);
+
+  return (
+    <div className="fixed inset-0 z-[100] bg-black/85 backdrop-blur-sm flex items-center justify-center p-4"
+      data-testid="qr-scanner-modal">
+      <div className="relative w-full max-w-md bg-white rounded-3xl overflow-hidden shadow-2xl">
+        <div className="flex items-center justify-between p-5 border-b border-slate-100">
+          <div className="flex items-center gap-2.5">
+            <span className="w-9 h-9 rounded-xl flex items-center justify-center"
+              style={{ background: `${primary}15` }}>
+              <QrCode className="w-5 h-5" style={{ color: primary }} />
+            </span>
+            <h3 className="text-base font-black text-slate-900">QR scannen</h3>
+          </div>
+          <button onClick={onClose} data-testid="qr-scanner-close"
+            className="w-9 h-9 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-500">
+            <XIcon className="w-5 h-5" />
+          </button>
+        </div>
+        <div className="p-5">
+          {status === 'error' ? (
+            <div className="text-center py-8">
+              <div className="w-14 h-14 mx-auto mb-3 rounded-full bg-red-50 flex items-center justify-center">
+                <XIcon className="w-7 h-7 text-red-500" />
+              </div>
+              <p className="text-sm font-bold text-slate-900">{message}</p>
+              <button onClick={onClose}
+                className="mt-5 px-5 h-10 rounded-lg text-white text-sm font-bold"
+                style={{ background: primary }}>
+                Sluiten
+              </button>
+            </div>
+          ) : status === 'success' ? (
+            <div className="text-center py-8">
+              <div className="w-14 h-14 mx-auto mb-3 rounded-full bg-emerald-50 flex items-center justify-center">
+                <Check className="w-7 h-7 text-emerald-600" strokeWidth={3} />
+              </div>
+              <p className="text-sm font-black text-slate-900">{message}</p>
+              <p className="text-xs text-slate-500 mt-1">U kunt nu uw desktop gebruiken.</p>
+            </div>
+          ) : (
+            <>
+              <p className="text-xs font-bold text-slate-500 text-center mb-3">
+                Richt de camera op de QR-code op uw desktop scherm
+              </p>
+              <div id="qr-reader" className="w-full rounded-2xl overflow-hidden bg-slate-900 aspect-square" />
+              {status === 'claiming' && (
+                <div className="mt-4 flex items-center justify-center gap-2 text-slate-700">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span className="text-sm font-bold">Inloggen op desktop…</span>
+                </div>
+              )}
+              {status === 'scanning' && (
+                <p className="mt-4 text-center text-xs text-slate-400 font-medium">
+                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse mr-1.5" />
+                  Camera actief — scannen…
+                </p>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// =============================================================================
+// QrLoginTab — toont een QR code die door een mobiele admin gescand kan
+// worden om deze desktop sessie in te loggen. Polt status elke 2s.
+// =============================================================================
+function QrLoginTab({ onSuccess, primary = '#FF5C00' }) {
+  const [qr, setQr] = useState(null);     // { token, qr_url }
+  const [status, setStatus] = useState('loading'); // loading | pending | claimed | expired
+  const pollRef = useRef(null);
+
+  const createQr = useCallback(async () => {
+    setStatus('loading');
+    try {
+      const { data } = await api.post('/auth/qr/create');
+      setQr(data);
+      setStatus('pending');
+    } catch {
+      setStatus('expired');
+    }
+  }, []);
+
+  useEffect(() => { createQr(); }, [createQr]);
+
+  useEffect(() => {
+    if (!qr || status !== 'pending') return;
+    pollRef.current = setInterval(async () => {
+      try {
+        const { data } = await api.get(`/auth/qr/status/${qr.token}`);
+        if (data.status === 'claimed' && data.access_token) {
+          clearInterval(pollRef.current);
+          setStatus('claimed');
+          try { localStorage.setItem('admin_token', data.access_token); } catch { /* ignore */ }
+          // Korte pauze om de "Ingelogd" state te tonen, dan navigeren.
+          setTimeout(() => onSuccess?.(), 800);
+        } else if (data.status === 'expired') {
+          clearInterval(pollRef.current);
+          setStatus('expired');
+        }
+      } catch { /* keep polling, network may flicker */ }
+    }, 2000);
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, [qr, status, onSuccess]);
+
+  return (
+    <div className="w-full max-w-sm mx-auto text-center" data-testid="qr-login-tab">
+      <h3 className="text-xl font-black text-slate-900 mb-1">Inloggen met QR</h3>
+      <p className="text-sm text-slate-500 mb-5">Open uw SuriRent app en scan deze code.</p>
+
+      <div className="relative inline-block p-5 bg-white rounded-3xl border-2 mb-4"
+        style={{ borderColor: `${primary}25` }}>
+        {status === 'pending' && qr && (
+          <QRCodeSVG value={qr.qr_url} size={220} bgColor="#FFFFFF" fgColor="#0F0F0F"
+            level="M" includeMargin={false} data-testid="qr-code-svg" />
+        )}
+        {status === 'loading' && (
+          <div className="w-[220px] h-[220px] flex items-center justify-center text-slate-400">
+            <Loader2 className="w-8 h-8 animate-spin" />
+          </div>
+        )}
+        {status === 'claimed' && (
+          <div className="w-[220px] h-[220px] flex flex-col items-center justify-center gap-2">
+            <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center">
+              <Check className="w-8 h-8 text-emerald-600" strokeWidth={3} />
+            </div>
+            <p className="text-sm font-black text-slate-900">Ingelogd!</p>
+            <p className="text-xs text-slate-500">U wordt doorgestuurd…</p>
+          </div>
+        )}
+        {status === 'expired' && (
+          <div className="w-[220px] h-[220px] flex flex-col items-center justify-center gap-2">
+            <div className="w-16 h-16 rounded-full bg-amber-50 flex items-center justify-center">
+              <QrCode className="w-8 h-8 text-amber-600" />
+            </div>
+            <p className="text-sm font-black text-slate-900">QR verlopen</p>
+            <button onClick={createQr} data-testid="qr-refresh"
+              className="text-xs font-bold mt-1" style={{ color: primary }}>
+              Vraag nieuwe QR aan →
+            </button>
+          </div>
+        )}
+      </div>
+
+      {status === 'pending' && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-center gap-2 text-sm font-bold text-slate-700">
+            <Smartphone className="w-4 h-4" style={{ color: primary }} />
+            Open de SuriRent app op uw telefoon
+          </div>
+          <p className="text-xs text-slate-500 font-medium">
+            Tik "Scan QR" en richt op deze code.
+          </p>
+          <div className="flex items-center justify-center gap-2 mt-3">
+            <Loader2 className="w-3 h-3 animate-spin text-slate-400" />
+            <span className="text-[11px] font-bold text-slate-400">Wachten op scan…</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PinLanding({ onSuccess, onPassword, onRegister, branding, pwaTarget }) {
   const [pin, setPin] = useState(['', '', '', '']);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [showScanner, setShowScanner] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
   const primary = branding?.primary_color || '#FF5C00';
-  const appName = branding?.app_name || 'Kiosk';
-  const tagline = branding?.tagline || '';
+  const appName = branding?.app_name || 'SuriRent';
   const logoUrl = branding?.logo_url ? branding._logoResolved : '/kiosk-icons/kiosk-512.png';
   const isAdminTarget = pwaTarget === 'admin';
+
+  const verify = async (code) => {
+    setLoading(true); setError('');
+    try {
+      const { data } = await api.post('/auth/kiosk-pin', {
+        pin: code,
+        company_slug: branding?.slug || undefined,
+        company_id: branding?.company_id || undefined,
+      });
+      if (data?.token) localStorage.setItem('kiosk_token', data.token);
+      if (data?.company) localStorage.setItem('kiosk_company', JSON.stringify(data.company));
+      if (data?.employee?.id) {
+        try { localStorage.removeItem('admin_token'); } catch { /* ignore */ }
+        setKioskEmployee({
+          id: data.employee.id,
+          name: data.employee.name || 'Medewerker',
+          pin: data.employee.pin || code,
+        });
+        setPreferredRole('kiosk');
+      } else {
+        try { clearKioskEmployee(); } catch { /* ignore */ }
+        if (data?.admin_token) localStorage.setItem('admin_token', data.admin_token);
+        setPreferredRole(isAdminTarget ? 'admin' : 'kiosk');
+      }
+      onSuccess();
+    } catch (e) {
+      setError(formatError(e, 'Ongeldige PIN code'));
+      setPin(['', '', '', '']);
+    } finally { setLoading(false); }
+  };
+
+  const handleKey = (k) => {
+    if (loading) return;
+    setError('');
+    if (k === 'DEL') {
+      for (let i = 3; i >= 0; i--) {
+        if (pin[i]) { const np = [...pin]; np[i] = ''; setPin(np); return; }
+      }
+      return;
+    }
+    for (let i = 0; i < 4; i++) {
+      if (!pin[i]) {
+        const np = [...pin]; np[i] = k; setPin(np);
+        if (i === 3) verify(np.join(''));
+        return;
+      }
+    }
+  };
+
+  // Numpad letters voor sub-labels (ABN AMRO stijl)
+  const NUMPAD_LETTERS = {
+    '2': 'ABC', '3': 'DEF', '4': 'GHI', '5': 'JKL',
+    '6': 'MNO', '7': 'PQRS', '8': 'TUV', '9': 'WXYZ',
+  };
+
+  return (
+    <div className="flex flex-col text-white relative overflow-hidden" style={{
+      position: 'fixed', inset: 0,
+      backgroundColor: primary,
+      paddingTop: 'env(safe-area-inset-top, 0px)',
+      paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+      paddingLeft: 'env(safe-area-inset-left, 0px)',
+      paddingRight: 'env(safe-area-inset-right, 0px)',
+    }}>
+      {/* Diagonal decorative background pattern — ABN AMRO inspired */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden -z-0">
+        <div className="absolute -top-32 -right-40 w-[600px] h-[600px] rounded-full opacity-20 blur-3xl"
+          style={{ background: 'rgba(255,255,255,0.4)' }} />
+        <div className="absolute top-[20%] -left-32 w-[400px] h-[400px] rounded-full opacity-15 blur-3xl"
+          style={{ background: 'rgba(255,176,99,0.6)' }} />
+        {/* Diagonal layered curves */}
+        <svg className="absolute top-0 right-0 w-full h-full opacity-[0.08]" preserveAspectRatio="none" viewBox="0 0 400 800">
+          <path d="M0,200 Q200,150 400,250 L400,300 Q200,200 0,250 Z" fill="white" />
+          <path d="M0,360 Q200,310 400,410 L400,460 Q200,360 0,410 Z" fill="white" />
+        </svg>
+      </div>
+
+      {/* TOP ACTION BAR — Scan QR linksboven, Help rechtsboven */}
+      <div className="relative z-10 flex items-center justify-between px-5 lg:px-8"
+        style={{ paddingTop: 'clamp(12px, 2vh, 24px)', paddingBottom: 'clamp(8px, 1.5vh, 16px)' }}>
+        <button onClick={() => setShowScanner(true)} data-testid="login-scan-qr-btn"
+          className="flex items-center gap-2 px-3 py-2 rounded-full bg-white/15 hover:bg-white/25 backdrop-blur-sm border border-white/20 transition-all text-white text-sm font-bold">
+          <QrCode className="w-4 h-4" />
+          Scan QR
+        </button>
+        <button onClick={() => setShowHelp(true)} data-testid="login-help-btn"
+          className="flex items-center gap-2 px-3 py-2 rounded-full bg-white/15 hover:bg-white/25 backdrop-blur-sm border border-white/20 transition-all text-white text-sm font-bold">
+          <HelpCircle className="w-4 h-4" />
+          Help
+        </button>
+      </div>
+
+      {/* CENTER — Welkom + profielfoto + naam + PIN */}
+      <div className="relative z-10 flex-1 min-h-0 flex flex-col items-center justify-start overflow-y-auto"
+        style={{ paddingTop: 'clamp(8px, 2vh, 24px)', paddingBottom: 'clamp(16px, 3vh, 32px)' }}>
+
+        <h1 className="font-black tracking-tight text-white text-center"
+          style={{ fontSize: 'clamp(28px, 5vh, 44px)', lineHeight: '1.05' }}
+          data-testid="pin-welcome">
+          Welkom
+        </h1>
+
+        {/* Profielfoto in cirkel */}
+        <div className="relative mt-4 mb-3 lg:mb-4">
+          <div className="rounded-full bg-white p-1 shadow-[0_12px_28px_-8px_rgba(0,0,0,0.35)]"
+            style={{
+              width: 'clamp(76px, 12vh, 110px)',
+              height: 'clamp(76px, 12vh, 110px)',
+            }}>
+            <div className="w-full h-full rounded-full overflow-hidden flex items-center justify-center"
+              style={{
+                background: `linear-gradient(135deg, #FFF6D6 0%, #F8C260 60%, #D4A037 100%)`,
+              }}>
+              <img src={logoUrl} alt="logo"
+                className="w-[70%] h-[70%] object-contain drop-shadow-md"
+                data-testid="pin-profile-photo" />
+            </div>
+          </div>
+          {/* Online dot indicator */}
+          <span className="absolute bottom-1 right-1 w-4 h-4 rounded-full border-2 border-white bg-emerald-400 shadow-md" />
+        </div>
+
+        <p className="text-white/90 font-black text-center uppercase tracking-wider"
+          style={{ fontSize: 'clamp(13px, 1.8vh, 17px)' }}
+          data-testid="pin-company-name">
+          {appName}
+        </p>
+        <p className="text-white/80 text-center font-medium mt-2 px-6"
+          style={{ fontSize: 'clamp(12px, 1.6vh, 15px)', maxWidth: '340px' }}>
+          Vul je 4-cijferige PIN in om verder te gaan
+        </p>
+
+        {error && (
+          <div className="mt-3 px-5 py-2 rounded-full bg-red-500/95 text-white text-xs font-bold shadow-lg"
+            data-testid="pin-error">
+            {error}
+          </div>
+        )}
+
+        {/* PIN dots */}
+        <div className="flex items-center mt-5 lg:mt-6" style={{ gap: 'clamp(14px, 3vw, 24px)' }}>
+          {pin.map((digit, i) => (
+            <div key={`pin-slot-${i}`} data-testid={`pin-input-${i}`}
+              className={`rounded-full transition-all ${
+                error ? 'bg-red-300 scale-110' : digit ? 'bg-white scale-110' : 'bg-white/35'
+              }`}
+              style={{
+                width: 'clamp(14px, 1.8vh, 18px)',
+                height: 'clamp(14px, 1.8vh, 18px)',
+              }} />
+          ))}
+        </div>
+
+        {/* Numpad — ABN-stijl met letters subscript */}
+        <div className="grid grid-cols-3 mt-6 lg:mt-8"
+          style={{
+            gap: 'clamp(10px, 1.5vh, 16px) clamp(20px, 6vw, 40px)',
+            width: 'min(340px, 88%)',
+          }}>
+          {['1','2','3','4','5','6','7','8','9','_e','0','DEL'].map((k) => (
+            k === '_e' ? <div key="e" /> : (
+              <button key={k} type="button" onClick={() => handleKey(k)} disabled={loading}
+                data-testid={`keypad-${k}`}
+                className="flex flex-col items-center justify-center text-white active:scale-95 disabled:opacity-50 transition-all"
+                style={{ height: 'clamp(54px, 8vh, 70px)' }}>
+                {k === 'DEL' ? (
+                  <Delete style={{ width: 'clamp(22px, 3vh, 28px)', height: 'clamp(22px, 3vh, 28px)' }} />
+                ) : (
+                  <>
+                    <span className="font-black leading-none"
+                      style={{ fontSize: 'clamp(28px, 4.5vh, 38px)' }}>
+                      {k}
+                    </span>
+                    {NUMPAD_LETTERS[k] && (
+                      <span className="font-bold tracking-[0.18em] text-white/70 mt-0.5"
+                        style={{ fontSize: 'clamp(9px, 1.2vh, 11px)' }}>
+                        {NUMPAD_LETTERS[k]}
+                      </span>
+                    )}
+                  </>
+                )}
+              </button>
+            )
+          ))}
+        </div>
+
+        {loading && (
+          <div className="flex items-center gap-2 text-white/80 mt-3">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            <span className="text-sm font-bold">Verifiëren…</span>
+          </div>
+        )}
+
+        {/* Onderaan: Beheerder login + nieuw account */}
+        <div className="flex items-center gap-4 mt-4 lg:mt-5 text-xs font-bold flex-wrap justify-center px-4">
+          <button onClick={onPassword} data-testid="login-password-btn"
+            className="flex items-center gap-1.5 text-white/80 hover:text-white">
+            <KeyRound className="w-3.5 h-3.5" /> Inloggen met e-mail
+          </button>
+          <span className="text-white/40">•</span>
+          <button onClick={onRegister} data-testid="login-register-btn"
+            className="flex items-center gap-1.5 text-white/80 hover:text-white">
+            <UserPlus className="w-3.5 h-3.5" /> Nieuw account
+          </button>
+        </div>
+      </div>
+
+      {/* Modals */}
+      {showScanner && <QrScannerModal onClose={() => setShowScanner(false)} primary={primary} />}
+      {showHelp && <HelpModal onClose={() => setShowHelp(false)} primary={primary} />}
+    </div>
+  );
+}
+
+// =============================================================================
+// HelpModal — uitleg over hoe PIN + QR login werkt
+// =============================================================================
+function HelpModal({ onClose, primary = '#FF5C00' }) {
+  return (
+    <div className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4"
+      data-testid="help-modal">
+      <div className="relative w-full max-w-md bg-white rounded-t-3xl sm:rounded-3xl overflow-hidden shadow-2xl max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between p-5 border-b border-slate-100 sticky top-0 bg-white">
+          <h3 className="text-base font-black text-slate-900">Hulp bij inloggen</h3>
+          <button onClick={onClose} data-testid="help-modal-close"
+            className="w-9 h-9 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-500">
+            <XIcon className="w-5 h-5" />
+          </button>
+        </div>
+        <div className="p-5 space-y-5">
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="w-7 h-7 rounded-lg flex items-center justify-center text-white text-xs font-black"
+                style={{ background: primary }}>1</span>
+              <h4 className="text-sm font-black text-slate-900">Inloggen met PIN</h4>
+            </div>
+            <p className="text-sm text-slate-600 leading-relaxed pl-9">
+              Voer uw 4-cijferige PIN in. Dit is de bedrijfs-PIN of uw persoonlijke medewerker-PIN
+              (toegewezen door de beheerder).
+            </p>
+          </div>
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="w-7 h-7 rounded-lg flex items-center justify-center text-white text-xs font-black"
+                style={{ background: primary }}>2</span>
+              <h4 className="text-sm font-black text-slate-900">QR scannen (desktop login)</h4>
+            </div>
+            <p className="text-sm text-slate-600 leading-relaxed pl-9">
+              Tik op <strong>Scan QR</strong> linksboven om uw camera te openen. Open SuriRent in
+              een browser op uw computer, kies de "QR code" tab, en scan de QR om uw desktop in
+              te loggen.
+            </p>
+          </div>
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="w-7 h-7 rounded-lg flex items-center justify-center text-white text-xs font-black"
+                style={{ background: primary }}>3</span>
+              <h4 className="text-sm font-black text-slate-900">PIN vergeten?</h4>
+            </div>
+            <p className="text-sm text-slate-600 leading-relaxed pl-9">
+              Vraag uw beheerder om een nieuwe PIN. Heeft u geen toegang? Tik op
+              "Inloggen met e-mail" onderaan om met uw wachtwoord in te loggen.
+            </p>
+          </div>
+          <button onClick={onClose}
+            className="w-full h-12 rounded-xl text-white font-black text-sm"
+            style={{ background: primary }}>
+            Begrepen
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PinLanding_DEPRECATED({ onSuccess, onPassword, onRegister, branding, pwaTarget }) {
 
   const verify = async (code) => {
     setLoading(true); setError('');
@@ -266,6 +771,8 @@ function PasswordView({ initialMode = 'login', onBack, onRegistered, branding })
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  // QR vs password login method (alleen relevant in mode === 'login').
+  const [loginMethod, setLoginMethod] = useState('password');
 
   // Build the query that drives the plan-currency on the registration form.
   // Explicit country wins; otherwise the phone is used for auto-detect.
@@ -348,7 +855,16 @@ function PasswordView({ initialMode = 'login', onBack, onRegistered, branding })
           }
         } catch { /* noop */ }
         setPreferredRole('admin');
-        navigate('/admin');
+        // Pending QR? Vorige sessie heeft ons hier naartoe gestuurd via /qr-link.
+        // Claim de QR direct nu we ingelogd zijn.
+        let pendingQr = null;
+        try { pendingQr = sessionStorage.getItem('pending_qr_token'); } catch { /* ignore */ }
+        if (pendingQr) {
+          try { sessionStorage.removeItem('pending_qr_token'); } catch { /* ignore */ }
+          navigate(`/qr-link?token=${encodeURIComponent(pendingQr)}`);
+        } else {
+          navigate('/admin');
+        }
       } else {
         const result = await register({
           name: name.trim(),
@@ -427,6 +943,53 @@ function PasswordView({ initialMode = 'login', onBack, onRegistered, branding })
               {error}
             </div>
           )}
+
+          {/* Tab toggle: e-mail/wachtwoord vs QR code (alleen in login mode) */}
+          {mode === 'login' && (
+            <div className="mb-5 grid grid-cols-2 gap-1.5 p-1 bg-slate-100 rounded-xl"
+              data-testid="login-method-tabs">
+              <button type="button" onClick={() => setLoginMethod('password')}
+                data-testid="tab-password"
+                className={`h-10 rounded-lg text-sm font-bold transition-all flex items-center justify-center gap-1.5 ${
+                  loginMethod === 'password'
+                    ? 'bg-white text-slate-900 shadow-sm'
+                    : 'text-slate-500 hover:text-slate-700'
+                }`}>
+                <KeyRound className="w-4 h-4" /> Wachtwoord
+              </button>
+              <button type="button" onClick={() => setLoginMethod('qr')}
+                data-testid="tab-qr"
+                className={`h-10 rounded-lg text-sm font-bold transition-all flex items-center justify-center gap-1.5 ${
+                  loginMethod === 'qr'
+                    ? 'bg-white text-slate-900 shadow-sm'
+                    : 'text-slate-500 hover:text-slate-700'
+                }`}>
+                <QrCode className="w-4 h-4" /> QR code
+              </button>
+            </div>
+          )}
+
+          {/* QR Login view */}
+          {mode === 'login' && loginMethod === 'qr' ? (
+            <div className="py-6">
+              <QrLoginTab
+                primary={branding?.primary_color || '#FF5C00'}
+                onSuccess={() => {
+                  // Token is opgeslagen via QrLoginTab — hard reload zodat
+                  // AuthProvider de nieuwe sessie picks-up en redirect doet.
+                  window.location.assign('/admin');
+                }}
+              />
+              <p className="text-center text-xs text-slate-400 mt-5">
+                Geen telefoon bij de hand?{' '}
+                <button onClick={() => setLoginMethod('password')}
+                  data-testid="qr-switch-password"
+                  className="font-bold text-[#FF5C00] hover:underline">
+                  Gebruik wachtwoord
+                </button>
+              </p>
+            </div>
+          ) : (
 
           <form onSubmit={submit} className="space-y-3">
             {mode === 'register' && (
@@ -636,6 +1199,7 @@ function PasswordView({ initialMode = 'login', onBack, onRegistered, branding })
               )}
             </button>
           </form>
+          )}
 
           <p className="text-center text-sm text-slate-400 mt-4">
             {mode === 'login' ? 'Nog geen account?' : 'Al een account?'}{' '}
