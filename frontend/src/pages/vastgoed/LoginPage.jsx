@@ -350,7 +350,6 @@ function QrLoginTab({ onSuccess, primary = '#FF5C00' }) {
 function PinLanding({ onSuccess, onPassword, onRegister, branding, pwaTarget }) {
   const [pin, setPin] = useState(['', '', '', '']);
   const [loading, setLoading] = useState(false);
-  const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
   const [showScanner, setShowScanner] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
@@ -413,9 +412,6 @@ function PinLanding({ onSuccess, onPassword, onRegister, branding, pwaTarget }) 
             try { localStorage.setItem('device_qr_token', r.data.device_qr_token); } catch { /* ignore */ }
           }
         }).catch(() => { /* niet-kritiek */ });
-        // Markeer success ZICHTBAAR zodat de gebruiker geen flash van de
-        // PIN-keypad meer ziet tijdens de transitie naar /admin.
-        setSuccess(true);
         onSuccess();
         return;
       }
@@ -440,7 +436,6 @@ function PinLanding({ onSuccess, onPassword, onRegister, branding, pwaTarget }) 
         if (data?.admin_token) localStorage.setItem('admin_token', data.admin_token);
         setPreferredRole(isAdminTarget ? 'admin' : 'kiosk');
       }
-      setSuccess(true);
       onSuccess();
     } catch (e) {
       setError(formatError(e, 'Ongeldige PIN code'));
@@ -471,30 +466,6 @@ function PinLanding({ onSuccess, onPassword, onRegister, branding, pwaTarget }) 
     '2': 'ABC', '3': 'DEF', '4': 'GHI', '5': 'JKL',
     '6': 'MNO', '7': 'PQRS', '8': 'TUV', '9': 'WXYZ',
   };
-
-  // Success-overlay: voorkomt de "PIN flash" wanneer de gebruiker net heeft
-  // ingelogd en we wachten op de hard-navigate naar /admin (kan 200-1000ms
-  // duren op trager netwerk). Toont een welkom-checkmark zodat de UI niet
-  // misleidend lijkt te resetten naar PIN-keypad tijdens de transitie.
-  if (success) {
-    return (
-      <div className="flex flex-col items-center justify-center text-white" style={{
-        position: 'fixed', inset: 0,
-        backgroundColor: primary,
-        paddingTop: 'env(safe-area-inset-top, 0px)',
-        paddingBottom: 'env(safe-area-inset-bottom, 0px)',
-      }} data-testid="pin-success-overlay">
-        <div className="w-24 h-24 rounded-full bg-white/15 backdrop-blur-sm flex items-center justify-center mb-5 animate-[scale-in_300ms_ease-out]">
-          <Check className="w-12 h-12 text-white" strokeWidth={3} />
-        </div>
-        <h1 className="font-black tracking-tight text-white text-center"
-          style={{ fontSize: 'clamp(24px, 4vh, 36px)' }}>
-          Welkom terug{deviceUser ? `, ${deviceUser.name}` : ''}
-        </h1>
-        <p className="text-white/80 text-sm font-medium mt-2">Een moment…</p>
-      </div>
-    );
-  }
 
   return (
     <div className="flex flex-col text-white relative overflow-hidden" style={{
@@ -1654,7 +1625,7 @@ function Bank({ label, value, mono }) {
 export default function LoginPage() {
   const navigate = useBrandedNavigate();
   const [searchParams] = useSearchParams();
-  const { user, loading } = useAuth();
+  const { user, loading, refresh } = useAuth();
   // Initial view from ?view=admin or ?view=register query string (e.g. when arriving
   // from the Kiosk "Beheerder" button or a marketing CTA). Defaults to PIN keypad.
   const initialView = (() => {
@@ -1828,16 +1799,22 @@ export default function LoginPage() {
   // PIN entry; the difference is only where the user lands afterwards.
   // BELANGRIJK: medewerker-PIN logins krijgen GEEN admin_token, dus we sturen
   // ze altijd naar /kiosk — ook als ze de "Beheer"-shortcut hebben gebruikt.
-  const onPinSuccess = () => {
+  //
+  // SOFT NAVIGATIE: vroeger deden we `window.location.assign('/admin')` zodat
+  // AuthProvider /auth/me opnieuw uitvoerde. Dat veroorzaakte echter een
+  // full page reload + spinner flash. We doen nu refresh() (vernieuw /auth/me
+  // in dezelfde React tree) en daarna een soft navigate. Geen flash, instant.
+  const onPinSuccess = async () => {
     let hasAdmin = false;
     try { hasAdmin = !!localStorage.getItem('admin_token'); } catch { /* ignore */ }
     if (pwaTarget === 'admin' && hasAdmin) {
       setPreferredRole('admin');
-      // Hard-navigate so AuthProvider re-runs /auth/me with the new admin_token
-      // that the kiosk-pin endpoint just returned.
-      window.location.assign('/admin');
+      // Refresh AuthProvider zodat de nieuwe admin_token meteen actief is.
+      // Soft navigate naar /admin nadat user state is bijgewerkt.
+      try { await refresh(); } catch { /* niet-fataal */ }
+      navigate('/admin', { replace: true });
     } else {
-      navigate('/kiosk');
+      navigate('/kiosk', { replace: true });
     }
   };
 
