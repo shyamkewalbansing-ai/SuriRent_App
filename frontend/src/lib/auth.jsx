@@ -44,6 +44,16 @@ export function AuthProvider({ children }) {
       } else {
         setActiveCompanyMeta(null);
       }
+      // Backfill device_qr_token voor gebruikers die al ingelogd waren VOOR
+      // we deze feature toevoegden. Eenmalig: als er geen token in
+      // localStorage staat én we hebben een geldige sessie → uitgeven.
+      // Hiermee werkt QR scan ook voor bestaande PWA installs zonder dat
+      // de gebruiker eerst hoeft uit-en-in te loggen.
+      try {
+        if (!localStorage.getItem('device_qr_token')) {
+          issueDeviceQrTokenSilently();
+        }
+      } catch { /* ignore */ }
     } catch {
       setUser(null);
       setActiveCompanyMeta(null);
