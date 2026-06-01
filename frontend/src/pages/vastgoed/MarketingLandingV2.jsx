@@ -58,6 +58,20 @@ function searchIndex(q) {
 // Top header — tier 1 (thin): logo + segments + Inloggen button
 // =============================================================================
 function TopHeader({ segment, setSegment, onLogin }) {
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const navItems = [
+    { id: 'home',     label: 'Home' },
+    { id: 'features', label: 'Functies' },
+    { id: 'kiosk',    label: 'Kiosk PWA' },
+    { id: 'pricing',  label: 'Prijzen' },
+    { id: 'faq',      label: 'Service & FAQ' },
+  ];
+  const goTo = (id) => {
+    setMobileMenuOpen(false);
+    if (id === 'home') { window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
   return (
     <div className="bg-white border-b border-slate-100">
       <div className="max-w-[1280px] mx-auto px-5 lg:px-10 h-20 flex items-center justify-between">
@@ -71,8 +85,8 @@ function TopHeader({ segment, setSegment, onLogin }) {
           </span>
         </button>
 
-        <div className="flex items-center gap-5 lg:gap-7">
-          {/* Segment selector — like ABN's Privé/Zakelijk */}
+        <div className="flex items-center gap-3 md:gap-5 lg:gap-7">
+          {/* Segment selector — like ABN's Privé/Zakelijk (desktop only) */}
           <div className="hidden md:flex items-center gap-2">
             {['Beheerder', 'Huurder', 'Demo'].map((s) => (
               <button key={s} onClick={() => setSegment(s)}
@@ -88,12 +102,51 @@ function TopHeader({ segment, setSegment, onLogin }) {
           </div>
 
           <button onClick={onLogin} data-testid="topheader-login"
-            className="h-11 px-5 rounded-md bg-[#FF5C00] hover:bg-[#C74600] text-white text-sm font-bold flex items-center gap-2 transition-colors shadow-[0_2px_0_0_rgba(0,0,0,0.05)]">
+            className="h-11 px-4 md:px-5 rounded-md bg-[#FF5C00] hover:bg-[#C74600] text-white text-sm font-bold flex items-center gap-2 transition-colors shadow-[0_2px_0_0_rgba(0,0,0,0.05)]">
             <Lock className="w-4 h-4" />
             Inloggen
           </button>
+
+          {/* Mobile hamburger — NAAST de Inloggen knop. Op desktop verborgen
+              omdat de SecondaryNav daar de navigatie biedt. */}
+          <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            data-testid="topheader-mobile-menu"
+            aria-label={mobileMenuOpen ? 'Sluit menu' : 'Open menu'}
+            className="md:hidden w-11 h-11 rounded-md border border-slate-200 flex items-center justify-center hover:bg-slate-50 transition-colors">
+            {mobileMenuOpen ? <X className="w-5 h-5 text-[#0F0F0F]" /> : <Menu className="w-5 h-5 text-[#0F0F0F]" />}
+          </button>
         </div>
       </div>
+
+      {/* Mobile menu drawer — uitvouwbaar onder de top bar.
+          Toont nav links + segment selector. Geen zoekbalk (gebruiker
+          kan via greeting card zoeken). */}
+      {mobileMenuOpen && (
+        <div className="md:hidden bg-white border-t border-slate-200" data-testid="topheader-mobile-drawer">
+          <div className="px-5 py-4 space-y-1">
+            {navItems.map((n) => (
+              <button key={n.id} onClick={() => goTo(n.id)}
+                data-testid={`mobile-nav-${n.id}`}
+                className="w-full text-left px-3 py-3 text-base font-bold text-[#0F0F0F] hover:bg-slate-50 rounded-md transition-colors">
+                {n.label}
+              </button>
+            ))}
+            <div className="pt-3 mt-2 border-t border-slate-100 flex flex-wrap gap-2">
+              {['Beheerder', 'Huurder', 'Demo'].map((s) => (
+                <button key={s} onClick={() => { setSegment(s); setMobileMenuOpen(false); }}
+                  data-testid={`mobile-segment-${s.toLowerCase()}`}
+                  className={`text-xs font-bold px-3 py-1.5 rounded transition-colors ${
+                    segment === s
+                      ? 'border border-[#0F0F0F] text-[#0F0F0F]'
+                      : 'border border-slate-200 text-slate-600 hover:border-[#FF5C00]'
+                  }`}>
+                  {s}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -102,7 +155,6 @@ function TopHeader({ segment, setSegment, onLogin }) {
 // Secondary nav — Home / Producten / Je situatie / etc.
 // =============================================================================
 function SecondaryNav() {
-  const [open, setOpen] = useState(false);
   const items = [
     { id: 'home',     label: 'Home',                hasMenu: false },
     { id: 'features', label: 'Functies',            hasMenu: true },
@@ -115,9 +167,10 @@ function SecondaryNav() {
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
   return (
-    <div className="bg-white border-b border-slate-200/80 sticky top-0 z-30">
+    // Desktop only — op mobile zit de nav in TopHeader's hamburger menu.
+    <div className="hidden md:block bg-white border-b border-slate-200/80 sticky top-0 z-30">
       <div className="max-w-[1280px] mx-auto px-5 lg:px-10 h-14 flex items-center justify-between">
-        <nav className="hidden md:flex items-center gap-8">
+        <nav className="flex items-center gap-8">
           {items.map((n) => (
             <button key={n.id} onClick={() => goTo(n.id)}
               data-testid={`secnav-${n.id}`}
@@ -127,26 +180,11 @@ function SecondaryNav() {
             </button>
           ))}
         </nav>
-        <button onClick={() => setOpen(!open)}
-          data-testid="secnav-mobile-toggle"
-          className="md:hidden w-10 h-10 rounded-lg flex items-center justify-center">
-          {open ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-        </button>
         <button data-testid="secnav-search"
           className="w-10 h-10 rounded-full flex items-center justify-center hover:bg-slate-50">
           <Search className="w-5 h-5 text-[#0F0F0F]" />
         </button>
       </div>
-      {open && (
-        <div className="md:hidden bg-white border-t border-slate-200 px-5 py-3 space-y-1">
-          {items.map((n) => (
-            <button key={n.id} onClick={() => { setOpen(false); goTo(n.id); }}
-              className="w-full text-left px-2 py-2.5 text-sm font-bold text-[#0F0F0F] hover:bg-slate-50 rounded">
-              {n.label}
-            </button>
-          ))}
-        </div>
-      )}
     </div>
   );
 }
