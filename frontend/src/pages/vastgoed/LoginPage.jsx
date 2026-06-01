@@ -627,11 +627,17 @@ function PinLanding({ onSuccess, onPassword, onRegister, branding, pwaTarget }) 
                 className="flex items-center gap-1.5 text-white/80 hover:text-white">
                 <KeyRound className="w-3.5 h-3.5" /> Inloggen met e-mail
               </button>
-              <span className="text-white/40">•</span>
-              <button onClick={onRegister} data-testid="login-register-btn"
-                className="flex items-center gap-1.5 text-white/80 hover:text-white">
-                <UserPlus className="w-3.5 h-3.5" /> Nieuw account
-              </button>
+              {/* Nieuw account ALLEEN op generieke /login. Op /<slug>/login horen
+                  klanten in te loggen — niet een nieuw bedrijf aan te maken. */}
+              {!branding?.slug && (
+                <>
+                  <span className="text-white/40">•</span>
+                  <button onClick={onRegister} data-testid="login-register-btn"
+                    className="flex items-center gap-1.5 text-white/80 hover:text-white">
+                    <UserPlus className="w-3.5 h-3.5" /> Nieuw account
+                  </button>
+                </>
+              )}
             </>
           )}
         </div>
