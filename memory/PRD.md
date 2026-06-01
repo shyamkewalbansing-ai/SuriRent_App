@@ -1,5 +1,14 @@
 # Vastgoed Kiosk - PRD
 
+## Session 2026-06-01 (v16) — PWA install fix #2: SW cache strategy ✅
+- **Probleem**: gebruiker meldde dat na fix v15 (slug-aware manifest endpoint) de installed PWA op iOS Safari nog steeds opent op `/login` ipv `/surirent/login`.
+- **Diepere root cause**: Service Worker `surirent-v77` deed `stale-while-revalidate` voor HTML + JS → bij PWA install las iOS Safari de **gecachete oude index.html + oude bundle.js**, die de manifest URL OVERSCHRIJVEN naar `/manifest-beheer.json` (zonder slug). iOS 16.4+ leest manifest start_url BIJ install, dus de install krijgt de verkeerde start_url.
+- **Fix**: 
+  - SW versie naar `v79` (bumpt cache).
+  - HTML + JS strategie veranderd naar **network-first** (was stale-while-revalidate). Bij online: altijd fresh code. Bij offline: cache fallback. Iets latente eerste paint, maar correctheid wint.
+  - `activate` handler: bij SW UPDATE (niet first install) post nu SW_ACTIVATED message met `reload: true` voor alle open clients.
+- **Gevolg**: gebruikers moeten oude install **deïnstalleren + één keer fresh laden** zodat de nieuwe SW activeert + alle oude cache wist, en pas **dan** opnieuw installeren. iOS captures manifest start_url at install time — kan niet retroactief gefixt worden.
+
 ## Session 2026-06-01 (v15) — 3 bugfixes: PWA install, logout redirect, QR scan URL ✅
 
 ### Bug A — PWA install vanaf `/<slug>/login` opent nog steeds `/login`

@@ -6,7 +6,7 @@
  * - Bypass /api/* (always go to network)
  * - Push notifications + click handler
  */
-const CACHE_VERSION = 'surirent-v78';
+const CACHE_VERSION = 'surirent-v79';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 
@@ -39,6 +39,10 @@ self.addEventListener('message', (event) => {
 
 self.addEventListener('activate', (event) => {
   event.waitUntil((async () => {
+    // Detecteer of dit een UPDATE is (er was al een controller) of een
+    // FIRST install. Bij first install nooit navigeren — geeft loop.
+    const hadPreviousController = (await self.clients.matchAll({ type: 'window', includeUncontrolled: false })).length > 0;
+
     // Verwijder ALLE oude caches (zowel static als runtime van vorige versies).
     // Belangrijk: bij een nieuwe build krijgen chunks nieuwe hashed namen.
     // Als we de runtime cache van een vorige versie behouden, blijft een
@@ -50,12 +54,22 @@ self.addEventListener('activate', (event) => {
       keys.filter((k) => !k.startsWith(CACHE_VERSION) && k !== 'surirent-state').map((k) => caches.delete(k))
     );
     await self.clients.claim();
-    // Vertel alle open tabs dat ze 1x mogen herladen om de nieuwe chunks
-    // te pakken — zonder dat de gebruiker zelf hoeft te refreshen.
-    try {
-      const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-      for (const c of clients) c.postMessage({ type: 'SW_ACTIVATED', version: CACHE_VERSION });
-    } catch { /* noop */ }
+
+    // ALLEEN bij een SW UPDATE (niet first install) forceren we alle open
+    // tabs om DIRECT te herladen zodat ze de nieuwe bundle.js + manifest URL
+    // pakken. Anders blijft het oude tabblad de gecachete (verkeerde) PWA
+    // manifest serveren tot de gebruiker zelf refresht — wat catastrofaal
+    // is voor PWA install (Chrome/iOS captures de manifest start_url AT
+    // THE MOMENT OF INSTALL, en dat moment zou dan een oude manifest URL
+    // gebruiken die naar /manifest-beheer.json wijst zonder slug).
+    if (hadPreviousController) {
+      try {
+        const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+        for (const c of clients) {
+          try { c.postMessage({ type: 'SW_ACTIVATED', version: CACHE_VERSION, reload: true }); } catch { /* noop */ }
+        }
+      } catch { /* noop */ }
+    }
   })());
 });
 
@@ -82,41 +96,50 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // HTML navigation: STALE-WHILE-REVALIDATE — toon eerst de gecachete shell
-  // (instant first paint op PWA), update tegelijk in achtergrond zodat
-  // de volgende refresh up-to-date is. Op een cold start zonder cache
-  // valt het terug op live network. Dit maakt PWA-openen ~500-1500ms
-  // sneller op mobiel.
+  // HTML navigation: NETWORK-FIRST. Vroeger gebruikten we stale-while-revalidate
+  // voor snellere first-paint op PWA, maar dat veroorzaakte een ongelukkige
+  // race-conditie: na een deploy bleef de geïnstalleerde PWA de gecachete
+  // index.html serveren met OUDE bundle.js → OUDE pwa-manifest code →
+  // verkeerd `start_url` → PWA opent in de verkeerde route.
+  //
+  // Network-first lost dit op: nieuwe pageloads krijgen ALTIJD fresh HTML
+  // (en daarmee fresh bundle.js + fresh manifest URL). Bij offline valt
+  // het netjes terug op de cache zodat de PWA blijft werken zonder netwerk.
   const isHTML = req.mode === 'navigate' || (req.headers.get('accept') || '').includes('text/html');
   if (isHTML) {
     event.respondWith(
       caches.open(RUNTIME_CACHE).then(async (cache) => {
-        const cached = await cache.match(req) || await cache.match('/');
-        const networkPromise = fetch(req).then((res) => {
+        try {
+          const res = await fetch(req);
           if (res && res.status === 200) {
             cache.put(req, res.clone()).catch(() => {});
           }
           return res;
-        }).catch(() => cached);
-        return cached || networkPromise;
+        } catch {
+          const cached = await cache.match(req) || await cache.match('/');
+          return cached || Response.error();
+        }
       })
     );
     return;
   }
 
-  // Static assets — use stale-while-revalidate so new builds load on next visit
-  // without users getting permanently stuck on old JS bundles.
+  // JS/CSS static assets — NETWORK-FIRST om dezelfde reden. Een geüpdate
+  // index.html verwijst naar een nieuwe bundle hash, dus we willen die
+  // nieuwe bundle direct van het netwerk, niet uit cache.
   if (url.pathname.startsWith('/static/') || url.pathname.endsWith('.js') || url.pathname.endsWith('.css')) {
     event.respondWith(
       caches.open(RUNTIME_CACHE).then(async (cache) => {
-        const cached = await cache.match(req);
-        const networkPromise = fetch(req).then((res) => {
+        try {
+          const res = await fetch(req);
           if (res && res.status === 200 && res.type === 'basic') {
             cache.put(req, res.clone()).catch(() => {});
           }
           return res;
-        }).catch(() => cached);
-        return cached || networkPromise;
+        } catch {
+          const cached = await cache.match(req);
+          return cached || Response.error();
+        }
       })
     );
     return;
