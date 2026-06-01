@@ -53,6 +53,16 @@ export function AuthProvider({ children }) {
         localStorage.setItem('device_user_name', data.user.name || data.user.email.split('@')[0]);
       }
     } catch { /* ignore */ }
+    // Kritiek voor PWA: bewaar de bedrijfs-slug zodat het volgende bezoek
+    // direct naar de branded /<slug>/login kan redirecten (i.p.v. de
+    // generieke /login). iOS PWA's hebben geïsoleerde localStorage van
+    // Safari op iOS 16.4+, dus deze opslag binnen de PWA is essentieel.
+    try {
+      const slug = data?.company?.slug || data?.user?.company_slug;
+      if (slug) {
+        localStorage.setItem('pwa_company_slug', String(slug).toLowerCase());
+      }
+    } catch { /* ignore */ }
     // Clear any stale superadmin company selection
     if (data.user?.role !== 'superadmin') {
       localStorage.removeItem(ACTIVE_COMPANY_KEY);

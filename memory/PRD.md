@@ -1,5 +1,18 @@
 # Vastgoed Kiosk - PRD
 
+## Session 2026-06-01 (v18) — PWA branded recovery via post-login redirect ✅
+- **Probleem**: iOS 16.4+ isoleert PWA storage van Safari → mijn v17 localStorage-redirect werkt in Safari maar NIET in de PWA (lege storage).
+- **Definitieve fix**: 
+  - Bij `login()` in `auth.jsx` slaan we nu de bedrijfs-slug op in `localStorage.pwa_company_slug` (uit `data.company.slug`).
+  - In `LoginPage.submit()`: na succesvolle login, als de gebruiker op generieke `/login` zit en zijn JWT heeft een bedrijfs-slug, `window.location.assign('/<slug>/admin')` → hard-navigate naar branded route. Dit triggert BrandedShell → activeert branding + stored_slug in PWA storage.
+- **Flow voor de gebruiker met huidige (verkeerde) PWA install**:
+  1. Open PWA (opent generic `/login?source=pwa&view=admin`)
+  2. Login met email + wachtwoord
+  3. Auto-redirect naar `/<slug>/admin` ← branded ✓
+  4. PWA storage nu gevuld met `pwa_company_slug`
+  5. Daarna: logout → branded login, elke PWA-start → branded PIN ✓
+- **Verified**: lege localStorage → /login PWA → email login → `/surirent/admin` met branded sidebar ✓
+
 ## Session 2026-06-01 (v17) — PWA install fix #3: in-app slug recovery vangnet ✅
 - **Probleem**: iOS Safari heeft de oude (verkeerde) start_url `/login` gecaptured bij een eerdere install. Na fix v15/v16 deïnstall + reïnstall: iOS Safari kan de manifest **niet altijd opnieuw lezen** vanwege OS-level caching, dus de PWA bleef openen op `/login`.
 - **Vangnet-fix**: In `LoginPage.jsx` toegevoegd: bij mount, als URL = `/login` (geen slug) maar `localStorage.pwa_company_slug` bevat een geldige slug → direct `window.location.replace('/<slug>/login' + query)`. 

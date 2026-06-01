@@ -919,7 +919,7 @@ function PasswordView({ initialMode = 'login', onBack, onRegistered, branding })
     setLoading(true); setError('');
     try {
       if (mode === 'login') {
-        await login(email, password);
+        const loginResult = await login(email, password);
         // "Onthoud mij": sla email + wachtwoord lokaal op (alleen op apparaten
         // waar de gebruiker zelf toegang toe heeft — niet ideaal voor gedeelde
         // kiosks, daarom uitvink-baar).
@@ -949,7 +949,20 @@ function PasswordView({ initialMode = 'login', onBack, onRegistered, branding })
           try { sessionStorage.removeItem('pending_qr_token'); } catch { /* ignore */ }
           navigate(`/qr-link?token=${encodeURIComponent(pendingQr)}`);
         } else {
-          navigate('/admin');
+          // Bepaal het juiste admin-pad. Wanneer we op de generieke /login
+          // (zonder slug) zitten en de gebruiker hoort bij een specifiek
+          // bedrijf, sturen we hem naar `/<slug>/admin` zodat de branded
+          // omgeving + storage-context geactiveerd wordt. KRITIEK voor PWA
+          // gebruikers die zonder slug-context openen.
+          const userSlug = loginResult?.company?.slug || loginResult?.user?.company_slug;
+          const onPlainLogin = /^\/login(\/|$)/i.test(window.location.pathname);
+          if (userSlug && onPlainLogin) {
+            // Hard-navigate naar branded admin zodat BrandedShell mount +
+            // branding kleuren + stored_slug worden geactiveerd in PWA storage.
+            window.location.assign(`/${userSlug}/admin`);
+          } else {
+            navigate('/admin');
+          }
         }
       } else {
         const result = await register({
