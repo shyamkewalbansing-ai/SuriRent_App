@@ -179,9 +179,11 @@ function Hero({ onDemo, onWhatsApp }) {
 
   return (
     <section className="relative" id="home">
-      {/* Full-bleed hero — extends edge-to-edge zoals ABN AMRO */}
+      {/* Compactere hero — kortere full-bleed visual zoals Centraal Beheer.
+          De greeting card hangt over de onderrand en steekt uit in de content
+          eronder via een negatieve bottom margin (zie LandingPage wrapper). */}
       <div className="relative w-full bg-[#0F0F0F] overflow-hidden"
-        style={{ minHeight: 'clamp(620px, 78vh, 880px)' }}
+        style={{ minHeight: 'clamp(440px, 56vh, 620px)' }}
         data-testid="hero-canvas">
         {/* Background screenshot — wide bleed met dark overlay */}
         <div className="absolute inset-0">
@@ -200,39 +202,41 @@ function Hero({ onDemo, onWhatsApp }) {
             style={{ background: 'radial-gradient(circle, #FF8A3D, transparent 70%)' }} />
         </div>
 
-        {/* Centered max-width content */}
-        <div className="relative max-w-[1280px] mx-auto px-5 lg:px-10 py-16 lg:py-24 grid lg:grid-cols-[1.15fr,1fr] gap-10 lg:gap-14 items-center"
-          style={{ minHeight: 'clamp(620px, 78vh, 880px)' }}>
+        {/* Centered max-width content — kortere padding voor compact gevoel */}
+        <div className="relative max-w-[1280px] mx-auto px-5 lg:px-10 py-10 lg:py-14 grid lg:grid-cols-[1.15fr,1fr] gap-8 lg:gap-12 items-center"
+          style={{ minHeight: 'clamp(440px, 56vh, 620px)' }}>
           {/* LEFT — massive headline */}
           <div className="text-white relative z-10">
-            <p className="text-xs lg:text-sm font-black tracking-[0.32em] uppercase text-[#FF8A3D] mb-6 lg:mb-8">
+            <p className="text-xs lg:text-sm font-black tracking-[0.32em] uppercase text-[#FF8A3D] mb-4 lg:mb-5">
               Vastgoed Suite · Suriname 2026
             </p>
             <h1 className="font-black tracking-[-0.035em] leading-[0.95] text-white"
-              style={{ fontSize: 'clamp(2.75rem, 6.2vw, 5.5rem)' }}
+              style={{ fontSize: 'clamp(2.25rem, 5.2vw, 4.5rem)' }}
               data-testid="hero-title">
               Voor als
               <br />Excel uw vastgoed
               <br /><span className="text-[#FF8A3D]">niet meer trekt.</span>
             </h1>
-            <p className="mt-7 lg:mt-9 text-lg lg:text-2xl text-white/85 font-medium max-w-xl leading-relaxed">
+            <p className="mt-5 lg:mt-6 text-base lg:text-xl text-white/85 font-medium max-w-xl leading-relaxed">
               Nu <span className="font-black text-white">30% sneller</span> dan handmatig boekhouden — met Kiosk,
               automatische facturatie en AI-OCR voor betalingen.
             </p>
-            <div className="mt-8 lg:mt-10 flex flex-col sm:flex-row gap-3">
+            <div className="mt-6 lg:mt-7 flex flex-col sm:flex-row gap-3">
               <button onClick={onDemo} data-testid="hero-cta-action"
-                className="inline-flex items-center justify-center gap-2 h-14 px-7 rounded-md bg-[#FF5C00] hover:bg-[#FF8A3D] text-white text-sm lg:text-base font-black transition-colors shadow-[0_4px_0_0_rgba(0,0,0,0.15)]">
+                className="inline-flex items-center justify-center gap-2 h-12 lg:h-13 px-6 rounded-md bg-[#FF5C00] hover:bg-[#FF8A3D] text-white text-sm lg:text-base font-black transition-colors shadow-[0_4px_0_0_rgba(0,0,0,0.15)]">
                 Bekijk de demo <ArrowRight className="w-4 h-4" />
               </button>
               <button onClick={onWhatsApp}
-                className="inline-flex items-center justify-center gap-2 h-14 px-7 rounded-md bg-white/10 hover:bg-white/15 border border-white/20 text-white text-sm lg:text-base font-bold backdrop-blur-sm transition-colors">
+                className="inline-flex items-center justify-center gap-2 h-12 lg:h-13 px-6 rounded-md bg-white/10 hover:bg-white/15 border border-white/20 text-white text-sm lg:text-base font-bold backdrop-blur-sm transition-colors">
                 <MessageCircle className="w-5 h-5" /> WhatsApp ons
               </button>
             </div>
           </div>
 
-          {/* RIGHT — floating dark greeting card met functionele zoekbalk */}
-          <div className="flex items-center justify-center lg:justify-end relative z-10">
+          {/* RIGHT — floating dark greeting card die UIT de hero steekt
+              (negatieve bottom margin op desktop zodat hij over de content
+              hangt zoals op de Centraal Beheer referentie). */}
+          <div className="flex items-center justify-center lg:justify-end relative z-20 lg:mb-[-110px] xl:mb-[-130px]">
             <div className="relative w-full max-w-[420px]">
               <div className="rounded-2xl bg-[#0F0F0F]/95 border border-white/10 backdrop-blur-sm p-7 lg:p-8 shadow-[0_30px_60px_-20px_rgba(0,0,0,0.6)]"
                 data-testid="greeting-card">
@@ -328,7 +332,7 @@ function ProductGrid({ onDemo, onLogin }) {
     else if (item.target) document.getElementById(item.target)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
   return (
-    <section className="bg-slate-50 py-10 lg:py-14">
+    <section className="bg-slate-50 py-10 lg:py-14 lg:pt-[170px] xl:pt-[190px]">
       <div className="max-w-[1280px] mx-auto px-5 lg:px-10">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 lg:gap-4">
           {items.map(({ Icon, label, desc, action, target }) => (
