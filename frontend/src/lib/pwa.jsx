@@ -15,14 +15,16 @@ export function useRegisterServiceWorker() {
       try {
         const reg = await navigator.serviceWorker.register('/sw.js');
 
-        // Stille update-strategie — NOOIT mid-session reload.
+        // Stille update-strategie met AUTO-RELOAD-AT-NEXT-VISIBLE.
         // Wanneer een nieuwe SW gevonden wordt:
         //   1) installeert hij in de achtergrond,
         //   2) we sturen SKIP_WAITING zodat hij meteen actief wordt,
-        //   3) de OUDE pagina blijft draaien tot de gebruiker zelf de app
-        //      opnieuw opent / navigeert / refresht. Geen flikker, geen
-        //      "loading" — gewoon de volgende cold-start draait al de
-        //      nieuwe versie (omdat de SW dan nieuw HTML serveert).
+        //   3) bij `controllerchange` reloaden we de pagina ALLEEN wanneer
+        //      de pagina niet zichtbaar is OF de gebruiker net is terug-
+        //      gekomen (visibility changes). Hierdoor krijgen gebruikers
+        //      snel nieuwe fixes (bv. device QR token backfill) zonder
+        //      midden in een actie te worden gestoord.
+        let pendingReload = false;
         const activate = (newWorker) => {
           newWorker.addEventListener('statechange', () => {
             if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
@@ -35,8 +37,22 @@ export function useRegisterServiceWorker() {
           if (reg.installing) activate(reg.installing);
         });
 
-        // BEWUST GEEN controllerchange→reload meer. Update is volledig
-        // stil; geen reload, geen toast, geen loading-state.
+        // Controllerchange = nieuwe SW is nu de actieve controller.
+        // We reloaden als de pagina niet zichtbaar is, of markeren een
+        // pending reload voor de volgende visibility-return.
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+          if (document.visibilityState === 'hidden') {
+            window.location.reload();
+          } else {
+            pendingReload = true;
+          }
+        });
+        document.addEventListener('visibilitychange', () => {
+          if (pendingReload && document.visibilityState === 'visible') {
+            pendingReload = false;
+            window.location.reload();
+          }
+        });
 
         // Periodieke check voor nieuwe versies zodat de nieuwe SW snel
         // klaar staat (60s actieve tab + bij focus / visibility changes).
