@@ -103,7 +103,43 @@
           document.title = cfg.name;
 
           var manifest = document.querySelector('link[rel="manifest"]');
-          if (manifest) manifest.setAttribute('href', '/manifest-' + role + '.json');
+          // Detecteer bedrijfs-slug uit pad: /<slug>/login etc.
+          // Reserved slugs (admin, kiosk, login, etc.) zijn geen bedrijfs-slug.
+          var RESERVED = ['admin','kiosk','login','demo','huurder','klant','onderteken','qr-link','c','api','assets'];
+          var slug = '';
+          var seg = p.split('/').filter(Boolean);
+          if (seg.length > 0 && RESERVED.indexOf(seg[0]) === -1) {
+            slug = seg[0];
+          }
+          if (manifest) {
+            // Bouw dynamische manifest die start_url + scope laat lijken op de
+            // branded URL (bv. /surirent/login). Hiermee opent de geinstalleerde
+            // PWA direct in het bedrijfs-context i.p.v. de generieke /login.
+            try {
+              fetch('/manifest-' + role + '.json')
+                .then(function (r) { return r.json(); })
+                .then(function (base) {
+                  if (slug) {
+                    base.id = '/' + slug + '/?role=' + role;
+                    base.start_url = '/' + slug + '/login?source=pwa';
+                    base.scope = '/' + slug + '/';
+                    // Naam aanvullen met slug zodat installatie-dialogen
+                    // duidelijk zijn (iOS toont alleen short_name).
+                    if (base.short_name) {
+                      base.short_name = base.short_name; // unchanged — let bedrijfs branding via React doen
+                    }
+                  }
+                  var blob = new Blob([JSON.stringify(base)], { type: 'application/manifest+json' });
+                  var url = URL.createObjectURL(blob);
+                  manifest.setAttribute('href', url);
+                })
+                .catch(function () {
+                  manifest.setAttribute('href', '/manifest-' + role + '.json');
+                });
+            } catch (e) {
+              manifest.setAttribute('href', '/manifest-' + role + '.json');
+            }
+          }
           var t = document.querySelector('meta[name="apple-mobile-web-app-title"]');
           if (t) t.setAttribute('content', cfg.name);
           var an = document.querySelector('meta[name="application-name"]');

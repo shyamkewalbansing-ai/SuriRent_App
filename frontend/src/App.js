@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './lib/auth';
 import { useRegisterServiceWorker, InstallPrompt } from './lib/pwa';
+import PersonalPinSetup from './components/PersonalPinSetup';
 import { usePwaManifest } from './lib/pwa-manifest';
 import { useSheetSwipeToDismiss } from './lib/sheet-swipe';
 import { useEffect, lazy, Suspense } from 'react';
@@ -191,6 +192,7 @@ export default function App() {
         {mode === 'hybrid' && <HybridRoutes />}
       </Suspense>
       <InstallPrompt />
+      <PersonalPinSetup />
       <RotateNotice />
     </AuthProvider>
   );

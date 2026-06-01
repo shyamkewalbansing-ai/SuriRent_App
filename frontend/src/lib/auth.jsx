@@ -46,6 +46,13 @@ export function AuthProvider({ children }) {
     const { data } = await api.post('/auth/login', { email, password });
     if (data?.token) localStorage.setItem('admin_token', data.token);
     setUser(data.user);
+    // Onthoud welke gebruiker hier inlogde, voor persoonlijke PIN-flow op PWA.
+    try {
+      if (data?.user?.email) {
+        localStorage.setItem('device_user_email', data.user.email);
+        localStorage.setItem('device_user_name', data.user.name || data.user.email.split('@')[0]);
+      }
+    } catch { /* ignore */ }
     // Clear any stale superadmin company selection
     if (data.user?.role !== 'superadmin') {
       localStorage.removeItem(ACTIVE_COMPANY_KEY);

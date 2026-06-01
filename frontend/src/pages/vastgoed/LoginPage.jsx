@@ -97,21 +97,50 @@ function QrScannerModal({ onClose, primary = '#FF5C00' }) {
 
   useEffect(() => {
     let cancelled = false;
+    let scanner = null;
     (async () => {
       try {
-        const html5QrCode = new Html5Qrcode('qr-reader');
-        scannerRef.current = html5QrCode;
+        // Probeer eerst beschikbare camera's op te halen — dit triggert
+        // de permissie-prompt op iOS Safari op een betrouwbare manier.
+        let cameras = [];
+        try {
+          cameras = await Html5Qrcode.getCameras();
+        } catch (e) {
+          setStatus('error');
+          setMessage('Geen camera toegang. Sta camera toe in de browser-instellingen en probeer opnieuw.');
+          return;
+        }
+        if (!cameras || cameras.length === 0) {
+          setStatus('error');
+          setMessage('Geen camera gevonden op dit apparaat.');
+          return;
+        }
         if (cancelled) return;
+        // Kies de achterste camera als beschikbaar (label bevat 'back' of 'environment').
+        const back = cameras.find((c) => /back|environment|rear/i.test(c.label || ''));
+        const cameraId = (back || cameras[cameras.length - 1] || cameras[0]).id;
+
+        scanner = new Html5Qrcode('qr-reader', { verbose: false });
+        scannerRef.current = scanner;
         setStatus('scanning');
-        await html5QrCode.start(
-          { facingMode: 'environment' },
-          { fps: 10, qrbox: 240 },
+        await scanner.start(
+          cameraId,
+          { fps: 10, qrbox: { width: 240, height: 240 }, aspectRatio: 1.0 },
           handleScan,
-          () => { /* silent ignore decode failures */ },
+          () => { /* silent decode-failure ignore */ },
         );
       } catch (e) {
+        const msg = (e && e.message) || String(e || '');
         setStatus('error');
-        setMessage('Camera toegang geweigerd. Sta camera toe en probeer opnieuw.');
+        if (/NotAllowedError|Permission/i.test(msg)) {
+          setMessage('Camera toegang geweigerd. Sta camera toe en herlaad de pagina.');
+        } else if (/NotFoundError/i.test(msg)) {
+          setMessage('Geen camera gevonden op dit apparaat.');
+        } else if (/NotReadableError|aborted/i.test(msg)) {
+          setMessage('Camera is in gebruik door een andere app. Sluit andere camera-apps en probeer opnieuw.');
+        } else {
+          setMessage('Camera kon niet starten. Probeer opnieuw of gebruik de native camera-app om de QR te scannen.');
+        }
       }
     })();
     return () => {
@@ -290,14 +319,45 @@ function PinLanding({ onSuccess, onPassword, onRegister, branding, pwaTarget }) 
   const [error, setError] = useState('');
   const [showScanner, setShowScanner] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+
+  // Persoonlijke PIN-modus: als dit apparaat een onthouden gebruiker heeft,
+  // gebruiken we PIN-by-email (in plaats van de gedeelde kiosk-PIN). Dit
+  // activeert de "Welkom [naam]" ervaring zoals ABN AMRO.
+  const [deviceUser, setDeviceUser] = useState(() => {
+    try {
+      const email = localStorage.getItem('device_user_email') || '';
+      const name = localStorage.getItem('device_user_name') || '';
+      return email ? { email, name: name || email.split('@')[0] } : null;
+    } catch { return null; }
+  });
+
   const primary = branding?.primary_color || '#FF5C00';
   const appName = branding?.app_name || 'SuriRent';
   const logoUrl = branding?.logo_url ? branding._logoResolved : '/kiosk-icons/kiosk-512.png';
   const isAdminTarget = pwaTarget === 'admin';
 
+  const forgetDevice = () => {
+    try {
+      localStorage.removeItem('device_user_email');
+      localStorage.removeItem('device_user_name');
+    } catch { /* ignore */ }
+    setDeviceUser(null);
+  };
+
   const verify = async (code) => {
     setLoading(true); setError('');
     try {
+      if (deviceUser) {
+        // Persoonlijke PIN login — gebruikt user.personal_pin_hash op backend.
+        const { data } = await api.post('/auth/personal-pin/login', {
+          email: deviceUser.email, pin: code,
+        });
+        if (data?.access_token) localStorage.setItem('admin_token', data.access_token);
+        setPreferredRole('admin');
+        onSuccess();
+        return;
+      }
+      // Geen onthouden gebruiker → val terug op gedeelde kiosk PIN.
       const { data } = await api.post('/auth/kiosk-pin', {
         pin: code,
         company_slug: branding?.slug || undefined,
@@ -393,7 +453,7 @@ function PinLanding({ onSuccess, onPassword, onRegister, branding, pwaTarget }) 
         <h1 className="font-black tracking-tight text-white text-center"
           style={{ fontSize: 'clamp(28px, 5vh, 44px)', lineHeight: '1.05' }}
           data-testid="pin-welcome">
-          Welkom
+          Welkom{deviceUser ? ',' : ''}
         </h1>
 
         {/* Profielfoto in cirkel */}
@@ -419,11 +479,13 @@ function PinLanding({ onSuccess, onPassword, onRegister, branding, pwaTarget }) 
         <p className="text-white/90 font-black text-center uppercase tracking-wider"
           style={{ fontSize: 'clamp(13px, 1.8vh, 17px)' }}
           data-testid="pin-company-name">
-          {appName}
+          {deviceUser ? deviceUser.name : appName}
         </p>
         <p className="text-white/80 text-center font-medium mt-2 px-6"
           style={{ fontSize: 'clamp(12px, 1.6vh, 15px)', maxWidth: '340px' }}>
-          Vul je 4-cijferige PIN in om verder te gaan
+          {deviceUser
+            ? 'Vul je persoonlijke PIN in om verder te gaan'
+            : 'Vul je 4-cijferige PIN in om verder te gaan'}
         </p>
 
         {error && (
@@ -489,15 +551,31 @@ function PinLanding({ onSuccess, onPassword, onRegister, branding, pwaTarget }) 
 
         {/* Onderaan: Beheerder login + nieuw account */}
         <div className="flex items-center gap-4 mt-4 lg:mt-5 text-xs font-bold flex-wrap justify-center px-4">
-          <button onClick={onPassword} data-testid="login-password-btn"
-            className="flex items-center gap-1.5 text-white/80 hover:text-white">
-            <KeyRound className="w-3.5 h-3.5" /> Inloggen met e-mail
-          </button>
-          <span className="text-white/40">•</span>
-          <button onClick={onRegister} data-testid="login-register-btn"
-            className="flex items-center gap-1.5 text-white/80 hover:text-white">
-            <UserPlus className="w-3.5 h-3.5" /> Nieuw account
-          </button>
+          {deviceUser ? (
+            <>
+              <button onClick={forgetDevice} data-testid="login-switch-user-btn"
+                className="flex items-center gap-1.5 text-white/80 hover:text-white">
+                <KeyRound className="w-3.5 h-3.5" /> Andere gebruiker
+              </button>
+              <span className="text-white/40">•</span>
+              <button onClick={onPassword} data-testid="login-password-btn"
+                className="flex items-center gap-1.5 text-white/80 hover:text-white">
+                <LogIn className="w-3.5 h-3.5" /> Inloggen met wachtwoord
+              </button>
+            </>
+          ) : (
+            <>
+              <button onClick={onPassword} data-testid="login-password-btn"
+                className="flex items-center gap-1.5 text-white/80 hover:text-white">
+                <KeyRound className="w-3.5 h-3.5" /> Inloggen met e-mail
+              </button>
+              <span className="text-white/40">•</span>
+              <button onClick={onRegister} data-testid="login-register-btn"
+                className="flex items-center gap-1.5 text-white/80 hover:text-white">
+                <UserPlus className="w-3.5 h-3.5" /> Nieuw account
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -855,6 +933,14 @@ function PasswordView({ initialMode = 'login', onBack, onRegistered, branding })
           }
         } catch { /* noop */ }
         setPreferredRole('admin');
+        // Onthoud op dit device welke gebruiker hier het laatst inlogde. Zo
+        // kunnen we bij volgende launch "Welkom [naam]" tonen en eventueel
+        // de persoonlijke PIN-flow activeren (mobile-only, en alleen wanneer
+        // de gebruiker een PIN heeft ingesteld).
+        try {
+          localStorage.setItem('device_user_email', email.trim());
+          localStorage.setItem('device_user_name', name?.trim() || email.split('@')[0]);
+        } catch { /* ignore */ }
         // Pending QR? Vorige sessie heeft ons hier naartoe gestuurd via /qr-link.
         // Claim de QR direct nu we ingelogd zijn.
         let pendingQr = null;

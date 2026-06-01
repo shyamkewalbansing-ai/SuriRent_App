@@ -1188,6 +1188,72 @@ async def qr_claim(token: str, user=Depends(get_current_user)):
     return {"ok": True, "message": "Desktop sessie is ingelogd"}
 
 
+# ============================================================
+# PERSONAL PIN — Per-gebruiker PIN voor snelle re-login op PWA
+# ============================================================
+# Na de eerste succesvolle email+wachtwoord login op PWA kan de
+# gebruiker een 4-cijferige persoonlijke PIN instellen. Volgende
+# keer kan ze met PIN alleen inloggen (sneller, geen wachtwoord
+# typen). Veiligheid: PIN wordt bcrypt-gehashed, gekoppeld aan
+# user_id, en device-binding via cookie/localStorage flag.
+from pydantic import BaseModel as _PydBase  # noqa — bestaande aliasing
+class _PinSetupIn(_PydBase):
+    pin: str
+
+class _PinLoginIn(_PydBase):
+    email: str
+    pin: str
+
+@api.post("/auth/personal-pin/setup")
+async def personal_pin_setup(body: _PinSetupIn, user=Depends(get_current_user)):
+    """Stel of update de persoonlijke 4-cijferige PIN van de huidige gebruiker."""
+    pin = (body.pin or "").strip()
+    if not pin.isdigit() or len(pin) != 4:
+        raise HTTPException(status_code=400, detail="PIN moet uit precies 4 cijfers bestaan")
+    await db.users.update_one(
+        {"id": user["id"]},
+        {"$set": {
+            "personal_pin_hash": hash_password(pin),
+            "personal_pin_set_at": datetime.now(timezone.utc).isoformat(),
+        }},
+    )
+    return {"ok": True, "name": user.get("name", ""), "email": user.get("email", "")}
+
+
+@api.post("/auth/personal-pin/login")
+async def personal_pin_login(body: _PinLoginIn):
+    """Login met email + persoonlijke 4-cijferige PIN. Genereert dezelfde
+    JWT als wachtwoord-login zodat de frontend identiek kan reageren."""
+    email = (body.email or "").strip().lower()
+    pin = (body.pin or "").strip()
+    if not email or not pin.isdigit() or len(pin) != 4:
+        raise HTTPException(status_code=400, detail="Ongeldige PIN of e-mail")
+    u = await db.users.find_one({"email": email})
+    if not u or not u.get("personal_pin_hash"):
+        # Geen exacte fout-melding om PIN/email enumeratie te voorkomen.
+        raise HTTPException(status_code=401, detail="Onbekende combinatie van e-mail en PIN")
+    if not verify_password(pin, u.get("personal_pin_hash", "")):
+        raise HTTPException(status_code=401, detail="Onbekende combinatie van e-mail en PIN")
+    token = create_token({
+        "sub": u["id"], "email": u["email"], "type": "access",
+        "company_id": u.get("company_id"), "role": u.get("role", "admin"),
+    }, ACCESS_MIN)
+    return {
+        "access_token": token, "token_type": "bearer",
+        "user": {
+            "id": u["id"], "email": u["email"], "name": u.get("name", ""),
+            "role": u.get("role", "admin"), "company_id": u.get("company_id"),
+        },
+    }
+
+
+@api.get("/auth/personal-pin/status")
+async def personal_pin_status(user=Depends(get_current_user)):
+    """Frontend gebruikt dit om te checken of PIN al ingesteld is."""
+    u = await db.users.find_one({"id": user["id"]}, {"_id": 0, "personal_pin_hash": 1})
+    return {"has_pin": bool(u and u.get("personal_pin_hash"))}
+
+
 @api.post("/auth/demo-login")
 async def demo_login(response: Response):
     """Logt direct in op de demo-omgeving. Maakt deze aan als hij nog niet
