@@ -1,7 +1,7 @@
 // QrLinkPage — wordt geopend wanneer een geauthenticeerde gebruiker
 // een QR scant via de native camera (deep-link). Bevestigt en claimt
 // de desktop sessie.
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useBrandedNavigate } from '../../lib/branded-nav';
 import { api, formatError } from '../../lib/api';
@@ -14,7 +14,7 @@ export default function QrLinkPage() {
   const [status, setStatus] = useState(token ? 'idle' : 'invalid'); // idle | claiming | success | error | invalid
   const [error, setError] = useState('');
 
-  const claim = async () => {
+  const claim = useCallback(async () => {
     if (!token) return;
     setStatus('claiming');
     try {
@@ -24,18 +24,28 @@ export default function QrLinkPage() {
       setError(formatError(e, 'QR sessie kon niet worden geclaimd.'));
       setStatus('error');
     }
-  };
+  }, [token]);
 
   // Geen auth? Stuur naar login en bewaar token in sessionStorage zodat
-  // we na inloggen alsnog kunnen claimen.
+  // we na inloggen alsnog kunnen claimen. ALS al ingelogd: auto-claim direct
+  // zodat de gebruiker geen extra "Bevestig" tik nodig heeft (de scenario is:
+  // /qr-link?token=X → /login → submit → terug naar /qr-link?token=X).
   useEffect(() => {
     if (!token) return;
     const t = localStorage.getItem('admin_token') || localStorage.getItem('kiosk_token');
     if (!t) {
       try { sessionStorage.setItem('pending_qr_token', token); } catch { /* ignore */ }
       nav('/login');
+      return;
     }
-  }, [token, nav]);
+    // Auto-claim als we via post-login redirect hier kwamen.
+    let isPostLogin = false;
+    try { isPostLogin = sessionStorage.getItem('pending_qr_token') === token; } catch { /* ignore */ }
+    if (isPostLogin) {
+      try { sessionStorage.removeItem('pending_qr_token'); } catch { /* ignore */ }
+      claim();
+    }
+  }, [token, nav, claim]);
 
   if (status === 'invalid') {
     return (

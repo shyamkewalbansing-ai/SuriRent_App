@@ -336,6 +336,21 @@ function PinLanding({ onSuccess, onPassword, onRegister, branding, pwaTarget }) 
   const logoUrl = branding?.logo_url ? branding._logoResolved : '/kiosk-icons/kiosk-512.png';
   const isAdminTarget = pwaTarget === 'admin';
 
+  // Fix witte strook onder home-indicator op iOS PWA: schilder html+body in
+  // dezelfde brand-kleur als de PinLanding zelf. `position: fixed; inset: 0`
+  // dekt niet altijd de gesture-zone onder de safe-area op standalone iOS,
+  // dus we kleuren de onderliggende html/body ook. Cleanup on unmount.
+  useEffect(() => {
+    const prevHtml = document.documentElement.style.backgroundColor;
+    const prevBody = document.body.style.backgroundColor;
+    document.documentElement.style.backgroundColor = primary;
+    document.body.style.backgroundColor = primary;
+    return () => {
+      document.documentElement.style.backgroundColor = prevHtml;
+      document.body.style.backgroundColor = prevBody;
+    };
+  }, [primary]);
+
   const forgetDevice = () => {
     try {
       localStorage.removeItem('device_user_email');
@@ -943,10 +958,12 @@ function PasswordView({ initialMode = 'login', onBack, onRegistered, branding })
         } catch { /* ignore */ }
         // Pending QR? Vorige sessie heeft ons hier naartoe gestuurd via /qr-link.
         // Claim de QR direct nu we ingelogd zijn.
+        // BELANGRIJK: NIET sessionStorage hier removen — de parent useEffect
+        // controleert ook op pending_qr_token om de auto-redirect naar /admin
+        // te onderdrukken (race-conditie). QrLinkPage zelf removed het na claim.
         let pendingQr = null;
         try { pendingQr = sessionStorage.getItem('pending_qr_token'); } catch { /* ignore */ }
         if (pendingQr) {
-          try { sessionStorage.removeItem('pending_qr_token'); } catch { /* ignore */ }
           navigate(`/qr-link?token=${encodeURIComponent(pendingQr)}`);
         } else {
           // Bepaal het juiste admin-pad. Wanneer we op de generieke /login
@@ -1704,9 +1721,15 @@ export default function LoginPage() {
     navigate(routeForRole(role), { replace: true });
   }, [navigate]);
 
-  // Auto-redirect if already logged (but not when we're showing the success screen)
+  // Auto-redirect if already logged (but not when we're showing the success screen
+  // OR wanneer er een pending QR claim is — de submit-handler zelf navigeert dan
+  // naar /qr-link?token=... en deze useEffect zou dat anders overschrijven met
+  // /admin (race-conditie).
   useEffect(() => {
     if (!loading && user && !skipRedirect) {
+      let hasPendingQr = false;
+      try { hasPendingQr = !!sessionStorage.getItem('pending_qr_token'); } catch { /* ignore */ }
+      if (hasPendingQr) return;
       navigate('/admin', { replace: true });
     }
   }, [user, loading, navigate, skipRedirect]);

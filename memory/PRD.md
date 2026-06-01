@@ -1,5 +1,21 @@
 # Vastgoed Kiosk - PRD
 
+## Session 2026-06-01 (v19) — QR cross-device login + witte balk fix ✅
+
+### Bug A — Witte strook onderaan PWA (PinLanding op iPhone)
+- **Root cause**: `position: fixed; inset: 0` op iOS standalone PWA dekt niet altijd de home-indicator gesture-zone. body/html bg was wit (CSS default voor `@media (display-mode: standalone)`).
+- **Fix**: `PinLanding` mount useEffect zet nu `document.documentElement.style.backgroundColor` + `document.body.style.backgroundColor` op `primary` (brand kleur). Cleanup on unmount herstelt vorige waarden.
+
+### Bug B — QR code scan vanaf telefoon claimde desktop sessie niet
+- **Root cause**: race-conditie tussen 2 redirects na login:
+  1. `submit()` navigeert naar `/qr-link?token=X` (mijn fix uit v18)
+  2. Parent useEffect (`LoginPageContent`) ziet `user` set → navigeert `replace:true` naar `/admin`
+  3. `/admin` wint omdat `replace:true` overschrijft de history entry
+- **Fix 1**: Parent useEffect controleert nu eerst `sessionStorage.pending_qr_token` — als gezet, niet auto-redirecten naar `/admin`.
+- **Fix 2**: `submit()` removed niet meer `pending_qr_token` (laat het aan QrLinkPage).
+- **Fix 3**: `QrLinkPage` doet nu **auto-claim** wanneer hij mount met token + admin_token + sessionStorage match. Gebruiker hoeft geen extra "Bevestig" knop te tikken. Wrapped `claim` in `useCallback` voor stable identity.
+- **Verified end-to-end**: phone scant QR → /qr-link → /login → submit → /qr-link?token=X → auto-claim → desktop QR status = `claimed`, `access_token` present, `user.email=admin@vastgoed.sr` ✓
+
 ## Session 2026-06-01 (v18) — PWA branded recovery via post-login redirect ✅
 - **Probleem**: iOS 16.4+ isoleert PWA storage van Safari → mijn v17 localStorage-redirect werkt in Safari maar NIET in de PWA (lege storage).
 - **Definitieve fix**: 
