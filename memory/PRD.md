@@ -1,5 +1,32 @@
 # Vastgoed Kiosk - PRD
 
+## Session 2026-06-01 (v13) — QR cross-device login + ABN-stijl PinLanding redesign ✅
+- **Backend (server.py)**: 3 nieuwe endpoints + `qr_sessions` collection:
+  - `POST /auth/qr/create` (anoniem) — genereert 24-byte urlsafe token, expires in 5 min, returnt `{token, qr_url, expires_in}`. URL afgeleid uit Origin/Host header met X-Forwarded-Proto fallback.
+  - `GET /auth/qr/status/{token}` — desktop polt elke 2s; returnt `pending`/`claimed`/`expired` + optioneel access_token + user_summary.
+  - `POST /auth/qr/claim/{token}` (auth required) — mobiel bevestigt; genereert verse JWT voor desktop sessie, markt sessie als `claimed`. Verlopen of dubbel-claim → 400. Onbekend token → 404.
+- **Frontend (LoginPage.jsx)**:
+  - **QrScannerModal**: `html5-qrcode` camera scanner, extract token uit URL, POST claim, success/error states.
+  - **QrLoginTab**: desktop QR weergave via `qrcode.react` (220px SVG, level M), polling elke 2s, "Ingelogd!" → `window.location.assign('/admin')`, expired state met refresh.
+  - **PasswordView tabs**: `loginMethod` state met "Wachtwoord" vs "QR code" tab toggle (alleen in login mode).
+  - **PinLanding redesign** (ABN AMRO-stijl behoudens oranje branding):
+    - "Welkom" massieve header
+    - Profielfoto in cream/goud cirkel (cream-to-gold radial gradient) met witte 4px border
+    - Online indicator (groene dot rechtsonder)
+    - Bedrijfsnaam in uppercase wide tracking
+    - "Vul je 4-cijferige PIN in om verder te gaan"
+    - 4 PIN dots
+    - 3x4 numpad met letter sub-labels (ABC/DEF/GHI/JKL/MNO/PQRS/TUV/WXYZ)
+    - **Scan QR** pill linksboven (witte glass-blur)
+    - **Help** pill rechtsboven (witte glass-blur)
+    - Diagonal curve SVG patroon op de achtergrond + radial glow blobs
+    - "Inloggen met e-mail · Nieuw account" onderaan
+  - **HelpModal**: 3-stap uitleg (PIN entry / QR scanning / PIN vergeten).
+- **Nieuwe pagina `QrLinkPage.jsx`** + route `/qr-link?token=X` voor deep-link scans via native camera. Geen auth? → bewaart token in sessionStorage en redirect naar `/login`. Geauthenticeerd? → "Desktop inloggen?" confirmatie pagina met one-tap claim. Success state met Check icoon.
+- **PasswordView submit**: na succesvolle login wordt `sessionStorage.pending_qr_token` gecheckt; indien aanwezig → redirect naar `/qr-link?token=X` ipv `/admin`, zodat de QR claim flow direct verdergaat.
+- **Packages**: `qrcode.react@4.2.0` + `html5-qrcode@2.3.8` via yarn.
+- **Tests**: iteration_29 — 9/9 backend tests pass + frontend integratie pass.
+
 ## Session 2026-05-31 (v12) — Hero vergroot + functionele zoekbalk ✅
 - **Hero canvas** is nu volledig edge-to-edge (geen rounded wrapper meer), `minHeight: clamp(620px, 78vh, 880px)` voor ABN-AMRO dramatische schaal.
 - **Headline** vergroot naar clamp `2.75rem–5.5rem` (was 4.5rem max). Subkopie `text-2xl` met "**30% sneller**" highlight.
