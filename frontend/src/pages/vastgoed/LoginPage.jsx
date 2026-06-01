@@ -1360,40 +1360,47 @@ function PasswordView({ initialMode = 'login', onBack, onRegistered, branding })
           </form>
           )}
 
-          <p className="text-center text-sm text-slate-400 mt-4">
-            {mode === 'login' ? 'Nog geen account?' : 'Al een account?'}{' '}
-            <button onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setError(''); }}
-              data-testid="auth-switch-mode"
-              className="text-[#FF5C00] font-semibold hover:underline">
-              {mode === 'login' ? 'Registreer hier' : 'Log hier in'}
-            </button>
-          </p>
+          {/* Registreer/demo-secties ALLEEN op de generieke /login (geen branding.slug).
+              Op /<slug>/login horen klanten in te loggen — niet te registreren of
+              demo te starten. */}
+          {!branding?.slug && (
+            <>
+              <p className="text-center text-sm text-slate-400 mt-4">
+                {mode === 'login' ? 'Nog geen account?' : 'Al een account?'}{' '}
+                <button onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setError(''); }}
+                  data-testid="auth-switch-mode"
+                  className="text-[#FF5C00] font-semibold hover:underline">
+                  {mode === 'login' ? 'Registreer hier' : 'Log hier in'}
+                </button>
+              </p>
 
-          {mode === 'login' && (
-            <div className="mt-5 p-3 bg-orange-50 border border-orange-200 rounded-xl text-center">
-              <p className="text-xs font-bold text-orange-700 mb-1">Demo proberen?</p>
-              <p className="text-[11px] text-orange-600 mb-2">Test alle functies in een gedeelde demo-omgeving (reset elke 30 min)</p>
-              <button type="button" onClick={async () => {
-                  setLoading(true); setError('');
-                  try {
-                    const { data } = await api.post('/auth/demo-login', {});
-                    if (data?.email && data?.password) {
-                      setEmail(data.email);
-                      setPassword(data.password);
-                      // Auto-submit
-                      await login(data.email, data.password);
-                      setPreferredRole('admin');
-                      navigate('/admin');
-                    }
-                  } catch (err) {
-                    setError(formatError(err, 'Demo niet beschikbaar'));
-                  } finally { setLoading(false); }
-                }}
-                data-testid="auth-demo-btn"
-                className="w-full py-2 rounded-lg bg-white border-2 border-orange-300 hover:bg-orange-100 text-orange-700 font-bold text-sm">
-                Direct in demo-omgeving →
-              </button>
-            </div>
+              {mode === 'login' && (
+                <div className="mt-5 p-3 bg-orange-50 border border-orange-200 rounded-xl text-center">
+                  <p className="text-xs font-bold text-orange-700 mb-1">Demo proberen?</p>
+                  <p className="text-[11px] text-orange-600 mb-2">Test alle functies in een gedeelde demo-omgeving (reset elke 30 min)</p>
+                  <button type="button" onClick={async () => {
+                      setLoading(true); setError('');
+                      try {
+                        const { data } = await api.post('/auth/demo-login', {});
+                        if (data?.email && data?.password) {
+                          setEmail(data.email);
+                          setPassword(data.password);
+                          // Auto-submit
+                          await login(data.email, data.password);
+                          setPreferredRole('admin');
+                          navigate('/admin');
+                        }
+                      } catch (err) {
+                        setError(formatError(err, 'Demo niet beschikbaar'));
+                      } finally { setLoading(false); }
+                    }}
+                    data-testid="auth-demo-btn"
+                    className="w-full py-2 rounded-lg bg-white border-2 border-orange-300 hover:bg-orange-100 text-orange-700 font-bold text-sm">
+                    Direct in demo-omgeving →
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
