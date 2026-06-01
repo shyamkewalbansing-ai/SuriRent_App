@@ -495,22 +495,104 @@ function KioskSection() {
 // =============================================================================
 // Pricing
 // =============================================================================
-const PLANS = [
-  { name: 'Starter', price: '450', sub: 'SRD / maand',
-    desc: 'Voor kleine vastgoedbedrijven met max. 25 huurders.',
-    features: ['Tot 25 huurders', '1 locatie', 'Beheer + Kiosk PWA', 'WhatsApp herinneringen', 'PDF kwitanties'],
-    cta: 'Start trial' },
-  { name: 'Pro', price: '950', sub: 'SRD / maand', highlight: true,
-    desc: 'Voor groeiende vastgoedbedrijven die alles willen automatiseren.',
-    features: ['Tot 100 huurders', 'Onbeperkt locaties', 'OCR via Gemini AI', 'Werknemers + goedkeuringen', 'Multi-currency', 'White-label branding'],
-    cta: 'Demo aanvragen' },
-  { name: 'Enterprise', price: 'Custom', sub: 'op aanvraag',
+// =============================================================================
+// Pricing — fetched dynamisch via /api/billing/plans (PLAN_PRICES in backend)
+// =============================================================================
+
+// Statische config voor enterprise (niet in PLAN_PRICES, blijft "Custom") + UI metadata
+// die niet vanuit backend komt (highlight, cta, descriptions als backend ze niet geeft).
+const PLAN_UI_META = {
+  starter:      { highlight: false, cta: 'Start trial' },
+  professional: { highlight: true,  cta: 'Demo aanvragen' },
+  enterprise:   { highlight: false, cta: 'Contact',
+    name: 'Enterprise', price: 'Custom', sub: 'op aanvraag',
     desc: 'Voor grote portfolios met aangepaste integraties.',
     features: ['Onbeperkt huurders', 'Custom integraties', 'Shelly smart breakers', 'Dedicated server', 'SLA + 24/7 support'],
-    cta: 'Contact' },
-];
+  },
+};
+
+function formatAmount(n) {
+  try {
+    return new Intl.NumberFormat('nl-NL').format(Math.round(Number(n) || 0));
+  } catch {
+    return String(n);
+  }
+}
 
 function PricingSection({ onDemo, onWhatsApp }) {
+  const [plans, setPlans] = useState([]);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const backend = (typeof process !== 'undefined' && process.env?.REACT_APP_BACKEND_URL) || '';
+        const res = await fetch(`${backend}/api/billing/plans`);
+        if (!res.ok) throw new Error('bad status');
+        const data = await res.json();
+        if (cancelled) return;
+        // Transform backend plans → UI shape. Enterprise wordt als laatste toegevoegd.
+        const out = data.map((p) => {
+          const ui = PLAN_UI_META[p.id] || {};
+          return {
+            id: p.id,
+            name: p.name,
+            price: formatAmount(p.amount),
+            sub: `${p.currency} / maand`,
+            desc: p.description || '',
+            features: p.features || [],
+            cta: ui.cta || 'Demo aanvragen',
+            highlight: !!ui.highlight,
+          };
+        });
+        // Voeg enterprise toe — niet in backend PLAN_PRICES.
+        out.push(PLAN_UI_META.enterprise);
+        setPlans(out);
+      } catch {
+        // Fallback op de oorspronkelijke hardcoded plans als de backend niet bereikbaar is.
+        setPlans([
+          { name: 'Starter', price: '3.000', sub: 'SRD / maand',
+            desc: 'Voor kleinere vastgoedbeheerders.',
+            features: ['Onbeperkt appartementen', 'Online betalen', 'WhatsApp & E-mail'],
+            cta: 'Start trial' },
+          { name: 'Professional', price: '5.000', sub: 'SRD / maand', highlight: true,
+            desc: 'Met Kiosk terminal en alle functies.',
+            features: ['Alles uit Starter', 'Kiosk terminal', 'Shelly stroombeheer', 'Prioriteit support'],
+            cta: 'Demo aanvragen' },
+          PLAN_UI_META.enterprise,
+        ]);
+      } finally {
+        if (!cancelled) setLoaded(true);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  if (!loaded) {
+    return (
+      <section id="pricing" className="bg-slate-50 py-16 lg:py-24">
+        <div className="max-w-[1280px] mx-auto px-5 lg:px-10">
+          <div className="text-center max-w-2xl mx-auto mb-12">
+            <p className="text-xs font-black tracking-[0.3em] uppercase text-[#FF5C00] mb-3">Prijzen</p>
+            <h2 className="text-3xl lg:text-5xl font-black tracking-tight text-[#0F0F0F] leading-tight">
+              Eerlijk geprijsd voor elk vastgoedbedrijf.
+            </h2>
+          </div>
+          <div className="grid md:grid-cols-3 gap-4">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="rounded-2xl bg-white border border-slate-200 p-7 h-[420px] animate-pulse">
+                <div className="h-4 w-24 bg-slate-200 rounded mb-4" />
+                <div className="h-12 w-32 bg-slate-200 rounded mb-3" />
+                <div className="h-3 w-full bg-slate-100 rounded" />
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section id="pricing" className="bg-slate-50 py-16 lg:py-24">
       <div className="max-w-[1280px] mx-auto px-5 lg:px-10">
@@ -521,7 +603,7 @@ function PricingSection({ onDemo, onWhatsApp }) {
           </h2>
         </div>
         <div className="grid md:grid-cols-3 gap-4">
-          {PLANS.map((p) => (
+          {plans.map((p) => (
             <div key={p.name}
               data-testid={`plan-${p.name.toLowerCase()}`}
               className={`relative rounded-2xl p-7 transition-all ${
