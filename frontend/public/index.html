@@ -155,6 +155,42 @@
         } catch (e) { /* no-op */ }
       })();
     </script>
+    <script>
+      // PWA slug-recovery — KRITIEK voor iOS PWA's die geïnstalleerd zijn
+      // met een OUDE manifest start_url (bv. /login zonder slug).
+      //
+      // Wanneer we openen op een generieke route (/, /login, /admin) MAAR
+      // er een eerder opgeslagen bedrijfs-slug bestaat in localStorage,
+      // redirecten we direct naar de branded variant. Dit gebeurt VOOR
+      // React mount zodat de gebruiker nooit de generieke /login page ziet.
+      (function () {
+        try {
+          var p = (window.location.pathname || '').toLowerCase();
+          var RESERVED = ['admin','kiosk','login','demo','huurder','klant','onderteken','qr-link','c','api','assets','static','vastgoed'];
+          // Alleen op generieke/reserved routes. Sla over als al binnen /<slug>/.
+          var firstSeg = p.split('/').filter(Boolean)[0] || '';
+          var alreadyBranded = firstSeg && RESERVED.indexOf(firstSeg) === -1;
+          if (alreadyBranded) return;
+          // Niet redirecten op marketing landing (/) of qr-link / onderteken (tokens).
+          if (p === '/onderteken' || p.indexOf('/onderteken/') === 0) return;
+          if (p === '/qr-link' || p.indexOf('/qr-link') === 0) return;
+          // Alleen /login (en /admin als PWA opent op /admin direct).
+          var isLoginRoute = p === '/login' || p === '/login/' || p.indexOf('/login') === 0;
+          var isAdminRoute = p === '/admin' || p.indexOf('/admin/') === 0 || p === '/admin/';
+          if (!isLoginRoute && !isAdminRoute) return;
+          // Geen redirect als de URL al een ?c=slug bevat (legacy branded-query).
+          if ((location.search || '').toLowerCase().indexOf('c=') > -1) return;
+          var stored = '';
+          try { stored = (localStorage.getItem('pwa_company_slug') || '').trim().toLowerCase(); } catch (e) {}
+          if (!stored) return;
+          if (!/^[a-z0-9][a-z0-9-]{0,62}$/.test(stored)) return;
+          // Bouw target: /<slug>/login of /<slug>/admin met behoud van query.
+          var basePath = isAdminRoute ? '/admin' : '/login';
+          var target = '/' + stored + basePath + (location.search || '') + (location.hash || '');
+          window.location.replace(target);
+        } catch (e) { /* no-op — fall through naar React */ }
+      })();
+    </script>
 
     <!-- (oudere PWA-rol detectie is vervangen door het inline-script
          bovenin de <head> dat eerder draait dan de brand-color injector
