@@ -6,7 +6,7 @@
  * - Bypass /api/* (always go to network)
  * - Push notifications + click handler
  */
-const CACHE_VERSION = 'surirent-v81';
+const CACHE_VERSION = 'surirent-v82';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 
@@ -124,12 +124,17 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // JS/CSS static assets — NETWORK-FIRST om dezelfde reden. Een geüpdate
-  // index.html verwijst naar een nieuwe bundle hash, dus we willen die
-  // nieuwe bundle direct van het netwerk, niet uit cache.
+  // JS/CSS static assets — CACHE-FIRST. Webpack hashed bundles (bv.
+  // `bundle.abc123.js`) hebben unieke namen per build, dus zijn altijd
+  // veilig om uit cache te serveren. Hierdoor laadt de PWA instant
+  // bij volgende opens — geen netwerk-roundtrip nodig.
+  // Nieuwe builds verwijzen vanuit fresh index.html naar nieuwe hashed
+  // namen, die dan automatisch worden gefetched (geen oude code blijft hangen).
   if (url.pathname.startsWith('/static/') || url.pathname.endsWith('.js') || url.pathname.endsWith('.css')) {
     event.respondWith(
       caches.open(RUNTIME_CACHE).then(async (cache) => {
+        const cached = await cache.match(req);
+        if (cached) return cached;
         try {
           const res = await fetch(req);
           if (res && res.status === 200 && res.type === 'basic') {
@@ -137,8 +142,7 @@ self.addEventListener('fetch', (event) => {
           }
           return res;
         } catch {
-          const cached = await cache.match(req);
-          return cached || Response.error();
+          return Response.error();
         }
       })
     );

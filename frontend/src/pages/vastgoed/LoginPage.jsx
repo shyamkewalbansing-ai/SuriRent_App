@@ -350,6 +350,7 @@ function QrLoginTab({ onSuccess, primary = '#FF5C00' }) {
 function PinLanding({ onSuccess, onPassword, onRegister, branding, pwaTarget }) {
   const [pin, setPin] = useState(['', '', '', '']);
   const [loading, setLoading] = useState(false);
+  const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
   const [showScanner, setShowScanner] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
@@ -402,15 +403,19 @@ function PinLanding({ onSuccess, onPassword, onRegister, branding, pwaTarget }) 
           email: deviceUser.email, pin: code,
         });
         if (data?.access_token) localStorage.setItem('admin_token', data.access_token);
-        // Issue long-lived device QR token zodat de PWA later QR sessies kan
-        // claimen zonder opnieuw te hoeven inloggen.
-        try {
-          const r = await api.post('/auth/device-qr-token/issue');
-          if (r?.data?.device_qr_token) {
-            localStorage.setItem('device_qr_token', r.data.device_qr_token);
-          }
-        } catch { /* niet-kritiek */ }
         setPreferredRole('admin');
+        // Fire-and-forget: device_qr_token issuing in achtergrond zodat de
+        // gebruiker er NIET op moet wachten. Dit voorkomt 200-500ms extra
+        // latency bij elke PIN-login. AuthProvider.refresh() backfilt
+        // sowieso bij volgende session-restore.
+        api.post('/auth/device-qr-token/issue').then((r) => {
+          if (r?.data?.device_qr_token) {
+            try { localStorage.setItem('device_qr_token', r.data.device_qr_token); } catch { /* ignore */ }
+          }
+        }).catch(() => { /* niet-kritiek */ });
+        // Markeer success ZICHTBAAR zodat de gebruiker geen flash van de
+        // PIN-keypad meer ziet tijdens de transitie naar /admin.
+        setSuccess(true);
         onSuccess();
         return;
       }
@@ -435,6 +440,7 @@ function PinLanding({ onSuccess, onPassword, onRegister, branding, pwaTarget }) 
         if (data?.admin_token) localStorage.setItem('admin_token', data.admin_token);
         setPreferredRole(isAdminTarget ? 'admin' : 'kiosk');
       }
+      setSuccess(true);
       onSuccess();
     } catch (e) {
       setError(formatError(e, 'Ongeldige PIN code'));
@@ -465,6 +471,30 @@ function PinLanding({ onSuccess, onPassword, onRegister, branding, pwaTarget }) 
     '2': 'ABC', '3': 'DEF', '4': 'GHI', '5': 'JKL',
     '6': 'MNO', '7': 'PQRS', '8': 'TUV', '9': 'WXYZ',
   };
+
+  // Success-overlay: voorkomt de "PIN flash" wanneer de gebruiker net heeft
+  // ingelogd en we wachten op de hard-navigate naar /admin (kan 200-1000ms
+  // duren op trager netwerk). Toont een welkom-checkmark zodat de UI niet
+  // misleidend lijkt te resetten naar PIN-keypad tijdens de transitie.
+  if (success) {
+    return (
+      <div className="flex flex-col items-center justify-center text-white" style={{
+        position: 'fixed', inset: 0,
+        backgroundColor: primary,
+        paddingTop: 'env(safe-area-inset-top, 0px)',
+        paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+      }} data-testid="pin-success-overlay">
+        <div className="w-24 h-24 rounded-full bg-white/15 backdrop-blur-sm flex items-center justify-center mb-5 animate-[scale-in_300ms_ease-out]">
+          <Check className="w-12 h-12 text-white" strokeWidth={3} />
+        </div>
+        <h1 className="font-black tracking-tight text-white text-center"
+          style={{ fontSize: 'clamp(24px, 4vh, 36px)' }}>
+          Welkom terug{deviceUser ? `, ${deviceUser.name}` : ''}
+        </h1>
+        <p className="text-white/80 text-sm font-medium mt-2">Een moment…</p>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col text-white relative overflow-hidden" style={{
