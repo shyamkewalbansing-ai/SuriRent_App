@@ -5,6 +5,29 @@ const AuthContext = createContext(null);
 
 const ACTIVE_COMPANY_KEY = 'active_company_id';
 
+/**
+ * Issue & store een long-lived device-bound QR token.
+ * Wordt automatisch aangeroepen na elke succesvolle login (email/password + PIN).
+ * Server slaat een bcrypt-hash op gekoppeld aan user_id; client behoudt het
+ * raw token in localStorage (key `device_qr_token`).
+ *
+ * Met dit token kan de PWA later desktop sessies claimen via QR-scan,
+ * ZONDER opnieuw in te hoeven loggen of PIN te tikken. Token is alleen
+ * geldig voor QR-claim — kan niet voor andere API endpoints worden gebruikt.
+ */
+async function issueDeviceQrTokenSilently() {
+  try {
+    const { data } = await api.post('/auth/device-qr-token/issue');
+    if (data?.device_qr_token) {
+      localStorage.setItem('device_qr_token', data.device_qr_token);
+    }
+  } catch (err) {
+    // Niet kritiek — als het uitgeven faalt blijft de gewone bearer flow werken.
+    console.warn('Device QR token issue failed (non-fatal):', err);
+  }
+}
+
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(undefined); // undefined = loading, null = not logged
   const [loading, setLoading] = useState(true);
@@ -63,6 +86,10 @@ export function AuthProvider({ children }) {
         localStorage.setItem('pwa_company_slug', String(slug).toLowerCase());
       }
     } catch { /* ignore */ }
+    // Issue long-lived device QR token zodat de PWA later QR sessies kan
+    // claimen zonder opnieuw te hoeven inloggen. Server slaat hash op,
+    // client slaat raw token op (90 dagen TTL).
+    issueDeviceQrTokenSilently();
     // Clear any stale superadmin company selection
     if (data.user?.role !== 'superadmin') {
       localStorage.removeItem(ACTIVE_COMPANY_KEY);

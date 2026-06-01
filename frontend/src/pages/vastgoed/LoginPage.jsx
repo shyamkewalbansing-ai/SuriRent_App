@@ -85,13 +85,21 @@ function QrScannerModal({ onClose, primary = '#FF5C00' }) {
         const u = new URL(decoded);
         token = u.searchParams.get('token') || decoded;
       } catch { /* not a URL — assume raw token */ }
-      await api.post(`/auth/qr/claim/${encodeURIComponent(token)}`);
+      // Bouw headers: gebruik bearer-auth als beschikbaar, anders fallback
+      // op device-qr-token (long-lived, alleen QR-claim). Hiermee werkt
+      // scannen vanaf PWA ook wanneer admin_token is verlopen.
+      const headers = {};
+      try {
+        const dqt = localStorage.getItem('device_qr_token');
+        if (dqt) headers['X-Device-QR-Token'] = dqt;
+      } catch { /* ignore */ }
+      await api.post(`/auth/qr/claim/${encodeURIComponent(token)}`, undefined, { headers });
       setStatus('success');
       setMessage('Desktop sessie ingelogd!');
       setTimeout(onClose, 1500);
     } catch (e) {
       setStatus('error');
-      setMessage(formatError(e, 'QR sessie kon niet worden geclaimd. Vraag een nieuwe QR aan op desktop.'));
+      setMessage(formatError(e, 'QR sessie kon niet worden geclaimd. Log eerst in op de PWA om scannen te activeren.'));
     }
   }, [status, stopScanner, onClose]);
 
@@ -368,6 +376,14 @@ function PinLanding({ onSuccess, onPassword, onRegister, branding, pwaTarget }) 
           email: deviceUser.email, pin: code,
         });
         if (data?.access_token) localStorage.setItem('admin_token', data.access_token);
+        // Issue long-lived device QR token zodat de PWA later QR sessies kan
+        // claimen zonder opnieuw te hoeven inloggen.
+        try {
+          const r = await api.post('/auth/device-qr-token/issue');
+          if (r?.data?.device_qr_token) {
+            localStorage.setItem('device_qr_token', r.data.device_qr_token);
+          }
+        } catch { /* niet-kritiek */ }
         setPreferredRole('admin');
         onSuccess();
         return;

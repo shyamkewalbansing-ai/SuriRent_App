@@ -1,5 +1,19 @@
 # Vastgoed Kiosk - PRD
 
+## Session 2026-06-01 (v20) — Device QR token: PWA scant zonder PIN/login ✅
+- **User request**: "QR scan vanaf PWA moet desktop autologinnen zonder PIN/login"
+- **Backend**:
+  - Nieuwe endpoint `POST /api/auth/device-qr-token/issue` (auth) → genereert bcrypt-hashed long-lived (90 dagen) token gekoppeld aan user_id, slaat op in `db.device_qr_tokens`, retourneert raw token 1x.
+  - `POST /api/auth/qr/claim/{token}` accepteert nu naast Bearer ook header `X-Device-QR-Token` als auth fallback. Backend zoekt matching hash, valideert expiry, resolved user, claimt sessie.
+  - Nieuwe helper `get_current_user_optional()` returnt None ipv 401.
+- **Frontend**:
+  - `auth.jsx`: na elke `login()` automatisch `issueDeviceQrTokenSilently()` → slaat raw token in localStorage onder `device_qr_token`.
+  - `LoginPage.verify()` (Personal PIN flow): zelfde — token uitgegeven na PIN login.
+  - `LoginPage.QrScannerModal.handleScan()`: voegt `X-Device-QR-Token` header toe bij claim call.
+  - `QrLinkPage`: detecteert device_qr_token in localStorage, auto-claimt direct (geen redirect naar /login meer als token aanwezig is).
+- **Security**: token kan ALLEEN /auth/qr/claim aanroepen, geen andere endpoints. Hash-based (bcrypt). 90 dagen TTL. Revocable door token uit DB te verwijderen.
+- **Verified end-to-end**: login → device_qr_token in localStorage → wis admin_token (simuleert verlopen sessie) → bezoek qr_url → auto-claim succes met device_qr_token, desktop status=claimed met admin@vastgoed.sr ✓
+
 ## Session 2026-06-01 (v19) — QR cross-device login + witte balk fix ✅
 
 ### Bug A — Witte strook onderaan PWA (PinLanding op iPhone)

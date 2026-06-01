@@ -18,7 +18,15 @@ export default function QrLinkPage() {
     if (!token) return;
     setStatus('claiming');
     try {
-      await api.post(`/auth/qr/claim/${encodeURIComponent(token)}`);
+      // Gebruik bearer-auth (standaard via interceptor) of fallback op
+      // het device-bound QR token zodat scannen vanaf PWA ook werkt na
+      // sessie-vervaltermijn.
+      const headers = {};
+      try {
+        const dqt = localStorage.getItem('device_qr_token');
+        if (dqt) headers['X-Device-QR-Token'] = dqt;
+      } catch { /* ignore */ }
+      await api.post(`/auth/qr/claim/${encodeURIComponent(token)}`, undefined, { headers });
       setStatus('success');
     } catch (e) {
       setError(formatError(e, 'QR sessie kon niet worden geclaimd.'));
@@ -33,15 +41,18 @@ export default function QrLinkPage() {
   useEffect(() => {
     if (!token) return;
     const t = localStorage.getItem('admin_token') || localStorage.getItem('kiosk_token');
-    if (!t) {
+    const dqt = localStorage.getItem('device_qr_token');
+    if (!t && !dqt) {
+      // Geen enkele auth-bron beschikbaar — leid door naar login.
       try { sessionStorage.setItem('pending_qr_token', token); } catch { /* ignore */ }
       nav('/login');
       return;
     }
-    // Auto-claim als we via post-login redirect hier kwamen.
+    // Auto-claim als we via post-login redirect hier kwamen OF als we
+    // een device_qr_token hebben (impliciete "vertrouwd apparaat" claim).
     let isPostLogin = false;
     try { isPostLogin = sessionStorage.getItem('pending_qr_token') === token; } catch { /* ignore */ }
-    if (isPostLogin) {
+    if (isPostLogin || (dqt && !t)) {
       try { sessionStorage.removeItem('pending_qr_token'); } catch { /* ignore */ }
       claim();
     }

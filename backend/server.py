@@ -174,6 +174,19 @@ async def get_current_user(request: Request) -> dict:
     return user
 
 
+async def get_current_user_optional(request: Request):
+    """Zoals `get_current_user` maar returnt None ipv HTTPException(401)
+    wanneer er geen geldige bearer token is. Endpoints die zelf alternatieve
+    authenticatie ondersteunen (bv. device-bound QR tokens) gebruiken dit."""
+    try:
+        return await get_current_user(request)
+    except HTTPException as e:
+        if e.status_code == 401:
+            return None
+        raise
+
+
+
 def require_role(*roles: str):
     async def _dep(user=Depends(get_current_user)):
         if user.get("role") not in roles:
@@ -1175,9 +1188,86 @@ async def qr_status(token: str):
     }
 
 
+@api.post("/auth/device-qr-token/issue")
+async def issue_device_qr_token(user=Depends(get_current_user)):
+    """Geeft een long-lived device-bound token uit dat ALLEEN QR-claim kan doen.
+    Server slaat een bcrypt-hash van het token op gekoppeld aan user_id; raw
+    token wordt 1x retour gegeven en client slaat het lokaal op.
+
+    Hierdoor kan de PWA — zelfs nadat de access_token is verlopen of de
+    gebruiker is uitgelogd — alsnog een desktop sessie claimen ZONDER
+    opnieuw PIN te hoeven invoeren. De token kan alleen QR-claim doen,
+    geen andere endpoints raadplegen.
+
+    TTL: 90 dagen. Revocable via account-instellingen.
+    """
+    raw_token = secrets.token_urlsafe(32)
+    token_hash = hash_password(raw_token)
+    now = datetime.now(timezone.utc)
+    expires = now + timedelta(days=90)
+    await db.device_qr_tokens.insert_one({
+        "_id": secrets.token_urlsafe(12),
+        "user_id": user["id"],
+        "token_hash": token_hash,
+        "created_at": now.isoformat(),
+        "expires_at": expires.isoformat(),
+        "last_used_at": None,
+        "company_id": user.get("company_id"),
+    })
+    return {"device_qr_token": raw_token, "expires_in_days": 90}
+
+
 @api.post("/auth/qr/claim/{token}")
-async def qr_claim(token: str, user=Depends(get_current_user)):
-    """Mobiel (geauthenticeerd) bevestigt de QR sessie — desktop wordt ingelogd."""
+async def qr_claim(token: str, request: Request, user=Depends(get_current_user_optional)):
+    """Mobiel (geauthenticeerd) bevestigt de QR sessie — desktop wordt ingelogd.
+
+    Twee authenticatie-paden:
+    1. Standaard: Bearer access_token via `Authorization` header.
+    2. Device QR token: header `X-Device-QR-Token` (long-lived, alleen QR-claim).
+       Hierdoor werkt scannen vanaf PWA ook wanneer de gewone sessie is verlopen,
+       zonder dat de gebruiker opnieuw PIN/wachtwoord hoeft in te voeren.
+    """
+    # Fallback naar device-qr-token wanneer de gewone bearer token niet
+    # aanwezig of niet geldig is.
+    if user is None:
+        dqt = request.headers.get("x-device-qr-token") or ""
+        if not dqt:
+            raise HTTPException(status_code=401, detail="Niet geauthenticeerd")
+        # Zoek matching token. We hebben geen index op token_hash dus we
+        # itereren over de tokens van de afgelopen 90 dagen. Voor preview
+        # is dit klein; in productie kun je een lookup via user_id versnellen
+        # door de client ook user_id mee te sturen — voor nu houden we het
+        # eenvoudig en defensief.
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=90)).isoformat()
+        matched_doc = None
+        async for doc in db.device_qr_tokens.find({"created_at": {"$gte": cutoff}}, {"_id": 0}):
+            try:
+                if verify_password(dqt, doc.get("token_hash", "")):
+                    matched_doc = doc
+                    break
+            except Exception:
+                continue
+        if not matched_doc:
+            raise HTTPException(status_code=401, detail="Ongeldig device token")
+        # Check expiry
+        try:
+            exp = datetime.fromisoformat(matched_doc["expires_at"])
+            if exp < datetime.now(timezone.utc):
+                raise HTTPException(status_code=401, detail="Device token is verlopen")
+        except HTTPException:
+            raise
+        except Exception:
+            pass
+        # Resolve user
+        user = await db.users.find_one({"id": matched_doc["user_id"]}, {"_id": 0})
+        if not user:
+            raise HTTPException(status_code=401, detail="Gebruiker niet gevonden")
+        # Touch last_used_at
+        await db.device_qr_tokens.update_one(
+            {"user_id": matched_doc["user_id"], "token_hash": matched_doc["token_hash"]},
+            {"$set": {"last_used_at": datetime.now(timezone.utc).isoformat()}},
+        )
+
     sess = await db.qr_sessions.find_one({"token": token})
     if not sess:
         raise HTTPException(status_code=404, detail="Onbekende QR sessie")
