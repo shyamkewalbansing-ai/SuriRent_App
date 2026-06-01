@@ -1,5 +1,12 @@
 # Vastgoed Kiosk - PRD
 
+## Session 2026-06-01 (v17) — PWA install fix #3: in-app slug recovery vangnet ✅
+- **Probleem**: iOS Safari heeft de oude (verkeerde) start_url `/login` gecaptured bij een eerdere install. Na fix v15/v16 deïnstall + reïnstall: iOS Safari kan de manifest **niet altijd opnieuw lezen** vanwege OS-level caching, dus de PWA bleef openen op `/login`.
+- **Vangnet-fix**: In `LoginPage.jsx` toegevoegd: bij mount, als URL = `/login` (geen slug) maar `localStorage.pwa_company_slug` bevat een geldige slug → direct `window.location.replace('/<slug>/login' + query)`. 
+- **Hoe werkt het**: BrandedShell zet `pwa_company_slug='surirent'` zodra de gebruiker ooit `/surirent/...` bezocht. Op de iOS PWA, wanneer hij verkeerd opent op `/login`, leest LoginPage deze stored slug en redirect intern naar `/surirent/login?source=pwa&view=admin` — met behoud van alle query params (source=pwa, view=admin, target=kiosk, etc.).
+- **Verified**: `/surirent/login` bezoek → stored_slug=`surirent` → navigeer naar `/login?source=pwa&view=admin` → auto-redirect naar `/surirent/login?source=pwa&view=admin` met GOPI APPARTEMENT branding ✓.
+- **Gevolg**: zelfs als iOS de oude install met `/login` start_url heeft, werkt de app nu meteen — geen extra deïnstall/install cyclus meer nodig.
+
 ## Session 2026-06-01 (v16) — PWA install fix #2: SW cache strategy ✅
 - **Probleem**: gebruiker meldde dat na fix v15 (slug-aware manifest endpoint) de installed PWA op iOS Safari nog steeds opent op `/login` ipv `/surirent/login`.
 - **Diepere root cause**: Service Worker `surirent-v77` deed `stale-while-revalidate` voor HTML + JS → bij PWA install las iOS Safari de **gecachete oude index.html + oude bundle.js**, die de manifest URL OVERSCHRIJVEN naar `/manifest-beheer.json` (zonder slug). iOS 16.4+ leest manifest start_url BIJ install, dus de install krijgt de verkeerde start_url.

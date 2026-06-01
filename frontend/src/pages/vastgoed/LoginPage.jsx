@@ -1601,6 +1601,38 @@ export default function LoginPage() {
     };
   }, [branding]);
 
+  // PWA bedrijfs-context fallback. Wanneer iOS Safari de oude (verkeerde)
+  // start_url heeft gecaptured (`/login` zonder slug) maar de gebruiker
+  // eerder een bedrijfs-tenant heeft bezocht, redirecten we automatisch
+  // naar `/<slug>/login` zodat de PIN-flow en branding correct laden.
+  //
+  // Dit is een vangnet voor het iOS PWA install-cache probleem waar de
+  // start_url is geboekt vóór onze slug-aware manifest fix. Een normale
+  // hard refresh kan iOS niet zomaar overrulen — vandaar deze in-app redir.
+  useEffect(() => {
+    try {
+      const path = (window.location.pathname || '').toLowerCase();
+      // Alleen op de generieke /login (niet al binnen een /<slug>/login).
+      const onPlainLogin = path === '/login' || path === '/login/';
+      if (!onPlainLogin) return;
+      // Alleen wanneer er ECHT geen slug in de URL zit (geen ?c=, geen /c/<slug>).
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('c')) return;
+      // We vertrouwen op de eerder opgeslagen slug uit localStorage. Die
+      // wordt gezet door BrandedShell bij elk bezoek aan /<slug>/...
+      const stored = (typeof window !== 'undefined' && window.localStorage)
+        ? (window.localStorage.getItem('pwa_company_slug') || '').trim().toLowerCase()
+        : '';
+      if (!stored) return;
+      // Slug-shape sanity check (a-z, 0-9, dashes).
+      if (!/^[a-z0-9][a-z0-9-]{0,62}$/.test(stored)) return;
+      // Bouw target met behoud van bestaande query params (source=pwa, view=admin etc.)
+      const qs = window.location.search || '';
+      const next = `/${stored}/login${qs}`;
+      window.location.replace(next);
+    } catch { /* noop */ }
+  }, []);
+
   // Resolve and apply company branding on mount.
   useEffect(() => {
     let cancelled = false;
