@@ -1098,6 +1098,8 @@ DEMO_COMPANY_SLUG = "demo"
 
 QR_SESSION_TTL_MIN = 5  # noqa — anti-replay window
 
+
+
 @api.post("/auth/qr/create")
 async def qr_create(request: Request):
     """Anonieme endpoint die een pending QR sessie aanmaakt."""
@@ -1113,17 +1115,41 @@ async def qr_create(request: Request):
         "claimed_user_id": None,
         "access_token": None,
     })
-    # Bouw absolute qr_url uit Origin/Host headers — zo werkt deep-link voor
+    # Bouw absolute qr_url uit headers — zo werkt deep-link voor
     # elke deployment zonder dat FRONTEND_BASE_URL gezet hoeft te worden.
+    #
+    # Belangrijk: in Kubernetes ingress + Cloudflare worker is `Origin`
+    # vaak HERSCHREVEN naar de cluster-interne host
+    # (bv. `vastgoed-app.cluster-1.preview.emergentcf.cloud`) die niet
+    # bereikbaar is vanaf de telefoon van de gebruiker.
+    # Prioriteit: FRONTEND_BASE_URL → X-Forwarded-Host (publiek) →
+    # Referer (publiek) → Origin → Host.
     base = (os.environ.get("FRONTEND_BASE_URL") or "").rstrip("/")
     if not base:
-        origin = request.headers.get("origin") or ""
-        if origin:
-            base = origin.rstrip("/")
+        scheme = request.headers.get("x-forwarded-proto", "https")
+        fwd_host = (request.headers.get("x-forwarded-host") or "").strip()
+        if fwd_host:
+            # X-Forwarded-Host bevat de echte publieke host.
+            # Pak de eerste waarde als er een chain is.
+            fwd_host = fwd_host.split(",")[0].strip()
+            base = f"{scheme}://{fwd_host}"
         else:
-            host = request.headers.get("host") or "localhost:8001"
-            scheme = request.headers.get("x-forwarded-proto", "https")
-            base = f"{scheme}://{host}"
+            referer = (request.headers.get("referer") or "").strip()
+            if referer:
+                try:
+                    from urllib.parse import urlparse as _urlparse
+                    _u = _urlparse(referer)
+                    if _u.scheme and _u.netloc:
+                        base = f"{_u.scheme}://{_u.netloc}"
+                except Exception:
+                    pass
+            if not base:
+                origin = (request.headers.get("origin") or "").strip()
+                if origin:
+                    base = origin.rstrip("/")
+                else:
+                    host = request.headers.get("host") or "localhost:8001"
+                    base = f"{scheme}://{host}"
     qr_url = f"{base}/qr-link?token={token}"
     return {"token": token, "qr_url": qr_url, "expires_in": QR_SESSION_TTL_MIN * 60}
 
@@ -9796,6 +9822,164 @@ _payment_plans_router = _make_payment_plans_router(db, _pp_helpers)
 # `api.include_router(_payment_plans_router)` na `app.include_router(api)`
 # niet meer alle endpoints registreert (sub-router al gemount).
 app.include_router(_payment_plans_router, prefix="/api")
+
+# =====================================================================
+# Slug-aware PWA manifest endpoint
+#
+# Wanneer een tenant een PWA installeert vanaf `/<slug>/login` (of een
+# andere branded route) moet de geïnstalleerde app blijven openen binnen
+# het bedrijfs-context (`/<slug>/...`) — niet op de generieke `/login`.
+#
+# Browsers cachen het manifest op de URL. Een blob: manifest URL werkt
+# alleen tijdens de huidige document-sessie. Een stabiele HTTP URL is
+# robuuster: Chrome/Android herfetcht hem bij update-checks, en de
+# installed PWA gebruikt de daarin opgegeven `start_url` / `scope`.
+# =====================================================================
+import json as _json
+from fastapi import Response as _FastAPIResponse
+
+_PWA_ROLE_MANIFEST: dict[str, dict] = {
+    "beheer": {
+        "name": "SuriRent Beheer",
+        "short_name": "Beheer",
+        "description": "Beheerdersapp voor SuriRent — appartementen, huurders, betalingen en facturen.",
+        "start_url": "/login?view=admin&source=pwa",
+        "scope": "/",
+        "display": "standalone",
+        "orientation": "any",
+        "background_color": "#FFF7F0",
+        "theme_color": "#FFF7F0",
+        "lang": "nl",
+        "dir": "ltr",
+        "categories": ["business", "finance", "productivity"],
+        "id": "/?app=beheer",
+        "prefer_related_applications": False,
+        "icons": [
+            {"src": "/kiosk-icons/beheer-72.png",  "sizes": "72x72",   "type": "image/png", "purpose": "any"},
+            {"src": "/kiosk-icons/beheer-144.png", "sizes": "144x144", "type": "image/png", "purpose": "any"},
+            {"src": "/kiosk-icons/beheer-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
+            {"src": "/kiosk-icons/beheer-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"},
+        ],
+    },
+    "huurder": {
+        "name": "SuriRent Huurder",
+        "short_name": "Huurder",
+        "description": "Huurdersportaal voor SuriRent — saldo, betalingen, kwitanties en onderhoud.",
+        "start_url": "/kiosk/huurder?source=pwa",
+        "scope": "/",
+        "display": "standalone",
+        "orientation": "any",
+        "background_color": "#EAF8F1",
+        "theme_color": "#10B981",
+        "lang": "nl",
+        "dir": "ltr",
+        "categories": ["business", "productivity"],
+        "id": "/?app=huurder",
+        "prefer_related_applications": False,
+        "icons": [
+            {"src": "/kiosk-icons/huurder-72.png",  "sizes": "72x72",   "type": "image/png", "purpose": "any"},
+            {"src": "/kiosk-icons/huurder-144.png", "sizes": "144x144", "type": "image/png", "purpose": "any"},
+            {"src": "/kiosk-icons/huurder-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
+            {"src": "/kiosk-icons/huurder-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"},
+        ],
+    },
+    "kiosk": {
+        "name": "SuriRent Kiosk",
+        "short_name": "Kiosk",
+        "description": "Selfservice kiosk terminal voor huurders — PIN-toegang, betalingen.",
+        "start_url": "/kiosk?source=pwa",
+        "scope": "/",
+        "display": "standalone",
+        "orientation": "any",
+        "background_color": "#FF5C00",
+        "theme_color": "#2563EB",
+        "lang": "nl",
+        "dir": "ltr",
+        "categories": ["business", "productivity"],
+        "id": "/?app=kiosk",
+        "prefer_related_applications": False,
+        "icons": [
+            {"src": "/kiosk-icons/kioskpwa-72.png",  "sizes": "72x72",   "type": "image/png", "purpose": "any"},
+            {"src": "/kiosk-icons/kioskpwa-144.png", "sizes": "144x144", "type": "image/png", "purpose": "any"},
+            {"src": "/kiosk-icons/kioskpwa-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
+            {"src": "/kiosk-icons/kioskpwa-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"},
+        ],
+    },
+    "klant": {
+        "name": "SuriRent Klantenscherm",
+        "short_name": "Klantenscherm",
+        "description": "Klantweergave-scherm voor SuriRent.",
+        "start_url": "/kiosk/klant?source=pwa",
+        "scope": "/",
+        "display": "standalone",
+        "orientation": "any",
+        "background_color": "#3A0764",
+        "theme_color": "#9333EA",
+        "lang": "nl",
+        "dir": "ltr",
+        "categories": ["business"],
+        "id": "/?app=klant",
+        "prefer_related_applications": False,
+        "icons": [
+            {"src": "/kiosk-icons/klant-72.png",  "sizes": "72x72",   "type": "image/png", "purpose": "any"},
+            {"src": "/kiosk-icons/klant-144.png", "sizes": "144x144", "type": "image/png", "purpose": "any"},
+            {"src": "/kiosk-icons/klant-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
+            {"src": "/kiosk-icons/klant-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"},
+        ],
+    },
+}
+
+
+def _slug_aware_start_url(role: str, slug: str | None) -> str:
+    """Bouw de role-specifieke in-slug start_url."""
+    if not slug:
+        # geen slug → fallback naar de niet-branded defaults
+        return _PWA_ROLE_MANIFEST.get(role, _PWA_ROLE_MANIFEST["beheer"])["start_url"]
+    if role == "huurder":
+        return f"/{slug}/kiosk/huurder?source=pwa"
+    if role == "klant":
+        return f"/{slug}/kiosk/klant?source=pwa"
+    if role == "kiosk":
+        return f"/{slug}/kiosk?source=pwa"
+    return f"/{slug}/login?source=pwa&view=admin"
+
+
+@app.get("/api/pwa/manifest")
+async def pwa_manifest(role: str = "beheer", slug: str | None = None):
+    """
+    Slug-aware PWA manifest. Frontend zet:
+        <link rel="manifest" href="/api/pwa/manifest?role=beheer&slug=surirent">
+    De geïnstalleerde PWA opent dan in het bedrijfs-context.
+
+    Returns: application/manifest+json
+    """
+    role = (role or "beheer").lower().strip()
+    if role not in _PWA_ROLE_MANIFEST:
+        role = "beheer"
+    base = _json.loads(_json.dumps(_PWA_ROLE_MANIFEST[role]))  # diepe copy
+    if slug:
+        slug = slug.lower().strip()
+        # Strikte sanitatie — alleen [a-z0-9-] toelaten zodat we geen
+        # injectie in URLs krijgen.
+        import re as _re
+        if _re.match(r"^[a-z0-9][a-z0-9-]{0,62}$", slug):
+            base["start_url"] = _slug_aware_start_url(role, slug)
+            base["scope"] = f"/{slug}/"
+            base["id"] = f"/{slug}/?role={role}"
+    body = _json.dumps(base, ensure_ascii=False)
+    return _FastAPIResponse(
+        content=body,
+        media_type="application/manifest+json",
+        headers={
+            # Korte cache — laat browsers de manifest verversen wanneer
+            # we de start_url logica updaten. PWA install captures op
+            # install-moment, dus deze cache is alleen voor herfetches.
+            "Cache-Control": "public, max-age=300, must-revalidate",
+        },
+    )
+
+
+
 
 # Shared core voor tenant + kiosk installment-betaling
 _plan_core = _build_plan_pay_core(db, _pp_helpers)

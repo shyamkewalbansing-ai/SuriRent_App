@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './lib/auth';
 import { useRegisterServiceWorker, InstallPrompt } from './lib/pwa';
 import PersonalPinSetup from './components/PersonalPinSetup';
@@ -9,6 +9,7 @@ import { installGlobalTapSounds } from './lib/tap-sounds';
 import RotateNotice from './components/RotateNotice';
 import BrandedShell from './components/BrandedShell';
 import { isMarketingHost, appUrl } from './lib/env';
+import { brandedSlugFromPath } from './lib/branded-nav';
 
 // LAZY LOADED ROUTES — Code-splitting per route zodat een kiosk-bezoeker
 // NIET de admin-bundle hoeft te downloaden (en andersom). Initial paint
@@ -82,6 +83,7 @@ function BrandedRouteTree() {
 
 function Protected({ children }) {
   const { user, loading } = useAuth();
+  const location = useLocation();
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-kiosk-cream">
@@ -89,7 +91,14 @@ function Protected({ children }) {
       </div>
     );
   }
-  if (!user) return <Navigate to="/login" replace />;
+  if (!user) {
+    // Preserve branded slug context. Wanneer de admin afmeldt vanaf
+    // `/<slug>/admin/...` sturen we hem naar `/<slug>/login` ipv de
+    // generieke `/login` (anders verliest hij zijn bedrijfs-kleuren/PIN).
+    const slug = brandedSlugFromPath(location.pathname);
+    const target = slug ? `/${slug}/login` : '/login';
+    return <Navigate to={target} replace />;
+  }
   return children;
 }
 

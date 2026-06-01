@@ -38,6 +38,8 @@ const RESERVED_SLUGS = new Set([
 
 // Per-rol default in-slug route die als start_url gebruikt wordt wanneer
 // de gebruiker een PWA installeert van een /<slug>/... pagina.
+// (Reserve helper — backend `/api/pwa/manifest` doet de echte mutatie.)
+// eslint-disable-next-line no-unused-vars
 function inSlugStartUrl(role, slug) {
   switch (role) {
     case 'huurder': return `/${slug}/kiosk/huurder?source=pwa`;
@@ -47,10 +49,6 @@ function inSlugStartUrl(role, slug) {
     default:        return `/${slug}/login?source=pwa&view=admin`;
   }
 }
-
-// Houd track van de huidig actieve blob-URL zodat we hem kunnen
-// revoke'en wanneer we een nieuwe genereren (anders lekken we ze).
-let activeBlobUrl = null;
 
 function detectSlug(pathname) {
   const parts = (pathname || '').toLowerCase().split('/').filter(Boolean);
@@ -63,27 +61,18 @@ function detectSlug(pathname) {
   return '';
 }
 
-async function applySlugAwareManifest(linkEl, role, slug) {
-  try {
-    const resp = await fetch(`/manifest-${role}.json`, { cache: 'no-cache' });
-    if (!resp.ok) throw new Error(`manifest ${role} not ok`);
-    const base = await resp.json();
-    if (slug) {
-      base.id = `/${slug}/?role=${role}`;
-      base.start_url = inSlugStartUrl(role, slug);
-      base.scope = `/${slug}/`;
-    }
-    const blob = new Blob([JSON.stringify(base)], { type: 'application/manifest+json' });
-    const url = URL.createObjectURL(blob);
-    if (activeBlobUrl) {
-      try { URL.revokeObjectURL(activeBlobUrl); } catch { /* noop */ }
-    }
-    activeBlobUrl = url;
-    linkEl.setAttribute('href', url);
-  } catch {
-    // Fallback: statische manifest (geen slug-context). Beter dan niets.
-    linkEl.setAttribute('href', `/manifest-${role}.json`);
-  }
+/**
+ * Bouw de slug-aware manifest URL. We gebruiken een stabiele HTTP URL
+ * (backend endpoint `/api/pwa/manifest`) i.p.v. een blob: URL. Blob URLs
+ * werken alleen tijdens de huidige document-sessie — een geïnstalleerde
+ * PWA kan ze niet later herfetchen, waardoor Chrome de install-time
+ * waarden moet onthouden. Met een stabiele URL kan het manifest bij
+ * elke launch worden gerefresht.
+ */
+function buildManifestUrl(role, slug) {
+  const params = new URLSearchParams({ role });
+  if (slug) params.set('slug', slug);
+  return `/api/pwa/manifest?${params.toString()}`;
 }
 
 export function usePwaManifest() {
@@ -94,15 +83,16 @@ export function usePwaManifest() {
     const slug = detectSlug(location.pathname);
 
     // 1) <link rel="manifest"> — Android PWA install
-    //    Slug-aware: muteer start_url/scope/id zodat de geïnstalleerde
-    //    PWA in het bedrijfs-context opent (`/<slug>/login` ipv `/login`).
+    //    Slug-aware: backend `/api/pwa/manifest?role=X&slug=Y` returnt
+    //    de juiste start_url/scope/id zodat de geïnstalleerde PWA in
+    //    het bedrijfs-context opent (`/<slug>/login` ipv `/login`).
     let link = document.querySelector('link[rel="manifest"]');
     if (!link) {
       link = document.createElement('link');
       link.setAttribute('rel', 'manifest');
       document.head.appendChild(link);
     }
-    applySlugAwareManifest(link, role, slug);
+    link.setAttribute('href', buildManifestUrl(role, slug));
 
     // 2) theme-color meta — Android system UI tint
     setMetaContent('meta[name="theme-color"]:not([media])', cfg.theme);

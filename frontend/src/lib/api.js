@@ -78,14 +78,29 @@ api.interceptors.response.use(
             localStorage.removeItem('admin_token');
           }
         } catch { /* ignore */ }
-        // Hard redirect ALLEEN voor admin-pagina's (/admin/*) en alleen
-        // wanneer we niet al op /login of een tenant/kiosk route zitten.
+        // Hard redirect ALLEEN voor admin-pagina's (/admin/* of /<slug>/admin/*)
+        // en alleen wanneer we niet al op /login of een tenant/kiosk route zitten.
         // Tenant/kiosk/customer pagina's tonen zelf hun lokale login-UI.
         try {
-          const isAdminRoute = path.startsWith('/admin');
+          const segs = path.split('/').filter(Boolean);
+          // Detecteer branded slug + admin route binnen die slug.
+          // Sync met RESERVED_SLUGS in lib/branded-nav.js.
+          const RESERVED = new Set(['login','admin','kiosk','huurder','onderteken','c','vastgoed','api','health','static','manifest','sw','favicon','assets','qr-link','qr','tenant','tenants','company','companies','superadmin']);
+          let isAdminRoute = false;
+          let brandedSlug = '';
+          if (segs[0] === 'admin') {
+            isAdminRoute = true;
+          } else if (segs[0] && !RESERVED.has(segs[0]) && segs[1] === 'admin') {
+            isAdminRoute = true;
+            brandedSlug = segs[0];
+          } else if (segs[0] === 'c' && segs[1] && segs[2] === 'admin') {
+            isAdminRoute = true;
+            brandedSlug = segs[1];
+          }
           const onLogin = path === '/login' || path.endsWith('/login');
           if (isAdminRoute && !onLogin) {
-            window.location.assign('/login?stale=1');
+            const loginPath = brandedSlug ? `/${brandedSlug}/login?stale=1` : '/login?stale=1';
+            window.location.assign(loginPath);
           }
         } catch { /* ignore */ }
       }

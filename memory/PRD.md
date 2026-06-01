@@ -1,5 +1,24 @@
 # Vastgoed Kiosk - PRD
 
+## Session 2026-06-01 (v15) — 3 bugfixes: PWA install, logout redirect, QR scan URL ✅
+
+### Bug A — PWA install vanaf `/<slug>/login` opent nog steeds `/login`
+- **Root cause**: blob: URL manifest is document-scoped — Chrome kon de geïnstalleerde PWA's manifest niet later refetchen, en op iOS Safari werkte de blob URL helemaal niet. Statische manifests `/manifest-{role}.json` hadden hardcoded `start_url: /login`.
+- **Fix**: Nieuwe **backend endpoint** `GET /api/pwa/manifest?role=X&slug=Y` returnt slug-aware manifest met `start_url`/`scope`/`id` correct gemuteerd. Frontend (`pwa-manifest.js` + `index.html`) zet `<link rel="manifest">` naar deze stabiele HTTP URL ipv blob URL.
+- **Verified**: `/api/pwa/manifest?role=beheer&slug=surirent` → `start_url: /surirent/login?source=pwa&view=admin`, `scope: /surirent/`.
+- **Belangrijk voor gebruiker**: oude PWA installs moeten **eerst worden gedeïnstalleerd** voordat de nieuwe (slug-aware) install actief wordt.
+
+### Bug B — Na logout redirect naar `/login` ipv `/<slug>/login`
+- **Root cause**: `Protected` component in `App.js` had hardcoded `<Navigate to="/login" replace />`. Bij `user=null` (logout) wint deze synchroon-tijdens-render redirect van `doLogout`'s `navigate('/login')` (die wel slug-aware was).
+- **Fix**: `Protected` detecteert nu de slug uit `location.pathname` via `brandedSlugFromPath()` en redirect naar `/<slug>/login`.
+- **Bonus**: `api.js` 401-interceptor ook slug-aware gemaakt (was eerder hardcoded `/login?stale=1` voor `path.startsWith('/admin')`, herkende `/surirent/admin` niet).
+- **Verified**: Login op `/surirent/login` → `/surirent/admin` → klik logout → land op `/surirent/login` ✓.
+
+### Bug C — QR-code scan werkt niet vanaf telefoon (verkeerde host)
+- **Root cause**: Backend `/auth/qr/create` gebruikte `Origin` header als base URL. Cloudflare-worker `preview.emergentagent.com` herschrijft `Origin` echter naar de **cluster-interne** host (`vastgoed-app.cluster-1.preview.emergentcf.cloud`), die niet bereikbaar is vanaf de telefoon van de gebruiker. QR encodeerde dus een dead-link.
+- **Fix**: Header-prioriteit aangepast naar `FRONTEND_BASE_URL` → **`X-Forwarded-Host`** (publiek) → `Referer` → `Origin` → `Host`. `X-Forwarded-Host` bevat de echte publieke host die door de ingress wordt doorgegeven.
+- **Verified**: `POST /api/auth/qr/create` returnt nu `qr_url: https://vastgoed-app.preview.emergentagent.com/qr-link?token=...`.
+
 ## Session 2026-06-01 (v14) — Bugfix: PWA install vanaf tenant login → slug-aware manifest ✅
 - **Bug**: bij PWA install vanaf `/<slug>/login` (bedrijfs-tenant login) opende de geïnstalleerde app `/login` (generiek) ipv `/<slug>/login`.
 - **Root cause**: `usePwaManifest()` hook in `lib/pwa-manifest.js` overschreef de slug-aware blob-manifest (gezet door inline `index.html` script) met statische `/manifest-{role}.json` (hardcoded `start_url: /login?view=admin`).

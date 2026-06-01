@@ -112,36 +112,13 @@
             slug = seg[0];
           }
           if (manifest) {
-            // Bouw dynamische manifest die start_url + scope laat lijken op de
-            // branded URL (bv. /surirent/login). Hiermee opent de geinstalleerde
-            // PWA direct in het bedrijfs-context i.p.v. de generieke /login.
-            // Role-aware start_url zodat huurder/kiosk/klant ook op de juiste
-            // pagina openen na install vanaf /<slug>/...
-            function inSlugStart(r, s) {
-              if (r === 'huurder') return '/' + s + '/kiosk/huurder?source=pwa';
-              if (r === 'klant')   return '/' + s + '/kiosk/klant?source=pwa';
-              if (r === 'kiosk')   return '/' + s + '/kiosk?source=pwa';
-              return '/' + s + '/login?source=pwa&view=admin';
-            }
-            try {
-              fetch('/manifest-' + role + '.json')
-                .then(function (r) { return r.json(); })
-                .then(function (base) {
-                  if (slug) {
-                    base.id = '/' + slug + '/?role=' + role;
-                    base.start_url = inSlugStart(role, slug);
-                    base.scope = '/' + slug + '/';
-                  }
-                  var blob = new Blob([JSON.stringify(base)], { type: 'application/manifest+json' });
-                  var url = URL.createObjectURL(blob);
-                  manifest.setAttribute('href', url);
-                })
-                .catch(function () {
-                  manifest.setAttribute('href', '/manifest-' + role + '.json');
-                });
-            } catch (e) {
-              manifest.setAttribute('href', '/manifest-' + role + '.json');
-            }
+            // Stabiele backend-URL met slug+role query — vervangt de oude
+            // blob-URL approach (die alleen tijdens document-sessie geldig
+            // was). Hierdoor kan een geïnstalleerde PWA de manifest later
+            // refresht en blijft `start_url` in het bedrijfs-context.
+            var manifestUrl = '/api/pwa/manifest?role=' + encodeURIComponent(role);
+            if (slug) manifestUrl += '&slug=' + encodeURIComponent(slug);
+            manifest.setAttribute('href', manifestUrl);
           }
           var t = document.querySelector('meta[name="apple-mobile-web-app-title"]');
           if (t) t.setAttribute('content', cfg.name);
