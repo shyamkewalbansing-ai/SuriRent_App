@@ -115,19 +115,22 @@
             // Bouw dynamische manifest die start_url + scope laat lijken op de
             // branded URL (bv. /surirent/login). Hiermee opent de geinstalleerde
             // PWA direct in het bedrijfs-context i.p.v. de generieke /login.
+            // Role-aware start_url zodat huurder/kiosk/klant ook op de juiste
+            // pagina openen na install vanaf /<slug>/...
+            function inSlugStart(r, s) {
+              if (r === 'huurder') return '/' + s + '/kiosk/huurder?source=pwa';
+              if (r === 'klant')   return '/' + s + '/kiosk/klant?source=pwa';
+              if (r === 'kiosk')   return '/' + s + '/kiosk?source=pwa';
+              return '/' + s + '/login?source=pwa&view=admin';
+            }
             try {
               fetch('/manifest-' + role + '.json')
                 .then(function (r) { return r.json(); })
                 .then(function (base) {
                   if (slug) {
                     base.id = '/' + slug + '/?role=' + role;
-                    base.start_url = '/' + slug + '/login?source=pwa';
+                    base.start_url = inSlugStart(role, slug);
                     base.scope = '/' + slug + '/';
-                    // Naam aanvullen met slug zodat installatie-dialogen
-                    // duidelijk zijn (iOS toont alleen short_name).
-                    if (base.short_name) {
-                      base.short_name = base.short_name; // unchanged — let bedrijfs branding via React doen
-                    }
                   }
                   var blob = new Blob([JSON.stringify(base)], { type: 'application/manifest+json' });
                   var url = URL.createObjectURL(blob);

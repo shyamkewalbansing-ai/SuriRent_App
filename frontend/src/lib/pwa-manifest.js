@@ -29,14 +29,80 @@ const ROLE_CONFIG = {
   },
 };
 
+// Gereserveerde root-segmenten die geen bedrijfs-slug zijn.
+const RESERVED_SLUGS = new Set([
+  'admin', 'kiosk', 'login', 'demo', 'huurder', 'klant',
+  'onderteken', 'qr-link', 'c', 'api', 'assets', 'static',
+  'vastgoed',
+]);
+
+// Per-rol default in-slug route die als start_url gebruikt wordt wanneer
+// de gebruiker een PWA installeert van een /<slug>/... pagina.
+function inSlugStartUrl(role, slug) {
+  switch (role) {
+    case 'huurder': return `/${slug}/kiosk/huurder?source=pwa`;
+    case 'klant':   return `/${slug}/kiosk/klant?source=pwa`;
+    case 'kiosk':   return `/${slug}/kiosk?source=pwa`;
+    case 'beheer':
+    default:        return `/${slug}/login?source=pwa&view=admin`;
+  }
+}
+
+// Houd track van de huidig actieve blob-URL zodat we hem kunnen
+// revoke'en wanneer we een nieuwe genereren (anders lekken we ze).
+let activeBlobUrl = null;
+
+function detectSlug(pathname) {
+  const parts = (pathname || '').toLowerCase().split('/').filter(Boolean);
+  if (parts.length === 0) return '';
+  // Ondersteun zowel `/<slug>/...` als `/c/<slug>/...`.
+  if (parts[0] === 'c' && parts.length >= 2 && !RESERVED_SLUGS.has(parts[1])) {
+    return parts[1];
+  }
+  if (!RESERVED_SLUGS.has(parts[0])) return parts[0];
+  return '';
+}
+
+async function applySlugAwareManifest(linkEl, role, slug) {
+  try {
+    const resp = await fetch(`/manifest-${role}.json`, { cache: 'no-cache' });
+    if (!resp.ok) throw new Error(`manifest ${role} not ok`);
+    const base = await resp.json();
+    if (slug) {
+      base.id = `/${slug}/?role=${role}`;
+      base.start_url = inSlugStartUrl(role, slug);
+      base.scope = `/${slug}/`;
+    }
+    const blob = new Blob([JSON.stringify(base)], { type: 'application/manifest+json' });
+    const url = URL.createObjectURL(blob);
+    if (activeBlobUrl) {
+      try { URL.revokeObjectURL(activeBlobUrl); } catch { /* noop */ }
+    }
+    activeBlobUrl = url;
+    linkEl.setAttribute('href', url);
+  } catch {
+    // Fallback: statische manifest (geen slug-context). Beter dan niets.
+    linkEl.setAttribute('href', `/manifest-${role}.json`);
+  }
+}
+
 export function usePwaManifest() {
   const location = useLocation();
   useEffect(() => {
     const role = pickRole(location.pathname, location.search);
     const cfg = ROLE_CONFIG[role] || ROLE_CONFIG.beheer;
+    const slug = detectSlug(location.pathname);
 
     // 1) <link rel="manifest"> — Android PWA install
-    setLink('link[rel="manifest"]', { rel: 'manifest', href: `/manifest-${role}.json` });
+    //    Slug-aware: muteer start_url/scope/id zodat de geïnstalleerde
+    //    PWA in het bedrijfs-context opent (`/<slug>/login` ipv `/login`).
+    let link = document.querySelector('link[rel="manifest"]');
+    if (!link) {
+      link = document.createElement('link');
+      link.setAttribute('rel', 'manifest');
+      document.head.appendChild(link);
+    }
+    applySlugAwareManifest(link, role, slug);
 
     // 2) theme-color meta — Android system UI tint
     setMetaContent('meta[name="theme-color"]:not([media])', cfg.theme);
@@ -74,15 +140,6 @@ export function usePwaManifest() {
   }, [location.pathname, location.search]);
 }
 
-function setLink(selector, attrs) {
-  let el = document.querySelector(selector);
-  if (!el) {
-    el = document.createElement('link');
-    document.head.appendChild(el);
-  }
-  Object.entries(attrs).forEach(([k, v]) => el.setAttribute(k, v));
-}
-
 function setMetaContent(selector, content) {
   const els = document.querySelectorAll(selector);
   els.forEach((el) => el.setAttribute('content', content));
@@ -99,20 +156,28 @@ function setMetaContent(selector, content) {
 
 function pickRole(path = '', search = '') {
   const p = (path || '').toLowerCase();
-  if (p.startsWith('/admin')) return 'beheer';
-  if (p === '/kiosk/klant' || p.startsWith('/kiosk/klant')) return 'klant';
-  if (p === '/kiosk/huurder' || p.startsWith('/kiosk/huurder')) return 'huurder';
-  if (p === '/kiosk' || p.startsWith('/kiosk')) return 'kiosk';
-  if (p === '/login' || p.startsWith('/login')) {
+  // Strip optionele `/c/<slug>` of `/<slug>` prefix vóór role-detectie.
+  let sub = p;
+  const parts = p.split('/').filter(Boolean);
+  if (parts.length > 0) {
+    if (parts[0] === 'c' && parts.length >= 2 && !RESERVED_SLUGS.has(parts[1])) {
+      sub = '/' + parts.slice(2).join('/');
+    } else if (!RESERVED_SLUGS.has(parts[0])) {
+      sub = '/' + parts.slice(1).join('/');
+    }
+  }
+  if (!sub.startsWith('/')) sub = '/' + sub;
+
+  if (sub.startsWith('/admin')) return 'beheer';
+  if (sub === '/kiosk/klant' || sub.startsWith('/kiosk/klant')) return 'klant';
+  if (sub === '/kiosk/huurder' || sub.startsWith('/kiosk/huurder')) return 'huurder';
+  if (sub === '/kiosk' || sub.startsWith('/kiosk')) return 'kiosk';
+  if (sub === '/login' || sub.startsWith('/login') || sub === '/' || sub === '') {
     const q = (search || '').toLowerCase();
     if (q.includes('target=kiosk')) return 'kiosk';
     if (q.includes('target=huurder')) return 'huurder';
     if (q.includes('target=klant')) return 'klant';
     return 'beheer';
-  }
-  if (p.startsWith('/c/')) {
-    const rest = p.split('/').slice(3).join('/');
-    return pickRole('/' + rest, search);
   }
   return 'beheer';
 }

@@ -1,5 +1,17 @@
 # Vastgoed Kiosk - PRD
 
+## Session 2026-06-01 (v14) — Bugfix: PWA install vanaf tenant login → slug-aware manifest ✅
+- **Bug**: bij PWA install vanaf `/<slug>/login` (bedrijfs-tenant login) opende de geïnstalleerde app `/login` (generiek) ipv `/<slug>/login`.
+- **Root cause**: `usePwaManifest()` hook in `lib/pwa-manifest.js` overschreef de slug-aware blob-manifest (gezet door inline `index.html` script) met statische `/manifest-{role}.json` (hardcoded `start_url: /login?view=admin`).
+- **Fix**: `usePwaManifest` doet nu zelf de slug + role detectie, fetcht `manifest-{role}.json`, muteert `start_url`/`scope`/`id` met `/<slug>/` prefix, en serveert via `URL.createObjectURL` (blob:). Vorige blob URLs worden gerevoke'd om geheugenlek te voorkomen.
+- **Role-aware in-slug start_urls**:
+  - `beheer` → `/<slug>/login?source=pwa&view=admin`
+  - `huurder` → `/<slug>/kiosk/huurder?source=pwa`
+  - `klant` → `/<slug>/kiosk/klant?source=pwa`
+  - `kiosk` → `/<slug>/kiosk?source=pwa`
+- **Inline `index.html` script** ook aangepast met dezelfde `inSlugStart()` logica zodat de first-paint manifest al klopt (vóór React mount).
+- **Verified live**: `/surirent/login` → manifest `start_url: /surirent/login?source=pwa&view=admin`, `scope: /surirent/`. `/surirent/kiosk/huurder` → manifest `start_url: /surirent/kiosk/huurder?source=pwa`, `scope: /surirent/`.
+
 ## Session 2026-06-01 (v13) — QR cross-device login + ABN-stijl PinLanding redesign ✅
 - **Backend (server.py)**: 3 nieuwe endpoints + `qr_sessions` collection:
   - `POST /auth/qr/create` (anoniem) — genereert 24-byte urlsafe token, expires in 5 min, returnt `{token, qr_url, expires_in}`. URL afgeleid uit Origin/Host header met X-Forwarded-Proto fallback.
