@@ -1,0 +1,74 @@
+{
+  "summary": "Backend+frontend testing of SaaS billing/plans/cancellation workflow (iter 30). 8 of 9 backend tests passed. Found 1 CRITICAL routing bug: /api/companies/me/cancel-subscription returns 403 because /companies/{cid}/cancel-subscription (superadmin-only) is declared first and FastAPI matches cid='me'. Frontend renders all expected SaaS tabs (Landing Editor, SaaS Instellingen, Pakketten, SaaS Beheer, Bedrijven), Plans admin page works, MijnAbonnement shows the cancel button. Dado Vastgoed Beheer (surirent) was RESTORED to billing_status=active after testing.",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "POST /api/companies/me/cancel-subscription",
+        "issue": "Returns 403 'Onvoldoende rechten' for tenant admin. ROOT CAUSE: in server.py, /companies/{cid}/cancel-subscription (requires superadmin, line 3274) is defined BEFORE /companies/me/cancel-subscription (line 3336). FastAPI routes 'me' to the {cid} variant which has require_role('superadmin') → 403. Feature 4 (self-cancel) is completely broken end-to-end despite the frontend button being wired correctly.",
+        "priority": "CRITICAL"
+      }
+    ],
+    "minor": [
+      {
+        "endpoint": "POST /api/companies/{cid}/reactivate-subscription",
+        "issue": "Returns only {ok:true}. Sets billing_status='active' and writes next_billing_date in DB, BUT neither GET /api/companies (list) nor GET /api/billing/me exposes next_billing_date / renews_at in the response (renews_at is null, list serializer omits next_billing_date). UI cannot show 'Volgende vernieuwing op' after reactivation."
+      },
+      {
+        "endpoint": "GET /api/billing/me",
+        "issue": "renews_at always null even after reactivation populates next_billing_date in companies collection. Mapping from companies.next_billing_date → billing.renews_at is missing."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "PlansAdmin",
+        "issue": "Plan cards do not have data-testid='plan-row-{id}' or per-field testids (name/amount/save). Page-level data-testid='plans-admin-page' is present, but inner CRUD elements need testids for reliable E2E.",
+        "selector": "[data-testid^=\"plan-row-\"]",
+        "priority": "LOW"
+      }
+    ],
+    "integration_issues": [
+      {
+        "flow": "MijnAbonnement → Abonnement opzeggen",
+        "issue": "Button is visible (data-testid='cancel-subscription-btn') and confirmation modal wires to POST /api/companies/me/cancel-subscription, but backend returns 403 → BillingBlockedScreen will NEVER show, company stays active. Blocked by the route-ordering bug above.",
+        "affected_selectors": ["[data-testid=\"cancel-subscription-btn\"]"]
+      }
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter30_saas_billing.py",
+    "/app/test_reports/pytest/iter30_saas_billing.xml"
+  ],
+  "action_items": [
+    "CRITICAL: Reorder routes in /app/backend/server.py — move @api.post('/companies/me/cancel-subscription') (line 3336) BEFORE @api.post('/companies/{cid}/cancel-subscription') (line 3274). Or alternatively, add an early `if cid == 'me': ...` branch inside the {cid} handler. After fix, re-run TestBillingEnforcement::test_reactivate_then_cancel_then_reactivate to validate.",
+    "MEDIUM: Expose next_billing_date in GET /api/companies list serializer AND map companies.next_billing_date → billing.renews_at in GET /api/billing/me so the green 'Volgende vernieuwing op …' line in MijnAbonnement is populated after reactivation.",
+    "LOW: Add data-testid='plan-row-{id}' on each PlansAdmin card and data-testid='plan-save-{id}' on Opslaan button for stable E2E.",
+    "VERIFY: Confirm `superadmin@vastgoed.sr / superadmin123` mentioned in review request is wrong — actual superadmin in test_credentials.md is `super@surirent.sr / super123`. Update the user-facing prompt/docs."
+  ],
+  "critical_code_review_comments": [
+    "server.py route ordering: Path /companies/{cid}/... declared before /companies/me/... causes 'me' to be captured as path param. Always declare literal-prefix routes (`/me/*`) above param routes (`/{id}/*`) in FastAPI to avoid this exact bug.",
+    "Public /api/billing/plans correctly seeds db.plan_catalog from PLAN_PRICES on first call (verified — starter 3000 SRD, professional 5000 SRD).",
+    "BILLING_EXEMPT list in get_current_user covers /api/billing/, /api/auth/, /api/companies/me/branding, /api/public/, /api/health — good. Self-cancel route is NOT exempt but would not need to be once routing bug is fixed (user just needs auth, not active billing — actually a cancelled user should still be able to cancel, but currently the route never reaches the right handler).",
+    "server.py is 10820 lines — strongly recommend modular split (auth, billing, companies, plans into separate routers). Hard to maintain at this size."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter30_saas_billing.py"
+  ],
+  "success_rate": {
+    "backend": "89% (8/9 — 1 skipped due to test ordering, 1 critical route-ordering bug)",
+    "frontend": "100% smoke (sidebar tabs, plans page, cancel button all render)"
+  },
+  "test_credentials": "Superadmin: super@surirent.sr / super123 (NOT superadmin@vastgoed.sr as review claimed). Admin: admin@vastgoed.sr / admin123. Source: /app/memory/test_credentials.md.",
+  "seed_data_creation": "Created and deleted a temporary 'enterprise' plan via /api/superadmin/plans for CRUD validation — cleaned up at end of test. Dado Vastgoed Beheer (surirent, id=1e13389d-7e2d-48ff-8b28-5a4a8699ed5b) was reactivated at end of run; final billing_status=active confirmed via API.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "After main agent fixes the route ordering bug in server.py (move /companies/me/cancel-subscription before /companies/{cid}/cancel-subscription, or add `if cid=='me'` guard), re-run /app/backend/tests/test_iter30_saas_billing.py — all 9 tests should pass. CRITICAL: after any cancel test, always POST /api/companies/{surirent_id}/reactivate-subscription as super@surirent.sr to restore the user's preview env. surirent_company_id = 1e13389d-7e2d-48ff-8b28-5a4a8699ed5b.",
+  "rca_of_the_issue": {
+    "bug": "/api/companies/me/cancel-subscription returns 403 'Onvoldoende rechten' instead of 200",
+    "reproduction": "1) Login as admin@vastgoed.sr / admin123 (company billing_status=active). 2) POST /api/companies/me/cancel-subscription with Bearer token. 3) Observe 403 response. 4) Verify company billing_status remains 'active'.",
+    "root_cause": "FastAPI route resolution in /app/backend/server.py: @api.post('/companies/{cid}/cancel-subscription') with Depends(require_role('superadmin')) is declared at line 3274, BEFORE @api.post('/companies/me/cancel-subscription') at line 3336. FastAPI matches the first route with cid='me' and the require_role check rejects non-superadmins with 403.",
+    "mitigation": "In /app/backend/server.py, move the entire @api.post('/companies/me/cancel-subscription') block (lines 3336–3377) to appear BEFORE the @api.post('/companies/{cid}/cancel-subscription') definition at line 3274. Alternatively, add `if cid == 'me': return await company_self_cancel(user)` at the top of cancel_subscription, but reordering is cleaner."
+  }
+}

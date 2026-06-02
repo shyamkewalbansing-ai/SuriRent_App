@@ -171,7 +171,49 @@ async def get_current_user(request: Request) -> dict:
         user["active_company_id"] = active or user.get("company_id")
     else:
         user["active_company_id"] = user.get("company_id")
+
+    # BILLING ENFORCEMENT — block opgezegde/expired bedrijven van non-billing endpoints.
+    # Superadmin + impersonatie zijn altijd toegestaan (om te kunnen herstellen).
+    # `/billing/*` en `/auth/*` zijn vrijgesteld zodat de gebruiker zijn
+    # abonnement kan heractiveren en kan uitloggen.
+    if user.get("role") != "superadmin" and not user.get("original_user_id"):
+        path = (request.url.path or "").lower()
+        BILLING_EXEMPT = (
+            "/api/billing/",
+            "/api/auth/",
+            "/api/companies/me/branding",
+            "/api/public/",
+            "/api/health",
+        )
+        if not any(path.startswith(p) for p in BILLING_EXEMPT):
+            cid = user.get("company_id")
+            if cid:
+                c = await db.companies.find_one({"id": cid}, {"_id": 0, "billing_status": 1, "trial_ends_at": 1})
+                if c:
+                    bs = (c.get("billing_status") or "active").lower()
+                    # Check trial expiry zonder DB-update om read-side te houden.
+                    if bs == "trial" and c.get("trial_ends_at"):
+                        try:
+                            end = datetime.fromisoformat(c["trial_ends_at"].replace("Z", "+00:00"))
+                            if end < datetime.now(timezone.utc):
+                                bs = "expired"
+                        except Exception:
+                            pass
+                    if bs in ("cancelled", "expired", "past_due"):
+                        raise HTTPException(
+                            status_code=402,
+                            detail={
+                                "code": "billing_blocked",
+                                "billing_status": bs,
+                                "message": {
+                                    "cancelled": "Uw abonnement is opgezegd. Heractiveer om door te gaan.",
+                                    "expired": "Uw proefperiode is verlopen. Activeer een abonnement om door te gaan.",
+                                    "past_due": "Uw betaling staat open. Voldoe om door te gaan.",
+                                }.get(bs, "Abonnement niet actief."),
+                            },
+                        )
     return user
+
 
 
 async def get_current_user_optional(request: Request):
@@ -1559,22 +1601,169 @@ PLAN_PRICES = {
 }
 
 
+# =====================================================================
+# DB-driven plan catalog — seeds en helpers
+#
+# Plannen worden nu opgeslagen in `db.plan_catalog` zodat superadmin ze
+# kan bewerken via de UI. De PLAN_PRICES dict blijft als immutable
+# fallback voor seeding + voor flow's die nog geen await kunnen doen.
+# =====================================================================
+
+async def _seed_plan_catalog():
+    """Seed de plan_catalog collection met de standaard plans als hij leeg is.
+    Idempotent: bestaande plans worden niet overschreven."""
+    try:
+        count = await db.plan_catalog.count_documents({})
+        if count > 0:
+            return
+        for pid, pdata in PLAN_PRICES.items():
+            doc = {
+                "id": pid,
+                "name": pdata["name"],
+                "amount": pdata["amount"],
+                "currency": pdata["currency"],
+                "interval": pdata["interval"],
+                "description": pdata["description"],
+                "features": list(pdata.get("features", [])),
+                "active": True,
+                "sort_order": 10 if pid == "starter" else 20,
+                "created_at": now_utc_iso(),
+                "updated_at": now_utc_iso(),
+            }
+            await db.plan_catalog.insert_one(doc)
+    except Exception as e:
+        import logging as _logging
+        _logging.getLogger("uvicorn.error").warning(f"Plan catalog seed failed: {e}")
+
+
+async def _fetch_plans_from_db() -> list[dict]:
+    """Haalt alle ACTIEVE plans op uit de DB (gesorteerd op sort_order).
+    Valt terug op PLAN_PRICES als de DB leeg is of fails."""
+    try:
+        docs = await db.plan_catalog.find({"active": {"$ne": False}}, {"_id": 0}).sort("sort_order", 1).to_list(100)
+        if docs:
+            return docs
+    except Exception as e:
+        import logging as _logging
+        _logging.getLogger("uvicorn.error").warning(f"plan_catalog fetch failed: {e}")
+    # Fallback
+    return [{"id": k, **v, "active": True} for k, v in PLAN_PRICES.items()]
+
+
+async def _fetch_plan_by_id(plan_id: str) -> Optional[dict]:
+    """Resolve een plan op id — DB-first, val terug op PLAN_PRICES."""
+    try:
+        doc = await db.plan_catalog.find_one({"id": plan_id}, {"_id": 0})
+        if doc:
+            return doc
+    except Exception:
+        pass
+    if plan_id in PLAN_PRICES:
+        return {"id": plan_id, **PLAN_PRICES[plan_id], "active": True}
+    return None
+
+
+def now_utc_iso():
+    return datetime.now(timezone.utc).isoformat()
+
+
 @api.get("/billing/plans")
 async def list_plans(phone: Optional[str] = None, currency: Optional[str] = None):
     """Public plan catalog — used by landing + registration flow.
-    Currency resolution: explicit ?currency=EUR/SRD > ?phone=... auto-detect > SRD default."""
+    Currency resolution: explicit ?currency=EUR/SRD > ?phone=... auto-detect > SRD default.
+
+    Plans komen uit `db.plan_catalog` (superadmin-bewerkbaar). Bij lege DB
+    wordt teruggevallen op `PLAN_PRICES` constant."""
+    plans = await _fetch_plans_from_db()
     want = (currency or "").upper()
     if not want and phone:
         _, want = _detect_country_currency(phone)
     if want == "EUR":
         fx = await _get_eur_per_srd()
         out = []
-        for k, v in PLAN_PRICES.items():
-            eur_amount = _convert_to_eur(v["amount"], v["currency"], fx["rate"])
-            out.append({"id": k, **v, "amount": eur_amount, "currency": "EUR",
-                        "original_amount": v["amount"], "original_currency": "SRD"})
+        for p in plans:
+            eur_amount = _convert_to_eur(p["amount"], p["currency"], fx["rate"])
+            out.append({**p, "amount": eur_amount, "currency": "EUR",
+                        "original_amount": p["amount"], "original_currency": "SRD"})
         return out
-    return [{"id": k, **v} for k, v in PLAN_PRICES.items()]
+    return plans
+
+
+# Superadmin CRUD voor plan_catalog -----------------------------------
+class PlanCreate(BaseModel):
+    id: str
+    name: str
+    amount: float
+    currency: str = "SRD"
+    interval: str = "month"
+    description: str = ""
+    features: list[str] = []
+    active: bool = True
+    sort_order: int = 50
+
+
+class PlanUpdate(BaseModel):
+    name: Optional[str] = None
+    amount: Optional[float] = None
+    currency: Optional[str] = None
+    interval: Optional[str] = None
+    description: Optional[str] = None
+    features: Optional[list[str]] = None
+    active: Optional[bool] = None
+    sort_order: Optional[int] = None
+
+
+@api.get("/superadmin/plans")
+async def superadmin_list_plans(user=Depends(require_role("superadmin"))):
+    """Alle plans (incl. inactieve) voor superadmin beheer."""
+    await _seed_plan_catalog()
+    docs = await db.plan_catalog.find({}, {"_id": 0}).sort("sort_order", 1).to_list(100)
+    return docs
+
+
+@api.post("/superadmin/plans")
+async def superadmin_create_plan(body: PlanCreate, user=Depends(require_role("superadmin"))):
+    plan_id = (body.id or "").strip().lower()
+    if not plan_id or not body.name:
+        raise HTTPException(status_code=400, detail="id en name zijn verplicht")
+    exists = await db.plan_catalog.find_one({"id": plan_id})
+    if exists:
+        raise HTTPException(status_code=400, detail=f"Plan met id '{plan_id}' bestaat al")
+    doc = {
+        "id": plan_id, "name": body.name, "amount": float(body.amount),
+        "currency": body.currency.upper(), "interval": body.interval,
+        "description": body.description, "features": list(body.features),
+        "active": body.active, "sort_order": int(body.sort_order),
+        "created_at": now_utc_iso(), "updated_at": now_utc_iso(),
+    }
+    await db.plan_catalog.insert_one(doc)
+    return {k: v for k, v in doc.items() if k != "_id"}
+
+
+@api.put("/superadmin/plans/{plan_id}")
+async def superadmin_update_plan(plan_id: str, body: PlanUpdate, user=Depends(require_role("superadmin"))):
+    doc = await db.plan_catalog.find_one({"id": plan_id})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Plan niet gevonden")
+    update = {k: v for k, v in body.model_dump(exclude_unset=True).items() if v is not None}
+    if "currency" in update:
+        update["currency"] = update["currency"].upper()
+    update["updated_at"] = now_utc_iso()
+    await db.plan_catalog.update_one({"id": plan_id}, {"$set": update})
+    out = await db.plan_catalog.find_one({"id": plan_id}, {"_id": 0})
+    return out
+
+
+@api.delete("/superadmin/plans/{plan_id}")
+async def superadmin_delete_plan(plan_id: str, user=Depends(require_role("superadmin"))):
+    in_use = await db.companies.count_documents({"plan": plan_id})
+    if in_use > 0:
+        # Soft-delete: markeer inactief ipv hard verwijderen om historische
+        # data van bedrijven die op dit plan zaten te bewaren.
+        await db.plan_catalog.update_one({"id": plan_id}, {"$set": {"active": False, "updated_at": now_utc_iso()}})
+        return {"ok": True, "soft_deleted": True, "active_companies_on_plan": in_use}
+    await db.plan_catalog.delete_one({"id": plan_id})
+    return {"ok": True, "soft_deleted": False}
 
 
 @api.get("/billing/me")
@@ -3089,6 +3278,105 @@ async def cancel_subscription(cid: str, user=Depends(require_role("superadmin"))
         raise HTTPException(status_code=404, detail="Bedrijf niet gevonden")
     await db.companies.update_one({"id": cid}, {"$set": {"billing_status": "cancelled"}})
     return {"ok": True}
+
+
+
+async def _saas_email(to_email: str, subject: str, body_html: str) -> bool:
+    """Centrale helper om SaaS-platform mails te versturen via de SaaS SMTP
+    instellingen (db.saas_settings). Stilt fouten af — return False ipv raise."""
+    if not to_email:
+        return False
+    try:
+        from email_service import send_email as _smtp_send, send_platform_email, wrap_template
+        saas = await db.saas_settings.find_one({"id": SAAS_SETTINGS_ID}, {"_id": 0}) or {}
+        smtp = saas.get("smtp") or {}
+        wrapped = wrap_template(body_html, brand_name="SuriRent")
+        if smtp.get("enabled") and smtp.get("host"):
+            await _smtp_send(smtp, to=to_email, subject=subject, body_html=wrapped)
+            return True
+        # Platform fallback (Resend) als die geconfigureerd is.
+        try:
+            await send_platform_email(to=to_email, subject=subject, body_html=wrapped)
+            return True
+        except Exception:
+            return False
+    except Exception as e:
+        import logging as _logging
+        _logging.getLogger("uvicorn.error").warning(f"_saas_email failed for {to_email}: {e}")
+        return False
+
+
+@api.post("/companies/{cid}/reactivate-subscription")
+async def reactivate_subscription(cid: str, user=Depends(require_role("superadmin"))):
+    """Superadmin heractiveert een opgezegd of expired abonnement."""
+    c = await db.companies.find_one({"id": cid}, {"_id": 0})
+    if not c:
+        raise HTTPException(status_code=404, detail="Bedrijf niet gevonden")
+    update = {"billing_status": "active", "reactivated_at": now_utc_iso()}
+    # Als trial nooit afliep maar gewoon opgezegd was, schenk een nieuwe maand.
+    if c.get("billing_status") in ("cancelled", "expired"):
+        update["next_billing_date"] = (datetime.now(timezone.utc) + timedelta(days=30)).isoformat()
+    await db.companies.update_one({"id": cid}, {"$set": update})
+    # Notificeer de bedrijfsadmin (best-effort).
+    try:
+        if c.get("owner_email"):
+            await _saas_email(
+                to_email=c["owner_email"],
+                subject="Uw SuriRent abonnement is geheractiveerd",
+                body_html=f"<p>Beste {c.get('owner_name', 'beheerder')},</p>"
+                          f"<p>Uw abonnement voor <strong>{c.get('name', 'uw bedrijf')}</strong> is geheractiveerd. "
+                          f"U kunt direct weer inloggen.</p>",
+            )
+    except Exception as e:
+        import logging as _logging
+        _logging.getLogger("uvicorn.error").warning(f"Heractivatie email failed: {e}")
+    return {"ok": True}
+
+
+@api.post("/companies/me/cancel-subscription")
+async def company_self_cancel(user=Depends(get_current_user)):
+    """Admin van een bedrijf kan zijn eigen abonnement opzeggen.
+    Notificeert superadmin via email en zet billing_status='cancelled'."""
+    cid = company_id_of(user)
+    if not cid:
+        raise HTTPException(status_code=400, detail="Geen actief bedrijf")
+    c = await db.companies.find_one({"id": cid}, {"_id": 0})
+    if not c:
+        raise HTTPException(status_code=404, detail="Bedrijf niet gevonden")
+    await db.companies.update_one({"id": cid}, {"$set": {
+        "billing_status": "cancelled",
+        "cancelled_at": now_utc_iso(),
+        "cancelled_by_user_id": user.get("id"),
+    }})
+    # Notificeer superadmins via email
+    try:
+        superadmins = await db.users.find({"role": "superadmin"}, {"_id": 0, "email": 1}).to_list(20)
+        for sa in superadmins:
+            if not sa.get("email"):
+                continue
+            await _saas_email(
+                to_email=sa["email"],
+                subject=f"Opzegging: {c.get('name', cid)}",
+                body_html=f"<p>Bedrijf <strong>{c.get('name', cid)}</strong> heeft zojuist opgezegd.</p>"
+                          f"<p>Beheerder: {user.get('email')}<br/>Opzeg-tijdstip: {now_utc_iso()}</p>",
+            )
+        # En bevestig naar de admin zelf
+        if user.get("email"):
+            await _saas_email(
+                to_email=user["email"],
+                subject="Bevestiging opzegging SuriRent",
+                body_html=f"<p>Beste {user.get('name', 'beheerder')},</p>"
+                          f"<p>Wij bevestigen de opzegging van uw abonnement voor "
+                          f"<strong>{c.get('name', 'uw bedrijf')}</strong>. "
+                          f"Toegang is met onmiddellijke ingang geblokkeerd. "
+                          f"Neem contact met support op om te heractiveren.</p>",
+            )
+    except Exception as e:
+        import logging as _logging
+        _logging.getLogger("uvicorn.error").warning(f"Opzeg-notificatie email failed: {e}")
+    return {"ok": True, "billing_status": "cancelled"}
+
+
 
 
 @api.get("/superadmin/overview")
@@ -9712,6 +10000,54 @@ async def manual_run_trial_reminders(user=Depends(require_role("superadmin"))):
     """Manually trigger the reminder sweep (useful for testing)."""
     await _send_trial_reminders()
     return {"ok": True}
+
+
+async def _enforce_billing_expirations():
+    """Markeer trial-bedrijven waar de trial is afgelopen als 'expired'.
+    Wordt op verzoek aangeroepen door superadmin of (later) cronjob.
+    Verstuurt 1 email per nieuw geconvergeerd expired bedrijf."""
+    now = datetime.now(timezone.utc)
+    expired = []
+    cursor = db.companies.find({"billing_status": "trial"}, {"_id": 0})
+    async for c in cursor:
+        end_raw = c.get("trial_ends_at")
+        if not end_raw:
+            continue
+        try:
+            end = datetime.fromisoformat(end_raw.replace("Z", "+00:00"))
+        except Exception:
+            continue
+        if end < now:
+            await db.companies.update_one(
+                {"id": c["id"]},
+                {"$set": {"billing_status": "expired", "expired_at": now.isoformat()}},
+            )
+            expired.append(c)
+            if c.get("owner_email"):
+                try:
+                    await _saas_email(
+                        to_email=c["owner_email"],
+                        subject="Uw proefperiode is verlopen",
+                        body_html=f"<p>Beste {c.get('owner_name', 'beheerder')},</p>"
+                                  f"<p>De proefperiode van uw <strong>{c.get('name')}</strong> omgeving is verlopen. "
+                                  f"Activeer uw abonnement om weer toegang te krijgen.</p>",
+                    )
+                except Exception:
+                    pass
+    return expired
+
+
+@api.post("/superadmin/run-billing-checks")
+async def manual_run_billing_checks(user=Depends(require_role("superadmin"))):
+    """Markeer expired trial-bedrijven + stuur notificatie. Kan handmatig of
+    via cronjob worden aangeroepen."""
+    expired = await _enforce_billing_expirations()
+    return {
+        "ok": True,
+        "expired_count": len(expired),
+        "expired_companies": [{"id": c["id"], "name": c.get("name")} for c in expired],
+    }
+
 
 
 @api.get("/admin/morning-briefing")

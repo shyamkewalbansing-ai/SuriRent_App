@@ -10,7 +10,7 @@ import {
   Zap, Power, Menu, MoreHorizontal, MapPin, Crown, Paintbrush, Palette,
   Gauge, Activity, Clock as ClockIcon, Monitor, QrCode, Printer,
   ReceiptText, UsersRound, Building, Calendar, Sparkles,
-  AlertCircle, UserPlus, TrendingUp, ArrowUpRight,
+  AlertCircle, UserPlus, TrendingUp, ArrowUpRight, Package,
 } from 'lucide-react';
 import { api, formatError, fmtMoney, MONTHS_NL, openAuthedPdf } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
@@ -31,6 +31,7 @@ import Locations from './admin/Locations';
 import Subscriptions from './admin/Subscriptions';
 import SaasSettings from './admin/SaasSettings';
 import LandingEditor from './admin/LandingEditor';
+import PlansAdmin from './admin/PlansAdmin';
 import Branding from './admin/Branding';
 import BusinessInfo from './admin/BusinessInfo';
 import SetupWizard from './admin/SetupWizard';
@@ -49,6 +50,7 @@ import { installPendingApprovalDingListener } from '../../lib/notify-sound';
 import { useForegroundPendingNotify } from '../../lib/foreground-notify';
 import { useMorningBriefing } from '../../lib/morning-briefing';
 import MorningBriefingModal from '../../components/MorningBriefingModal';
+import BillingBlockedScreen from '../../components/BillingBlockedScreen';
 
 const BASE_TABS = [
   { id: 'overview', label: 'Overzicht', icon: LayoutDashboard },
@@ -73,6 +75,7 @@ const BASE_TABS = [
 const SUPER_TABS = [
   { id: 'subscriptions', label: 'SaaS Beheer', icon: Crown },
   { id: 'companies', label: 'Bedrijven', icon: Briefcase },
+  { id: 'plans', label: 'Pakketten', icon: Package },
   { id: 'landing_editor', label: 'Landing Editor', icon: Paintbrush },
   { id: 'saas_settings', label: 'SaaS Instellingen', icon: KeySquare },
 ];
@@ -88,6 +91,10 @@ const SIDEBAR_GROUPS = {
   geld: { label: 'Financieel', ids: ['payments', 'invoices', 'payment_plans', 'deposits', 'kasgeld'] },
   ops: { label: 'Operaties', ids: ['maintenance', 'employees', 'notifications'] },
   account: { label: 'Account', ids: ['mijn_abonnement', 'setup_wizard', 'business_info', 'branding', 'settings'] },
+  // SaaS Superadmin groep: tabs die alleen voor superadmin verschijnen.
+  // Zonder deze groep werd Landing Editor + SaaS Instellingen weggefilterd
+  // door groupTabs() omdat de tab-id's in geen enkele groep voorkwamen.
+  saas: { label: 'SaaS Beheer', ids: ['subscriptions', 'companies', 'plans', 'landing_editor', 'saas_settings'] },
 };
 function groupTabs(tabs) {
   const byId = Object.fromEntries(tabs.map((t) => [t.id, t]));
@@ -2223,6 +2230,43 @@ function DesktopTopBar({ user, activeCompany, tab, tabs }) {
 export default function AdminDashboard() {
   const { user, logout, activeCompany } = useAuth();
   const tabs = getTabsFor(user);
+  // BILLING BLOCKED — als de backend ons een 402 stuurt, tonen we een
+  // full-screen blok scherm. State wordt gevoed door de api.js interceptor
+  // (custom event 'billing-blocked') en localStorage zodat de status
+  // persists over re-renders.
+  const [billingBlocked, setBillingBlocked] = useState(() => {
+    try {
+      const status = localStorage.getItem('billing_blocked_status');
+      if (status && user?.role !== 'superadmin') {
+        return {
+          status,
+          message: localStorage.getItem('billing_blocked_message') || '',
+        };
+      }
+    } catch { /* ignore */ }
+    return null;
+  });
+  useEffect(() => {
+    const onBlocked = (e) => {
+      if (user?.role === 'superadmin') return;
+      setBillingBlocked({
+        status: e?.detail?.billing_status || 'cancelled',
+        message: e?.detail?.message || '',
+      });
+    };
+    window.addEventListener('billing-blocked', onBlocked);
+    return () => window.removeEventListener('billing-blocked', onBlocked);
+  }, [user?.role]);
+  // Clear blok bij superadmin / impersonatie zodat zij niet vastlopen.
+  useEffect(() => {
+    if (user?.role === 'superadmin' || user?.original_user_id) {
+      try {
+        localStorage.removeItem('billing_blocked_status');
+        localStorage.removeItem('billing_blocked_message');
+      } catch { /* ignore */ }
+      setBillingBlocked(null);
+    }
+  }, [user?.role, user?.original_user_id]);
   // Mobiel landt direct op Betalingen (geen Overzicht meer) — tablet/desktop
   // blijft op Overzicht starten. We detecteren op basis van window-breedte
   // bij eerste render zodat de PWA-launch direct in de juiste tab opent.
@@ -2331,6 +2375,14 @@ export default function AdminDashboard() {
 
   const doLogout = async () => { await logout(); navigate('/login'); };
 
+  // Toon billing-blocked vol-scherm vóór ALLE andere UI. Voorkomt dat de
+  // gebruiker iets ziet/aanraakt van een omgeving waar hij geen toegang
+  // meer toe heeft. Superadmin + impersonators worden hierboven al
+  // uitgesloten.
+  if (billingBlocked && user && user.role !== 'superadmin' && !user.original_user_id) {
+    return <BillingBlockedScreen status={billingBlocked.status} message={billingBlocked.message} />;
+  }
+
   return (
     <div className="min-h-screen bg-[#F7F8FA] flex">
       <Sidebar active={tab} onChange={handleSetTab} onLogout={doLogout}
@@ -2343,6 +2395,7 @@ export default function AdminDashboard() {
         <main className="flex-1 p-5 md:px-6 md:py-5 lg:px-8 lg:pt-3 pb-32 md:pb-8 w-full">
           {tab === 'companies' && <Companies />}
           {tab === 'subscriptions' && <Subscriptions />}
+          {tab === 'plans' && <PlansAdmin />}
           {tab === 'saas_settings' && <SaasSettings />}
           {tab === 'landing_editor' && <LandingEditor />}
           {tab === 'setup_wizard' && (

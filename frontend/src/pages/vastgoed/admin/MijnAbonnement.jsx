@@ -463,6 +463,35 @@ export default function MijnAbonnement() {
           </div>
         </div>
       )}
+
+      {/* Abonnement opzeggen — alleen zichtbaar voor actieve / trial abonnementen */}
+      {(me.status === 'trial' || me.status === 'active') && (
+        <div className="mt-8 pt-6 border-t border-slate-200">
+          <h3 className="text-sm font-extrabold uppercase tracking-wider text-slate-500 mb-3">Gevarenzone</h3>
+          <div className="bg-red-50/50 border border-red-200 rounded-2xl p-5">
+            <h4 className="font-extrabold text-red-900">Abonnement opzeggen</h4>
+            <p className="text-sm text-red-700 mt-1 leading-relaxed">
+              Uw abonnement wordt direct opgezegd en toegang tot de admin omgeving wordt
+              onmiddellijk geblokkeerd. Uw data blijft 90 dagen bewaard zodat u kunt heractiveren.
+            </p>
+            <button onClick={async () => {
+                if (!window.confirm('Weet u het zeker? Uw abonnement wordt direct opgezegd en u verliest toegang tot uw omgeving.')) return;
+                try {
+                  await api.post('/companies/me/cancel-subscription');
+                  // Backend zet billing_status='cancelled' en de volgende API call
+                  // krijgt 402 → BillingBlockedScreen verschijnt.
+                  window.location.reload();
+                } catch (e) {
+                  setErr(formatError(e, 'Opzeggen mislukt'));
+                }
+              }}
+              data-testid="cancel-subscription-btn"
+              className="mt-4 px-5 h-11 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-bold transition-colors">
+              Abonnement opzeggen
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -50,6 +50,19 @@ const PUBLIC_401_PATHS = [
 api.interceptors.response.use(
   (r) => r,
   (err) => {
+    // 402 Payment Required — billing blocked (cancelled/expired/past_due).
+    // Markeer in localStorage zodat AdminDashboard de BillingBlockedScreen toont.
+    if (err?.response?.status === 402) {
+      const detail = err?.response?.data?.detail;
+      if (detail && detail.code === 'billing_blocked') {
+        try {
+          localStorage.setItem('billing_blocked_status', detail.billing_status || 'cancelled');
+          localStorage.setItem('billing_blocked_message', detail.message || '');
+          // Broadcast event zodat React components direct re-renderen.
+          window.dispatchEvent(new CustomEvent('billing-blocked', { detail }));
+        } catch { /* ignore */ }
+      }
+    }
     if (err?.response?.status === 401) {
       const url = (err.config?.url || '');
       const isPublic = PUBLIC_401_PATHS.some((p) => url.startsWith(p));
