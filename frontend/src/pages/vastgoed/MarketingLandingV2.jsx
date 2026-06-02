@@ -76,12 +76,12 @@ function TopHeader({ segment, setSegment, onLogin }) {
     <div className="bg-white border-b border-slate-100">
       <div className="max-w-[1280px] mx-auto px-5 lg:px-10 h-20 flex items-center justify-between">
         <button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-          className="flex items-center gap-2.5" data-testid="topheader-logo">
-          <span className="w-10 h-10 rounded-lg bg-[#FF5C00] p-1.5">
+          className="flex items-center gap-2.5 md:gap-3" data-testid="topheader-logo">
+          <span className="w-11 h-11 md:w-12 md:h-12 rounded-lg bg-[#FF5C00] p-1.5 md:p-2 shrink-0">
             <img src="/kiosk-icons/mark-white.png" alt="" className="w-full h-full object-contain" />
           </span>
-          <span className="text-lg font-black tracking-tight text-[#0F0F0F]">
-            Suri<span className="text-[#FF5C00]">Rent</span>
+          <span className="text-xl md:text-2xl font-black tracking-tight text-[#0F0F0F]">
+            Suri<span className="text-[#FF5C00]">Rent</span> <span className="text-slate-400 font-bold">N.V</span>
           </span>
         </button>
 
@@ -758,7 +758,7 @@ function Footer({ onLogin }) {
                 <img src="/kiosk-icons/mark-white.png" alt="" className="w-full h-full object-contain" />
               </span>
               <span className="text-base font-black text-white">
-                Suri<span className="text-[#FF5C00]">Rent</span>
+                Suri<span className="text-[#FF5C00]">Rent</span> <span className="text-white/60">N.V</span>
               </span>
             </div>
             <p className="text-sm leading-relaxed max-w-md">
@@ -795,7 +795,7 @@ function Footer({ onLogin }) {
           </div>
         </div>
         <div className="mt-12 pt-8 border-t border-white/10 flex flex-wrap items-center justify-between gap-4">
-          <p className="text-xs text-white/40">© {new Date().getFullYear()} SuriRent. Alle rechten voorbehouden.</p>
+          <p className="text-xs text-white/40">© {new Date().getFullYear()} SuriRent N.V. Alle rechten voorbehouden.</p>
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
             <span className="text-xs font-semibold text-white/40">Alle systemen operationeel</span>
