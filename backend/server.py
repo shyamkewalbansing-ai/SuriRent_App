@@ -1808,7 +1808,10 @@ async def billing_me(user=Depends(get_current_user)):
         "pending_plan_id": pending_plan_id,
         "pending_plan": pending_plan,
         "pending_invoice": pending_invoice,
-        "renews_at": c.get("subscription_renews_at"),
+        "renews_at": c.get("subscription_renews_at") or c.get("next_billing_date"),
+        "next_billing_date": c.get("next_billing_date"),
+        "cancelled_at": c.get("cancelled_at"),
+        "reactivated_at": c.get("reactivated_at"),
     }
 
 
@@ -3272,12 +3275,64 @@ async def activate_subscription(cid: str, user=Depends(require_role("superadmin"
 
 
 @api.post("/companies/{cid}/cancel-subscription")
-async def cancel_subscription(cid: str, user=Depends(require_role("superadmin"))):
+async def cancel_subscription(cid: str, user=Depends(get_current_user)):
+    """Cancel een abonnement. Twee paden:
+    1. `cid == "me"` → self-cancel door bedrijfsadmin (resolves cid via user.company_id).
+       Stuurt notificatie naar superadmins en bevestiging naar admin.
+    2. Specifiek cid → superadmin force-cancel.
+    """
+    # Resolve self-cancel alias.
+    if cid == "me":
+        cid = company_id_of(user)
+        if not cid:
+            raise HTTPException(status_code=400, detail="Geen actief bedrijf")
+        return await _do_self_cancel(cid, user)
+    # Hard cancel — alleen superadmin.
+    if user.get("role") != "superadmin":
+        raise HTTPException(status_code=403, detail="Onvoldoende rechten")
     c = await db.companies.find_one({"id": cid}, {"_id": 0})
     if not c:
         raise HTTPException(status_code=404, detail="Bedrijf niet gevonden")
     await db.companies.update_one({"id": cid}, {"$set": {"billing_status": "cancelled"}})
     return {"ok": True}
+
+
+async def _do_self_cancel(cid: str, user: dict) -> dict:
+    """Helper voor /companies/me/cancel-subscription — markeert opzegging
+    en stuurt email-notificaties (best-effort)."""
+    c = await db.companies.find_one({"id": cid}, {"_id": 0})
+    if not c:
+        raise HTTPException(status_code=404, detail="Bedrijf niet gevonden")
+    await db.companies.update_one({"id": cid}, {"$set": {
+        "billing_status": "cancelled",
+        "cancelled_at": now_utc_iso(),
+        "cancelled_by_user_id": user.get("id"),
+    }})
+    try:
+        superadmins = await db.users.find({"role": "superadmin"}, {"_id": 0, "email": 1}).to_list(20)
+        for sa in superadmins:
+            if not sa.get("email"):
+                continue
+            await _saas_email(
+                to_email=sa["email"],
+                subject=f"Opzegging: {c.get('name', cid)}",
+                body_html=f"<p>Bedrijf <strong>{c.get('name', cid)}</strong> heeft zojuist opgezegd.</p>"
+                          f"<p>Beheerder: {user.get('email')}<br/>Opzeg-tijdstip: {now_utc_iso()}</p>",
+            )
+        if user.get("email"):
+            await _saas_email(
+                to_email=user["email"],
+                subject="Bevestiging opzegging SuriRent",
+                body_html=f"<p>Beste {user.get('name', 'beheerder')},</p>"
+                          f"<p>Wij bevestigen de opzegging van uw abonnement voor "
+                          f"<strong>{c.get('name', 'uw bedrijf')}</strong>. "
+                          f"Toegang is met onmiddellijke ingang geblokkeerd. "
+                          f"Neem contact met support op om te heractiveren.</p>",
+            )
+    except Exception as e:
+        import logging as _logging
+        _logging.getLogger("uvicorn.error").warning(f"Opzeg-notificatie email failed: {e}")
+    return {"ok": True, "billing_status": "cancelled"}
 
 
 
@@ -3335,46 +3390,15 @@ async def reactivate_subscription(cid: str, user=Depends(require_role("superadmi
 
 @api.post("/companies/me/cancel-subscription")
 async def company_self_cancel(user=Depends(get_current_user)):
-    """Admin van een bedrijf kan zijn eigen abonnement opzeggen.
-    Notificeert superadmin via email en zet billing_status='cancelled'."""
+    """Alias-route: admin van een bedrijf kan zijn eigen abonnement opzeggen.
+    Wordt feitelijk afgehandeld door `_do_self_cancel`. FastAPI route-matching
+    kan deze literal-prefix route boven de `/{cid}` variant pakken (definieer
+    deze daarom ook in server.py BOVEN de {cid} variant, of laat de {cid}
+    variant 'me' detecteren — beide werken)."""
     cid = company_id_of(user)
     if not cid:
         raise HTTPException(status_code=400, detail="Geen actief bedrijf")
-    c = await db.companies.find_one({"id": cid}, {"_id": 0})
-    if not c:
-        raise HTTPException(status_code=404, detail="Bedrijf niet gevonden")
-    await db.companies.update_one({"id": cid}, {"$set": {
-        "billing_status": "cancelled",
-        "cancelled_at": now_utc_iso(),
-        "cancelled_by_user_id": user.get("id"),
-    }})
-    # Notificeer superadmins via email
-    try:
-        superadmins = await db.users.find({"role": "superadmin"}, {"_id": 0, "email": 1}).to_list(20)
-        for sa in superadmins:
-            if not sa.get("email"):
-                continue
-            await _saas_email(
-                to_email=sa["email"],
-                subject=f"Opzegging: {c.get('name', cid)}",
-                body_html=f"<p>Bedrijf <strong>{c.get('name', cid)}</strong> heeft zojuist opgezegd.</p>"
-                          f"<p>Beheerder: {user.get('email')}<br/>Opzeg-tijdstip: {now_utc_iso()}</p>",
-            )
-        # En bevestig naar de admin zelf
-        if user.get("email"):
-            await _saas_email(
-                to_email=user["email"],
-                subject="Bevestiging opzegging SuriRent",
-                body_html=f"<p>Beste {user.get('name', 'beheerder')},</p>"
-                          f"<p>Wij bevestigen de opzegging van uw abonnement voor "
-                          f"<strong>{c.get('name', 'uw bedrijf')}</strong>. "
-                          f"Toegang is met onmiddellijke ingang geblokkeerd. "
-                          f"Neem contact met support op om te heractiveren.</p>",
-            )
-    except Exception as e:
-        import logging as _logging
-        _logging.getLogger("uvicorn.error").warning(f"Opzeg-notificatie email failed: {e}")
-    return {"ok": True, "billing_status": "cancelled"}
+    return await _do_self_cancel(cid, user)
 
 
 

@@ -1,5 +1,41 @@
 # Vastgoed Kiosk - PRD
 
+## Session 2026-06-02 (v25) — Volledige SaaS workflow: sidebar fix + plans CRUD + billing enforcement ✅
+
+### A. Sidebar bug fix
+- `SIDEBAR_GROUPS` had geen group voor superadmin tabs → Landing Editor + SaaS Instellingen verdwenen weggefilterd.
+- **Fix**: nieuwe `saas` group toegevoegd: `['subscriptions', 'companies', 'plans', 'landing_editor', 'saas_settings']`.
+
+### B. DB-driven plan catalog + Pakketten beheer UI
+- Nieuwe collection `db.plan_catalog` (seeds vanuit `PLAN_PRICES` op eerste call).
+- Endpoints: `GET/POST /api/superadmin/plans`, `PUT/DELETE /api/superadmin/plans/{id}`.
+- Soft-delete: als een plan in gebruik is wordt het op inactief gezet ipv hard verwijderd.
+- Nieuwe page `PlansAdmin.jsx` met inline edit + create + delete UI.
+- Tab "Pakketten" toegevoegd aan SUPER_TABS.
+- `GET /api/billing/plans` (public) leest nu uit DB; landing page Pricing blijft automatisch werken.
+
+### C. Billing enforcement middleware (KRITIEK)
+- `get_current_user()` checkt billing_status, returnt HTTP 402 `{code:'billing_blocked'}` voor cancelled/expired/past_due.
+- BILLING_EXEMPT routes: `/auth/`, `/billing/`, `/companies/me/branding`, `/public/`, `/health`.
+- Frontend `api.js` interceptor vangt 402 → custom event 'billing-blocked' + localStorage.
+- `BillingBlockedScreen.jsx`: full-screen UI met WhatsApp/email contact + uitlog + refresh.
+- AdminDashboard rendert BillingBlockedScreen vóór alle andere UI (skipped voor superadmin/impersonators).
+
+### D. Abonnement workflow
+- Self-cancel: `POST /api/companies/me/cancel-subscription` (alias `/{cid}` met `cid='me'`).
+- Reactivate: `POST /api/companies/{cid}/reactivate-subscription` (superadmin).
+- Expiry cronjob: `POST /api/superadmin/run-billing-checks`.
+- `_saas_email()` helper voor SaaS-platform emails via SMTP settings.
+- `MijnAbonnement.jsx`: gevarenzone met rode "Abonnement opzeggen" knop.
+- `/api/billing/me` exposed nu `next_billing_date`, `cancelled_at`, `reactivated_at`.
+
+### Bug fixes na testing agent feedback (iter 30)
+- Route-ordering bug: `/companies/me/cancel-subscription` werd niet bereikt → fix via cid=='me' detection in /{cid} route.
+- renews_at null in billing/me → fix: lees next_billing_date als fallback.
+
+### Verified end-to-end
+- self-cancel 200 ✓ → admin endpoint 402 ✓ → reactivate 200 ✓ → run-billing-checks 200 ✓
+
 ## Session 2026-06-01 (v20) — Device QR token: PWA scant zonder PIN/login ✅
 - **User request**: "QR scan vanaf PWA moet desktop autologinnen zonder PIN/login"
 - **Backend**:
