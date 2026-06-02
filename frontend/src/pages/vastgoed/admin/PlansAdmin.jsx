@@ -12,6 +12,59 @@ import { useState, useEffect, useCallback } from 'react';
 import { Plus, Save, Trash2, X, Loader2, Package, Check } from 'lucide-react';
 import { api, formatError } from '../../../lib/api';
 
+function LimitsEditor({ value, onChange, primary = '#FF5C00' }) {
+  // value = { max_apartments, max_tenants, max_locations, max_employees,
+  //           allow_kiosk, allow_ocr, allow_shelly, allow_branding, allow_backup }
+  const v = value || {};
+  const set = (k, val) => onChange({ ...v, [k]: val });
+  const numericFields = [
+    { key: 'max_apartments', label: 'Max appartementen' },
+    { key: 'max_tenants', label: 'Max huurders' },
+    { key: 'max_locations', label: 'Max locaties' },
+    { key: 'max_employees', label: 'Max medewerkers' },
+  ];
+  const booleanFields = [
+    { key: 'allow_kiosk', label: 'Kiosk terminal' },
+    { key: 'allow_ocr', label: 'AI-OCR (Gemini)' },
+    { key: 'allow_shelly', label: 'Shelly stroombeheer' },
+    { key: 'allow_branding', label: 'White-label branding' },
+    { key: 'allow_backup', label: 'Backup & Herstel' },
+  ];
+  return (
+    <div className="space-y-3 bg-slate-50 rounded-xl p-4">
+      <div className="grid grid-cols-2 gap-3">
+        {numericFields.map((f) => (
+          <div key={f.key}>
+            <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">{f.label}</label>
+            <div className="flex items-center gap-1">
+              <input type="number" value={v[f.key] ?? 0}
+                onChange={(e) => set(f.key, parseInt(e.target.value, 10) || 0)}
+                data-testid={`plan-limit-${f.key}`}
+                className="w-full h-9 px-2.5 rounded-lg border border-slate-200 focus:border-orange-500 outline-none text-sm font-mono" />
+              <button onClick={() => set(f.key, -1)} title="Onbeperkt"
+                className="px-2 h-9 rounded-lg border border-slate-200 hover:border-orange-400 text-xs font-bold text-slate-600 shrink-0">∞</button>
+            </div>
+            {v[f.key] === -1 && (
+              <p className="text-[10px] font-bold text-emerald-600 mt-0.5">ONBEPERKT</p>
+            )}
+          </div>
+        ))}
+      </div>
+      <div className="pt-3 border-t border-slate-200 grid grid-cols-2 gap-2">
+        {booleanFields.map((f) => (
+          <label key={f.key} className="flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200 hover:border-orange-400 cursor-pointer">
+            <input type="checkbox" checked={!!v[f.key]}
+              onChange={(e) => set(f.key, e.target.checked)}
+              data-testid={`plan-feature-${f.key}`}
+              className="w-4 h-4 accent-orange-500" />
+            <span className="text-sm font-bold text-slate-700">{f.label}</span>
+          </label>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function FeaturesEditor({ value, onChange, primary = '#FF5C00' }) {
   const items = Array.isArray(value) ? value : [];
   const update = (idx, v) => {
@@ -151,8 +204,14 @@ function PlanCard({ plan, onSave, onDelete, isNew = false, onCancel }) {
         </div>
 
         <div>
-          <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-2">Features</label>
+          <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-2">Features (zichtbaar in pricing)</label>
           <FeaturesEditor value={draft.features || []} onChange={(v) => update('features', v)} />
+        </div>
+
+        <div>
+          <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-2">Limieten & Functies</label>
+          <p className="text-[11px] text-slate-400 mb-2">Bepaal hoeveel een bedrijf mag aanmaken en welke premium features beschikbaar zijn. Gebruik ∞ voor onbeperkt.</p>
+          <LimitsEditor value={draft.limits || {}} onChange={(v) => update('limits', v)} />
         </div>
 
         {error && (

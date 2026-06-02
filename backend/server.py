@@ -16,7 +16,7 @@ from typing import List, Optional, Literal
 
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, Response, Query, UploadFile, File, Body, Form
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, JSONResponse
 from pydantic import BaseModel, EmailStr, Field
 from motor.motor_asyncio import AsyncIOMotorClient
 from contextlib import asynccontextmanager
@@ -659,6 +659,14 @@ async def lifespan(app: FastAPI):
         import asyncio as _aio2
         _demo_reset_task_handle = _aio2.create_task(_demo_reset_loop())
 
+    # --- Daily billing-checks loop (06:00 Suriname-tijd / UTC-3) ---
+    # Markeert verlopen trials als 'expired' en stuurt notificatie-emails.
+    # Loopt ALTIJD aan tenzij DISABLE_BILLING_CRON=1 wordt gezet.
+    _billing_cron_handle = None
+    if os.environ.get("DISABLE_BILLING_CRON") != "1":
+        import asyncio as _aio3
+        _billing_cron_handle = _aio3.create_task(_daily_billing_checks_loop())
+
     yield
     if _reminder_task_handle:
         _reminder_task_handle.cancel()
@@ -668,7 +676,38 @@ async def lifespan(app: FastAPI):
         _auto_invoice_task_handle.cancel()
     if _demo_reset_task_handle:
         _demo_reset_task_handle.cancel()
+    if _billing_cron_handle:
+        _billing_cron_handle.cancel()
     client.close()
+
+
+async def _daily_billing_checks_loop():
+    """Draait elke dag om 06:00 Suriname-tijd (UTC-3) de
+    `_enforce_billing_expirations()` flow. Gebruikt een simpele loop met
+    een berekend slaap-interval ipv apscheduler om dependencies minimaal
+    te houden."""
+    import asyncio as _aio
+    import logging as _logging
+    _log = _logging.getLogger("uvicorn.error")
+    while True:
+        try:
+            now = datetime.now(timezone.utc)
+            # Doel: 06:00 Suriname = 09:00 UTC
+            target = now.replace(hour=9, minute=0, second=0, microsecond=0)
+            if target <= now:
+                target = target + timedelta(days=1)
+            sleep_s = (target - now).total_seconds()
+            await _aio.sleep(max(60.0, sleep_s))
+            try:
+                expired = await _enforce_billing_expirations()
+                _log.info(f"[billing-cron] expired {len(expired)} companies @ {datetime.now(timezone.utc).isoformat()}")
+            except Exception as e:
+                _log.warning(f"[billing-cron] cycle failed: {e}")
+        except _aio.CancelledError:
+            return
+        except Exception as e:
+            _log.warning(f"[billing-cron] outer loop error: {e}")
+            await _aio.sleep(3600)
 
 
 _reminder_task_handle = None
@@ -1594,11 +1633,87 @@ async def me(user=Depends(get_current_user)):
 PLAN_PRICES = {
     "starter": {"name": "Starter", "amount": 3000, "currency": "SRD", "interval": "month",
                 "description": "Voor kleinere vastgoedbeheerders.",
-                "features": ["Onbeperkt appartementen", "Online betalen", "WhatsApp & E-mail"]},
+                "features": ["Onbeperkt appartementen", "Online betalen", "WhatsApp & E-mail"],
+                "limits": {
+                    "max_apartments": 100, "max_tenants": 100, "max_locations": 2, "max_employees": 5,
+                    "allow_kiosk": False, "allow_ocr": True, "allow_shelly": False,
+                    "allow_branding": False, "allow_backup": True,
+                }},
     "professional": {"name": "Professional", "amount": 5000, "currency": "SRD", "interval": "month",
                      "description": "Met Kiosk terminal en alle functies.",
-                     "features": ["Alles uit Starter", "Kiosk terminal", "Shelly stroombeheer", "Prioriteit support"]},
+                     "features": ["Alles uit Starter", "Kiosk terminal", "Shelly stroombeheer", "Prioriteit support"],
+                     "limits": {
+                         "max_apartments": 500, "max_tenants": 500, "max_locations": 10, "max_employees": 25,
+                         "allow_kiosk": True, "allow_ocr": True, "allow_shelly": True,
+                         "allow_branding": True, "allow_backup": True,
+                     }},
 }
+
+
+# Default limits voor plans die nog geen "limits" veld hebben (legacy DB rows).
+DEFAULT_PLAN_LIMITS = {
+    "max_apartments": 50, "max_tenants": 50, "max_locations": 1, "max_employees": 3,
+    "allow_kiosk": False, "allow_ocr": False, "allow_shelly": False,
+    "allow_branding": False, "allow_backup": False,
+}
+
+
+async def _resolve_company_limits(company_id: str) -> dict:
+    """Bepaalt de actieve limits voor een bedrijf op basis van zijn plan.
+    Returnt een complete dict met alle limit-keys (vult ontbrekende met defaults).
+    Onbekende plan-ids → val terug op het eerste actieve plan ipv harde defaults
+    zodat legacy data niet plotseling alle features verliest."""
+    if not company_id:
+        return dict(DEFAULT_PLAN_LIMITS)
+    c = await db.companies.find_one({"id": company_id}, {"_id": 0, "plan": 1})
+    plan_id = (c or {}).get("plan", "starter")
+    plan = await _fetch_plan_by_id(plan_id)
+    if not plan:
+        # Legacy plan-id (bv. 'pro' uit oude DB rijen) → pak eerste actieve plan.
+        all_plans = await _fetch_plans_from_db()
+        if all_plans:
+            plan = all_plans[0]
+    if not plan:
+        return dict(DEFAULT_PLAN_LIMITS)
+    limits = dict(DEFAULT_PLAN_LIMITS)
+    limits.update(plan.get("limits") or {})
+    return limits
+
+
+async def _enforce_count_limit(company_id: str, collection_name: str, limit_key: str, resource_label: str):
+    """Hard-block: raised HTTP 403 wanneer het bedrijf zijn quota voor
+    deze resource heeft bereikt. `limit_key` is een sleutel in `limits`
+    zoals 'max_apartments'. Een waarde van `-1` of None betekent 'unlimited'."""
+    limits = await _resolve_company_limits(company_id)
+    cap = limits.get(limit_key)
+    if cap is None or cap < 0:
+        return  # unlimited
+    coll = getattr(db, collection_name)
+    current = await coll.count_documents({"company_id": company_id})
+    if current >= int(cap):
+        raise HTTPException(status_code=403, detail={
+            "code": "plan_limit_reached",
+            "limit_key": limit_key,
+            "current": current,
+            "cap": int(cap),
+            "resource": resource_label,
+            "message": f"Uw abonnement staat maximaal {cap} {resource_label} toe. "
+                       f"Upgrade uw pakket om er meer toe te voegen.",
+        })
+
+
+async def _require_plan_feature(company_id: str, feature_key: str, feature_label: str):
+    """Hard-block: raised HTTP 403 wanneer een feature (allow_kiosk/_ocr/_shelly/...)
+    niet beschikbaar is op het huidige plan."""
+    limits = await _resolve_company_limits(company_id)
+    if not limits.get(feature_key, False):
+        raise HTTPException(status_code=403, detail={
+            "code": "plan_feature_locked",
+            "feature_key": feature_key,
+            "feature": feature_label,
+            "message": f"{feature_label} is niet beschikbaar op uw huidige abonnement. "
+                       f"Upgrade om deze functie te activeren.",
+        })
 
 
 # =====================================================================
@@ -1610,27 +1725,36 @@ PLAN_PRICES = {
 # =====================================================================
 
 async def _seed_plan_catalog():
-    """Seed de plan_catalog collection met de standaard plans als hij leeg is.
-    Idempotent: bestaande plans worden niet overschreven."""
+    """Seed de plan_catalog collection met de standaard plans als hij leeg is,
+    en backfill bestaande plans met `limits` als die ontbreken. Idempotent."""
     try:
-        count = await db.plan_catalog.count_documents({})
-        if count > 0:
-            return
         for pid, pdata in PLAN_PRICES.items():
-            doc = {
-                "id": pid,
-                "name": pdata["name"],
-                "amount": pdata["amount"],
-                "currency": pdata["currency"],
-                "interval": pdata["interval"],
-                "description": pdata["description"],
-                "features": list(pdata.get("features", [])),
-                "active": True,
-                "sort_order": 10 if pid == "starter" else 20,
-                "created_at": now_utc_iso(),
-                "updated_at": now_utc_iso(),
-            }
-            await db.plan_catalog.insert_one(doc)
+            existing = await db.plan_catalog.find_one({"id": pid})
+            if not existing:
+                doc = {
+                    "id": pid,
+                    "name": pdata["name"],
+                    "amount": pdata["amount"],
+                    "currency": pdata["currency"],
+                    "interval": pdata["interval"],
+                    "description": pdata["description"],
+                    "features": list(pdata.get("features", [])),
+                    "limits": dict(pdata.get("limits", DEFAULT_PLAN_LIMITS)),
+                    "active": True,
+                    "sort_order": 10 if pid == "starter" else 20,
+                    "created_at": now_utc_iso(),
+                    "updated_at": now_utc_iso(),
+                }
+                await db.plan_catalog.insert_one(doc)
+            elif not existing.get("limits"):
+                # Backfill: bestaande rijen zonder limits → patch met defaults uit PLAN_PRICES.
+                await db.plan_catalog.update_one(
+                    {"id": pid},
+                    {"$set": {
+                        "limits": dict(pdata.get("limits", DEFAULT_PLAN_LIMITS)),
+                        "updated_at": now_utc_iso(),
+                    }},
+                )
     except Exception as e:
         import logging as _logging
         _logging.getLogger("uvicorn.error").warning(f"Plan catalog seed failed: {e}")
@@ -1669,11 +1793,8 @@ def now_utc_iso():
 
 @api.get("/billing/plans")
 async def list_plans(phone: Optional[str] = None, currency: Optional[str] = None):
-    """Public plan catalog — used by landing + registration flow.
-    Currency resolution: explicit ?currency=EUR/SRD > ?phone=... auto-detect > SRD default.
-
-    Plans komen uit `db.plan_catalog` (superadmin-bewerkbaar). Bij lege DB
-    wordt teruggevallen op `PLAN_PRICES` constant."""
+    """Public plan catalog — used by landing + registration flow."""
+    await _seed_plan_catalog()  # idempotent — backfilt limits indien nodig
     plans = await _fetch_plans_from_db()
     want = (currency or "").upper()
     if not want and phone:
@@ -1698,6 +1819,7 @@ class PlanCreate(BaseModel):
     interval: str = "month"
     description: str = ""
     features: list[str] = []
+    limits: dict = {}
     active: bool = True
     sort_order: int = 50
 
@@ -1709,6 +1831,7 @@ class PlanUpdate(BaseModel):
     interval: Optional[str] = None
     description: Optional[str] = None
     features: Optional[list[str]] = None
+    limits: Optional[dict] = None
     active: Optional[bool] = None
     sort_order: Optional[int] = None
 
@@ -1733,6 +1856,7 @@ async def superadmin_create_plan(body: PlanCreate, user=Depends(require_role("su
         "id": plan_id, "name": body.name, "amount": float(body.amount),
         "currency": body.currency.upper(), "interval": body.interval,
         "description": body.description, "features": list(body.features),
+        "limits": {**DEFAULT_PLAN_LIMITS, **(body.limits or {})},
         "active": body.active, "sort_order": int(body.sort_order),
         "created_at": now_utc_iso(), "updated_at": now_utc_iso(),
     }
@@ -3399,6 +3523,126 @@ async def company_self_cancel(user=Depends(get_current_user)):
     if not cid:
         raise HTTPException(status_code=400, detail="Geen actief bedrijf")
     return await _do_self_cancel(cid, user)
+
+
+
+# =====================================================================
+# Backup & Restore — admin van een bedrijf kan zijn data exporteren en
+# herstellen. Toegestaan voor alle plannen die `allow_backup=true` hebben.
+# =====================================================================
+
+@api.get("/companies/me/backup")
+async def export_company_backup(user=Depends(get_current_user)):
+    """Exporteer alle data van het huidige bedrijf naar een JSON dump.
+    Toegankelijk voor admin's met `allow_backup` op hun plan."""
+    cid = company_id_of(user)
+    if not cid:
+        raise HTTPException(status_code=400, detail="Geen actief bedrijf")
+    if user.get("role") != "superadmin" and not user.get("original_user_id"):
+        await _require_plan_feature(cid, "allow_backup", "Backup & Herstel")
+
+    company = await db.companies.find_one({"id": cid}, {"_id": 0})
+    if not company:
+        raise HTTPException(status_code=404, detail="Bedrijf niet gevonden")
+
+    backup = {
+        "format_version": 1,
+        "exported_at": now_utc_iso(),
+        "company_id": cid,
+        "company": company,
+        "users": [u async for u in db.users.find({"company_id": cid}, {"_id": 0, "password_hash": 0})],
+        "collections": {},
+    }
+    for coll in TENANT_SCOPED_COLLECTIONS:
+        docs = []
+        async for d in db[coll].find({"company_id": cid}, {"_id": 0}):
+            docs.append(d)
+        backup["collections"][coll] = docs
+
+    # Bouw een filename met datum + slug voor downloadbestand.
+    slug = (company.get("slug") or cid)[:32]
+    filename = f"surirent-backup-{slug}-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}.json"
+    return JSONResponse(
+        content=backup,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+class BackupRestoreRequest(BaseModel):
+    backup: dict
+    mode: str = "merge"  # "merge" (default: upsert by id) | "replace" (wipe + insert)
+    target_company_id: Optional[str] = None  # superadmin only — migratie naar ander bedrijf
+
+
+@api.post("/companies/me/restore")
+async def restore_company_backup(body: BackupRestoreRequest, user=Depends(get_current_user)):
+    """Importeer een eerder gemaakte JSON backup.
+    - `mode='merge'` (default): upsert per id, behoudt bestaande records die niet in de backup zitten.
+    - `mode='replace'`: wist alle company-scoped data en importeert opnieuw (destructief!).
+    Superadmin kan via `target_company_id` data naar een ander bedrijf migreren."""
+    backup = body.backup or {}
+    if backup.get("format_version") != 1:
+        raise HTTPException(status_code=400, detail="Onbekend backup formaat")
+    src_cid = backup.get("company_id")
+    if not src_cid:
+        raise HTTPException(status_code=400, detail="Backup mist company_id")
+
+    target_cid = company_id_of(user)
+    if body.target_company_id:
+        if user.get("role") != "superadmin":
+            raise HTTPException(status_code=403, detail="Alleen superadmin mag migreren")
+        target_cid = body.target_company_id
+    if not target_cid:
+        raise HTTPException(status_code=400, detail="Geen target bedrijf")
+
+    # Plan feature check (geldt niet voor superadmin/impersonatie).
+    if user.get("role") != "superadmin" and not user.get("original_user_id"):
+        await _require_plan_feature(target_cid, "allow_backup", "Backup & Herstel")
+
+    summary = {"target_company_id": target_cid, "mode": body.mode, "collections": {}}
+
+    # Replace-modus: wipe eerst alle tenant-scoped collections voor target.
+    if body.mode == "replace":
+        for coll in TENANT_SCOPED_COLLECTIONS:
+            res = await db[coll].delete_many({"company_id": target_cid})
+            summary["collections"].setdefault(coll, {"deleted": 0, "inserted": 0, "upserted": 0})
+            summary["collections"][coll]["deleted"] = res.deleted_count
+
+    # Re-import elke collection. Forceer company_id en strip _id om dup-conflicten te voorkomen.
+    collections_in = backup.get("collections") or {}
+    for coll, docs in collections_in.items():
+        if coll not in TENANT_SCOPED_COLLECTIONS:
+            continue
+        ins = 0
+        upd = 0
+        for d in docs:
+            d = {k: v for k, v in (d or {}).items() if k != "_id"}
+            d["company_id"] = target_cid
+            doc_id = d.get("id") or new_id()
+            d["id"] = doc_id
+            res = await db[coll].update_one(
+                {"id": doc_id, "company_id": target_cid},
+                {"$set": d},
+                upsert=True,
+            )
+            if res.upserted_id is not None:
+                ins += 1
+            elif res.modified_count > 0:
+                upd += 1
+        summary["collections"].setdefault(coll, {"deleted": 0, "inserted": 0, "upserted": 0})
+        summary["collections"][coll]["inserted"] += ins
+        summary["collections"][coll]["upserted"] += upd
+
+    summary["restored_at"] = now_utc_iso()
+    return summary
+
+
+@api.post("/superadmin/migrate-company-data")
+async def superadmin_migrate(body: BackupRestoreRequest, user=Depends(require_role("superadmin"))):
+    """Superadmin tool: kopieer data van bedrijf A → bedrijf B via backup body."""
+    if not body.target_company_id:
+        raise HTTPException(status_code=400, detail="target_company_id is verplicht")
+    return await restore_company_backup(body, user)
 
 
 
@@ -5119,6 +5363,9 @@ async def create_apartment(body: ApartmentIn, user=Depends(get_current_user)):
     cid = company_id_of(user)
     if not cid:
         raise HTTPException(status_code=400, detail="Geen actief bedrijf geselecteerd")
+    # Hard-block bij plan limiet (superadmin/impersonatie krijgt vrije toegang).
+    if user.get("role") != "superadmin" and not user.get("original_user_id"):
+        await _enforce_count_limit(cid, "apartments", "max_apartments", "appartementen")
     doc = {
         "id": new_id(),
         "company_id": cid,
@@ -5487,6 +5734,8 @@ async def create_tenant(body: TenantIn, user=Depends(get_current_user)):
     cid = company_id_of(user)
     if not cid:
         raise HTTPException(status_code=400, detail="Geen actief bedrijf geselecteerd")
+    if user.get("role") != "superadmin" and not user.get("original_user_id"):
+        await _enforce_count_limit(cid, "tenants", "max_tenants", "huurders")
     payload = body.model_dump()
     if payload.get("email"):
         payload["email"] = payload["email"].strip().lower()
@@ -6419,6 +6668,8 @@ async def create_location(body: LocationIn, user=Depends(get_current_user)):
     cid = company_id_of(user)
     if not cid:
         raise HTTPException(status_code=400, detail="Geen actief bedrijf geselecteerd")
+    if user.get("role") != "superadmin" and not user.get("original_user_id"):
+        await _enforce_count_limit(cid, "locations", "max_locations", "locaties")
     doc = {
         "id": new_id(),
         "company_id": cid,
@@ -8562,6 +8813,8 @@ async def create_employee(body: EmployeeIn, user=Depends(get_current_user)):
     cid = company_id_of(user)
     if not cid:
         raise HTTPException(status_code=400, detail="Geen actief bedrijf geselecteerd")
+    if user.get("role") != "superadmin" and not user.get("original_user_id"):
+        await _enforce_count_limit(cid, "employees", "max_employees", "medewerkers")
     doc = {"id": new_id(), "company_id": cid, **body.model_dump(), "created_at": iso(now_utc())}
     await db.employees.insert_one(doc)
     doc.pop("_id", None)

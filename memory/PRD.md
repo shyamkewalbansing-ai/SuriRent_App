@@ -1,6 +1,35 @@
 # Vastgoed Kiosk - PRD
 
-## Session 2026-06-02 (v25) — Volledige SaaS workflow: sidebar fix + plans CRUD + billing enforcement ✅
+## Session 2026-06-02 (v26) — Plan limits + cronjob + backup/restore ✅
+
+### 1. Plan Limits (Hard-block)
+- `plan_catalog.limits`: max_apartments, max_tenants, max_locations, max_employees, allow_kiosk, allow_ocr, allow_shelly, allow_branding, allow_backup
+- Helpers `_enforce_count_limit()` + `_require_plan_feature()` raise HTTP 403 met code='plan_limit_reached' of 'plan_feature_locked'
+- Inject in POST /apartments, /tenants, /locations, /employees
+- PlansAdmin.jsx LimitsEditor: numerieke velden + ∞ knop voor unlimited + boolean toggles per feature
+- Backfill: bestaande plan_catalog rows zonder limits krijgen auto defaults
+
+### 2. Cronjob 06:00 dagelijks
+- `_daily_billing_checks_loop()` toegevoegd aan lifespan
+- Berekent slaaptijd naar 09:00 UTC (= 06:00 Suriname/UTC-3)
+- Runt `_enforce_billing_expirations()` automatisch
+- Disable via env `DISABLE_BILLING_CRON=1`
+
+### 3. Backup & Restore
+- GET /api/companies/me/backup → JSON dump van alle tenant-scoped collections + users + company
+- POST /api/companies/me/restore met mode='merge' (upsert) of 'replace' (wipe+insert)
+- POST /api/superadmin/migrate-company-data: superadmin migreert data tussen bedrijven
+- Plan feature `allow_backup` required (geldt ook voor restore)
+- Frontend BackupRestore.jsx: download knop + upload met mode switcher + waarschuwing
+- Toegevoegd aan Account-groep in sidebar
+
+### End-to-end Verified
+- starter limits PUT → opgeslagen ✓
+- backup download → JSON met 4 apartments, 3 tenants, 339 payments etc ✓
+- restore merge → succesvol, 0 changes (data identiek) ✓
+- backfill resolver: legacy plan_id 'pro' valt nu terug op eerste actieve plan ✓
+
+## Session 2026-06-02 (v25) — Volledige SaaS workflow ✅
 
 ### A. Sidebar bug fix
 - `SIDEBAR_GROUPS` had geen group voor superadmin tabs → Landing Editor + SaaS Instellingen verdwenen weggefilterd.

@@ -10,7 +10,7 @@ import {
   Zap, Power, Menu, MoreHorizontal, MapPin, Crown, Paintbrush, Palette,
   Gauge, Activity, Clock as ClockIcon, Monitor, QrCode, Printer,
   ReceiptText, UsersRound, Building, Calendar, Sparkles,
-  AlertCircle, UserPlus, TrendingUp, ArrowUpRight, Package,
+  AlertCircle, UserPlus, TrendingUp, ArrowUpRight, Package, Database,
 } from 'lucide-react';
 import { api, formatError, fmtMoney, MONTHS_NL, openAuthedPdf } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
@@ -32,6 +32,7 @@ import Subscriptions from './admin/Subscriptions';
 import SaasSettings from './admin/SaasSettings';
 import LandingEditor from './admin/LandingEditor';
 import PlansAdmin from './admin/PlansAdmin';
+import BackupRestore from './admin/BackupRestore';
 import Branding from './admin/Branding';
 import BusinessInfo from './admin/BusinessInfo';
 import SetupWizard from './admin/SetupWizard';
@@ -70,6 +71,7 @@ const BASE_TABS = [
   { id: 'setup_wizard', label: 'Setup Wizard', icon: Sparkles },
   { id: 'business_info', label: 'Bedrijfsgegevens', icon: Briefcase },
   { id: 'branding', label: 'Branding', icon: Palette },
+  { id: 'backup_restore', label: 'Backup & Herstel', icon: Database },
   { id: 'settings', label: 'Instellingen', icon: KeySquare },
 ];
 const SUPER_TABS = [
@@ -90,7 +92,7 @@ const SIDEBAR_GROUPS = {
   hoofd: { label: 'Hoofd', ids: ['overview', 'locations', 'apartments', 'tenants', 'contracts'] },
   geld: { label: 'Financieel', ids: ['payments', 'invoices', 'payment_plans', 'deposits', 'kasgeld'] },
   ops: { label: 'Operaties', ids: ['maintenance', 'employees', 'notifications'] },
-  account: { label: 'Account', ids: ['mijn_abonnement', 'setup_wizard', 'business_info', 'branding', 'settings'] },
+  account: { label: 'Account', ids: ['mijn_abonnement', 'setup_wizard', 'business_info', 'branding', 'backup_restore', 'settings'] },
   // SaaS Superadmin groep: tabs die alleen voor superadmin verschijnen.
   // Zonder deze groep werd Landing Editor + SaaS Instellingen weggefilterd
   // door groupTabs() omdat de tab-id's in geen enkele groep voorkwamen.
@@ -2420,6 +2422,7 @@ export default function AdminDashboard() {
           {tab === 'employees' && <Employees />}
           {tab === 'notifications' && <Notifications />}
           {tab === 'mijn_abonnement' && <MijnAbonnement />}
+          {tab === 'backup_restore' && <BackupRestore />}
           {tab === 'settings' && <SettingsPage initialSection={settingsSection} />}
         </main>
       </div>
