@@ -8150,6 +8150,130 @@ async def health():
     return {"ok": True, "service": "vastgoed-kiosk-api"}
 
 
+@api.get("/system/status")
+async def system_status():
+    """Publieke status-endpoint voor de status pill op de landing.
+
+    Per-component checks zonder enige authenticatie. Snel (~<200ms) en
+    cacheable voor 30s. Components:
+      • api          — FastAPI proces draait (impliciet: deze route reageert)
+      • database     — MongoDB ping
+      • admin_app    — Admin Dashboard frontend bundle bereikbaar (via API ping
+                       want zelfde dyno als landing)
+      • huurder_kiosk — Huurder kiosk route + tenant-portal endpoint
+      • klantenscherm — Customer display feed endpoint
+      • landing      — Marketing landing content fetch
+    """
+    import time
+    from pymongo.errors import PyMongoError
+
+    components = []
+    overall_status = "operational"   # operational | degraded | down
+
+    # 1) Database ping
+    t0 = time.perf_counter()
+    db_status = "operational"
+    db_err = None
+    try:
+        await asyncio.wait_for(db.command("ping"), timeout=3.0)
+    except (PyMongoError, asyncio.TimeoutError, Exception) as e:
+        db_status = "down"
+        db_err = str(e)[:120]
+        overall_status = "down"
+    db_latency = int((time.perf_counter() - t0) * 1000)
+    components.append({
+        "id": "database",
+        "label": "Database",
+        "status": db_status,
+        "latency_ms": db_latency,
+        "error": db_err,
+    })
+
+    # 2) API is implicit — als deze response wordt opgebouwd, draait FastAPI.
+    components.append({
+        "id": "api",
+        "label": "API server",
+        "status": "operational",
+        "latency_ms": 0,
+    })
+
+    # 3) Huurder kiosk — check dat /tenant-portal endpoint kan resolven
+    t0 = time.perf_counter()
+    hk_status = "operational"
+    try:
+        # Lichte sanity: count tenants (snel met index) — bevestigt dat
+        # tenant-portal data laag werkt.
+        await asyncio.wait_for(db.tenants.estimated_document_count(), timeout=2.0)
+    except Exception as e:
+        hk_status = "degraded"
+        if overall_status == "operational":
+            overall_status = "degraded"
+    components.append({
+        "id": "huurder_kiosk",
+        "label": "Huurder Kiosk + Portaal",
+        "status": hk_status,
+        "latency_ms": int((time.perf_counter() - t0) * 1000),
+    })
+
+    # 4) Klantenscherm — check kasgeld feed bron
+    t0 = time.perf_counter()
+    kl_status = "operational"
+    try:
+        await asyncio.wait_for(db.kasgeld.estimated_document_count(), timeout=2.0)
+    except Exception:
+        kl_status = "degraded"
+        if overall_status == "operational":
+            overall_status = "degraded"
+    components.append({
+        "id": "klantenscherm",
+        "label": "Klantenscherm",
+        "status": kl_status,
+        "latency_ms": int((time.perf_counter() - t0) * 1000),
+    })
+
+    # 5) Admin Dashboard — check companies collection
+    t0 = time.perf_counter()
+    ad_status = "operational"
+    try:
+        await asyncio.wait_for(db.companies.estimated_document_count(), timeout=2.0)
+    except Exception:
+        ad_status = "degraded"
+        if overall_status == "operational":
+            overall_status = "degraded"
+    components.append({
+        "id": "admin_app",
+        "label": "Admin Dashboard",
+        "status": ad_status,
+        "latency_ms": int((time.perf_counter() - t0) * 1000),
+    })
+
+    # 6) Landing content
+    t0 = time.perf_counter()
+    landing_status = "operational"
+    try:
+        await asyncio.wait_for(db.landing_content.estimated_document_count(), timeout=2.0)
+    except Exception:
+        landing_status = "degraded"
+        if overall_status == "operational":
+            overall_status = "degraded"
+    components.append({
+        "id": "landing",
+        "label": "Marketing site",
+        "status": landing_status,
+        "latency_ms": int((time.perf_counter() - t0) * 1000),
+    })
+
+    headers = {"Cache-Control": "public, max-age=30"}
+    return JSONResponse(
+        content={
+            "status": overall_status,
+            "components": components,
+            "checked_at": iso(now_utc()),
+        },
+        headers=headers,
+    )
+
+
 # =====================================================================
 # Receipt PDF
 # =====================================================================

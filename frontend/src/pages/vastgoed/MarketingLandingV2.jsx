@@ -11,6 +11,7 @@ import {
   Star, ArrowRight,
 } from 'lucide-react';
 import { EditableProvider, EditableText, EditableImage, useLandingContent } from '../../lib/landing-editable';
+import StatusPill from '../../components/StatusPill';
 
 const SHOTS = {
   overzicht:     'https://customer-assets.emergentagent.com/job_vastgoed-app/artifacts/7sx9hgg7_1.png',
@@ -56,16 +57,9 @@ function searchIndex(q) {
 }
 
 // =============================================================================
-// Top header — tier 1 (thin): logo + segments + Inloggen button
+// Top header — tier 1 (thin): logo + status indicator + Inloggen button
 // =============================================================================
-const DEMO_SEGMENTS = [
-  { id: 'admin',   label: 'Admin kiosk demo',    target: '/admin' },
-  { id: 'huurder', label: 'Huurder kiosk demo',  target: '/kiosk/huurder' },
-  { id: 'klant',   label: 'Klantenscherm demo',  target: '/kiosk/klant' },
-  { id: 'portaal', label: 'Mijn Huurportaal demo', target: '/kiosk/huurder?source=portaal' },
-];
-
-function TopHeader({ segment, setSegment, onLogin, onDemoLaunch }) {
+function TopHeader({ onLogin }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const navItems = [
     { id: 'home',     label: 'Home' },
@@ -97,20 +91,10 @@ function TopHeader({ segment, setSegment, onLogin, onDemoLaunch }) {
           </span>
         </button>
 
-        <div className="flex items-center gap-3 md:gap-5 lg:gap-7">
-          {/* Demo segments — klik = direct ingelogd in de juiste demo-omgeving */}
-          <div className="hidden lg:flex items-center gap-1.5">
-            {DEMO_SEGMENTS.map((s) => (
-              <button key={s.id} onClick={() => { setSegment(s.id); onDemoLaunch(s.target); }}
-                data-testid={`segment-${s.id}`}
-                className={`text-[11px] font-bold px-3 py-2 rounded transition-colors whitespace-nowrap ${
-                  segment === s.id
-                    ? 'border border-[#FF5C00] text-[#FF5C00] bg-orange-50'
-                    : 'text-[#0F0F0F] hover:bg-orange-50 hover:text-[#FF5C00]'
-                }`}>
-                {s.label}
-              </button>
-            ))}
+        <div className="flex items-center gap-3 md:gap-4">
+          {/* Status indicator — toont real-time of alle systemen draaien */}
+          <div className="hidden sm:block">
+            <StatusPill />
           </div>
 
           <button onClick={onLogin} data-testid="topheader-login"
@@ -143,18 +127,8 @@ function TopHeader({ segment, setSegment, onLogin, onDemoLaunch }) {
                 {n.label}
               </button>
             ))}
-            <div className="pt-3 mt-2 border-t border-slate-100 grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {DEMO_SEGMENTS.map((s) => (
-                <button key={s.id} onClick={() => { setSegment(s.id); setMobileMenuOpen(false); onDemoLaunch(s.target); }}
-                  data-testid={`mobile-segment-${s.id}`}
-                  className={`text-xs font-bold px-3 py-2.5 rounded transition-colors text-left ${
-                    segment === s.id
-                      ? 'border border-[#FF5C00] text-[#FF5C00] bg-orange-50'
-                      : 'border border-slate-200 text-slate-700 hover:border-[#FF5C00] hover:text-[#FF5C00]'
-                  }`}>
-                  {s.label}
-                </button>
-              ))}
+            <div className="pt-3 mt-2 border-t border-slate-100">
+              <StatusPill />
             </div>
           </div>
         </div>
@@ -861,7 +835,6 @@ function Footer({ onLogin }) {
 // =============================================================================
 export default function MarketingLandingV2() {
   const navigate = useNavigate();
-  const [segment, setSegment] = useState('admin');
 
   // Edit mode wordt geactiveerd via ?edit=1 (alleen wanneer pagina in iframe
   // staat van de LiveLandingEditor superadmin tool).
@@ -975,7 +948,7 @@ export default function MarketingLandingV2() {
             ✏️ Bewerk modus actief — klik op een tekst om te bewerken
           </div>
         )}
-        <TopHeader segment={segment} setSegment={setSegment} onLogin={onLogin} onDemoLaunch={launchDemo} />
+        <TopHeader onLogin={onLogin} />
         <SecondaryNav />
         <Hero onDemo={onDemo} onWhatsApp={onWhatsApp} />
         <ProductGrid onDemo={onDemo} onLogin={onLogin} />
