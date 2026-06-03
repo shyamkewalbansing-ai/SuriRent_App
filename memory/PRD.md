@@ -1,5 +1,46 @@
 # Vastgoed Kiosk - PRD
 
+## Session 2026-06-03 (v28) — Full Editable Landing + Per-Company Public Landings ✅
+
+### 1. SuriRent hoofdpagina volledig inline-editable
+Uitgebreid van ~12 paden → **103 data-edit-path** velden in MarketingLandingV2.jsx:
+- TopHeader: logo (EditableImage), `v2.brand.name_prefix/suffix/legal_suffix/cta_login`
+- Greeting card: `v2.greeting.subtitle/whatsapp_label/popular_label`
+- ProductGrid: 8 cards × {label, desc} (`v2.product.cards.0..7`)
+- FeatureRows: 5 rows × {eyebrow, title, desc, bullets[], img} (`v2.features.rows.0..4`)
+- KioskSection: eyebrow/title_line1/title_highlight/subtitle + 4 steps × {label, desc, img}
+- FAQSection: dynamische items × {q, a}
+- Footer: branding + email/phone/address/rating_label
+
+### 2. Per-bedrijf landing op custom domain (NIEUW)
+**Architectuur**:
+- `companies.custom_domain` (uniek genormaliseerd: lowercase, geen www., geen port)
+- `company_landings` collectie: {id, draft, published, updated_at, published_at}
+- `landing_leads` collectie: publieke leads vanuit het contactformulier
+- `App.js useTenantLandingResolver()`: bij mount checkt host → custom_domain match → rendert direct `<TenantPublicLanding />` ipv alle routes. Skipt system hosts (surirent.sr, *.surirent.sr, emergent preview, localhost).
+
+**Backend endpoints**:
+- `GET /api/public/company-landing` — host-based, geen auth, returnt {found, company, apartments[vacant+available], content}
+- `POST /api/public/landing-lead` — geen auth, vereist {company_id, name, phone}
+- `GET/PUT /api/companies/me/landing` — admin draft management
+- `POST /api/companies/me/landing/{publish,discard}` — promote/reset
+- `PUT /api/companies/me/custom-domain` — set/clear domain met dup-check (409)
+- `GET /api/companies/me/landing-apartments` — preview-helper
+- `GET /api/companies/me/landing-leads` + `POST .../{lead_id}/status` — lead inbox
+- Superadmin variants: `/api/superadmin/companies/{cid}/landing` GET/PUT/publish
+
+**Frontend**:
+- `TenantPublicLanding.jsx` — apartement-rental showcase template met Hero (Unsplash bg), StatsBar, ApartmentsGrid (auto-gevuld uit vacant units), About, ContactSection (lead form), Footer. Volledig editable in `?edit=1` mode. Branding `primary_color` toegepast op accents.
+- `MijnLanding.jsx` — admin editor: custom-domain card met DNS-instructies (CNAME → surirent.sr) + iframe-based WYSIWYG editor (zelfde patroon als LiveLandingEditor).
+- Sidebar item "Mijn Landing" toegevoegd onder Account-groep.
+
+### Test Results (Iteration 32)
+- **Backend**: 18/18 pytest PASS (`/app/backend/tests/test_iter32_tenant_landing.py`)
+  - Bug gefixed: `list_my_landing_leads` had `async for` over `to_list()` Future → vervangen door `await ... .to_list()`
+- **Frontend**: Mijn Landing editor + iframe + inline edit + custom domain save + public lead form + no regressies
+- **End-to-end**: custom_domain=`surirent-demo.com` → PUT landing → publish → `/api/public/company-landing?host=surirent-demo.com` returnt published content + filtered apartments ✓
+
+
 ## Session 2026-06-03 (v27) — Superadmin restructuring + Live Landing Editor ✅
 
 ### 1. Sidebar Reorganisatie (SaaS Beheer split)
