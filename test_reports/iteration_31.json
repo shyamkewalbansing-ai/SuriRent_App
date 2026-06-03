@@ -1,0 +1,81 @@
+{
+  "summary": "Iter 31 — Full E2E validation of new superadmin restructuring: SaaS Overzicht dashboard, sidebar reorganization (8 entries), sub-page viewMode routing (Bedrijven/OCR/Facturen/Betalingen), Live WYSIWYG Landing Editor with iframe inline edit + autosave + publish/discard, presence tracking (last_seen_at), and admin regression. 8/8 backend tests PASS, all targeted frontend flows PASS.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Admin /admin landing", "issues": ["Goedemorgen (Morning Briefing) modal opens automatically after admin login and intercepts clicks on sidebar items if not dismissed. Test scripts must handle this. Not a bug per-se but UX: consider showing briefing as a side toast or making it auto-dismiss after focus loss."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter31_saas_overview_landing.py",
+    "/app/test_reports/pytest/iter31.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "AdminDashboard.jsx is 2454 lines — well over the 700-line threshold. SUPER_TABS, SIDEBAR_GROUPS, and the giant tab-switch render block (~lines 2415-2437) should be split into smaller files (e.g. extract sidebar config + renderTabContent into separate modules) to reduce cognitive load and improve maintainability.",
+    "LiveLandingEditor postMessage protocol is functional but should validate event.origin === window.location.origin before accepting patches; current implementation trusts any same-window message which is fine for same-origin iframe but defensive coding advised.",
+    "Cleanup: old LandingEditor.jsx is still in repo but no longer imported — safe to delete to reduce confusion."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter31_saas_overview_landing.py (created)"
+  ],
+  "success_rate": {"backend": "100% (8/8)", "frontend": "100% on tested flows"},
+  "test_credentials": "Superadmin super@surirent.sr / super123 ✓ | Admin admin@vastgoed.sr / admin123 ✓ (both work as documented in /app/memory/test_credentials.md)",
+  "seed_data_creation": "None. Test marker TEST_HERO_* was used briefly for landing publish flow then cleaned up via PUT (restore) + publish + discard. Public landing content is in its pre-test state.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend test file /app/backend/tests/test_iter31_saas_overview_landing.py covers: superadmin overview new fields (online_now/open_invoices/pending_ocr), online-status shape, presence tracking via /api/auth/me last_seen_at update, full landing draft→save→publish→discard cycle, authorization (admin gets 403 on superadmin/landing endpoints). When testing the admin dashboard, ALWAYS dismiss the 'Goedemorgen!' briefing modal first (click 'Begrepen' or close icon) — it blocks pointer events to the sidebar.",
+  "detailed_results": {
+    "saas_overview_page": {
+      "default_landing_for_superadmin": "PASS (URL /admin, testid saas-overview-page present)",
+      "kpi_cards_present": "PASS (kpi-mrr, kpi-online, kpi-trial, kpi-churn, kpi-ocr, kpi-open-invoices, kpi-paid-invoices)",
+      "refresh_button": "PASS (saas-overview-refresh)"
+    },
+    "sidebar_order": {
+      "expected_order": ["SaaS Overzicht","Bedrijven","OCR-goedkeuring","SaaS Facturen","SaaS Betalingen","Pakketten","Landing Editor","SaaS Instellingen"],
+      "actual_order_matches": "PASS — exact order observed in DOM",
+      "legacy_saas_beheer_single_entry": "ABSENT (correct)"
+    },
+    "sub_page_routing": {
+      "Bedrijven_heading": "Bedrijven (PASS) — no tablist",
+      "OCR-goedkeuring_heading": "OCR-goedkeuring (PASS) — no tablist",
+      "SaaS_Facturen_heading": "SaaS Facturen (PASS) — no tablist",
+      "SaaS_Betalingen_heading": "SaaS Betalingen (PASS) — no tablist"
+    },
+    "live_landing_editor": {
+      "all_testids_present": "PASS (live-landing-editor, device-desktop/tablet/mobile, landing-discard/save/publish/iframe)",
+      "iframe_loads_with_edit_banner": "PASS — edit-mode-banner detected inside iframe",
+      "data_edit_path_elements_count": 16,
+      "device_switcher_widths": {"mobile": "390px", "tablet": "820px", "desktop": "1632px (fluid full)"},
+      "inline_edit_flow": "PASS — clicked v2.hero.title_highlight, typed marker, blurred. After 1.5s debounce status badge changed to 'Onuitgegeven' and 'Concept opgeslagen ✓' appeared. Draft API confirmed has_unpublished_changes=true with new value.",
+      "publish_flow": "PASS — clicked landing-publish, confirmed dialog, status returned to 'Live = Concept'. Public /api/landing/content returns the new marker value.",
+      "cleanup": "PASS — restored original via PUT + publish + discard. Final has_unpublished_changes=false."
+    },
+    "presence_tracking": {
+      "auth_me_updates_last_seen": "PASS — admin /api/auth/me call results in admin's company showing online=true in /api/superadmin/online-status with fresh last_seen_at"
+    },
+    "admin_regression": {
+      "admin_lands_on_overview_not_saas_overview": "PASS (URL /surirent/admin, no saas-overview-page testid)",
+      "no_super_tabs_leaked_in_admin_sidebar": "PASS — none of SaaS Overzicht/Bedrijven/Pakketten/Landing Editor/OCR/SaaS Facturen/SaaS Betalingen/SaaS Instellingen present",
+      "base_tabs_present": "PASS (Overzicht, Locaties, Appartementen, Huurders, Backup & Herstel, etc.)",
+      "backup_restore_page_works": "PASS — testid backup-restore-page renders correctly with download/restore UI",
+      "other_tab_navigation": "PASS — Locaties, Appartementen, Huurders all load with no error elements"
+    },
+    "backend_endpoints_8_of_8_pass": {
+      "TestSuperadminOverview::test_overview_returns_new_fields": "PASS",
+      "TestSuperadminOverview::test_online_status_shape": "PASS",
+      "TestSuperadminOverview::test_overview_forbidden_for_admin": "PASS (admin → 403)",
+      "TestPresenceTracking::test_admin_me_updates_company_last_seen": "PASS",
+      "TestLandingEditor::test_get_draft_initial": "PASS",
+      "TestLandingEditor::test_get_published": "PASS",
+      "TestLandingEditor::test_draft_save_publish_discard_flow": "PASS (full create→save→publish→verify-on-public→restore→discard)",
+      "TestLandingEditor::test_landing_endpoints_forbidden_for_admin": "PASS (admin → 403 on GET/POST publish/POST discard)"
+    }
+  },
+  "rca_of_the_issue": "No bugs to RCA. The single 'apparent failure' during testing (backup-restore-page testid not detected on first attempt) was caused by the auto-opening 'Goedemorgen!' Morning Briefing modal intercepting the sidebar click. Once dismissed via 'Begrepen', the Backup & Herstel page renders correctly with the expected testid. This is not a regression — it is pre-existing behavior of the admin dashboard."
+}

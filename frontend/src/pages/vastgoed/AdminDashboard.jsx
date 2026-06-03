@@ -11,6 +11,7 @@ import {
   Gauge, Activity, Clock as ClockIcon, Monitor, QrCode, Printer,
   ReceiptText, UsersRound, Building, Calendar, Sparkles,
   AlertCircle, UserPlus, TrendingUp, ArrowUpRight, Package, Database,
+  ScanLine,
 } from 'lucide-react';
 import { api, formatError, fmtMoney, MONTHS_NL, openAuthedPdf } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
@@ -29,8 +30,9 @@ import Companies from './admin/Companies';
 import SettingsPage from './admin/Settings';
 import Locations from './admin/Locations';
 import Subscriptions from './admin/Subscriptions';
+import SaasOverview from './admin/SaasOverview';
 import SaasSettings from './admin/SaasSettings';
-import LandingEditor from './admin/LandingEditor';
+import LandingEditor from './admin/LiveLandingEditor';
 import PlansAdmin from './admin/PlansAdmin';
 import BackupRestore from './admin/BackupRestore';
 import Branding from './admin/Branding';
@@ -75,8 +77,11 @@ const BASE_TABS = [
   { id: 'settings', label: 'Instellingen', icon: KeySquare },
 ];
 const SUPER_TABS = [
-  { id: 'subscriptions', label: 'SaaS Beheer', icon: Crown },
+  { id: 'saas_overview', label: 'SaaS Overzicht', icon: LayoutDashboard },
   { id: 'companies', label: 'Bedrijven', icon: Briefcase },
+  { id: 'saas_pending', label: 'OCR-goedkeuring', icon: ScanLine },
+  { id: 'saas_invoices', label: 'SaaS Facturen', icon: Receipt },
+  { id: 'saas_payments', label: 'SaaS Betalingen', icon: Banknote },
   { id: 'plans', label: 'Pakketten', icon: Package },
   { id: 'landing_editor', label: 'Landing Editor', icon: Paintbrush },
   { id: 'saas_settings', label: 'SaaS Instellingen', icon: KeySquare },
@@ -93,10 +98,12 @@ const SIDEBAR_GROUPS = {
   geld: { label: 'Financieel', ids: ['payments', 'invoices', 'payment_plans', 'deposits', 'kasgeld'] },
   ops: { label: 'Operaties', ids: ['maintenance', 'employees', 'notifications'] },
   account: { label: 'Account', ids: ['mijn_abonnement', 'setup_wizard', 'business_info', 'branding', 'backup_restore', 'settings'] },
-  // SaaS Superadmin groep: tabs die alleen voor superadmin verschijnen.
-  // Zonder deze groep werd Landing Editor + SaaS Instellingen weggefilterd
-  // door groupTabs() omdat de tab-id's in geen enkele groep voorkwamen.
-  saas: { label: 'SaaS Beheer', ids: ['subscriptions', 'companies', 'plans', 'landing_editor', 'saas_settings'] },
+  // SaaS Superadmin groep — split per functie. Volgorde: overzicht, klanten,
+  // dagelijkse acties (OCR + facturen/betalingen), instellingen.
+  saas: { label: 'SaaS Beheer', ids: [
+    'saas_overview', 'companies', 'saas_pending', 'saas_invoices', 'saas_payments',
+    'plans', 'landing_editor', 'saas_settings',
+  ] },
 };
 function groupTabs(tabs) {
   const byId = Object.fromEntries(tabs.map((t) => [t.id, t]));
@@ -247,7 +254,7 @@ const MOBILE_TAB_ICON_OVERRIDES = {
   tenants: UsersRound,
   apartments: Building,
 };
-const MOBILE_SUPER_PRIMARY_IDS = ['companies', 'overview', 'apartments', 'tenants'];
+const MOBILE_SUPER_PRIMARY_IDS = ['saas_overview', 'companies', 'saas_pending', 'saas_invoices'];
 
 function MobileHeader_REMOVED({ activeCompany, user, onOpenMenu }) {
   void activeCompany; void user; void onOpenMenu;
@@ -2273,7 +2280,7 @@ export default function AdminDashboard() {
   // blijft op Overzicht starten. We detecteren op basis van window-breedte
   // bij eerste render zodat de PWA-launch direct in de juiste tab opent.
   const [tab, setTab] = useState(() => {
-    if (user?.role === 'superadmin') return 'subscriptions';
+    if (user?.role === 'superadmin') return 'saas_overview';
     try {
       if (typeof window !== 'undefined' && window.innerWidth < 768) return 'payments';
     } catch { /* SSR-safe noop */ }
@@ -2397,6 +2404,10 @@ export default function AdminDashboard() {
         <main className="flex-1 p-5 md:px-6 md:py-5 lg:px-8 lg:pt-3 pb-32 md:pb-8 w-full">
           {tab === 'companies' && <Companies />}
           {tab === 'subscriptions' && <Subscriptions />}
+          {tab === 'saas_overview' && <SaasOverview />}
+          {tab === 'saas_pending' && <Subscriptions viewMode="pending" />}
+          {tab === 'saas_invoices' && <Subscriptions viewMode="invoices" />}
+          {tab === 'saas_payments' && <Subscriptions viewMode="payments" />}
           {tab === 'plans' && <PlansAdmin />}
           {tab === 'saas_settings' && <SaasSettings />}
           {tab === 'landing_editor' && <LandingEditor />}

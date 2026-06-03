@@ -172,6 +172,30 @@ async def get_current_user(request: Request) -> dict:
     else:
         user["active_company_id"] = user.get("company_id")
 
+    # Presence tracking — throttle naar 1× per 60s om DB-druk te beperken.
+    # Werkt voor zowel admins (per company) als tenants/superadmin (per user).
+    try:
+        now_dt = now_utc()
+        prev = user.get("last_seen_at")
+        needs = True
+        if prev:
+            try:
+                prev_dt = datetime.fromisoformat(str(prev).replace("Z", "+00:00"))
+                if (now_dt - prev_dt).total_seconds() < 60:
+                    needs = False
+            except Exception:
+                pass
+        if needs:
+            iso_now = iso(now_dt)
+            await db.users.update_one({"id": user["id"]}, {"$set": {"last_seen_at": iso_now}})
+            user["last_seen_at"] = iso_now
+            # Update company last_seen ook (handig voor superadmin online-overview).
+            cid = user.get("company_id")
+            if cid and user.get("role") != "superadmin":
+                await db.companies.update_one({"id": cid}, {"$set": {"last_seen_at": iso_now}})
+    except Exception:
+        pass  # presence-tracking mag nooit de request laten falen
+
     # BILLING ENFORCEMENT — block opgezegde/expired bedrijven van non-billing endpoints.
     # Superadmin + impersonatie zijn altijd toegestaan (om te kunnen herstellen).
     # `/billing/*` en `/auth/*` zijn vrijgesteld zodat de gebruiker zijn
@@ -3647,12 +3671,24 @@ async def superadmin_migrate(body: BackupRestoreRequest, user=Depends(require_ro
 
 
 
+def _is_online(last_seen_iso: str | None, threshold_seconds: int = 300) -> bool:
+    """Bepaal of een entity online is op basis van de laatste API-call.
+    Default threshold = 5 minuten (300s)."""
+    if not last_seen_iso:
+        return False
+    try:
+        last = datetime.fromisoformat(str(last_seen_iso).replace("Z", "+00:00"))
+        return (now_utc() - last).total_seconds() <= threshold_seconds
+    except Exception:
+        return False
+
+
 @api.get("/superadmin/overview")
 async def superadmin_overview(user=Depends(require_role("superadmin"))):
-    """Aggregate metrics for the superadmin dashboard."""
+    """Aggregate metrics for the superadmin dashboard, incl. online count."""
     companies = await db.companies.find({}, {"_id": 0}).to_list(1000)
     total = len(companies)
-    trial = active = expired = cancelled = 0
+    trial = active = expired = cancelled = online_now = 0
     mrr = 0.0
     for c in companies:
         s = _billing_summary(c)
@@ -3666,12 +3702,71 @@ async def superadmin_overview(user=Depends(require_role("superadmin"))):
             expired += 1
         elif st == "cancelled":
             cancelled += 1
+        if _is_online(c.get("last_seen_at")):
+            online_now += 1
     paid_invoices = await db.subscription_invoices.count_documents({"status": "paid"})
+    pending_ocr = await db.saas_payment_requests.count_documents({"status": "pending_approval"})
+    open_invoices = await db.subscription_invoices.count_documents({"status": {"$in": ["open", "overdue"]}})
     return {
         "companies_total": total,
         "trial": trial, "active": active, "expired": expired, "cancelled": cancelled,
+        "online_now": online_now,
         "mrr": mrr, "currency": "SRD",
         "paid_invoices": paid_invoices,
+        "open_invoices": open_invoices,
+        "pending_ocr": pending_ocr,
+    }
+
+
+@api.get("/superadmin/online-status")
+async def superadmin_online_status(user=Depends(require_role("superadmin"))):
+    """Returns per-company online status: last_seen, online (bool), billing_status,
+    plus a count of users seen in the last 5 min. Voor de SaaS Overzicht widget."""
+    companies = await db.companies.find({}, {"_id": 0}).to_list(1000)
+    # Bouw mapping user.company_id -> aantal recent gezien (<= 5 min).
+    threshold = now_utc().timestamp() - 300
+    recent_user_counts: dict[str, int] = {}
+    async for u in db.users.find(
+        {"last_seen_at": {"$exists": True}, "company_id": {"$ne": None}},
+        {"_id": 0, "company_id": 1, "last_seen_at": 1},
+    ):
+        try:
+            ts = datetime.fromisoformat(str(u["last_seen_at"]).replace("Z", "+00:00")).timestamp()
+            if ts >= threshold:
+                cid = u.get("company_id")
+                if cid:
+                    recent_user_counts[cid] = recent_user_counts.get(cid, 0) + 1
+        except Exception:
+            continue
+
+    rows = []
+    for c in companies:
+        last_seen = c.get("last_seen_at")
+        s = _billing_summary(c)
+        rows.append({
+            "id": c.get("id"),
+            "name": c.get("name"),
+            "slug": c.get("slug"),
+            "last_seen_at": last_seen,
+            "online": _is_online(last_seen),
+            "active_users": recent_user_counts.get(c.get("id"), 0),
+            "billing_status": s["billing_status"],
+            "plan": c.get("plan"),
+            "trial_ends_at": c.get("trial_ends_at"),
+            "monthly_amount": s.get("monthly_amount"),
+            "currency": s.get("currency") or "SRD",
+        })
+    # Sort: online first, then most recent last_seen_at desc.
+    rows.sort(key=lambda r: (
+        0 if r["online"] else 1,
+        -(datetime.fromisoformat(str(r["last_seen_at"]).replace("Z", "+00:00")).timestamp()
+           if r["last_seen_at"] else 0),
+    ))
+    return {
+        "companies": rows,
+        "total_online": sum(1 for r in rows if r["online"]),
+        "threshold_seconds": 300,
+        "checked_at": iso(now_utc()),
     }
 
 

@@ -375,13 +375,14 @@ function Row({ label, value, mono, bold }) {
   );
 }
 
-export default function Subscriptions() {
+export default function Subscriptions({ viewMode = 'all' } = {}) {
   const [overview, setOverview] = useState(null);
   const [companies, setCompanies] = useState([]);
   const [invoices, setInvoices] = useState([]);
   const [payments, setPayments] = useState([]);
   const [pending, setPending] = useState([]);   // OCR-mismatch wachtend op handmatige goedkeuring
-  const [tab, setTab] = useState('companies');
+  const initialTab = ['companies', 'invoices', 'payments', 'pending'].includes(viewMode) ? viewMode : 'companies';
+  const [tab, setTab] = useState(initialTab);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
   const [selected, setSelected] = useState(null);
@@ -389,6 +390,8 @@ export default function Subscriptions() {
   const [loading, setLoading] = useState(true);
   const [previewStmt, setPreviewStmt] = useState(null);  // {url, contentType}
   const [busyRow, setBusyRow] = useState('');
+  // Als viewMode een specifieke tab forceert, tonen we de tab-balk niet.
+  const showTabBar = viewMode === 'all';
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -467,9 +470,21 @@ export default function Subscriptions() {
         <div>
           <div className="flex items-center gap-2 mb-2">
             <Crown className="w-6 h-6 text-orange-500" />
-            <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900 tracking-tight">SaaS Beheer</h1>
+            <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900 tracking-tight">
+              {viewMode === 'companies' ? 'Bedrijven'
+                : viewMode === 'pending' ? 'OCR-goedkeuring'
+                : viewMode === 'invoices' ? 'SaaS Facturen'
+                : viewMode === 'payments' ? 'SaaS Betalingen'
+                : 'SaaS Beheer'}
+            </h1>
           </div>
-          <p className="text-sm text-slate-500">Alle bedrijven, abonnementen, facturen en betalingen op één plek.</p>
+          <p className="text-sm text-slate-500">
+            {viewMode === 'companies' ? 'Alle klanten met hun abonnementsstatus en plan.'
+              : viewMode === 'pending' ? 'Handmatig goedkeuren van OCR-mismatches bij SaaS-betalingen.'
+              : viewMode === 'invoices' ? 'Facturen die SuriRent N.V. uitstuurt aan klanten.'
+              : viewMode === 'payments' ? 'Ontvangen betalingen van klanten — handmatig of via OCR.'
+              : 'Alle bedrijven, abonnementen, facturen en betalingen op één plek.'}
+          </p>
         </div>
         <button onClick={() => setShowPay(true)} data-testid="register-payment-btn"
           className="px-5 h-11 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-extrabold flex items-center gap-2 shadow-lg shadow-emerald-500/25">
@@ -477,18 +492,21 @@ export default function Subscriptions() {
         </button>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
-        <StatCard icon={TrendingUp} label="MRR" value={fmt(overview.mrr, overview.currency)}
-          sub={`${overview.active} actief abonnement${overview.active === 1 ? '' : 'en'}`} color="emerald" />
-        <StatCard icon={Building2} label="Totaal bedrijven" value={overview.companies_total}
-          sub={`${overview.active} actief · ${overview.trial} trial`} color="orange" />
-        <StatCard icon={Clock} label="Proefperiode" value={overview.trial}
-          sub="bedrijven testen nu" color="orange" />
-        <StatCard icon={AlertCircle} label="Verlopen / Opgezegd" value={overview.expired + overview.cancelled}
-          sub={`${overview.expired} verlopen · ${overview.cancelled} opgezegd`} color={overview.expired > 0 ? 'red' : 'slate'} />
-      </div>
+      {viewMode === 'all' && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+          <StatCard icon={TrendingUp} label="MRR" value={fmt(overview.mrr, overview.currency)}
+            sub={`${overview.active} actief abonnement${overview.active === 1 ? '' : 'en'}`} color="emerald" />
+          <StatCard icon={Building2} label="Totaal bedrijven" value={overview.companies_total}
+            sub={`${overview.active} actief · ${overview.trial} trial`} color="orange" />
+          <StatCard icon={Clock} label="Proefperiode" value={overview.trial}
+            sub="bedrijven testen nu" color="orange" />
+          <StatCard icon={AlertCircle} label="Verlopen / Opgezegd" value={overview.expired + overview.cancelled}
+            sub={`${overview.expired} verlopen · ${overview.cancelled} opgezegd`} color={overview.expired > 0 ? 'red' : 'slate'} />
+        </div>
+      )}
 
-      <div className="flex items-center gap-1.5 mb-4 border-b border-slate-100 overflow-x-auto">
+      {showTabBar && (
+        <div className="flex items-center gap-1.5 mb-4 border-b border-slate-100 overflow-x-auto">
         {[
           { id: 'companies', label: `Bedrijven (${companies.length})`, icon: Building2 },
           { id: 'pending',
@@ -514,7 +532,8 @@ export default function Subscriptions() {
             </button>
           );
         })}
-      </div>
+        </div>
+      )}
 
       {tab === 'companies' && (
         <>

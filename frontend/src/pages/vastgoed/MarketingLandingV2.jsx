@@ -1,7 +1,7 @@
 // ABN AMRO-stijl landing — v11 redesign (2026-05-31).
 // Dubbele top nav, hero met grote visual + dark greeting card, 8 product cards
 // in 4x2 grid. Kleurschema: zwart (#0F0F0F / #1F1F1F) + oranje (#FF5C00).
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { appLink } from '../../lib/env';
 import {
@@ -10,6 +10,7 @@ import {
   Wallet, ScanLine, Building2, MessageCircle, Mail, Phone,
   Star, ArrowRight,
 } from 'lucide-react';
+import { EditableProvider, EditableText, useLandingContent } from '../../lib/landing-editable';
 
 const SHOTS = {
   overzicht:     'https://customer-assets.emergentagent.com/job_vastgoed-app/artifacts/7sx9hgg7_1.png',
@@ -245,28 +246,32 @@ function Hero({ onDemo, onWhatsApp }) {
           style={{ minHeight: 'clamp(440px, 56vh, 620px)' }}>
           {/* LEFT — massive headline */}
           <div className="text-white relative z-10">
-            <p className="text-xs lg:text-sm font-black tracking-[0.32em] uppercase text-[#FF8A3D] mb-4 lg:mb-5">
-              Vastgoed Suite · Suriname 2026
-            </p>
+            <EditableText path="v2.hero.eyebrow" fallback="Vastgoed Suite · Suriname 2026"
+              as="p"
+              className="text-xs lg:text-sm font-black tracking-[0.32em] uppercase text-[#FF8A3D] mb-4 lg:mb-5" />
             <h1 className="font-black tracking-[-0.035em] leading-[0.95] text-white"
               style={{ fontSize: 'clamp(2.25rem, 5.2vw, 4.5rem)' }}
               data-testid="hero-title">
-              Voor als
-              <br />Excel uw vastgoed
-              <br /><span className="text-[#FF8A3D]">niet meer trekt.</span>
+              <EditableText path="v2.hero.title_line1" fallback="Voor als" as="span" />
+              <br /><EditableText path="v2.hero.title_line2" fallback="Excel uw vastgoed" as="span" />
+              <br /><EditableText path="v2.hero.title_highlight" fallback="niet meer trekt."
+                as="span" className="text-[#FF8A3D]" />
             </h1>
-            <p className="mt-5 lg:mt-6 text-base lg:text-xl text-white/85 font-medium max-w-xl leading-relaxed">
-              Nu <span className="font-black text-white">30% sneller</span> dan handmatig boekhouden — met Kiosk,
-              automatische facturatie en AI-OCR voor betalingen.
-            </p>
+            <EditableText path="v2.hero.subtitle"
+              fallback="Nu 30% sneller dan handmatig boekhouden — met Kiosk, automatische facturatie en AI-OCR voor betalingen."
+              as="p"
+              multiline
+              className="mt-5 lg:mt-6 text-base lg:text-xl text-white/85 font-medium max-w-xl leading-relaxed" />
             <div className="mt-6 lg:mt-7 flex flex-col sm:flex-row gap-3">
               <button onClick={onDemo} data-testid="hero-cta-action"
                 className="inline-flex items-center justify-center gap-2 h-12 lg:h-13 px-6 rounded-md bg-[#FF5C00] hover:bg-[#FF8A3D] text-white text-sm lg:text-base font-black transition-colors shadow-[0_4px_0_0_rgba(0,0,0,0.15)]">
-                Bekijk de demo <ArrowRight className="w-4 h-4" />
+                <EditableText path="v2.hero.cta_primary" fallback="Bekijk de demo" as="span" />
+                <ArrowRight className="w-4 h-4" />
               </button>
               <button onClick={onWhatsApp}
                 className="inline-flex items-center justify-center gap-2 h-12 lg:h-13 px-6 rounded-md bg-white/10 hover:bg-white/15 border border-white/20 text-white text-sm lg:text-base font-bold backdrop-blur-sm transition-colors">
-                <MessageCircle className="w-5 h-5" /> WhatsApp ons
+                <MessageCircle className="w-5 h-5" />
+                <EditableText path="v2.hero.cta_secondary" fallback="WhatsApp ons" as="span" />
               </button>
             </div>
           </div>
@@ -429,10 +434,11 @@ function FeatureRows() {
     <section id="features" className="bg-white py-16 lg:py-24">
       <div className="max-w-[1280px] mx-auto px-5 lg:px-10">
         <div className="max-w-2xl mb-12 lg:mb-16">
-          <p className="text-xs font-black tracking-[0.3em] uppercase text-[#FF5C00] mb-3">Functies</p>
-          <h2 className="text-3xl lg:text-5xl font-black tracking-tight text-[#0F0F0F] leading-tight">
-            Alles wat uw vastgoed nodig heeft.
-          </h2>
+          <EditableText path="v2.features.eyebrow" fallback="Functies" as="p"
+            className="text-xs font-black tracking-[0.3em] uppercase text-[#FF5C00] mb-3" />
+          <EditableText path="v2.features.title" fallback="Alles wat uw vastgoed nodig heeft."
+            as="h2"
+            className="text-3xl lg:text-5xl font-black tracking-tight text-[#0F0F0F] leading-tight" />
         </div>
         <div className="space-y-16 lg:space-y-24">
           {FEATURE_ROWS.map((f, i) => {
@@ -635,10 +641,11 @@ function PricingSection({ onDemo, onWhatsApp }) {
     <section id="pricing" className="bg-slate-50 py-16 lg:py-24">
       <div className="max-w-[1280px] mx-auto px-5 lg:px-10">
         <div className="text-center max-w-2xl mx-auto mb-12">
-          <p className="text-xs font-black tracking-[0.3em] uppercase text-[#FF5C00] mb-3">Prijzen</p>
-          <h2 className="text-3xl lg:text-5xl font-black tracking-tight text-[#0F0F0F] leading-tight">
-            Eerlijk geprijsd voor elk vastgoedbedrijf.
-          </h2>
+          <EditableText path="v2.pricing.eyebrow" fallback="Prijzen" as="p"
+            className="text-xs font-black tracking-[0.3em] uppercase text-[#FF5C00] mb-3" />
+          <EditableText path="v2.pricing.title" fallback="Eerlijk geprijsd voor elk vastgoedbedrijf."
+            as="h2"
+            className="text-3xl lg:text-5xl font-black tracking-tight text-[#0F0F0F] leading-tight" />
         </div>
         <div className="grid md:grid-cols-3 gap-4">
           {plans.map((p) => (
@@ -761,13 +768,14 @@ function Footer({ onLogin }) {
                 Suri<span className="text-[#FF5C00]">Rent</span> <span className="text-white/60">N.V</span>
               </span>
             </div>
-            <p className="text-sm leading-relaxed max-w-md">
-              Het volledige vastgoedplatform voor Surinaamse verhuurders.
-              White-label SaaS met Kiosk, automatische facturatie en AI-OCR.
-            </p>
+            <EditableText path="v2.footer.tagline"
+              fallback="Het volledige vastgoedplatform voor Surinaamse verhuurders. White-label SaaS met Kiosk, automatische facturatie en AI-OCR."
+              as="p" multiline
+              className="text-sm leading-relaxed max-w-md" />
             <div className="mt-5 flex items-center gap-1">
               {[0,1,2,3,4].map((i) => <Star key={i} className="w-4 h-4 fill-[#FF8A3D] text-[#FF8A3D]" />)}
-              <span className="ml-2 text-xs font-bold text-white/70">5.0 · Surinaams gebouwd</span>
+              <EditableText path="v2.footer.rating_label" fallback="5.0 · Surinaams gebouwd"
+                as="span" className="ml-2 text-xs font-bold text-white/70" />
             </div>
           </div>
           <div>
@@ -782,9 +790,15 @@ function Footer({ onLogin }) {
           <div>
             <p className="text-xs font-black tracking-[0.22em] uppercase text-white mb-4">Contact</p>
             <ul className="space-y-2.5 text-sm">
-              <li className="flex items-center gap-2"><Mail className="w-4 h-4 text-[#FF8A3D]" /> info@surirent.sr</li>
-              <li className="flex items-center gap-2"><Phone className="w-4 h-4 text-[#FF8A3D]" /> +597 XXX XXX</li>
-              <li className="flex items-center gap-2"><Users className="w-4 h-4 text-[#FF8A3D]" /> Paramaribo, SR</li>
+              <li className="flex items-center gap-2"><Mail className="w-4 h-4 text-[#FF8A3D]" />
+                <EditableText path="v2.footer.email" fallback="info@surirent.sr" as="span" />
+              </li>
+              <li className="flex items-center gap-2"><Phone className="w-4 h-4 text-[#FF8A3D]" />
+                <EditableText path="v2.footer.phone" fallback="+597 XXX XXX" as="span" />
+              </li>
+              <li className="flex items-center gap-2"><Users className="w-4 h-4 text-[#FF8A3D]" />
+                <EditableText path="v2.footer.address" fallback="Paramaribo, SR" as="span" />
+              </li>
               <li className="pt-2">
                 <button onClick={onLogin} data-testid="footer-login"
                   className="text-[#FF8A3D] hover:text-orange-300 font-bold">
@@ -813,15 +827,27 @@ export default function MarketingLandingV2() {
   const navigate = useNavigate();
   const [segment, setSegment] = useState('Beheerder');
 
+  // Edit mode wordt geactiveerd via ?edit=1 (alleen wanneer pagina in iframe
+  // staat van de LiveLandingEditor superadmin tool).
+  const editMode = (() => {
+    try {
+      const p = new URLSearchParams(window.location.search);
+      return p.get('edit') === '1';
+    } catch { return false; }
+  })();
+
+  const { content: initialContent } = useLandingContent(editMode);
+
   useEffect(() => {
     document.body.style.backgroundColor = '#FFFFFF';
     return () => { document.body.style.backgroundColor = ''; };
   }, []);
 
   useEffect(() => {
+    if (editMode) return undefined;
     try {
       const params = new URLSearchParams(window.location.search);
-      if (params.get('landing') === '1') return;
+      if (params.get('landing') === '1') return undefined;
       const isStandalone =
         window.matchMedia?.('(display-mode: standalone)').matches
         || window.navigator.standalone === true
@@ -832,29 +858,56 @@ export default function MarketingLandingV2() {
         else navigate(target, { replace: true });
       }
     } catch { /* ignore */ }
-  }, [navigate]);
+    return undefined;
+  }, [navigate, editMode]);
 
   const onLogin = () => {
+    if (editMode) return; // disable navigation while editing
     const t = appLink('/login');
     if (t.startsWith('http')) window.location.href = t;
     else navigate(t);
   };
   const onDemo = onLogin;
   const onWhatsApp = () => {
+    if (editMode) return;
     window.open('https://wa.me/597XXXXXXX?text=Ik%20wil%20graag%20een%20demo%20van%20SuriRent', '_blank');
   };
 
+  // Patches doorsturen naar parent (LiveLandingEditor) zodat hij ze kan opslaan.
+  const onPatch = useCallback((patch) => {
+    try {
+      window.parent?.postMessage({ type: 'landing-edit-patch', ...patch }, '*');
+    } catch { /* no-op */ }
+  }, []);
+
+  // Signaleer parent dat we klaar zijn — handig om edit-bar te tonen pas
+  // wanneer de iframe daadwerkelijk gerenderd is.
+  useEffect(() => {
+    if (!editMode) return;
+    try {
+      window.parent?.postMessage({ type: 'landing-edit-ready' }, '*');
+    } catch { /* no-op */ }
+  }, [editMode]);
+
   return (
-    <div className="min-h-screen bg-white text-[#0F0F0F] antialiased selection:bg-[#FF5C00] selection:text-white">
-      <TopHeader segment={segment} setSegment={setSegment} onLogin={onLogin} />
-      <SecondaryNav />
-      <Hero onDemo={onDemo} onWhatsApp={onWhatsApp} />
-      <ProductGrid onDemo={onDemo} onLogin={onLogin} />
-      <FeatureRows />
-      <KioskSection />
-      <PricingSection onDemo={onDemo} onWhatsApp={onWhatsApp} />
-      <FAQSection />
-      <Footer onLogin={onLogin} />
-    </div>
+    <EditableProvider editMode={editMode} initialContent={initialContent} onPatch={onPatch}>
+      <div className="min-h-screen bg-white text-[#0F0F0F] antialiased selection:bg-[#FF5C00] selection:text-white">
+        {editMode && (
+          <div className="bg-orange-500 text-white text-center py-1.5 text-xs font-extrabold tracking-wider uppercase z-50 sticky top-0"
+            data-testid="edit-mode-banner">
+            ✏️ Bewerk modus actief — klik op een tekst om te bewerken
+          </div>
+        )}
+        <TopHeader segment={segment} setSegment={setSegment} onLogin={onLogin} />
+        <SecondaryNav />
+        <Hero onDemo={onDemo} onWhatsApp={onWhatsApp} />
+        <ProductGrid onDemo={onDemo} onLogin={onLogin} />
+        <FeatureRows />
+        <KioskSection />
+        <PricingSection onDemo={onDemo} onWhatsApp={onWhatsApp} />
+        <FAQSection />
+        <Footer onLogin={onLogin} />
+      </div>
+    </EditableProvider>
   );
 }
