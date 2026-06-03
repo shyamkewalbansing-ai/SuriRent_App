@@ -75,7 +75,7 @@ function TopHeader({ onLogin }) {
   };
 
   return (
-    <div className="bg-white border-b border-slate-100">
+    <div className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-100 shadow-[0_1px_0_0_rgba(15,15,15,0.04)]">
       <div className="max-w-[1280px] mx-auto px-5 lg:px-10 h-20 flex items-center justify-between">
         <button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
           className="flex items-center gap-2.5 md:gap-3" data-testid="topheader-logo">
