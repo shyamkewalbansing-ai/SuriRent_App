@@ -1,5 +1,73 @@
 # Vastgoed Kiosk - PRD
 
+## Session 2026-06-03 (v27) — Superadmin restructuring + Live Landing Editor ✅
+
+### 1. Sidebar Reorganisatie (SaaS Beheer split)
+Voorheen had superadmin één combined "SaaS Beheer" sidebar item met interne tabs.
+Nu zijn die tabs **individuele sidebar items** in exacte volgorde:
+- SaaS Overzicht (NEW — live dashboard)
+- Bedrijven
+- OCR-goedkeuring (Subscriptions viewMode='pending')
+- SaaS Facturen (Subscriptions viewMode='invoices')
+- SaaS Betalingen (Subscriptions viewMode='payments')
+- Pakketten
+- Landing Editor
+- SaaS Instellingen
+
+Implementatie: `Subscriptions.jsx` accepteert nieuwe `viewMode` prop — bij specifieke
+mode wordt de interne tab-balk verborgen + heading wordt aangepast.
+Default landing-tab voor superadmin: `saas_overview` (was `subscriptions`).
+
+### 2. SaaS Overzicht Dashboard (NIEUW)
+`/app/frontend/src/pages/vastgoed/admin/SaasOverview.jsx`
+- KPI cards: MRR, Online nu (live!), Proefperiode, Verlopen/Opgezegd
+- Action cards: Wacht op OCR-keuring, Open facturen, Betaalde facturen
+- **Live presence**: "Nu online" sectie met groene pulse + gesorteerd op recent
+- Trial expiring binnen 3 dagen — gele warning sectie
+- "Recent gezien" lijst (offline bedrijven, gesorteerd op last_seen_at desc)
+- Auto-refresh elke 15s
+
+### 3. Presence Tracking
+`get_current_user()` middleware update:
+- Update `users.last_seen_at` + `companies.last_seen_at` op elke API call (throttled 60s)
+- Nieuwe endpoint `GET /api/superadmin/online-status` → returns per-company online status
+- Online threshold = 5 min
+- `GET /api/superadmin/overview` uitgebreid met `online_now`, `open_invoices`, `pending_ocr`
+
+### 4. Live WYSIWYG Landing Editor
+**Probleem opgelost**: oude LandingEditor.jsx (672 regels form-input) bewerkte velden die
+de nieuwe Brutalist `MarketingLandingV2.jsx` NIET gebruikte → live preview kwam niet overeen.
+
+**Nieuw**: `/app/frontend/src/pages/vastgoed/admin/LiveLandingEditor.jsx`
+- Iframe-based editor — toont de echte landing in een iframe via `/?edit=1`
+- Device switcher: Desktop / Tablet / Mobiel
+- Status badge: Live=Concept / Niet opgeslagen / Onuitgegeven
+- Autosave: 1.5s debounce na elke patch → POST `/api/superadmin/landing/content`
+- Publish & Discard knoppen
+- Image picker modal (klik op afbeelding in iframe → upload via parent)
+
+**Inline edit infrastructure**: `/app/frontend/src/lib/landing-editable.jsx`
+- `<EditableProvider editMode initialContent onPatch>` — wraps the landing page
+- `<EditableText path="v2.hero.title" fallback="...">` — contenteditable spans in edit mode
+- `<EditableImage path="..." fallback="...">` — klikbare image overlay in edit mode
+- `useLandingContent(editMode)` hook — fetch published OR draft content
+- PostMessage protocol parent↔child:
+  - child → parent: `{type:'landing-edit-patch', path, value}` / `{type:'landing-edit-image-request', path, current}`
+  - parent → child: `{type:'landing-edit-reset', content}` / `{type:'landing-edit-image-reply', path, url}`
+
+**MarketingLandingV2.jsx editable fields**:
+- `v2.hero.eyebrow`, `v2.hero.title_line1/2/highlight`, `v2.hero.subtitle`, `v2.hero.cta_primary/secondary`
+- `v2.pricing.eyebrow`, `v2.pricing.title`
+- `v2.features.eyebrow`, `v2.features.title`
+- `v2.footer.tagline`, `v2.footer.rating_label`, `v2.footer.email/phone/address`
+
+### End-to-end Verified (Iteration 31)
+- 8/8 backend tests PASS (`/app/backend/tests/test_iter31_saas_overview_landing.py`)
+- Frontend: all sidebar items, all sub-pages, full inline edit→save→publish→discard cycle PASS
+- Admin regression: BASE_TABS still load, Backup & Herstel still works, no super-only tabs leak
+- Presence: admin login updates company last_seen → online_now KPI increments
+
+
 ## Session 2026-06-02 (v26) — Plan limits + cronjob + backup/restore ✅
 
 ### 1. Plan Limits (Hard-block)
