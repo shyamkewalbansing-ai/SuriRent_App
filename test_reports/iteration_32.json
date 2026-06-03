@@ -1,0 +1,86 @@
+{
+  "summary": "Iter 32 — Full E2E validation of NEW per-company tenant landing pages with custom-domain routing + extended editable fields on SuriRent main landing. Backend: 18/18 pytest PASS after fixing 1 real bug (list_my_landing_leads sync/async). Frontend: Mijn Landing editor renders correctly (all 9 toolbar testids + iframe with 23 data-edit-path + lead-form + edit-mode-banner), inline edit autosave + publish → public-landing host resolution verified live, custom-domain set/save works, public lead POST without auth returns 200. SuriRent main landing now has 103 data-edit-path elements including all 7 newly-wrapped paths. Superadmin SaaS Overzicht + Landing Editor still work (no regression).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter32_tenant_landing.py",
+    "/app/test_reports/pytest/iter32.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Bug fixed during this iteration: /api/companies/me/landing-leads used `async for ... in db.find(...).to_list(500):` — to_list() returns a Future, not an async iterable, so admin GET threw 500. Rewrote to `leads = await db.find(...).to_list(500); return leads`. This pattern should be audited elsewhere; grep for any other `async for .* to_list` occurrences.",
+    "/api/public/landing-lead has no rate-limit and no CAPTCHA — anyone can spam any company_id endlessly. Consider IP-throttling + per-company daily caps; problem statement notes this is acceptable for now.",
+    "Lead update endpoint /api/companies/me/landing-leads/{lead_id}/status exists (good) but there is no DELETE endpoint; test leads accumulate. Add admin delete or hard-delete after status=lost+older-than-X.",
+    "AdminDashboard.jsx still 2454+ lines (flagged in iter 31, no progress).",
+    "TenantPublicLanding receives raw `host` query param trust on the same-origin call from frontend — server-side _normalize_host strips port/www correctly; SYSTEM_HOSTS_SUFFIXES list blocks emergent/surirent/localhost. Solid."
+  ],
+  "updated_files": [
+    "/app/backend/server.py (1 bug-fix: list_my_landing_leads async/await)",
+    "/app/backend/tests/test_iter32_tenant_landing.py (new — 18 tests)"
+  ],
+  "success_rate": {"backend": "100% (18/18 pytest)", "frontend": "100% on tested flows"},
+  "test_credentials": "admin@vastgoed.sr / admin123 ✓ | super@surirent.sr / super123 ✓ (both as in /app/memory/test_credentials.md)",
+  "seed_data_creation": "Set companies.custom_domain='surirent-demo-test.com' on Company A then restored to 'surirent-demo.com'. Published hero.title_line1='TEST_INLINE_HERO_iter32' then restored to 'Welkom bij Demo Vastgoed'. 3 landing_leads inserted with name='TEST_' prefix — no DELETE endpoint exists so they remain in DB (harmless, prefixed for next agent to identify).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend regression file: /app/backend/tests/test_iter32_tenant_landing.py covers full tenant-landing cycle. Use admin's `localStorage.admin_token` for any admin API calls from playwright. To reach Mijn Landing UI: login via /login → click sidebar 'Mijn Landing' (don't direct-goto /surirent/admin/mijn_landing, the SPA needs the in-app navigation). The /landing-preview route runs same-origin and uses the parent page's admin_token via localStorage. The iframe-postMessage protocol is `{type:'landing-edit-patch',path,value}` child→parent, `{type:'landing-edit-reset',content}` parent→child. Demo Company A apartments: 1 vacant unit currently appears in public landing.",
+  "detailed_results": {
+    "backend_18_of_18_pass": {
+      "TestCustomDomain::test_set_valid_domain": "PASS",
+      "TestCustomDomain::test_normalization_strips_www_and_lowercase": "PASS (WWW.UPPER → lowercased, www stripped)",
+      "TestCustomDomain::test_reject_invalid_shape": "PASS (no-dot → 400)",
+      "TestCustomDomain::test_get_landing_returns_custom_domain": "PASS",
+      "TestLandingCRUD::test_draft_initial": "PASS",
+      "TestLandingCRUD::test_full_cycle_save_publish_then_public_visible": "PASS (PUT draft → POST publish → /public/company-landing?host=… shows new content)",
+      "TestLandingCRUD::test_discard_resets_to_published": "PASS",
+      "TestPublicLanding::test_unknown_host_returns_found_false": "PASS",
+      "TestPublicLanding::test_system_host_returns_found_false": "PASS (preview.emergentagent.com, surirent.sr, www.surirent.sr all skip)",
+      "TestPublicLanding::test_known_host_returns_company": "PASS (apartments status filter vacant/available enforced)",
+      "TestLandingApartments::test_admin_list_matches_public": "PASS (same set of apartment IDs)",
+      "TestLandingLeads::test_submit_lead_no_auth": "PASS (200, lead_id returned)",
+      "TestLandingLeads::test_submit_lead_requires_name_and_phone": "PASS (400 on empty)",
+      "TestLandingLeads::test_submit_lead_bad_company": "PASS (404 on unknown company_id)",
+      "TestLandingLeads::test_admin_can_list_leads": "PASS (after fix; was 500 due to async-for-over-Future bug — fixed)",
+      "TestSuperadminLanding::test_superadmin_get_put_publish": "PASS (super can edit any company's landing)",
+      "TestSuperadminLanding::test_admin_forbidden_on_superadmin_endpoints": "PASS (admin → 403)",
+      "test_zz_cleanup": "PASS (custom_domain restored)"
+    },
+    "frontend_admin_flow": {
+      "login": "PASS — admin@vastgoed.sr lands on /surirent/admin",
+      "sidebar_mijn_landing_visible": "PASS — testid present in Account group",
+      "mijn_landing_page_loads": "PASS — URL /surirent/admin/mijn_landing",
+      "toolbar_testids_all_present": "PASS — custom-domain-input, custom-domain-save, tenant-landing-iframe, tenant-landing-publish, tenant-landing-save, tenant-landing-discard, tenant-device-desktop/tablet/mobile",
+      "iframe_renders_tenant_public_landing": "PASS — edit-mode-banner + tenant-hero + tenant-contact-section + lead-form (+lead-name/phone/email/message/submit) all PRESENT inside iframe",
+      "iframe_data_edit_path_count": 23,
+      "apartment_cards_rendered_in_iframe": "PASS — 1 apt-card-* testid (matches Company A's 1 vacant unit)",
+      "inline_edit_autosave_then_publish": "PASS — modified hero.title_line1='TEST_INLINE_HERO_iter32', after blur+debounce status badge='Live = Concept' visible, public host=surirent-demo-test.com returned {found:true, hero:'TEST_INLINE_HERO_iter32', apts:1}",
+      "custom_domain_save": "PASS — input filled with 'surirent-demo-test.com', save button → status 'Domein opgeslagen' + DB updated",
+      "public_lead_post_no_auth": "PASS — fetch('/api/public/landing-lead', {company_id,name,phone}) → 200 + lead_id"
+    },
+    "frontend_marketing_landing_v2_editable_paths": {
+      "total_data_edit_path_on_superadmin_landing_editor": 103,
+      "newly_wrapped_paths_check": {
+        "v2.brand.name_prefix": "PRESENT",
+        "v2.brand.cta_login": "PRESENT",
+        "v2.greeting.subtitle": "PRESENT",
+        "v2.product.cards.0.label": "PRESENT",
+        "v2.features.rows.0.title": "PRESENT",
+        "v2.kiosk.title_line1": "PRESENT",
+        "v2.faq.items.0.q": "PRESENT"
+      }
+    },
+    "superadmin_regression": {
+      "saas_overview_loads": "PASS (testid saas-overview-page after login)",
+      "landing_editor_iframe_loads": "PASS",
+      "no_regression_observed": true
+    }
+  },
+  "rca_of_the_issue": "ONE backend bug found and fixed: GET /api/companies/me/landing-leads used `async for lead in db.landing_leads.find(...).sort(...).to_list(500):` — `.to_list()` returns an awaitable Future, NOT an async iterable, so the request raised TypeError: 'async for' requires an object with __aiter__ method. Fix: `leads = await db.landing_leads.find(...).sort(...).to_list(500); return leads`. After fix, admin lead-list endpoint returns 200 with the test lead included. All other endpoints worked first try."
+}

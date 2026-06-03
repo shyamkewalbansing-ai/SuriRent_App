@@ -10,7 +10,7 @@ import {
   Wallet, ScanLine, Building2, MessageCircle, Mail, Phone,
   Star, ArrowRight,
 } from 'lucide-react';
-import { EditableProvider, EditableText, useLandingContent } from '../../lib/landing-editable';
+import { EditableProvider, EditableText, EditableImage, useLandingContent } from '../../lib/landing-editable';
 
 const SHOTS = {
   overzicht:     'https://customer-assets.emergentagent.com/job_vastgoed-app/artifacts/7sx9hgg7_1.png',
@@ -79,10 +79,14 @@ function TopHeader({ segment, setSegment, onLogin }) {
         <button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
           className="flex items-center gap-2.5 md:gap-3" data-testid="topheader-logo">
           <span className="w-11 h-11 md:w-12 md:h-12 rounded-lg bg-[#FF5C00] p-1.5 md:p-2 shrink-0">
-            <img src="/kiosk-icons/mark-white.png" alt="" className="w-full h-full object-contain" />
+            <EditableImage path="v2.brand.logo_url" fallback="/kiosk-icons/mark-white.png"
+              alt="" className="w-full h-full object-contain" />
           </span>
           <span className="text-xl md:text-2xl font-black tracking-tight text-[#0F0F0F]">
-            Suri<span className="text-[#FF5C00]">Rent</span> <span className="text-slate-400 font-bold">N.V</span>
+            <EditableText path="v2.brand.name_prefix" fallback="Suri" as="span" />
+            <EditableText path="v2.brand.name_suffix" fallback="Rent" as="span" className="text-[#FF5C00]" />
+            <span> </span>
+            <EditableText path="v2.brand.legal_suffix" fallback="N.V" as="span" className="text-slate-400 font-bold" />
           </span>
         </button>
 
@@ -105,7 +109,7 @@ function TopHeader({ segment, setSegment, onLogin }) {
           <button onClick={onLogin} data-testid="topheader-login"
             className="h-11 px-4 md:px-5 rounded-md bg-[#FF5C00] hover:bg-[#C74600] text-white text-sm font-bold flex items-center gap-2 transition-colors shadow-[0_2px_0_0_rgba(0,0,0,0.05)]">
             <Lock className="w-4 h-4" />
-            Inloggen
+            <EditableText path="v2.brand.cta_login" fallback="Inloggen" as="span" />
           </button>
 
           {/* Mobile hamburger — NAAST de Inloggen knop. Op desktop verborgen
@@ -286,9 +290,8 @@ function Hero({ onDemo, onWhatsApp }) {
                 <h2 className="text-2xl lg:text-[28px] font-black tracking-tight text-white leading-tight">
                   {greeting},
                 </h2>
-                <p className="mt-2 text-base lg:text-lg text-white/70 font-medium">
-                  Waarmee kunnen we u vooruit helpen?
-                </p>
+                <EditableText path="v2.greeting.subtitle" fallback="Waarmee kunnen we u vooruit helpen?"
+                  as="p" className="mt-2 text-base lg:text-lg text-white/70 font-medium" />
                 <div className="mt-6 relative">
                   <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 z-10" />
                   <input
@@ -327,11 +330,13 @@ function Hero({ onDemo, onWhatsApp }) {
                 </div>
                 <button onClick={onWhatsApp} data-testid="greeting-whatsapp"
                   className="mt-5 w-full text-left text-sm font-bold text-[#FF8A3D] hover:text-orange-300 flex items-center gap-2 transition-colors">
-                  <MessageCircle className="w-4 h-4" /> Liever direct chatten? WhatsApp ons
+                  <MessageCircle className="w-4 h-4" />
+                  <EditableText path="v2.greeting.whatsapp_label" fallback="Liever direct chatten? WhatsApp ons" as="span" />
                 </button>
                 {/* Quick-pill suggestions */}
                 <div className="mt-5 pt-5 border-t border-white/10">
-                  <p className="text-[10px] font-bold tracking-[0.18em] uppercase text-white/40 mb-3">Veelgezocht</p>
+                  <EditableText path="v2.greeting.popular_label" fallback="Veelgezocht"
+                    as="p" className="text-[10px] font-bold tracking-[0.18em] uppercase text-white/40 mb-3" />
                   <div className="flex flex-wrap gap-2">
                     {[
                       { label: 'Prijzen', section: 'pricing' },
@@ -361,14 +366,22 @@ function Hero({ onDemo, onWhatsApp }) {
 // =============================================================================
 function ProductGrid({ onDemo, onLogin }) {
   const items = [
-    { Icon: Lock,             label: 'Inloggen',              desc: 'Beheer toegang',        action: onLogin },
-    { Icon: Building2,        label: 'Demo proberen',         desc: 'Direct testen',         action: onDemo },
-    { Icon: LayoutDashboard,  label: 'Beheer Suite',          desc: 'Volledig dashboard',    target: 'feature-0' },
-    { Icon: ScanLine,         label: 'Kiosk PWA',             desc: 'Selfservice terminal',  target: 'kiosk' },
-    { Icon: MapPin,           label: 'Locaties',              desc: 'Multi-vestiging',       target: 'feature-1' },
-    { Icon: HomeIcon,         label: 'Appartementen',         desc: 'Eenheidbeheer',         target: 'feature-2' },
-    { Icon: Receipt,          label: 'Betalingen',            desc: 'Kwitanties + OCR',      target: 'feature-3' },
-    { Icon: FileText,         label: 'Facturen',              desc: '3-bucket logica',       target: 'feature-4' },
+    { Icon: Lock,             labelPath: 'v2.product.cards.0.label', descPath: 'v2.product.cards.0.desc',
+      labelFallback: 'Inloggen',          descFallback: 'Beheer toegang',        action: onLogin },
+    { Icon: Building2,        labelPath: 'v2.product.cards.1.label', descPath: 'v2.product.cards.1.desc',
+      labelFallback: 'Demo proberen',     descFallback: 'Direct testen',         action: onDemo },
+    { Icon: LayoutDashboard,  labelPath: 'v2.product.cards.2.label', descPath: 'v2.product.cards.2.desc',
+      labelFallback: 'Beheer Suite',      descFallback: 'Volledig dashboard',    target: 'feature-0' },
+    { Icon: ScanLine,         labelPath: 'v2.product.cards.3.label', descPath: 'v2.product.cards.3.desc',
+      labelFallback: 'Kiosk PWA',         descFallback: 'Selfservice terminal',  target: 'kiosk' },
+    { Icon: MapPin,           labelPath: 'v2.product.cards.4.label', descPath: 'v2.product.cards.4.desc',
+      labelFallback: 'Locaties',          descFallback: 'Multi-vestiging',       target: 'feature-1' },
+    { Icon: HomeIcon,         labelPath: 'v2.product.cards.5.label', descPath: 'v2.product.cards.5.desc',
+      labelFallback: 'Appartementen',     descFallback: 'Eenheidbeheer',         target: 'feature-2' },
+    { Icon: Receipt,          labelPath: 'v2.product.cards.6.label', descPath: 'v2.product.cards.6.desc',
+      labelFallback: 'Betalingen',        descFallback: 'Kwitanties + OCR',      target: 'feature-3' },
+    { Icon: FileText,         labelPath: 'v2.product.cards.7.label', descPath: 'v2.product.cards.7.desc',
+      labelFallback: 'Facturen',          descFallback: '3-bucket logica',       target: 'feature-4' },
   ];
   const handle = (item) => {
     if (item.action) item.action();
@@ -378,16 +391,18 @@ function ProductGrid({ onDemo, onLogin }) {
     <section className="bg-slate-50 py-10 lg:py-14 lg:pt-[170px] xl:pt-[190px]">
       <div className="max-w-[1280px] mx-auto px-5 lg:px-10">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 lg:gap-4">
-          {items.map(({ Icon, label, desc, action, target }) => (
-            <button key={label} onClick={() => handle({ action, target })}
-              data-testid={`product-card-${label.toLowerCase().replace(/\s+/g, '-')}`}
+          {items.map((it) => (
+            <button key={it.labelPath} onClick={() => handle(it)}
+              data-testid={`product-card-${it.labelFallback.toLowerCase().replace(/\s+/g, '-')}`}
               className="group relative bg-white rounded-xl p-5 lg:p-6 flex items-center gap-3 lg:gap-4 hover:shadow-[0_18px_36px_-15px_rgba(15,15,15,0.18)] hover:-translate-y-0.5 transition-all text-left">
               <span className="w-12 h-12 rounded-xl bg-orange-50 flex items-center justify-center shrink-0 group-hover:bg-[#FF5C00] transition-colors">
-                <Icon className="w-6 h-6 text-[#FF5C00] group-hover:text-white transition-colors" strokeWidth={2} />
+                <it.Icon className="w-6 h-6 text-[#FF5C00] group-hover:text-white transition-colors" strokeWidth={2} />
               </span>
               <div className="flex-1 min-w-0">
-                <p className="text-base lg:text-lg font-black text-[#0F0F0F] leading-tight">{label}</p>
-                <p className="text-xs text-slate-500 mt-0.5">{desc}</p>
+                <EditableText path={it.labelPath} fallback={it.labelFallback} as="p"
+                  className="text-base lg:text-lg font-black text-[#0F0F0F] leading-tight" />
+                <EditableText path={it.descPath} fallback={it.descFallback} as="p"
+                  className="text-xs text-slate-500 mt-0.5" />
               </div>
               <ChevronRight className="w-5 h-5 text-[#0F0F0F] group-hover:text-[#FF5C00] group-hover:translate-x-0.5 transition-all shrink-0" />
             </button>
@@ -448,22 +463,20 @@ function FeatureRows() {
                 data-testid={`feature-row-${i}`}
                 className={`grid lg:grid-cols-2 gap-10 lg:gap-14 items-center ${reverse ? 'lg:grid-flow-dense' : ''}`}>
                 <div className={reverse ? 'lg:col-start-2' : ''}>
-                  <p className="text-xs font-black tracking-[0.3em] uppercase text-[#FF5C00] mb-3">
-                    {f.eyebrow}
-                  </p>
-                  <h3 className="text-2xl lg:text-4xl font-black tracking-tight text-[#0F0F0F] leading-tight">
-                    {f.title}
-                  </h3>
-                  <p className="mt-4 text-base lg:text-lg text-slate-600 leading-relaxed max-w-lg">
-                    {f.desc}
-                  </p>
+                  <EditableText path={`v2.features.rows.${i}.eyebrow`} fallback={f.eyebrow}
+                    as="p" className="text-xs font-black tracking-[0.3em] uppercase text-[#FF5C00] mb-3" />
+                  <EditableText path={`v2.features.rows.${i}.title`} fallback={f.title}
+                    as="h3" className="text-2xl lg:text-4xl font-black tracking-tight text-[#0F0F0F] leading-tight" />
+                  <EditableText path={`v2.features.rows.${i}.desc`} fallback={f.desc}
+                    as="p" multiline
+                    className="mt-4 text-base lg:text-lg text-slate-600 leading-relaxed max-w-lg" />
                   <ul className="mt-6 space-y-2.5">
-                    {f.bullets.map((b) => (
-                      <li key={b} className="flex items-start gap-3 text-sm text-[#0F0F0F] font-semibold">
+                    {f.bullets.map((b, bi) => (
+                      <li key={bi} className="flex items-start gap-3 text-sm text-[#0F0F0F] font-semibold">
                         <span className="w-6 h-6 rounded-md bg-[#FF5C00] flex items-center justify-center shrink-0 mt-0.5">
                           <ChevronRight className="w-3.5 h-3.5 text-white" strokeWidth={3} />
                         </span>
-                        {b}
+                        <EditableText path={`v2.features.rows.${i}.bullets.${bi}`} fallback={b} as="span" />
                       </li>
                     ))}
                   </ul>
@@ -475,7 +488,8 @@ function FeatureRows() {
                       <span className="w-3 h-3 rounded-full bg-[#FEBC2E]" />
                       <span className="w-3 h-3 rounded-full bg-[#28C840]" />
                     </div>
-                    <img src={f.img} alt={f.title} loading="lazy" className="w-full block" />
+                    <EditableImage path={`v2.features.rows.${i}.img`} fallback={f.img}
+                      alt={f.title} className="w-full block" />
                   </div>
                 </div>
               </div>
@@ -502,16 +516,19 @@ function KioskSection() {
       <div className="max-w-[1280px] mx-auto px-5 lg:px-10">
         <div className="grid lg:grid-cols-2 gap-8 mb-12 items-end">
           <div>
-            <p className="text-xs font-black tracking-[0.3em] uppercase text-[#FF8A3D] mb-3">Kiosk PWA</p>
+            <EditableText path="v2.kiosk.eyebrow" fallback="Kiosk PWA" as="p"
+              className="text-xs font-black tracking-[0.3em] uppercase text-[#FF8A3D] mb-3" />
             <h2 className="text-3xl lg:text-5xl font-black tracking-tight leading-tight">
-              Selfservice in
-              <span className="block text-[#FF5C00]">vier tikken.</span>
+              <EditableText path="v2.kiosk.title_line1" fallback="Selfservice in" as="span" />
+              <span className="block text-[#FF5C00]">
+                <EditableText path="v2.kiosk.title_highlight" fallback="vier tikken." as="span" />
+              </span>
             </h2>
           </div>
-          <p className="text-base lg:text-lg text-white/70 leading-relaxed max-w-lg">
-            Werkt op tablet, telefoon én desktop. Installeer in 1 tik — geen App Store nodig.
-            Achterstand, lopende maand en boetes met groot lettertype voor elke huurder.
-          </p>
+          <EditableText path="v2.kiosk.subtitle"
+            fallback="Werkt op tablet, telefoon én desktop. Installeer in 1 tik — geen App Store nodig. Achterstand, lopende maand en boetes met groot lettertype voor elke huurder."
+            as="p" multiline
+            className="text-base lg:text-lg text-white/70 leading-relaxed max-w-lg" />
         </div>
         <div className="grid sm:grid-cols-2 gap-6 lg:gap-8">
           {tablets.map((t, i) => (
@@ -521,12 +538,14 @@ function KioskSection() {
                 <span className="text-[10px] font-bold tracking-[0.22em] uppercase text-white/40">/ STEP</span>
               </div>
               <div className="rounded-xl overflow-hidden bg-black aspect-[1920/950]">
-                <img src={t.src} alt={t.label} loading="lazy"
-                  className="w-full h-full object-cover object-top" />
+                <EditableImage path={`v2.kiosk.steps.${i}.img`} fallback={t.src}
+                  alt={t.label} className="w-full h-full object-cover object-top" />
               </div>
               <div className="mt-4">
-                <p className="text-lg font-black text-white">{t.label}</p>
-                <p className="text-sm text-white/60 mt-1">{t.desc}</p>
+                <EditableText path={`v2.kiosk.steps.${i}.label`} fallback={t.label}
+                  as="p" className="text-lg font-black text-white" />
+                <EditableText path={`v2.kiosk.steps.${i}.desc`} fallback={t.desc}
+                  as="p" className="text-sm text-white/60 mt-1" />
               </div>
             </div>
           ))}
@@ -724,10 +743,10 @@ function FAQSection() {
     <section id="faq" className="bg-white py-16 lg:py-24">
       <div className="max-w-3xl mx-auto px-5 lg:px-10">
         <div className="text-center mb-10">
-          <p className="text-xs font-black tracking-[0.3em] uppercase text-[#FF5C00] mb-3">Service & FAQ</p>
-          <h2 className="text-3xl lg:text-5xl font-black tracking-tight text-[#0F0F0F] leading-tight">
-            Antwoorden op uw vragen.
-          </h2>
+          <EditableText path="v2.faq.eyebrow" fallback="Service & FAQ" as="p"
+            className="text-xs font-black tracking-[0.3em] uppercase text-[#FF5C00] mb-3" />
+          <EditableText path="v2.faq.title" fallback="Antwoorden op uw vragen." as="h2"
+            className="text-3xl lg:text-5xl font-black tracking-tight text-[#0F0F0F] leading-tight" />
         </div>
         <div className="border-t border-slate-200">
           {FAQS.map((f, i) => {
@@ -737,11 +756,17 @@ function FAQSection() {
                 <button onClick={() => setOpen(isOpen ? -1 : i)}
                   data-testid={`faq-${i}`}
                   className="w-full text-left py-5 flex items-start justify-between gap-4 hover:text-[#FF5C00] transition-colors">
-                  <p className="text-base lg:text-lg font-black text-[#0F0F0F]">{f.q}</p>
+                  <EditableText path={`v2.faq.items.${i}.q`} fallback={f.q}
+                    as="p" className="text-base lg:text-lg font-black text-[#0F0F0F]" />
                   {isOpen ? <ChevronUp className="w-5 h-5 text-[#FF5C00] shrink-0" />
                           : <ChevronDown className="w-5 h-5 text-[#0F0F0F] shrink-0" />}
                 </button>
-                {isOpen && <div className="pb-5"><p className="text-sm text-slate-600 leading-relaxed">{f.a}</p></div>}
+                {isOpen && (
+                  <div className="pb-5">
+                    <EditableText path={`v2.faq.items.${i}.a`} fallback={f.a}
+                      as="p" multiline className="text-sm text-slate-600 leading-relaxed" />
+                  </div>
+                )}
               </div>
             );
           })}
@@ -762,10 +787,14 @@ function Footer({ onLogin }) {
           <div className="md:col-span-2">
             <div className="flex items-center gap-2.5 mb-4">
               <span className="w-9 h-9 rounded-lg bg-[#FF5C00] p-1.5">
-                <img src="/kiosk-icons/mark-white.png" alt="" className="w-full h-full object-contain" />
+                <EditableImage path="v2.brand.logo_url" fallback="/kiosk-icons/mark-white.png"
+                  alt="" className="w-full h-full object-contain" />
               </span>
               <span className="text-base font-black text-white">
-                Suri<span className="text-[#FF5C00]">Rent</span> <span className="text-white/60">N.V</span>
+                <EditableText path="v2.brand.name_prefix" fallback="Suri" as="span" />
+                <EditableText path="v2.brand.name_suffix" fallback="Rent" as="span" className="text-[#FF5C00]" />
+                <span> </span>
+                <EditableText path="v2.brand.legal_suffix" fallback="N.V" as="span" className="text-white/60" />
               </span>
             </div>
             <EditableText path="v2.footer.tagline"

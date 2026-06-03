@@ -4,7 +4,7 @@ import { useRegisterServiceWorker, InstallPrompt } from './lib/pwa';
 import PersonalPinSetup from './components/PersonalPinSetup';
 import { usePwaManifest } from './lib/pwa-manifest';
 import { useSheetSwipeToDismiss } from './lib/sheet-swipe';
-import { useEffect, lazy, Suspense } from 'react';
+import { useEffect, useState, lazy, Suspense } from 'react';
 import { installGlobalTapSounds } from './lib/tap-sounds';
 import RotateNotice from './components/RotateNotice';
 import BrandedShell from './components/BrandedShell';
@@ -42,6 +42,7 @@ if (typeof window !== 'undefined') {
 }
 
 const MarketingLanding = lazyWithRetry(() => import('./pages/vastgoed/MarketingLandingV2'));
+const TenantPublicLanding = lazyWithRetry(() => import('./pages/vastgoed/TenantPublicLanding'));
 const LoginPage = lazyWithRetry(() => import('./pages/vastgoed/LoginPage'));
 const AdminDashboard = lazyWithRetry(() => import('./pages/vastgoed/AdminDashboard'));
 const KioskLayout = lazyWithRetry(() => import('./pages/vastgoed/KioskLayout'));
@@ -112,6 +113,49 @@ function MarketingRoutes() {
   );
 }
 
+/**
+ * useTenantLandingResolver — checkt of het huidige Host (window.location.hostname)
+ * een custom_domain is van een bedrijf. Returns:
+ *   - { status: 'checking' } initially
+ *   - { status: 'tenant', company, apartments, content } als er een match is
+ *   - { status: 'none' } anders (val terug op normal routing)
+ *
+ * Skip op bekende system hosts (surirent.sr, *.surirent.sr, emergent preview, localhost).
+ */
+function useTenantLandingResolver() {
+  const [state, setState] = useState({ status: 'checking' });
+  useEffect(() => {
+    const host = (typeof window !== 'undefined' ? window.location.hostname : '').toLowerCase();
+    // Skip system hosts om onnodige API call te besparen.
+    const SYSTEM = ['surirent.sr', 'app.surirent.sr', 'localhost', '127.0.0.1'];
+    const isSystem = SYSTEM.some((s) => host === s || host.endsWith('.' + s))
+      || host.includes('emergentagent.com')
+      || host.includes('.preview.');
+    if (isSystem) { setState({ status: 'none' }); return; }
+    let cancel = false;
+    (async () => {
+      try {
+        const backend = process.env.REACT_APP_BACKEND_URL || '';
+        const res = await fetch(`${backend}/api/public/company-landing`, {
+          headers: { 'X-Forwarded-Host': host },
+        });
+        if (!res.ok) throw new Error('bad status');
+        const data = await res.json();
+        if (cancel) return;
+        if (data.found) {
+          setState({ status: 'tenant', ...data });
+        } else {
+          setState({ status: 'none' });
+        }
+      } catch {
+        if (!cancel) setState({ status: 'none' });
+      }
+    })();
+    return () => { cancel = true; };
+  }, []);
+  return state;
+}
+
 function AppRoutes() {
   // app.surirent.sr serves the kiosk + admin + tenant portal + contract sign.
   // On preview / local dev, all routes are reachable under the same domain.
@@ -119,6 +163,7 @@ function AppRoutes() {
     <Routes>
       <Route path="/" element={<LoginPage />} />
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/landing-preview" element={<TenantPublicLanding />} />
       <Route path="/admin/*" element={<Protected><AdminDashboard /></Protected>} />
       <Route path="/kiosk" element={<KioskLayout />} />
       <Route path="/kiosk/huurder" element={<TenantKioskLayout />} />
@@ -157,6 +202,7 @@ function HybridRoutes() {
     <Routes>
       <Route path="/" element={<MarketingLanding />} />
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/landing-preview" element={<TenantPublicLanding />} />
       <Route path="/admin/*" element={<Protected><AdminDashboard /></Protected>} />
       <Route path="/kiosk" element={<KioskLayout />} />
       <Route path="/kiosk/huurder" element={<TenantKioskLayout />} />
@@ -193,6 +239,22 @@ export default function App() {
   // via /admin/notifications.
   useEffect(() => { installGlobalTapSounds(); }, []);
   const mode = isMarketingHost() ? 'marketing' : (appUrl() ? 'app' : 'hybrid');
+  // Tenant custom-domain detectie — als de huidige hostname een geregistreerd
+  // custom_domain is van een bedrijf, renderen we DIRECT TenantPublicLanding
+  // ipv de standaard routes. Skipt zichzelf op system hosts.
+  const tenant = useTenantLandingResolver();
+  if (tenant.status === 'checking') {
+    return <RouteFallback />;
+  }
+  if (tenant.status === 'tenant') {
+    return (
+      <AuthProvider>
+        <Suspense fallback={<RouteFallback />}>
+          <TenantPublicLanding company={tenant.company} apartments={tenant.apartments} content={tenant.content} editMode={false} />
+        </Suspense>
+      </AuthProvider>
+    );
+  }
   return (
     <AuthProvider>
       <Suspense fallback={<RouteFallback />}>

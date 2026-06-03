@@ -33,6 +33,7 @@ import Subscriptions from './admin/Subscriptions';
 import SaasOverview from './admin/SaasOverview';
 import SaasSettings from './admin/SaasSettings';
 import LandingEditor from './admin/LiveLandingEditor';
+import MijnLanding from './admin/MijnLanding';
 import PlansAdmin from './admin/PlansAdmin';
 import BackupRestore from './admin/BackupRestore';
 import Branding from './admin/Branding';
@@ -70,6 +71,7 @@ const BASE_TABS = [
   { id: 'employees', label: 'Werknemers', icon: Users },
   { id: 'notifications', label: 'Notificaties', icon: Bell },
   { id: 'mijn_abonnement', label: 'Mijn Abonnement', icon: Crown },
+  { id: 'mijn_landing', label: 'Mijn Landing', icon: Paintbrush },
   { id: 'setup_wizard', label: 'Setup Wizard', icon: Sparkles },
   { id: 'business_info', label: 'Bedrijfsgegevens', icon: Briefcase },
   { id: 'branding', label: 'Branding', icon: Palette },
@@ -97,7 +99,7 @@ const SIDEBAR_GROUPS = {
   hoofd: { label: 'Hoofd', ids: ['overview', 'locations', 'apartments', 'tenants', 'contracts'] },
   geld: { label: 'Financieel', ids: ['payments', 'invoices', 'payment_plans', 'deposits', 'kasgeld'] },
   ops: { label: 'Operaties', ids: ['maintenance', 'employees', 'notifications'] },
-  account: { label: 'Account', ids: ['mijn_abonnement', 'setup_wizard', 'business_info', 'branding', 'backup_restore', 'settings'] },
+  account: { label: 'Account', ids: ['mijn_abonnement', 'mijn_landing', 'setup_wizard', 'business_info', 'branding', 'backup_restore', 'settings'] },
   // SaaS Superadmin groep — split per functie. Volgorde: overzicht, klanten,
   // dagelijkse acties (OCR + facturen/betalingen), instellingen.
   saas: { label: 'SaaS Beheer', ids: [
@@ -2433,6 +2435,7 @@ export default function AdminDashboard() {
           {tab === 'employees' && <Employees />}
           {tab === 'notifications' && <Notifications />}
           {tab === 'mijn_abonnement' && <MijnAbonnement />}
+          {tab === 'mijn_landing' && <MijnLanding />}
           {tab === 'backup_restore' && <BackupRestore />}
           {tab === 'settings' && <SettingsPage initialSection={settingsSection} />}
         </main>

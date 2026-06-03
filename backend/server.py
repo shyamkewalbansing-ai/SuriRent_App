@@ -2868,6 +2868,318 @@ async def get_landing_asset(asset_id: str):
 
 
 # =====================================================================
+# Tenant (per-company) Landing pages — hostgebaseerde routing
+# =====================================================================
+# Elk bedrijf kan een custom domain instellen (bv. gopiappartements.com).
+# Wanneer een bezoeker naar dat domein gaat, doet de frontend een aanroep
+# naar /api/public/company-landing?host=… en krijgt de landing terug die
+# bij dat bedrijf hoort. De frontend rendert dan TenantPublicLanding ipv
+# de SuriRent marketing landing.
+#
+# DB:
+#   - companies.custom_domain (string, unique sparse index)
+#   - company_landings: {id: <company_id>, draft: {...}, published: {...},
+#                        updated_at, published_at}
+# =====================================================================
+
+def _normalize_host(host: str) -> str:
+    """Strip 'www.' + port van een Host header. Lowercase."""
+    h = (host or "").strip().lower()
+    if h.startswith("www."):
+        h = h[4:]
+    if ":" in h:
+        h = h.split(":", 1)[0]
+    return h
+
+
+@api.get("/public/company-landing")
+async def public_company_landing(request: Request, host: Optional[str] = None):
+    """Public endpoint — geen auth. Resolved van Host header (of ?host=).
+    Returnt {company, content, apartments, found:bool}. Bij niet gevonden
+    geeft `found=false` zodat de frontend kan terugvallen op de default
+    SuriRent landing."""
+    target = _normalize_host(host or request.headers.get("host", ""))
+    # Skip onze eigen hosts — die mogen NOOIT als custom domain matchen,
+    # zodat preview/prod altijd de superadmin landing zien.
+    SYSTEM_HOSTS_SUFFIXES = ("surirent.sr", "emergentagent.com", "localhost")
+    if not target or any(target == s or target.endswith("." + s) for s in SYSTEM_HOSTS_SUFFIXES):
+        return {"found": False}
+
+    company = await db.companies.find_one(
+        {"custom_domain": target},
+        {"_id": 0, "id": 1, "name": 1, "slug": 1, "branding": 1, "address": 1,
+         "contact_email": 1, "contact_phone": 1, "whatsapp_phone": 1},
+    )
+    if not company:
+        return {"found": False}
+
+    landing_doc = await db.company_landings.find_one({"id": company["id"]}, {"_id": 0}) or {}
+    content = landing_doc.get("published") or {}
+
+    # Vul publieke apartments aan (alleen vrije eenheden voor de showcase).
+    apartments = []
+    cursor = db.apartments.find(
+        {"company_id": company["id"], "status": {"$in": ["vacant", "available"]}},
+        {"_id": 0, "id": 1, "number": 1, "address": 1, "rent_amount": 1,
+         "currency": 1, "description": 1, "photo_url": 1, "status": 1},
+    ).sort("created_at", -1)
+    async for a in cursor:
+        apartments.append(a)
+
+    return {
+        "found": True,
+        "company": company,
+        "content": content,
+        "apartments": apartments,
+    }
+
+
+@api.get("/companies/me/landing")
+async def get_my_landing(mode: Literal["draft", "published"] = "draft",
+                          user=Depends(get_current_user)):
+    """Company admin reads their own draft/published landing content."""
+    cid = company_id_of(user)
+    if not cid:
+        raise HTTPException(status_code=400, detail="Geen actief bedrijf")
+    doc = await db.company_landings.find_one({"id": cid}, {"_id": 0}) or {}
+    if mode == "draft":
+        content = doc.get("draft") or doc.get("published") or {}
+    else:
+        content = doc.get("published") or {}
+    has_unpublished = (doc.get("draft") or {}) != (doc.get("published") or {}) and bool(doc.get("draft"))
+    return {
+        "content": content,
+        "has_unpublished_changes": has_unpublished,
+        "updated_at": doc.get("updated_at"),
+        "published_at": doc.get("published_at"),
+        "custom_domain": (await db.companies.find_one({"id": cid}, {"_id": 0, "custom_domain": 1}) or {}).get("custom_domain"),
+    }
+
+
+class CompanyLandingIn(BaseModel):
+    content: dict
+
+
+@api.put("/companies/me/landing")
+async def put_my_landing(body: CompanyLandingIn, user=Depends(get_current_user)):
+    """Save edits to the company's draft. Use /publish to make it live."""
+    cid = company_id_of(user)
+    if not cid:
+        raise HTTPException(status_code=400, detail="Geen actief bedrijf")
+    if not isinstance(body.content, dict):
+        raise HTTPException(status_code=400, detail="content moet een object zijn")
+    await db.company_landings.update_one(
+        {"id": cid},
+        {"$set": {
+            "id": cid,
+            "draft": body.content,
+            "updated_at": iso(now_utc()),
+            "updated_by": user.get("email"),
+        }},
+        upsert=True,
+    )
+    return {"ok": True}
+
+
+@api.post("/companies/me/landing/publish")
+async def publish_my_landing(user=Depends(get_current_user)):
+    cid = company_id_of(user)
+    if not cid:
+        raise HTTPException(status_code=400, detail="Geen actief bedrijf")
+    doc = await db.company_landings.find_one({"id": cid}, {"_id": 0}) or {}
+    draft = doc.get("draft")
+    if not draft:
+        raise HTTPException(status_code=400, detail="Geen concept om te publiceren")
+    await db.company_landings.update_one(
+        {"id": cid},
+        {"$set": {
+            "id": cid,
+            "published": draft,
+            "published_at": iso(now_utc()),
+            "published_by": user.get("email"),
+        }},
+        upsert=True,
+    )
+    return {"ok": True, "published_at": iso(now_utc())}
+
+
+@api.post("/companies/me/landing/discard")
+async def discard_my_landing(user=Depends(get_current_user)):
+    cid = company_id_of(user)
+    if not cid:
+        raise HTTPException(status_code=400, detail="Geen actief bedrijf")
+    doc = await db.company_landings.find_one({"id": cid}, {"_id": 0}) or {}
+    pub = doc.get("published") or {}
+    await db.company_landings.update_one(
+        {"id": cid},
+        {"$set": {
+            "id": cid,
+            "draft": pub,
+            "updated_at": iso(now_utc()),
+        }},
+        upsert=True,
+    )
+    return {"ok": True}
+
+
+class CustomDomainIn(BaseModel):
+    custom_domain: Optional[str] = ""
+
+
+@api.put("/companies/me/custom-domain")
+async def set_my_custom_domain(body: CustomDomainIn, user=Depends(require_role("admin"))):
+    """Company admin stelt zijn eigen custom domain in (bv. gopiappartements.com).
+    Leeg string = verwijder. Domain is genormaliseerd (lowercase, geen www., geen port)."""
+    cid = company_id_of(user)
+    if not cid:
+        raise HTTPException(status_code=400, detail="Geen actief bedrijf")
+    domain = _normalize_host(body.custom_domain or "")
+    if domain:
+        # Validate basic shape — moet minstens 1 dot bevatten.
+        if "." not in domain or len(domain) < 4:
+            raise HTTPException(status_code=400, detail="Ongeldig domein (bv. gopiappartements.com)")
+        # Check of een ander bedrijf dit domein al heeft.
+        existing = await db.companies.find_one(
+            {"custom_domain": domain, "id": {"$ne": cid}}, {"_id": 0, "id": 1, "name": 1},
+        )
+        if existing:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Domein '{domain}' is al in gebruik door '{existing.get('name')}'",
+            )
+    set_doc = {"custom_domain": domain or None}
+    await db.companies.update_one({"id": cid}, {"$set": set_doc})
+    return {"ok": True, "custom_domain": domain or None}
+
+
+@api.get("/companies/me/landing-apartments")
+async def get_my_landing_apartments(user=Depends(get_current_user)):
+    """Preview-helper voor de landing editor — toont welke apartments
+    publiek zichtbaar zouden zijn (status=vacant of available)."""
+    cid = company_id_of(user)
+    if not cid:
+        raise HTTPException(status_code=400, detail="Geen actief bedrijf")
+    out = []
+    cursor = db.apartments.find(
+        {"company_id": cid, "status": {"$in": ["vacant", "available"]}},
+        {"_id": 0, "id": 1, "number": 1, "address": 1, "rent_amount": 1,
+         "currency": 1, "description": 1, "photo_url": 1, "status": 1},
+    ).sort("created_at", -1)
+    async for a in cursor:
+        out.append(a)
+    return out
+
+
+# Superadmin variants — edit any company's landing.
+@api.get("/superadmin/companies/{cid}/landing")
+async def get_company_landing_super(cid: str, mode: Literal["draft", "published"] = "draft",
+                                      user=Depends(require_role("superadmin"))):
+    doc = await db.company_landings.find_one({"id": cid}, {"_id": 0}) or {}
+    content = (doc.get("draft") if mode == "draft" else doc.get("published")) or {}
+    if mode == "draft" and not doc.get("draft"):
+        content = doc.get("published") or {}
+    return {
+        "content": content,
+        "has_unpublished_changes": (doc.get("draft") or {}) != (doc.get("published") or {}) and bool(doc.get("draft")),
+        "updated_at": doc.get("updated_at"),
+        "published_at": doc.get("published_at"),
+    }
+
+
+@api.put("/superadmin/companies/{cid}/landing")
+async def put_company_landing_super(cid: str, body: CompanyLandingIn,
+                                      user=Depends(require_role("superadmin"))):
+    await db.company_landings.update_one(
+        {"id": cid},
+        {"$set": {
+            "id": cid,
+            "draft": body.content,
+            "updated_at": iso(now_utc()),
+            "updated_by": user.get("email"),
+        }},
+        upsert=True,
+    )
+    return {"ok": True}
+
+
+@api.post("/superadmin/companies/{cid}/landing/publish")
+async def publish_company_landing_super(cid: str, user=Depends(require_role("superadmin"))):
+    doc = await db.company_landings.find_one({"id": cid}, {"_id": 0}) or {}
+    draft = doc.get("draft")
+    if not draft:
+        raise HTTPException(status_code=400, detail="Geen concept om te publiceren")
+    await db.company_landings.update_one(
+        {"id": cid},
+        {"$set": {
+            "id": cid,
+            "published": draft,
+            "published_at": iso(now_utc()),
+            "published_by": user.get("email"),
+        }},
+        upsert=True,
+    )
+    return {"ok": True}
+
+
+class LandingLeadIn(BaseModel):
+    company_id: str
+    name: str
+    phone: str
+    email: Optional[str] = ""
+    message: Optional[str] = ""
+    apartment_id: Optional[str] = ""
+
+
+@api.post("/public/landing-lead")
+async def submit_landing_lead(body: LandingLeadIn):
+    """Public lead endpoint — anyone can submit. Wordt zichtbaar voor de
+    company admin in een Leads tab. Geen auth om wrijving voor bezoekers te
+    minimaliseren; spam-protection kan later via reCAPTCHA worden toegevoegd."""
+    if not body.company_id or not body.name or not body.phone:
+        raise HTTPException(status_code=400, detail="company_id, name en phone zijn verplicht")
+    company = await db.companies.find_one({"id": body.company_id}, {"_id": 0, "id": 1, "name": 1})
+    if not company:
+        raise HTTPException(status_code=404, detail="Bedrijf niet gevonden")
+    lead = {
+        "id": new_id(),
+        "company_id": body.company_id,
+        "name": body.name.strip()[:120],
+        "phone": body.phone.strip()[:40],
+        "email": (body.email or "").strip()[:120],
+        "message": (body.message or "").strip()[:2000],
+        "apartment_id": (body.apartment_id or "").strip() or None,
+        "status": "new",
+        "created_at": iso(now_utc()),
+    }
+    await db.landing_leads.insert_one(lead)
+    return {"ok": True, "lead_id": lead["id"]}
+
+
+@api.get("/companies/me/landing-leads")
+async def list_my_landing_leads(user=Depends(get_current_user)):
+    cid = company_id_of(user)
+    if not cid:
+        raise HTTPException(status_code=400, detail="Geen actief bedrijf")
+    leads = await db.landing_leads.find({"company_id": cid}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    return leads
+
+
+@api.post("/companies/me/landing-leads/{lead_id}/status")
+async def update_lead_status(lead_id: str, body: dict, user=Depends(get_current_user)):
+    cid = company_id_of(user)
+    status = (body or {}).get("status", "new")
+    if status not in ("new", "contacted", "won", "lost"):
+        raise HTTPException(status_code=400, detail="Ongeldige status")
+    res = await db.landing_leads.update_one(
+        {"id": lead_id, "company_id": cid},
+        {"$set": {"status": status, "updated_at": iso(now_utc())}},
+    )
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Lead niet gevonden")
+    return {"ok": True}
+
+
+# =====================================================================
 # Per-company branding (Logo + primary color + display name for PWA/login)
 # =====================================================================
 def _hex_color(v: Optional[str]) -> str:
