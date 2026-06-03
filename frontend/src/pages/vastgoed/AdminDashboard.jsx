@@ -2384,7 +2384,20 @@ export default function AdminDashboard() {
     return () => { cancelled = true; };
   }, [user]);
 
-  const doLogout = async () => { await logout(); navigate('/login'); };
+  const doLogout = async () => {
+    const wasDemo = (() => { try { return localStorage.getItem('is_demo_session') === '1'; } catch { return false; } })();
+    if (wasDemo) {
+      // Voor demo-gebruikers: navigeer eerst naar marketing landing
+      // (via hard nav, anders fired <Protected> nog een <Navigate to="/demo/login"/>
+      // omdat user pas null wordt NA de logout() call). Hard nav reset
+      // sowieso de app state — schoner einde van demo-sessie.
+      await logout();
+      window.location.replace('/');
+      return;
+    }
+    await logout();
+    navigate('/login');
+  };
 
   // Toon billing-blocked vol-scherm vóór ALLE andere UI. Voorkomt dat de
   // gebruiker iets ziet/aanraakt van een omgeving waar hij geen toegang

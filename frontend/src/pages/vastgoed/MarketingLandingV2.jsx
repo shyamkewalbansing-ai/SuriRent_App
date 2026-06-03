@@ -58,7 +58,14 @@ function searchIndex(q) {
 // =============================================================================
 // Top header — tier 1 (thin): logo + segments + Inloggen button
 // =============================================================================
-function TopHeader({ segment, setSegment, onLogin }) {
+const DEMO_SEGMENTS = [
+  { id: 'admin',   label: 'Admin kiosk demo',    target: '/admin' },
+  { id: 'huurder', label: 'Huurder kiosk demo',  target: '/kiosk/huurder' },
+  { id: 'klant',   label: 'Klantenscherm demo',  target: '/kiosk/klant' },
+  { id: 'portaal', label: 'Mijn Huurportaal demo', target: '/kiosk/huurder?source=portaal' },
+];
+
+function TopHeader({ segment, setSegment, onLogin, onDemoLaunch }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const navItems = [
     { id: 'home',     label: 'Home' },
@@ -91,17 +98,17 @@ function TopHeader({ segment, setSegment, onLogin }) {
         </button>
 
         <div className="flex items-center gap-3 md:gap-5 lg:gap-7">
-          {/* Segment selector — like ABN's Privé/Zakelijk (desktop only) */}
-          <div className="hidden md:flex items-center gap-2">
-            {['Beheerder', 'Huurder', 'Demo'].map((s) => (
-              <button key={s} onClick={() => setSegment(s)}
-                data-testid={`segment-${s.toLowerCase()}`}
-                className={`text-sm font-bold px-4 py-2 rounded transition-colors ${
-                  segment === s
-                    ? 'border border-[#0F0F0F] text-[#0F0F0F]'
-                    : 'text-[#0F0F0F] hover:bg-slate-50'
+          {/* Demo segments — klik = direct ingelogd in de juiste demo-omgeving */}
+          <div className="hidden lg:flex items-center gap-1.5">
+            {DEMO_SEGMENTS.map((s) => (
+              <button key={s.id} onClick={() => { setSegment(s.id); onDemoLaunch(s.target); }}
+                data-testid={`segment-${s.id}`}
+                className={`text-[11px] font-bold px-3 py-2 rounded transition-colors whitespace-nowrap ${
+                  segment === s.id
+                    ? 'border border-[#FF5C00] text-[#FF5C00] bg-orange-50'
+                    : 'text-[#0F0F0F] hover:bg-orange-50 hover:text-[#FF5C00]'
                 }`}>
-                {s}
+                {s.label}
               </button>
             ))}
           </div>
@@ -136,16 +143,16 @@ function TopHeader({ segment, setSegment, onLogin }) {
                 {n.label}
               </button>
             ))}
-            <div className="pt-3 mt-2 border-t border-slate-100 flex flex-wrap gap-2">
-              {['Beheerder', 'Huurder', 'Demo'].map((s) => (
-                <button key={s} onClick={() => { setSegment(s); setMobileMenuOpen(false); }}
-                  data-testid={`mobile-segment-${s.toLowerCase()}`}
-                  className={`text-xs font-bold px-3 py-1.5 rounded transition-colors ${
-                    segment === s
-                      ? 'border border-[#0F0F0F] text-[#0F0F0F]'
-                      : 'border border-slate-200 text-slate-600 hover:border-[#FF5C00]'
+            <div className="pt-3 mt-2 border-t border-slate-100 grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {DEMO_SEGMENTS.map((s) => (
+                <button key={s.id} onClick={() => { setSegment(s.id); setMobileMenuOpen(false); onDemoLaunch(s.target); }}
+                  data-testid={`mobile-segment-${s.id}`}
+                  className={`text-xs font-bold px-3 py-2.5 rounded transition-colors text-left ${
+                    segment === s.id
+                      ? 'border border-[#FF5C00] text-[#FF5C00] bg-orange-50'
+                      : 'border border-slate-200 text-slate-700 hover:border-[#FF5C00] hover:text-[#FF5C00]'
                   }`}>
-                  {s}
+                  {s.label}
                 </button>
               ))}
             </div>
@@ -388,7 +395,7 @@ function ProductGrid({ onDemo, onLogin }) {
     else if (item.target) document.getElementById(item.target)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
   return (
-    <section className="bg-slate-50 py-10 lg:py-14 lg:pt-[170px] xl:pt-[190px]">
+    <section className="bg-slate-50 py-10 lg:py-14 lg:pt-[50px] xl:pt-[50px]">
       <div className="max-w-[1280px] mx-auto px-5 lg:px-10">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 lg:gap-4">
           {items.map((it) => (
@@ -854,7 +861,7 @@ function Footer({ onLogin }) {
 // =============================================================================
 export default function MarketingLandingV2() {
   const navigate = useNavigate();
-  const [segment, setSegment] = useState('Beheerder');
+  const [segment, setSegment] = useState('admin');
 
   // Edit mode wordt geactiveerd via ?edit=1 (alleen wanneer pagina in iframe
   // staat van de LiveLandingEditor superadmin tool).
@@ -896,7 +903,48 @@ export default function MarketingLandingV2() {
     if (t.startsWith('http')) window.location.href = t;
     else navigate(t);
   };
-  const onDemo = onLogin;
+
+  // Demo launcher — logt direct in op de demo en navigeert naar het juiste doel
+  // (admin / huurder kiosk / klantenscherm / huurportaal). Slaat token op
+  // zodat de doelroute meteen authenticated is.
+  const launchDemo = useCallback(async (target = '/admin') => {
+    if (editMode) return;
+    try {
+      const backend = process.env.REACT_APP_BACKEND_URL || '';
+      const res = await fetch(`${backend}/api/auth/demo-login`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{}',
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      if (data?.token) {
+        try {
+          localStorage.setItem('admin_token', data.token);
+          // Sla de demo-slug op — zodat branded routes blijven werken, maar
+          // logout het netjes opruimt. We taggen 'm óók als demo zodat de
+          // logout-flow weet dat hij naar landing moet ipv naar PIN.
+          if (data.company?.slug) {
+            localStorage.setItem('pwa_company_slug', data.company.slug);
+          }
+          localStorage.setItem('is_demo_session', '1');
+        } catch { /* noop */ }
+      }
+      // Navigeer naar het doel — gebruik window.location voor cross-route
+      // hard nav (sommige doelen zitten onder app subdomain in productie).
+      const t = appLink(target);
+      if (t.startsWith('http')) window.location.href = t;
+      else navigate(t);
+    } catch (e) {
+      // Fallback: ga naar /login met demo intent zodat gebruiker handmatig kan inloggen
+      const t = appLink('/login?demo=1');
+      if (t.startsWith('http')) window.location.href = t;
+      else navigate(t);
+    }
+  }, [editMode, navigate]);
+
+  const onDemo = () => launchDemo('/admin');
   const onWhatsApp = () => {
     if (editMode) return;
     window.open('https://wa.me/597XXXXXXX?text=Ik%20wil%20graag%20een%20demo%20van%20SuriRent', '_blank');
@@ -927,7 +975,7 @@ export default function MarketingLandingV2() {
             ✏️ Bewerk modus actief — klik op een tekst om te bewerken
           </div>
         )}
-        <TopHeader segment={segment} setSegment={setSegment} onLogin={onLogin} />
+        <TopHeader segment={segment} setSegment={setSegment} onLogin={onLogin} onDemoLaunch={launchDemo} />
         <SecondaryNav />
         <Hero onDemo={onDemo} onWhatsApp={onWhatsApp} />
         <ProductGrid onDemo={onDemo} onLogin={onLogin} />

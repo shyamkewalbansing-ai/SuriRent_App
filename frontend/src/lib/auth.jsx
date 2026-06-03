@@ -118,6 +118,13 @@ export function AuthProvider({ children }) {
   };
 
   const logout = async () => {
+    // Onthoud of dit een demo-sessie was — daar willen we de pwa_company_slug
+    // óók wissen anders stuurt LoginPage de gebruiker direct door naar de
+    // branded /<slug>/login PIN-pagina (zie LoginPage useEffect ~1698).
+    const wasDemo = (() => {
+      try { return localStorage.getItem('is_demo_session') === '1'; }
+      catch { return false; }
+    })();
     try { await api.post('/auth/logout'); } catch (err) { console.warn('Admin logout API failed (continuing client-side):', err); }
     localStorage.removeItem('admin_token');
     localStorage.removeItem('kiosk_token');
@@ -128,6 +135,13 @@ export function AuthProvider({ children }) {
     try {
       localStorage.removeItem('pwa_preferred_role');
       localStorage.removeItem('kiosk_company');
+      localStorage.removeItem('is_demo_session');
+      // Demo-sessies wissen ook pwa_company_slug zodat LoginPage NIET naar
+      // /<demo-slug>/login (PIN) redirect na uitloggen. Voor echte gebruikers
+      // willen we de branded login wel behouden.
+      if (wasDemo) {
+        localStorage.removeItem('pwa_company_slug');
+      }
     } catch { /* ignore */ }
     try {
       sessionStorage.removeItem('kiosk_emp_id');
