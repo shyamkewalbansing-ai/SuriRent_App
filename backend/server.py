@@ -303,9 +303,10 @@ class RegisterIn(BaseModel):
     password: str = Field(min_length=6)
     company_name: Optional[str] = None  # If set, creates a new company with this user as admin
     telefoon: Optional[str] = ""
+    address: Optional[str] = ""
     plan: Optional[Literal["starter", "professional"]] = "starter"
     kiosk_pin: Optional[str] = None  # 4 digits — set the kiosk PIN at registration
-    country: Optional[Literal["SR", "NL", "OTHER"]] = None  # Explicit override; falls back to phone-based detection
+    country: Optional[Literal["SR", "NL"]] = None  # Explicit override; falls back to phone-based detection
 
 
 class LoginIn(BaseModel):
@@ -994,8 +995,6 @@ async def register(body: RegisterIn, response: Response):
             country, currency = "NL", "EUR"
         elif body.country == "SR":
             country, currency = "SR", "SRD"
-        elif body.country == "OTHER":
-            country, currency = "OTHER", "SRD"
         else:
             country, currency = _detect_country_currency(body.telefoon)
         c = {
@@ -1007,6 +1006,7 @@ async def register(body: RegisterIn, response: Response):
             "trial_started_at": iso(now),
             "trial_ends_at": iso(trial_end),
             "telefoon": (body.telefoon or "").strip(),
+            "address": (body.address or "").strip(),
             "owner_email": email,
             "country": country,
             "currency": currency,
@@ -8204,7 +8204,7 @@ async def system_status():
         # Lichte sanity: count tenants (snel met index) — bevestigt dat
         # tenant-portal data laag werkt.
         await asyncio.wait_for(db.tenants.estimated_document_count(), timeout=2.0)
-    except Exception as e:
+    except Exception:
         hk_status = "degraded"
         if overall_status == "operational":
             overall_status = "degraded"

@@ -894,6 +894,7 @@ function PasswordView({ initialMode = 'login', onBack, onRegistered, branding })
   const [name, setName] = useState('');
   const [companyName, setCompanyName] = useState('');
   const [telefoon, setTelefoon] = useState('');
+  const [address, setAddress] = useState('');
   const [plan, setPlan] = useState('starter');
   const [kioskPin, setKioskPin] = useState('');
   // Country selection: '' (auto), 'SR', 'NL', 'OTHER'.
@@ -920,7 +921,7 @@ function PasswordView({ initialMode = 'login', onBack, onRegistered, branding })
   // Explicit country wins; otherwise the phone is used for auto-detect.
   const planQuery = (() => {
     if (country === 'NL') return '?currency=EUR';
-    if (country === 'SR' || country === 'OTHER') return '?currency=SRD';
+    if (country === 'SR') return '?currency=SRD';
     return telefoon ? `?phone=${encodeURIComponent(telefoon)}` : '';
   })();
 
@@ -1037,6 +1038,7 @@ function PasswordView({ initialMode = 'login', onBack, onRegistered, branding })
           password,
           company_name: companyName.trim(),
           telefoon: telefoon.trim(),
+          address: address.trim(),
           plan,
           kiosk_pin: kioskPin.trim() || null,
           ...(country ? { country } : {}),
@@ -1163,11 +1165,10 @@ function PasswordView({ initialMode = 'login', onBack, onRegistered, branding })
                 <div className="space-y-3">
                   <div>
                     <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Land &amp; valuta</label>
-                    <div className="grid grid-cols-3 gap-2" data-testid="country-picker">
+                    <div className="grid grid-cols-2 gap-2" data-testid="country-picker">
                       {[
                         { code: 'SR', flag: '🇸🇷', label: 'Suriname', sub: 'SRD' },
                         { code: 'NL', flag: '🇳🇱', label: 'Nederland', sub: 'EUR' },
-                        { code: 'OTHER', flag: '🌍', label: 'Anders', sub: 'SRD' },
                       ].map((c) => {
                         const sel = country === c.code;
                         return (
@@ -1284,6 +1285,13 @@ function PasswordView({ initialMode = 'login', onBack, onRegistered, branding })
                     </div>
                   </div>
 
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Adres</label>
+                    <input type="text" value={address} onChange={(e) => setAddress(e.target.value)} data-testid="auth-address"
+                      placeholder="Bedrijfsadres (straat, huisnummer, stad)"
+                      className="w-full h-12 text-base px-4 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] focus:ring-4 focus:ring-[#FF5C00]/10 bg-[#F9FAFB] outline-none transition" />
+                  </div>
+
                   <div className="grid sm:grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">E-mailadres</label>
@@ -1379,33 +1387,6 @@ function PasswordView({ initialMode = 'login', onBack, onRegistered, branding })
                   {mode === 'login' ? 'Registreer hier' : 'Log hier in'}
                 </button>
               </p>
-
-              {mode === 'login' && (
-                <div className="mt-5 p-3 bg-orange-50 border border-orange-200 rounded-xl text-center">
-                  <p className="text-xs font-bold text-orange-700 mb-1">Demo proberen?</p>
-                  <p className="text-[11px] text-orange-600 mb-2">Test alle functies in een gedeelde demo-omgeving (reset elke 30 min)</p>
-                  <button type="button" onClick={async () => {
-                      setLoading(true); setError('');
-                      try {
-                        const { data } = await api.post('/auth/demo-login', {});
-                        if (data?.email && data?.password) {
-                          setEmail(data.email);
-                          setPassword(data.password);
-                          // Auto-submit
-                          await login(data.email, data.password);
-                          setPreferredRole('admin');
-                          navigate('/admin');
-                        }
-                      } catch (err) {
-                        setError(formatError(err, 'Demo niet beschikbaar'));
-                      } finally { setLoading(false); }
-                    }}
-                    data-testid="auth-demo-btn"
-                    className="w-full py-2 rounded-lg bg-white border-2 border-orange-300 hover:bg-orange-100 text-orange-700 font-bold text-sm">
-                    Direct in demo-omgeving →
-                  </button>
-                </div>
-              )}
             </>
           )}
         </div>
@@ -1645,6 +1626,14 @@ export default function LoginPage() {
     const v = (searchParams.get('view') || '').toLowerCase();
     if (v === 'admin' || v === 'login' || v === 'password') return 'login';
     if (v === 'register' || v === 'signup') return 'register';
+    // Shortcut: ?register=1 from marketing topbar
+    if (searchParams.get('register') === '1') return 'register';
+    // Desktop default: skip PIN keypad and show email login form directly.
+    // Mobile keeps PIN-first flow (more tactile + branded). We detect via
+    // viewport width on initial render — a no-op on SSR (window check).
+    try {
+      if (typeof window !== 'undefined' && window.innerWidth >= 1024) return 'login';
+    } catch { /* noop */ }
     return 'pin';
   })();
   const [view, setView] = useState(initialView);

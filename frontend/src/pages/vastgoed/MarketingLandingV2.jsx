@@ -59,7 +59,7 @@ function searchIndex(q) {
 // =============================================================================
 // Top header — tier 1 (thin): logo + status indicator + Inloggen button
 // =============================================================================
-function TopHeader({ onLogin }) {
+function TopHeader({ onLogin, onRegister }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const navItems = [
     { id: 'home',     label: 'Home' },
@@ -96,6 +96,11 @@ function TopHeader({ onLogin }) {
           <div className="hidden sm:block">
             <StatusPill />
           </div>
+
+          <button onClick={onRegister} data-testid="topheader-register"
+            className="hidden sm:inline-flex h-11 px-4 md:px-5 rounded-md bg-white hover:bg-orange-50 border-2 border-[#FF5C00] text-[#FF5C00] text-sm font-bold items-center gap-2 transition-colors">
+            <EditableText path="v2.brand.cta_register" fallback="Registreren" as="span" />
+          </button>
 
           <button onClick={onLogin} data-testid="topheader-login"
             className="h-11 px-4 md:px-5 rounded-md bg-[#FF5C00] hover:bg-[#C74600] text-white text-sm font-bold flex items-center gap-2 transition-colors shadow-[0_2px_0_0_rgba(0,0,0,0.05)]">
@@ -877,6 +882,13 @@ export default function MarketingLandingV2() {
     else navigate(t);
   };
 
+  const onRegister = () => {
+    if (editMode) return;
+    const t = appLink('/login?register=1');
+    if (t.startsWith('http')) window.location.href = t;
+    else navigate(t);
+  };
+
   // Demo launcher — logt direct in op de demo en navigeert naar het juiste doel
   // (admin / huurder kiosk / klantenscherm / huurportaal). Slaat token op
   // zodat de doelroute meteen authenticated is.
@@ -948,7 +960,7 @@ export default function MarketingLandingV2() {
             ✏️ Bewerk modus actief — klik op een tekst om te bewerken
           </div>
         )}
-        <TopHeader onLogin={onLogin} />
+        <TopHeader onLogin={onLogin} onRegister={onRegister} />
         <SecondaryNav />
         <Hero onDemo={onDemo} onWhatsApp={onWhatsApp} />
         <ProductGrid onDemo={onDemo} onLogin={onLogin} />
