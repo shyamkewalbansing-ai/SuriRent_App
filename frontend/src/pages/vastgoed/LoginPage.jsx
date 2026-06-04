@@ -468,7 +468,7 @@ function PinLanding({ onSuccess, onPassword, onRegister, branding, pwaTarget }) 
   };
 
   return (
-    <div className="flex flex-col text-white relative overflow-hidden" style={{
+    <div className="flex flex-col text-white relative overflow-hidden lg:overflow-auto lg:items-center lg:justify-center lg:p-8" style={{
       position: 'fixed', inset: 0,
       backgroundColor: primary,
       paddingTop: 'env(safe-area-inset-top, 0px)',
@@ -476,8 +476,8 @@ function PinLanding({ onSuccess, onPassword, onRegister, branding, pwaTarget }) 
       paddingLeft: 'env(safe-area-inset-left, 0px)',
       paddingRight: 'env(safe-area-inset-right, 0px)',
     }}>
-      {/* Diagonal decorative background pattern — ABN AMRO inspired */}
-      <div className="absolute inset-0 pointer-events-none overflow-hidden -z-0">
+      {/* Diagonal decorative background pattern — ABN AMRO inspired (only mobile/tablet) */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden -z-0 lg:hidden">
         <div className="absolute -top-32 -right-40 w-[600px] h-[600px] rounded-full opacity-20 blur-3xl"
           style={{ background: 'rgba(255,255,255,0.4)' }} />
         <div className="absolute top-[20%] -left-32 w-[400px] h-[400px] rounded-full opacity-15 blur-3xl"
@@ -489,34 +489,40 @@ function PinLanding({ onSuccess, onPassword, onRegister, branding, pwaTarget }) 
         </svg>
       </div>
 
-      {/* TOP ACTION BAR — Scan QR linksboven, Help rechtsboven */}
-      <div className="relative z-10 flex items-center justify-between px-5 lg:px-8"
+      {/* Desktop wrapper: alle inhoud wordt op desktop binnen een WIT KAART
+          gerenderd (zelfde stijl als het email-login formulier). Op mobiel
+          is dit gewoon een fragment-achtige doorgang zodat de fullscreen
+          oranje branded experience intact blijft. */}
+      <div className="contents lg:block lg:w-full lg:max-w-md lg:bg-white lg:rounded-2xl lg:shadow-2xl lg:overflow-hidden lg:relative lg:text-slate-900 lg:p-6">
+      {/* TOP ACTION BAR — Scan QR linksboven, Help rechtsboven (mobiel)
+          Op desktop staat hij ABOVE de witte card als kleine actie-links. */}
+      <div className="relative z-10 flex items-center justify-between px-5 lg:px-0 lg:mb-3"
         style={{ paddingTop: 'clamp(12px, 2vh, 24px)', paddingBottom: 'clamp(8px, 1.5vh, 16px)' }}>
         <button onClick={() => setShowScanner(true)} data-testid="login-scan-qr-btn"
-          className="flex items-center gap-2 px-3 py-2 rounded-full bg-white/15 hover:bg-white/25 backdrop-blur-sm border border-white/20 transition-all text-white text-sm font-bold">
+          className="flex items-center gap-2 px-3 py-2 rounded-full bg-white/15 hover:bg-white/25 backdrop-blur-sm border border-white/20 transition-all text-white text-sm font-bold lg:bg-slate-100 lg:hover:bg-slate-200 lg:border-slate-200 lg:text-slate-700">
           <QrCode className="w-4 h-4" />
           Scan QR
         </button>
         <button onClick={() => setShowHelp(true)} data-testid="login-help-btn"
-          className="flex items-center gap-2 px-3 py-2 rounded-full bg-white/15 hover:bg-white/25 backdrop-blur-sm border border-white/20 transition-all text-white text-sm font-bold">
+          className="flex items-center gap-2 px-3 py-2 rounded-full bg-white/15 hover:bg-white/25 backdrop-blur-sm border border-white/20 transition-all text-white text-sm font-bold lg:bg-slate-100 lg:hover:bg-slate-200 lg:border-slate-200 lg:text-slate-700">
           <HelpCircle className="w-4 h-4" />
           Help
         </button>
       </div>
 
       {/* CENTER — Welkom + profielfoto + naam + PIN */}
-      <div className="relative z-10 flex-1 min-h-0 flex flex-col items-center justify-start overflow-y-auto"
+      <div className="relative z-10 flex-1 min-h-0 flex flex-col items-center justify-start overflow-y-auto lg:overflow-visible lg:flex-none"
         style={{ paddingTop: 'clamp(8px, 2vh, 24px)', paddingBottom: 'clamp(16px, 3vh, 32px)' }}>
 
-        <h1 className="font-black tracking-tight text-white text-center"
+        <h1 className="font-black tracking-tight text-white text-center lg:text-slate-900"
           style={{ fontSize: 'clamp(28px, 5vh, 44px)', lineHeight: '1.05' }}
           data-testid="pin-welcome">
           Welkom{deviceUser ? ',' : ''}
         </h1>
 
         {/* Profielfoto in cirkel */}
-        <div className="relative mt-4 mb-3 lg:mb-4">
-          <div className="rounded-full bg-white p-1 shadow-[0_12px_28px_-8px_rgba(0,0,0,0.35)]"
+        <div className="relative mt-4 mb-3 lg:mb-4 lg:mt-3">
+          <div className="rounded-full bg-white p-1 shadow-[0_12px_28px_-8px_rgba(0,0,0,0.35)] lg:bg-slate-50 lg:shadow-md"
             style={{
               width: 'clamp(76px, 12vh, 110px)',
               height: 'clamp(76px, 12vh, 110px)',
@@ -534,12 +540,12 @@ function PinLanding({ onSuccess, onPassword, onRegister, branding, pwaTarget }) 
           <span className="absolute bottom-1 right-1 w-4 h-4 rounded-full border-2 border-white bg-emerald-400 shadow-md" />
         </div>
 
-        <p className="text-white/90 font-black text-center uppercase tracking-wider"
+        <p className="text-white/90 font-black text-center uppercase tracking-wider lg:text-slate-900"
           style={{ fontSize: 'clamp(13px, 1.8vh, 17px)' }}
           data-testid="pin-company-name">
           {deviceUser ? deviceUser.name : appName}
         </p>
-        <p className="text-white/80 text-center font-medium mt-2 px-6"
+        <p className="text-white/80 text-center font-medium mt-2 px-6 lg:text-slate-500 lg:mt-1"
           style={{ fontSize: 'clamp(12px, 1.6vh, 15px)', maxWidth: '340px' }}>
           {deviceUser
             ? 'Vul je persoonlijke PIN in om verder te gaan'
@@ -554,11 +560,11 @@ function PinLanding({ onSuccess, onPassword, onRegister, branding, pwaTarget }) 
         )}
 
         {/* PIN dots */}
-        <div className="flex items-center mt-5 lg:mt-6" style={{ gap: 'clamp(14px, 3vw, 24px)' }}>
+        <div className="flex items-center mt-5 lg:mt-5" style={{ gap: 'clamp(14px, 3vw, 24px)' }}>
           {pin.map((digit, i) => (
             <div key={`pin-slot-${i}`} data-testid={`pin-input-${i}`}
               className={`rounded-full transition-all ${
-                error ? 'bg-red-300 scale-110' : digit ? 'bg-white scale-110' : 'bg-white/35'
+                error ? 'bg-red-300 scale-110' : digit ? 'bg-white lg:bg-[#FF5C00] scale-110' : 'bg-white/35 lg:bg-slate-200'
               }`}
               style={{
                 width: 'clamp(14px, 1.8vh, 18px)',
@@ -568,7 +574,7 @@ function PinLanding({ onSuccess, onPassword, onRegister, branding, pwaTarget }) 
         </div>
 
         {/* Numpad — ABN-stijl met letters subscript */}
-        <div className="grid grid-cols-3 mt-6 lg:mt-8"
+        <div className="grid grid-cols-3 mt-6 lg:mt-5"
           style={{
             gap: 'clamp(10px, 1.5vh, 16px) clamp(20px, 6vw, 40px)',
             width: 'min(340px, 88%)',
@@ -577,7 +583,7 @@ function PinLanding({ onSuccess, onPassword, onRegister, branding, pwaTarget }) 
             k === '_e' ? <div key="e" /> : (
               <button key={k} type="button" onClick={() => handleKey(k)} disabled={loading}
                 data-testid={`keypad-${k}`}
-                className="flex flex-col items-center justify-center text-white active:scale-95 disabled:opacity-50 transition-all"
+                className="flex flex-col items-center justify-center text-white active:scale-95 disabled:opacity-50 transition-all lg:text-slate-800 lg:rounded-xl lg:hover:bg-orange-50 lg:active:bg-orange-100"
                 style={{ height: 'clamp(54px, 8vh, 70px)' }}>
                 {k === 'DEL' ? (
                   <Delete style={{ width: 'clamp(22px, 3vh, 28px)', height: 'clamp(22px, 3vh, 28px)' }} />
@@ -588,7 +594,7 @@ function PinLanding({ onSuccess, onPassword, onRegister, branding, pwaTarget }) 
                       {k}
                     </span>
                     {NUMPAD_LETTERS[k] && (
-                      <span className="font-bold tracking-[0.18em] text-white/70 mt-0.5"
+                      <span className="font-bold tracking-[0.18em] text-white/70 mt-0.5 lg:text-slate-400"
                         style={{ fontSize: 'clamp(9px, 1.2vh, 11px)' }}>
                         {NUMPAD_LETTERS[k]}
                       </span>
@@ -601,7 +607,7 @@ function PinLanding({ onSuccess, onPassword, onRegister, branding, pwaTarget }) 
         </div>
 
         {loading && (
-          <div className="flex items-center gap-2 text-white/80 mt-3">
+          <div className="flex items-center gap-2 text-white/80 mt-3 lg:text-slate-600">
             <Loader2 className="w-4 h-4 animate-spin" />
             <span className="text-sm font-bold">Verifiëren…</span>
           </div>
@@ -612,28 +618,28 @@ function PinLanding({ onSuccess, onPassword, onRegister, branding, pwaTarget }) 
           {deviceUser ? (
             <>
               <button onClick={forgetDevice} data-testid="login-switch-user-btn"
-                className="flex items-center gap-1.5 text-white/80 hover:text-white">
+                className="flex items-center gap-1.5 text-white/80 hover:text-white lg:text-slate-500 lg:hover:text-slate-900">
                 <KeyRound className="w-3.5 h-3.5" /> Andere gebruiker
               </button>
-              <span className="text-white/40">•</span>
+              <span className="text-white/40 lg:text-slate-300">•</span>
               <button onClick={onPassword} data-testid="login-password-btn"
-                className="flex items-center gap-1.5 text-white/80 hover:text-white">
+                className="flex items-center gap-1.5 text-white/80 hover:text-white lg:text-slate-500 lg:hover:text-slate-900">
                 <LogIn className="w-3.5 h-3.5" /> Inloggen met wachtwoord
               </button>
             </>
           ) : (
             <>
               <button onClick={onPassword} data-testid="login-password-btn"
-                className="flex items-center gap-1.5 text-white/80 hover:text-white">
+                className="flex items-center gap-1.5 text-white/80 hover:text-white lg:text-slate-500 lg:hover:text-slate-900">
                 <KeyRound className="w-3.5 h-3.5" /> Inloggen met e-mail
               </button>
               {/* Nieuw account ALLEEN op generieke /login. Op /<slug>/login horen
                   klanten in te loggen — niet een nieuw bedrijf aan te maken. */}
               {!branding?.slug && (
                 <>
-                  <span className="text-white/40">•</span>
+                  <span className="text-white/40 lg:text-slate-300">•</span>
                   <button onClick={onRegister} data-testid="login-register-btn"
-                    className="flex items-center gap-1.5 text-white/80 hover:text-white">
+                    className="flex items-center gap-1.5 text-white/80 hover:text-white lg:text-slate-500 lg:hover:text-slate-900">
                     <UserPlus className="w-3.5 h-3.5" /> Nieuw account
                   </button>
                 </>
@@ -642,6 +648,8 @@ function PinLanding({ onSuccess, onPassword, onRegister, branding, pwaTarget }) 
           )}
         </div>
       </div>
+
+      </div>  {/* end desktop wrapper */}
 
       {/* Modals */}
       {showScanner && <QrScannerModal onClose={() => setShowScanner(false)} primary={primary} />}
@@ -1626,6 +1634,7 @@ export default function LoginPage() {
     const v = (searchParams.get('view') || '').toLowerCase();
     if (v === 'admin' || v === 'login' || v === 'password') return 'login';
     if (v === 'register' || v === 'signup') return 'register';
+    if (v === 'pin') return 'pin';   // explicit PIN view (for testing / branded entry)
     // Shortcut: ?register=1 from marketing topbar
     if (searchParams.get('register') === '1') return 'register';
     // Desktop default: skip PIN keypad and show email login form directly.
