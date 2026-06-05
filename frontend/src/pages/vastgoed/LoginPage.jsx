@@ -1211,276 +1211,6 @@ function PasswordView({ initialMode = 'login', onBack, onRegistered, branding })
       onContinue={goToOwnPortal} />;
   }
 
-  // ============================================================
-  // REGISTER MODE — Volledig fullscreen, GEEN scrollen.
-  // Links: branded paneel (logo, gratis-proef badge, voordelen).
-  // Rechts: gecomprimeerd formulier dat binnen de viewport past.
-  // Mobile: paneel klein bovenaan, form vult de rest (intern scroll).
-  // ============================================================
-  if (mode === 'register') {
-    const primary = branding?.primary_color || '#FF5C00';
-    const appName = branding?.app_name || 'Vastgoed Kiosk';
-    const logo = branding?._logoResolved || '/kiosk-icons/kiosk-192.png';
-    return (
-      <div className="flex flex-col lg:flex-row bg-white" style={{
-        position: 'fixed', inset: 0, overflow: 'hidden',
-        paddingTop: 'env(safe-area-inset-top, 0px)',
-        paddingBottom: 'env(safe-area-inset-bottom, 0px)',
-        paddingLeft: 'env(safe-area-inset-left, 0px)',
-        paddingRight: 'env(safe-area-inset-right, 0px)',
-      }} data-testid="register-fullscreen">
-
-        {/* ============= LINKER PANEEL — BRANDED ============= */}
-        <div className="relative shrink-0 lg:w-[42%] xl:w-[40%] flex flex-col text-white overflow-hidden"
-          style={{ backgroundColor: primary }}>
-          {/* Decoratieve sferen */}
-          <div className="absolute -top-32 -left-32 w-96 h-96 rounded-full bg-white/10 blur-3xl pointer-events-none" />
-          <div className="absolute -bottom-40 -right-24 w-[28rem] h-[28rem] rounded-full bg-black/15 blur-3xl pointer-events-none" />
-          <div className="absolute inset-0 opacity-[0.04] pointer-events-none"
-            style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, white 1px, transparent 0)', backgroundSize: '24px 24px' }} />
-
-          {/* Top: logo + app naam */}
-          <div className="relative flex items-center gap-3 px-6 lg:px-10 pt-5 lg:pt-8 shrink-0">
-            <div className="w-11 h-11 lg:w-12 lg:h-12 rounded-2xl bg-white/15 backdrop-blur-sm flex items-center justify-center overflow-hidden p-1.5">
-              <img src={logo} alt={appName} className="w-full h-full object-contain" />
-            </div>
-            <div className="min-w-0">
-              <p className="font-extrabold text-base lg:text-lg leading-tight tracking-tight truncate">{appName}</p>
-              <p className="text-white/70 text-[11px] lg:text-xs font-medium leading-tight truncate">Multi-Company SaaS Platform</p>
-            </div>
-          </div>
-
-          {/* Midden: hero kopij + voordelen — alleen volledig zichtbaar op desktop */}
-          <div className="relative flex-1 flex flex-col justify-center px-6 lg:px-10 py-4 lg:py-8 hidden lg:flex">
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/15 backdrop-blur-sm border border-white/20 mb-5 w-fit">
-              <Sparkles className="w-4 h-4" />
-              <span className="text-[11px] font-extrabold tracking-[0.18em] uppercase">14 dagen gratis proberen</span>
-            </div>
-            <h1 className="text-4xl xl:text-5xl font-black leading-[1.05] tracking-tight mb-3">
-              Start uw eigen<br/>
-              <span className="text-white/90">vastgoed portaal</span>
-            </h1>
-            <p className="text-white/80 text-base xl:text-lg leading-relaxed mb-7 max-w-md">
-              Volledige beheeromgeving met kiosk, betalingen en huurder-portaal in minder dan 30 seconden klaar.
-            </p>
-
-            <ul className="space-y-3 max-w-md">
-              {[
-                { icon: ShieldCheck, t: 'Geen creditcard nodig', s: 'Pas betalen wanneer u tevreden bent.' },
-                { icon: Zap, t: 'Direct online', s: 'Eigen subdomein en kiosk binnen 30 seconden.' },
-                { icon: Star, t: 'Inclusief alle modules', s: 'OCR, WhatsApp, PDF facturen — vanaf dag 1.' },
-              ].map((b) => (
-                <li key={b.t} className="flex items-start gap-3">
-                  <div className="w-9 h-9 rounded-xl bg-white/15 backdrop-blur-sm border border-white/15 flex items-center justify-center shrink-0">
-                    <b.icon className="w-4.5 h-4.5" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="font-bold text-sm leading-tight">{b.t}</p>
-                    <p className="text-white/70 text-xs leading-tight mt-0.5">{b.s}</p>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          {/* Mobile: compacte hero */}
-          <div className="relative flex-1 flex items-center px-6 py-4 lg:hidden">
-            <div>
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/15 backdrop-blur-sm mb-2">
-                <Sparkles className="w-3 h-3" />
-                <span className="text-[9px] font-extrabold tracking-[0.18em] uppercase">14 dagen gratis</span>
-              </div>
-              <h1 className="text-xl font-black leading-tight tracking-tight">
-                Start uw vastgoed portaal
-              </h1>
-              <p className="text-white/80 text-xs leading-tight mt-1">Geen creditcard — klaar in 30s.</p>
-            </div>
-          </div>
-
-          {/* Footer link */}
-          <div className="relative px-6 lg:px-10 pb-5 lg:pb-8 shrink-0">
-            <button type="button" onClick={() => { setMode('login'); setError(''); }}
-              data-testid="register-switch-to-login"
-              className="flex items-center gap-2 text-xs lg:text-sm font-semibold text-white/85 hover:text-white transition">
-              <ArrowLeft className="w-4 h-4" />
-              Heeft u al een account? <span className="underline underline-offset-4">Log in</span>
-            </button>
-          </div>
-        </div>
-
-        {/* ============= RECHTER PANEEL — FORMULIER ============= */}
-        <div className="flex-1 flex flex-col min-h-0 overflow-hidden bg-white">
-          <div className="flex-1 min-h-0 overflow-y-auto" data-testid="auth-form" style={{ WebkitOverflowScrolling: 'touch' }}>
-            <div className="max-w-xl mx-auto px-5 sm:px-8 lg:px-10 py-5 lg:py-6">
-
-              <div className="mb-3 lg:mb-4">
-                <h2 className="text-xl lg:text-2xl font-black text-slate-900 tracking-tight leading-tight">
-                  Maak uw account aan
-                </h2>
-                <p className="text-xs lg:text-sm text-slate-500 mt-0.5">Vul de gegevens in en u bent direct online.</p>
-              </div>
-
-              {error && (
-                <div className="mb-3 p-2.5 bg-red-50 border border-red-200 text-red-600 rounded-lg text-xs font-medium" data-testid="auth-error">
-                  {error}
-                </div>
-              )}
-
-              <form onSubmit={submit} className="space-y-3">
-
-                {/* Bedrijfsnaam */}
-                <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Bedrijfsnaam *</label>
-                  <input type="text" value={companyName} onChange={(e) => setCompanyName(e.target.value)} data-testid="auth-company-name"
-                    required minLength={2}
-                    placeholder="Demo Vastgoed N.V."
-                    className="w-full h-10 text-sm px-3 rounded-lg border-2 border-slate-200 focus:border-[#FF5C00] focus:ring-2 focus:ring-[#FF5C00]/10 bg-[#F9FAFB] outline-none transition" />
-                  {portalPreview.slug && (() => {
-                    const okTone = slugStatus === 'available';
-                    const errTone = slugStatus === 'taken' || slugStatus === 'format';
-                    const palette = errTone
-                      ? 'bg-rose-50 border-rose-200 text-rose-700'
-                      : 'bg-emerald-50 border-emerald-200 text-emerald-700';
-                    return (
-                      <div className={`mt-1 flex items-center gap-1.5 px-2 py-1 rounded-md border text-[10px] font-bold ${palette}`} data-testid="auth-portal-preview">
-                        <Globe className="w-3 h-3 shrink-0" />
-                        <span className="font-mono truncate flex-1">{portalPreview.host || 'app.surirent.sr'}/{portalPreview.slug}</span>
-                        {slugStatus === 'checking' && <Loader2 className="w-3 h-3 animate-spin" />}
-                        {okTone && <span>✓ VRIJ</span>}
-                        {slugStatus === 'taken' && <span>✗ BEZET</span>}
-                      </div>
-                    );
-                  })()}
-                </div>
-
-                {/* Adres */}
-                <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Adres</label>
-                  <input type="text" value={address} onChange={(e) => setAddress(e.target.value)} data-testid="auth-address"
-                    placeholder="Straat, huisnummer, stad"
-                    className="w-full h-10 text-sm px-3 rounded-lg border-2 border-slate-200 focus:border-[#FF5C00] focus:ring-2 focus:ring-[#FF5C00]/10 bg-[#F9FAFB] outline-none transition" />
-                </div>
-
-                {/* Naam + Telefoon naast elkaar */}
-                <div className="grid grid-cols-2 gap-2.5">
-                  <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Uw naam *</label>
-                    <input type="text" value={name} onChange={(e) => setName(e.target.value)} data-testid="auth-name"
-                      required minLength={2}
-                      placeholder="Voor + Achternaam"
-                      className="w-full h-10 text-sm px-3 rounded-lg border-2 border-slate-200 focus:border-[#FF5C00] focus:ring-2 focus:ring-[#FF5C00]/10 bg-[#F9FAFB] outline-none transition" />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Telefoon</label>
-                    <input type="tel" value={telefoon} onChange={(e) => setTelefoon(e.target.value)} data-testid="auth-telefoon"
-                      placeholder="+597 ..."
-                      className="w-full h-10 text-sm px-3 rounded-lg border-2 border-slate-200 focus:border-[#FF5C00] focus:ring-2 focus:ring-[#FF5C00]/10 bg-[#F9FAFB] outline-none transition" />
-                  </div>
-                </div>
-
-                {/* E-mail */}
-                <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">E-mailadres *</label>
-                  <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} data-testid="auth-email"
-                    required
-                    placeholder="naam@bedrijf.sr"
-                    className="w-full h-10 text-sm px-3 rounded-lg border-2 border-slate-200 focus:border-[#FF5C00] focus:ring-2 focus:ring-[#FF5C00]/10 bg-[#F9FAFB] outline-none transition" />
-                </div>
-
-                {/* Wachtwoord */}
-                <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Wachtwoord *</label>
-                  <div className="relative">
-                    <input type={showPw ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)}
-                      data-testid="auth-password" required minLength={6}
-                      placeholder="Minimaal 6 tekens"
-                      className="w-full h-10 text-sm px-3 pr-10 rounded-lg border-2 border-slate-200 focus:border-[#FF5C00] focus:ring-2 focus:ring-[#FF5C00]/10 bg-[#F9FAFB] outline-none transition" />
-                    <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
-                      {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  </div>
-                </div>
-
-                {/* Land — compact horizontaal */}
-                <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Land &amp; valuta</label>
-                  <div className="grid grid-cols-2 gap-2" data-testid="country-picker">
-                    {[
-                      { code: 'SR', flag: '🇸🇷', label: 'Suriname', sub: 'SRD' },
-                      { code: 'NL', flag: '🇳🇱', label: 'Nederland', sub: 'EUR' },
-                    ].map((c) => {
-                      const sel = country === c.code;
-                      return (
-                        <button key={c.code} type="button" onClick={() => setCountry(c.code)}
-                          data-testid={`country-${c.code.toLowerCase()}`}
-                          className={`h-10 rounded-lg border-2 px-2 transition-all flex items-center justify-center gap-1.5 ${
-                            sel ? 'border-[#FF5C00] bg-orange-50' : 'border-slate-200 bg-white hover:border-orange-300'
-                          }`}>
-                          <span className="text-base leading-none">{c.flag}</span>
-                          <span className={`text-xs font-extrabold ${sel ? 'text-[#C74600]' : 'text-slate-700'}`}>{c.label}</span>
-                          <span className="text-[9px] text-slate-400 font-bold">{c.sub}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Pakket — compact */}
-                <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Kies uw pakket</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {plans.map((p) => {
-                      const sel = plan === p.id;
-                      return (
-                        <button key={p.id} type="button" onClick={() => setPlan(p.id)}
-                          data-testid={`plan-${p.id}`}
-                          className={`text-left rounded-lg border-2 p-2 transition-all ${
-                            sel ? 'border-[#FF5C00] bg-orange-50' : 'border-slate-200 bg-white hover:border-orange-300'
-                          }`}>
-                          <div className="flex items-center justify-between mb-0.5">
-                            <p className={`font-extrabold text-[11px] ${sel ? 'text-[#C74600]' : 'text-slate-900'}`}>{p.name}</p>
-                            <div className={`w-3 h-3 rounded-full border-2 flex items-center justify-center shrink-0 ${sel ? 'border-[#FF5C00] bg-[#FF5C00]' : 'border-slate-300'}`}>
-                              {sel && <div className="w-1 h-1 rounded-full bg-white" />}
-                            </div>
-                          </div>
-                          <p className={`text-sm font-extrabold ${sel ? 'text-[#FF5C00]' : 'text-slate-900'}`}>
-                            {(p.currency || 'SRD').toUpperCase() === 'EUR'
-                              ? `€${Number(p.amount).toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                              : `${p.currency} ${Number(p.amount).toLocaleString('nl-NL')}`}
-                            <span className="text-[9px] font-medium text-slate-400 ml-1">/m</span>
-                          </p>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Submit */}
-                <button type="submit" disabled={loading} data-testid="auth-submit"
-                  className="w-full h-11 mt-1 bg-gradient-to-r from-[#FF5C00] to-[#FF8A3D] hover:from-[#C74600] hover:to-[#FF5C00] text-white font-extrabold text-sm rounded-lg transition-all disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg shadow-orange-500/25">
-                  {loading ? (<><Loader2 className="w-4 h-4 animate-spin" /> Bezig…</>)
-                    : (<>Start 14 dagen gratis <ArrowRight className="w-4 h-4" /></>)}
-                </button>
-
-                <p className="text-center text-[10px] text-slate-400 leading-tight">
-                  Door te registreren accepteert u onze voorwaarden. SSL beveiligd · Geen creditcard nodig.
-                </p>
-
-                {/* Mobiele "log in" link (op desktop staat hij in linker paneel) */}
-                <p className="lg:hidden text-center text-xs text-slate-500 pt-1">
-                  Heeft u al een account?{' '}
-                  <button type="button" onClick={() => { setMode('login'); setError(''); }} className="font-bold text-[#FF5C00] hover:underline">
-                    Log in
-                  </button>
-                </p>
-              </form>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="flex flex-col" style={{
       position: 'fixed', inset: 0,
@@ -1493,6 +1223,295 @@ function PasswordView({ initialMode = 'login', onBack, onRegistered, branding })
     }}>
       <Header branding={branding} />
       <div className="flex-1 flex items-start sm:items-center justify-center p-3 sm:p-6">
+        {/* REGISTER op desktop: 2-panel split (form links + voordelen rechts).
+            LOGIN behoudt het bestaande compacte card design. */}
+        {mode === 'register' ? (
+      <div className="min-h-screen lg:grid lg:grid-cols-2" data-testid="auth-form">
+        {/* LEFT: branded panel — vol oranje, marketing + stats */}
+        <aside className="relative px-8 py-12 sm:px-12 sm:py-16 lg:p-16 xl:p-20 text-white overflow-hidden lg:min-h-screen flex flex-col"
+          style={{ background: 'linear-gradient(160deg, #FF5C00 0%, #C74600 100%)' }}>
+          <div className="absolute -top-32 -right-32 w-[500px] h-[500px] rounded-full opacity-15 blur-3xl bg-white pointer-events-none" />
+          <div className="absolute bottom-[-20%] left-[-20%] w-[500px] h-[500px] rounded-full opacity-10 blur-3xl bg-[#FFE0C2] pointer-events-none" />
+
+          {/* Logo / merk */}
+          <div className="relative z-10">
+            <div className="flex items-center gap-3 mb-12 lg:mb-16">
+              <span className="w-12 h-12 rounded-2xl bg-white p-2 shadow-lg">
+                <img src="/kiosk-icons/mark-orange.png" alt="SuriRent" className="w-full h-full object-contain"
+                  onError={(e) => { e.currentTarget.src = '/kiosk-icons/mark-white.png'; e.currentTarget.style.filter = 'brightness(0) invert(0.2)'; }} />
+              </span>
+              <span className="text-3xl lg:text-4xl font-black tracking-tight">SURIRENT</span>
+            </div>
+
+            <h2 className="font-black tracking-tight leading-[1.05]"
+              style={{ fontSize: 'clamp(2.25rem, 4.5vw, 4rem)' }}>
+              Start vandaag met <br />
+              <span className="text-[#FFE0C2]">SuriRent N.V.</span>
+            </h2>
+            <p className="mt-6 text-base lg:text-lg text-white/85 leading-relaxed max-w-md">
+              Maak gratis een account aan en ontdek het complete vastgoedplatform voor Suriname.
+            </p>
+          </div>
+
+          {/* Glassy "14 Dagen Gratis" card */}
+          <div className="relative z-10 mt-10 lg:mt-12">
+            <div className="rounded-2xl border border-white/20 backdrop-blur-sm bg-white/[0.07] p-6">
+              <div className="flex items-start gap-4 mb-5">
+                <div className="w-12 h-12 rounded-xl bg-white/15 backdrop-blur-sm flex items-center justify-center shrink-0">
+                  <Sparkles className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <p className="text-xl font-black">14 Dagen Gratis!</p>
+                  <p className="text-sm text-white/75 mt-0.5">Geen creditcard nodig</p>
+                </div>
+              </div>
+              <ul className="space-y-3 text-sm">
+                {[
+                  'Toegang tot alle modules',
+                  'Onbeperkte gebruikers',
+                  'Volledige functionaliteit',
+                ].map((feat) => (
+                  <li key={feat} className="flex items-center gap-3">
+                    <span className="w-6 h-6 rounded-full bg-white/15 flex items-center justify-center shrink-0">
+                      <Check className="w-3.5 h-3.5 text-white" strokeWidth={3} />
+                    </span>
+                    <span className="font-semibold">{feat}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Trust signals */}
+            <div className="mt-6 space-y-3">
+              <div className="flex items-center gap-3 text-sm">
+                <span className="w-9 h-9 rounded-lg bg-white/10 flex items-center justify-center shrink-0">
+                  <ShieldCheck className="w-4 h-4 text-white" />
+                </span>
+                <span className="font-semibold text-white/90">SSL-encryptie &amp; privacy gegarandeerd</span>
+              </div>
+              <div className="flex items-center gap-3 text-sm">
+                <span className="w-9 h-9 rounded-lg bg-white/10 flex items-center justify-center shrink-0">
+                  <Zap className="w-4 h-4 text-white" />
+                </span>
+                <span className="font-semibold text-white/90">Snel en modern platform</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex-1" />
+
+          {/* Bottom stats */}
+          <div className="relative z-10 mt-10 lg:mt-12 grid grid-cols-3 gap-4 lg:gap-8">
+            {[
+              { value: '500+',  label: 'Klanten' },
+              { value: '99.9%', label: 'Uptime' },
+              { value: '24/7',  label: 'Support' },
+            ].map((s) => (
+              <div key={s.label}>
+                <p className="text-3xl lg:text-4xl font-black">{s.value}</p>
+                <p className="text-xs lg:text-sm text-white/70 font-semibold mt-1">{s.label}</p>
+              </div>
+            ))}
+          </div>
+        </aside>
+
+        {/* RIGHT: schoon wit formulier */}
+        <div className="bg-white px-6 py-10 sm:px-12 sm:py-14 lg:p-16 xl:px-20 lg:overflow-y-auto lg:max-h-screen">
+          <div className="max-w-md mx-auto">
+          {branding?.slug && (
+            <button onClick={onBack} data-testid="auth-back" className="flex items-center gap-2 text-sm font-medium text-slate-400 hover:text-slate-600 mb-6 transition active:scale-95">
+              <ArrowLeft className="w-4 h-4" /> Terug naar PIN
+            </button>
+          )}
+
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-orange-50 border border-orange-100 mb-5">
+            <Sparkles className="w-3.5 h-3.5 text-[#FF5C00]" />
+            <span className="text-[11px] font-extrabold tracking-[0.18em] uppercase text-[#FF5C00]">14 Dagen Gratis</span>
+          </div>
+
+          <h1 className="text-4xl lg:text-5xl font-black text-slate-900 tracking-tight leading-tight">
+            Account aanmaken
+          </h1>
+          <p className="text-base text-slate-500 mt-2 mb-8">Vul uw gegevens in om te beginnen</p>
+
+          {error && (
+            <div className="mb-5 p-3 bg-red-50 border border-red-200 text-red-600 rounded-xl text-sm font-medium" data-testid="auth-error">
+              {error}
+            </div>
+          )}
+
+          <form onSubmit={submit} className="space-y-5">
+            {/* Volledige naam */}
+            <div>
+              <label className="block text-sm font-bold text-slate-700 mb-2">Volledige naam</label>
+              <input type="text" value={name} onChange={(e) => setName(e.target.value)} data-testid="auth-name"
+                required minLength={2}
+                placeholder="Jan Jansen"
+                className="w-full h-12 text-base px-4 rounded-xl border border-slate-200 focus:border-[#FF5C00] focus:ring-4 focus:ring-[#FF5C00]/10 bg-white outline-none transition" />
+            </div>
+
+            {/* Bedrijfsnaam */}
+            <div>
+              <label className="block text-sm font-bold text-slate-700 mb-2">
+                Bedrijfsnaam <span className="text-slate-400 font-medium">(optioneel)</span>
+              </label>
+              <input type="text" value={companyName} onChange={(e) => setCompanyName(e.target.value)} data-testid="auth-company-name"
+                placeholder="Uw bedrijfsnaam"
+                className="w-full h-12 text-base px-4 rounded-xl border border-slate-200 focus:border-[#FF5C00] focus:ring-4 focus:ring-[#FF5C00]/10 bg-white outline-none transition" />
+              {portalPreview.slug && companyName.length > 1 && (() => {
+                const okTone = slugStatus === 'available';
+                const errTone = slugStatus === 'taken' || slugStatus === 'format';
+                const palette = errTone
+                  ? 'bg-rose-50 border-rose-200 text-rose-700'
+                  : 'bg-emerald-50 border-emerald-200 text-emerald-700';
+                return (
+                  <div className={`mt-2 flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-bold ${palette}`} data-testid="auth-portal-preview">
+                    <Globe className="w-3.5 h-3.5 shrink-0" />
+                    <span className="font-mono truncate flex-1">{portalPreview.host || 'app.surirent.sr'}/{portalPreview.slug}</span>
+                    {slugStatus === 'checking' && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                    {okTone && <span className="font-extrabold">✓ VRIJ</span>}
+                    {slugStatus === 'taken' && <span className="font-extrabold">✗ BEZET</span>}
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* E-mailadres */}
+            <div>
+              <label className="block text-sm font-bold text-slate-700 mb-2">E-mailadres</label>
+              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} data-testid="auth-email"
+                required
+                placeholder="naam@bedrijf.sr"
+                className="w-full h-12 text-base px-4 rounded-xl border border-slate-200 focus:border-[#FF5C00] focus:ring-4 focus:ring-[#FF5C00]/10 bg-slate-50 outline-none transition" />
+            </div>
+
+            {/* Wachtwoord */}
+            <div>
+              <label className="block text-sm font-bold text-slate-700 mb-2">Wachtwoord</label>
+              <div className="relative">
+                <input type={showPw ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)}
+                  data-testid="auth-password" required minLength={6}
+                  placeholder="••••••••••"
+                  className="w-full h-12 text-base px-4 pr-11 rounded-xl border border-slate-200 focus:border-[#FF5C00] focus:ring-4 focus:ring-[#FF5C00]/10 bg-slate-50 outline-none transition" />
+                <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                  {showPw ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                </button>
+              </div>
+            </div>
+
+            {/* Geavanceerde opties — Telefoon, Adres, Land, PIN, Pakket — verborgen onder een toggle */}
+            <details className="group rounded-xl border border-slate-200 overflow-hidden">
+              <summary className="flex items-center justify-between cursor-pointer px-4 py-3 bg-slate-50 hover:bg-slate-100 transition-colors list-none">
+                <span className="text-sm font-bold text-slate-700">Geavanceerde opties</span>
+                <ChevronDown className="w-4 h-4 text-slate-500 transition-transform group-open:rotate-180" />
+              </summary>
+              <div className="p-4 space-y-4">
+                <div className="grid sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 mb-1.5">Telefoon</label>
+                    <input type="tel" value={telefoon} onChange={(e) => setTelefoon(e.target.value)} data-testid="auth-telefoon"
+                      placeholder="+597 ..."
+                      className="w-full h-11 text-sm px-3 rounded-lg border border-slate-200 focus:border-[#FF5C00] focus:ring-4 focus:ring-[#FF5C00]/10 bg-white outline-none transition" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 mb-1.5">Kiosk PIN</label>
+                    <input type="text" inputMode="numeric" pattern="\d{4}" maxLength={4} autoComplete="off"
+                      value={kioskPin}
+                      onChange={(e) => setKioskPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                      data-testid="auth-kiosk-pin"
+                      placeholder="• • • •"
+                      className="w-full h-11 text-sm px-3 rounded-lg border border-slate-200 focus:border-[#FF5C00] focus:ring-4 focus:ring-[#FF5C00]/10 bg-white outline-none transition font-mono tracking-[0.4em] text-center" />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1.5">Adres</label>
+                  <input type="text" value={address} onChange={(e) => setAddress(e.target.value)} data-testid="auth-address"
+                    placeholder="Bedrijfsadres"
+                    className="w-full h-11 text-sm px-3 rounded-lg border border-slate-200 focus:border-[#FF5C00] focus:ring-4 focus:ring-[#FF5C00]/10 bg-white outline-none transition" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1.5">Land &amp; valuta</label>
+                  <div className="grid grid-cols-2 gap-2" data-testid="country-picker">
+                    {[
+                      { code: 'SR', flag: '🇸🇷', label: 'Suriname', sub: 'SRD' },
+                      { code: 'NL', flag: '🇳🇱', label: 'Nederland', sub: 'EUR' },
+                    ].map((c) => {
+                      const sel = country === c.code;
+                      return (
+                        <button key={c.code} type="button" onClick={() => setCountry(c.code)}
+                          data-testid={`country-${c.code.toLowerCase()}`}
+                          className={`rounded-lg border p-2 text-center transition-all ${
+                            sel ? 'border-[#FF5C00] bg-orange-50' : 'border-slate-200 bg-white hover:border-orange-300'
+                          }`}>
+                          <span className="text-lg leading-none mr-1.5">{c.flag}</span>
+                          <span className={`text-xs font-extrabold ${sel ? 'text-[#C74600]' : 'text-slate-700'}`}>{c.label}</span>
+                          <span className="text-[10px] text-slate-400 font-bold ml-1">{c.sub}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1.5">Pakket</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {plans.map((p) => {
+                      const sel = plan === p.id;
+                      return (
+                        <button key={p.id} type="button" onClick={() => setPlan(p.id)}
+                          data-testid={`plan-${p.id}`}
+                          className={`text-left rounded-lg border p-2.5 transition-all ${
+                            sel ? 'border-[#FF5C00] bg-orange-50' : 'border-slate-200 bg-white hover:border-orange-300'
+                          }`}>
+                          <p className={`font-extrabold text-xs ${sel ? 'text-[#C74600]' : 'text-slate-900'}`}>{p.name}</p>
+                          <p className={`text-base font-extrabold mt-0.5 ${sel ? 'text-[#FF5C00]' : 'text-slate-900'}`}>
+                            {(p.currency || 'SRD').toUpperCase() === 'EUR'
+                              ? `€${Number(p.amount).toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                              : `${p.currency} ${Number(p.amount).toLocaleString('nl-NL')}`}
+                            <span className="text-[10px] text-slate-400 ml-1">/m</span>
+                          </p>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            </details>
+
+            {/* Submit */}
+            <button type="submit" disabled={loading} data-testid="auth-submit"
+              className="w-full h-14 bg-[#FF5C00] hover:bg-[#C74600] text-white font-extrabold text-base rounded-xl transition-all disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg shadow-orange-500/30 mt-2">
+              {loading ? (<><Loader2 className="w-5 h-5 animate-spin" /> Bezig…</>)
+                : (<>Account aanmaken <ArrowRight className="w-5 h-5" /></>)}
+            </button>
+
+            {/* Social proof */}
+            <div className="rounded-xl bg-emerald-50/70 border border-emerald-100 p-3 flex items-center gap-3">
+              <div className="flex -space-x-2">
+                {['JK', 'SM', 'RB'].map((init, i) => (
+                  <span key={init} className={`w-8 h-8 rounded-full ring-2 ring-white flex items-center justify-center text-[10px] font-extrabold text-white shadow-sm ${
+                    i === 0 ? 'bg-emerald-500' : i === 1 ? 'bg-emerald-600' : 'bg-emerald-700'
+                  }`}>{init}</span>
+                ))}
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center gap-1">
+                  {[0,1,2,3,4].map((i) => <Star key={i} className="w-3 h-3 fill-amber-400 text-amber-400" />)}
+                </div>
+                <p className="text-xs font-bold text-slate-700 mt-0.5">500+ tevreden klanten</p>
+              </div>
+            </div>
+
+            <p className="text-center text-sm text-slate-500">
+              Heeft u al een account?{' '}
+              <button type="button" onClick={() => { setMode('login'); setError(''); }} className="font-bold text-[#FF5C00] hover:underline">
+                Log hier in
+              </button>
+            </p>
+          </form>
+          </div>
+        </div>
+      </div>
+      ) : (
         <div
           className="bg-white rounded-3xl shadow-[0_20px_60px_rgba(0,0,0,0.15)] w-full max-w-xl p-5 sm:p-8 md:p-10"
           data-testid="auth-form"
@@ -1615,6 +1634,7 @@ function PasswordView({ initialMode = 'login', onBack, onRegistered, branding })
             </p>
           )}
         </div>
+        )}
       </div>
 
       {showForgot && (
