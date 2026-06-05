@@ -1226,44 +1226,42 @@ function PasswordView({ initialMode = 'login', onBack, onRegistered, branding })
         {/* REGISTER op desktop: 2-panel split (form links + voordelen rechts).
             LOGIN behoudt het bestaande compacte card design. */}
         {mode === 'register' ? (
-        <div
-          className="bg-white rounded-3xl shadow-[0_30px_80px_rgba(0,0,0,0.18)] w-full max-w-md lg:max-w-5xl overflow-hidden lg:grid lg:grid-cols-[1.4fr,1fr]"
-          data-testid="auth-form"
-        >
-          {/* LEFT: het formulier */}
-          <div className="p-6 sm:p-8 lg:p-10 lg:max-h-[88vh] lg:overflow-y-auto">
+      <div className="min-h-screen bg-white lg:grid lg:grid-cols-[1.5fr,1fr]" data-testid="auth-form">
+        {/* LEFT: het formulier — volledige hoogte, scrollbaar */}
+        <div className="px-5 py-8 sm:px-10 sm:py-10 lg:px-16 lg:py-12 lg:overflow-y-auto lg:max-h-screen">
+          <div className="max-w-2xl mx-auto">
           {branding?.slug && (
-            <button onClick={onBack} data-testid="auth-back" className="flex items-center gap-2 text-sm font-medium text-slate-400 hover:text-slate-600 mb-4 transition active:scale-95">
+            <button onClick={onBack} data-testid="auth-back" className="flex items-center gap-2 text-sm font-medium text-slate-400 hover:text-slate-600 mb-6 transition active:scale-95">
               <ArrowLeft className="w-4 h-4" /> Terug naar PIN
             </button>
           )}
 
-          <div className="mb-6">
-            <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-orange-50 border border-orange-100 mb-3">
-              <Sparkles className="w-3.5 h-3.5 text-[#FF5C00]" />
-              <span className="text-[10px] font-extrabold tracking-[0.18em] uppercase text-[#FF5C00]">14 dagen gratis</span>
+          <div className="mb-8">
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-orange-50 border border-orange-100 mb-4">
+              <Sparkles className="w-4 h-4 text-[#FF5C00]" />
+              <span className="text-[11px] font-extrabold tracking-[0.18em] uppercase text-[#FF5C00]">14 dagen gratis</span>
             </div>
-            <h2 className="text-3xl lg:text-4xl font-black text-slate-900 tracking-tight leading-[1.1]">
-              Maak uw <span className="text-[#FF5C00]">Vastgoed omgeving</span> aan
+            <h2 className="text-4xl lg:text-5xl xl:text-6xl font-black text-slate-900 tracking-tight leading-[1.05]">
+              Maak uw <span className="text-[#FF5C00]">Vastgoed</span> omgeving aan
             </h2>
-            <p className="text-sm text-slate-500 mt-2">Klaar in 30 seconden — geen creditcard nodig.</p>
+            <p className="text-base text-slate-500 mt-3">Klaar in 30 seconden — geen creditcard nodig.</p>
           </div>
 
           {error && (
-            <div className="mb-3 p-3 bg-red-50 border border-red-200 text-red-600 rounded-xl text-center text-sm font-medium" data-testid="auth-error">
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-600 rounded-xl text-center text-sm font-medium" data-testid="auth-error">
               {error}
             </div>
           )}
 
-          <form onSubmit={submit} className="space-y-5">
+          <form onSubmit={submit} className="space-y-8">
             {/* Sectie 1 — Bedrijf */}
             <section>
-              <div className="flex items-center gap-2 mb-3 pb-2 border-b border-slate-100">
-                <span className="flex items-center justify-center w-6 h-6 rounded-full bg-[#FF5C00] text-white text-[11px] font-extrabold">1</span>
-                <h3 className="text-sm font-extrabold text-slate-900 uppercase tracking-wider">Uw bedrijf</h3>
+              <div className="flex items-center gap-3 mb-4 pb-3 border-b border-slate-100">
+                <span className="flex items-center justify-center w-8 h-8 rounded-full bg-[#FF5C00] text-white text-sm font-extrabold">1</span>
+                <h3 className="text-base font-extrabold text-slate-900 uppercase tracking-wider">Uw bedrijf</h3>
               </div>
 
-              <div className="mb-3">
+              <div className="mb-4">
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Bedrijfsnaam *</label>
                 <input type="text" value={companyName} onChange={(e) => setCompanyName(e.target.value)} data-testid="auth-company-name"
                   required minLength={2}
@@ -1310,7 +1308,7 @@ function PasswordView({ initialMode = 'login', onBack, onRegistered, branding })
                 })()}
               </div>
 
-              <div className="mb-3">
+              <div className="mb-4">
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Adres</label>
                 <input type="text" value={address} onChange={(e) => setAddress(e.target.value)} data-testid="auth-address"
                   placeholder="Bedrijfsadres (straat, huisnummer, stad)"
@@ -1319,7 +1317,7 @@ function PasswordView({ initialMode = 'login', onBack, onRegistered, branding })
 
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Land &amp; valuta</label>
-                <div className="grid grid-cols-2 gap-2" data-testid="country-picker">
+                <div className="grid grid-cols-2 gap-3" data-testid="country-picker">
                   {[
                     { code: 'SR', flag: '🇸🇷', label: 'Suriname', sub: 'SRD' },
                     { code: 'NL', flag: '🇳🇱', label: 'Nederland', sub: 'EUR' },
@@ -1328,11 +1326,11 @@ function PasswordView({ initialMode = 'login', onBack, onRegistered, branding })
                     return (
                       <button key={c.code} type="button" onClick={() => setCountry(c.code)}
                         data-testid={`country-${c.code.toLowerCase()}`}
-                        className={`rounded-xl border-2 p-2.5 text-center transition-all ${
+                        className={`rounded-xl border-2 p-3 text-center transition-all ${
                           sel ? 'border-[#FF5C00] bg-orange-50 shadow-md shadow-orange-500/10' : 'border-slate-200 bg-white hover:border-orange-300'
                         }`}>
-                        <div className="text-xl leading-none mb-0.5">{c.flag}</div>
-                        <div className={`text-[11px] font-extrabold ${sel ? 'text-[#C74600]' : 'text-slate-700'}`}>{c.label}</div>
+                        <div className="text-2xl leading-none mb-1">{c.flag}</div>
+                        <div className={`text-xs font-extrabold ${sel ? 'text-[#C74600]' : 'text-slate-700'}`}>{c.label}</div>
                         <div className="text-[10px] text-slate-400 font-bold">{c.sub}</div>
                       </button>
                     );
@@ -1343,11 +1341,11 @@ function PasswordView({ initialMode = 'login', onBack, onRegistered, branding })
 
             {/* Sectie 2 — Persoonlijke gegevens */}
             <section>
-              <div className="flex items-center gap-2 mb-3 pb-2 border-b border-slate-100">
-                <span className="flex items-center justify-center w-6 h-6 rounded-full bg-[#FF5C00] text-white text-[11px] font-extrabold">2</span>
-                <h3 className="text-sm font-extrabold text-slate-900 uppercase tracking-wider">Uw gegevens</h3>
+              <div className="flex items-center gap-3 mb-4 pb-3 border-b border-slate-100">
+                <span className="flex items-center justify-center w-8 h-8 rounded-full bg-[#FF5C00] text-white text-sm font-extrabold">2</span>
+                <h3 className="text-base font-extrabold text-slate-900 uppercase tracking-wider">Uw gegevens</h3>
               </div>
-              <div className="grid sm:grid-cols-2 gap-3">
+              <div className="grid sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Uw naam</label>
                   <input type="text" value={name} onChange={(e) => setName(e.target.value)} data-testid="auth-name"
@@ -1366,11 +1364,11 @@ function PasswordView({ initialMode = 'login', onBack, onRegistered, branding })
 
             {/* Sectie 3 — Toegang */}
             <section>
-              <div className="flex items-center gap-2 mb-3 pb-2 border-b border-slate-100">
-                <span className="flex items-center justify-center w-6 h-6 rounded-full bg-[#FF5C00] text-white text-[11px] font-extrabold">3</span>
-                <h3 className="text-sm font-extrabold text-slate-900 uppercase tracking-wider">Toegang</h3>
+              <div className="flex items-center gap-3 mb-4 pb-3 border-b border-slate-100">
+                <span className="flex items-center justify-center w-8 h-8 rounded-full bg-[#FF5C00] text-white text-sm font-extrabold">3</span>
+                <h3 className="text-base font-extrabold text-slate-900 uppercase tracking-wider">Toegang</h3>
               </div>
-              <div className="grid sm:grid-cols-2 gap-3 mb-3">
+              <div className="grid sm:grid-cols-2 gap-4 mb-4">
                 <div>
                   <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">E-mailadres</label>
                   <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} data-testid="auth-email"
@@ -1397,16 +1395,16 @@ function PasswordView({ initialMode = 'login', onBack, onRegistered, branding })
                   onChange={(e) => setKioskPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
                   data-testid="auth-kiosk-pin"
                   placeholder="• • • •"
-                  className="w-full h-12 text-base px-4 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] focus:ring-4 focus:ring-[#FF5C00]/10 bg-[#F9FAFB] outline-none transition font-mono tracking-[0.5em] text-center" />
-                <p className="text-[11px] text-slate-400 mt-1.5">Gebruikt voor snelle login via kiosk-modus op gedeelde apparaten.</p>
+                  className="w-full sm:max-w-xs h-12 text-base px-4 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] focus:ring-4 focus:ring-[#FF5C00]/10 bg-[#F9FAFB] outline-none transition font-mono tracking-[0.5em] text-center" />
+                <p className="text-[11px] text-slate-400 mt-1.5">Voor snelle login op gedeelde kiosk-apparaten.</p>
               </div>
             </section>
 
             {/* Sectie 4 — Pakket */}
             <section>
-              <div className="flex items-center gap-2 mb-3 pb-2 border-b border-slate-100">
-                <span className="flex items-center justify-center w-6 h-6 rounded-full bg-[#FF5C00] text-white text-[11px] font-extrabold">4</span>
-                <h3 className="text-sm font-extrabold text-slate-900 uppercase tracking-wider">Kies uw pakket</h3>
+              <div className="flex items-center gap-3 mb-4 pb-3 border-b border-slate-100">
+                <span className="flex items-center justify-center w-8 h-8 rounded-full bg-[#FF5C00] text-white text-sm font-extrabold">4</span>
+                <h3 className="text-base font-extrabold text-slate-900 uppercase tracking-wider">Kies uw pakket</h3>
               </div>
               <div className="grid sm:grid-cols-2 gap-3">
                 {plans.map((p) => {
@@ -1419,26 +1417,26 @@ function PasswordView({ initialMode = 'login', onBack, onRegistered, branding })
                       }`}>
                       <div className="flex items-start justify-between mb-1">
                         <p className={`font-extrabold text-sm ${sel ? 'text-[#C74600]' : 'text-slate-900'}`}>{p.name}</p>
-                        <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${sel ? 'border-[#FF5C00] bg-[#FF5C00]' : 'border-slate-300'}`}>
-                          {sel && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                        <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${sel ? 'border-[#FF5C00] bg-[#FF5C00]' : 'border-slate-300'}`}>
+                          {sel && <div className="w-2 h-2 rounded-full bg-white" />}
                         </div>
                       </div>
-                      <p className={`text-xl font-extrabold ${sel ? 'text-[#FF5C00]' : 'text-slate-900'}`}>
+                      <p className={`text-2xl font-extrabold ${sel ? 'text-[#FF5C00]' : 'text-slate-900'}`}>
                         {(p.currency || 'SRD').toUpperCase() === 'EUR'
                           ? `€${Number(p.amount).toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                           : `${p.currency} ${Number(p.amount).toLocaleString('nl-NL')}`}
-                        <span className="text-[11px] font-medium text-slate-400 ml-1">/m</span>
+                        <span className="text-xs font-medium text-slate-400 ml-1">/m</span>
                       </p>
-                      <p className="text-[11px] text-slate-500 mt-1 leading-snug">{p.description}</p>
+                      <p className="text-xs text-slate-500 mt-1.5 leading-snug">{p.description}</p>
                     </button>
                   );
                 })}
               </div>
-              <p className="text-[11px] text-slate-400 mt-2 flex items-center gap-1.5"><Check className="w-3 h-3 text-emerald-500" /> 14 dagen gratis · daarna bankoverschrijving</p>
+              <p className="text-xs text-slate-400 mt-3 flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-500" /> 14 dagen gratis · daarna bankoverschrijving</p>
             </section>
 
             {/* Submit */}
-            <div className="pt-2">
+            <div className="pt-4 border-t border-slate-100">
               <button type="submit" disabled={loading} data-testid="auth-submit"
                 className="w-full h-14 bg-gradient-to-r from-[#FF5C00] to-[#FF8A3D] hover:from-[#C74600] hover:to-[#FF5C00] text-white font-extrabold text-base rounded-xl transition-all disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg shadow-orange-500/30">
                 {loading ? (<><Loader2 className="w-5 h-5 animate-spin" /> Bezig…</>)
@@ -1456,54 +1454,55 @@ function PasswordView({ initialMode = 'login', onBack, onRegistered, branding })
             </div>
           </form>
           </div>
-
-          {/* RIGHT: voordelen panel (alleen desktop) */}
-          <aside className="hidden lg:flex flex-col justify-between p-10 text-white relative overflow-hidden"
-            style={{ background: 'linear-gradient(160deg, #FF5C00 0%, #C74600 100%)' }}>
-            <div className="absolute -top-32 -right-32 w-[400px] h-[400px] rounded-full opacity-15 blur-3xl bg-white" />
-            <div className="absolute bottom-[-20%] left-[-20%] w-[400px] h-[400px] rounded-full opacity-10 blur-3xl bg-[#FFE0C2]" />
-
-            <div className="relative z-10">
-              <p className="text-[10px] font-black tracking-[0.32em] uppercase text-white/75 mb-3">SuriRent N.V.</p>
-              <h3 className="text-3xl font-black leading-tight">
-                Het complete <br />vastgoed-platform <br />voor Suriname.
-              </h3>
-              <p className="text-sm text-white/85 mt-4 leading-relaxed max-w-xs">
-                Honderden eenheden, automatische facturatie en een Kiosk PWA — vanaf dag één klaar voor gebruik.
-              </p>
-            </div>
-
-            <ul className="relative z-10 space-y-3 my-8">
-              {[
-                'Multi-tenant white-label SaaS',
-                'Kiosk PWA voor selfservice',
-                'Automatische facturatie & boetes',
-                'AI-OCR voor betalingen',
-                'Live betalingsstatus + WhatsApp',
-                '24/7 superadmin support',
-              ].map((feat) => (
-                <li key={feat} className="flex items-start gap-3 text-sm">
-                  <span className="w-6 h-6 rounded-full bg-white/15 backdrop-blur-sm flex items-center justify-center shrink-0 mt-0.5">
-                    <Check className="w-3.5 h-3.5 text-white" strokeWidth={3} />
-                  </span>
-                  <span className="font-semibold text-white/95">{feat}</span>
-                </li>
-              ))}
-            </ul>
-
-            <div className="relative z-10 pt-6 border-t border-white/20">
-              <div className="flex items-center gap-2.5 mb-2">
-                {[0,1,2,3,4].map((i) => <Star key={i} className="w-3.5 h-3.5 fill-white text-white" />)}
-                <span className="text-xs font-extrabold text-white">5.0</span>
-              </div>
-              <p className="text-xs text-white/85 italic leading-relaxed">
-                &ldquo;Eindelijk een platform dat begrijpt hoe een Surinaams vastgoedbedrijf draait.&rdquo;
-              </p>
-              <p className="text-[10px] text-white/65 mt-2 font-bold uppercase tracking-wider">Pilot klant · 2026</p>
-            </div>
-          </aside>
         </div>
-        ) : (
+
+        {/* RIGHT: voordelen panel — fullscreen, sticky */}
+        <aside className="hidden lg:flex flex-col justify-between p-12 xl:p-16 text-white relative overflow-hidden lg:sticky lg:top-0 lg:h-screen"
+          style={{ background: 'linear-gradient(160deg, #FF5C00 0%, #C74600 100%)' }}>
+          <div className="absolute -top-32 -right-32 w-[500px] h-[500px] rounded-full opacity-15 blur-3xl bg-white" />
+          <div className="absolute bottom-[-20%] left-[-20%] w-[500px] h-[500px] rounded-full opacity-10 blur-3xl bg-[#FFE0C2]" />
+
+          <div className="relative z-10">
+            <p className="text-xs font-black tracking-[0.32em] uppercase text-white/75 mb-4">SuriRent N.V.</p>
+            <h3 className="text-4xl xl:text-5xl font-black leading-[1.05]">
+              Het complete <br />vastgoed-platform <br />voor Suriname.
+            </h3>
+            <p className="text-base text-white/85 mt-6 leading-relaxed max-w-md">
+              Honderden eenheden, automatische facturatie en een Kiosk PWA — vanaf dag één klaar voor gebruik.
+            </p>
+          </div>
+
+          <ul className="relative z-10 space-y-4 my-10">
+            {[
+              'Multi-tenant white-label SaaS',
+              'Kiosk PWA voor selfservice',
+              'Automatische facturatie & boetes',
+              'AI-OCR voor betalingen',
+              'Live betalingsstatus + WhatsApp',
+              '24/7 superadmin support',
+            ].map((feat) => (
+              <li key={feat} className="flex items-start gap-3 text-base">
+                <span className="w-7 h-7 rounded-full bg-white/15 backdrop-blur-sm flex items-center justify-center shrink-0 mt-0.5">
+                  <Check className="w-4 h-4 text-white" strokeWidth={3} />
+                </span>
+                <span className="font-semibold text-white/95">{feat}</span>
+              </li>
+            ))}
+          </ul>
+
+          <div className="relative z-10 pt-8 border-t border-white/20">
+            <div className="flex items-center gap-2.5 mb-3">
+              {[0,1,2,3,4].map((i) => <Star key={i} className="w-4 h-4 fill-white text-white" />)}
+              <span className="text-sm font-extrabold text-white">5.0</span>
+            </div>
+            <p className="text-sm text-white/85 italic leading-relaxed">
+              &ldquo;Eindelijk een platform dat begrijpt hoe een Surinaams vastgoedbedrijf draait.&rdquo;
+            </p>
+            <p className="text-xs text-white/65 mt-2 font-bold uppercase tracking-wider">Pilot klant · 2026</p>
+          </div>
+        </aside>
+      </div>
+      ) : (
         <div
           className="bg-white rounded-3xl shadow-[0_20px_60px_rgba(0,0,0,0.15)] w-full max-w-xl p-5 sm:p-8 md:p-10"
           data-testid="auth-form"
