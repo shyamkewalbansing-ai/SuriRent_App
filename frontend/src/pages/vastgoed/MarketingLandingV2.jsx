@@ -971,7 +971,14 @@ export default function MarketingLandingV2() {
 
   return (
     <EditableProvider editMode={editMode} initialContent={initialContent} onPatch={onPatch}>
-      <div className="min-h-screen bg-white text-[#0F0F0F] antialiased selection:bg-[#FF5C00] selection:text-white">
+      {/* Globale UI-schaal: alles op de landing pagina wordt standaard
+          op 125% getoond — gelijk aan de browser-zoom die de gebruiker
+          eerder zelf instelde. CSS `zoom` is sinds 2024 in alle moderne
+          browsers (Chrome, Safari, Edge, Firefox 126+) ondersteund en
+          gedraagt zich identiek aan native browser-zoom (geen kromme
+          layout zoals bij transform: scale). */}
+      <div className="min-h-screen bg-white text-[#0F0F0F] antialiased selection:bg-[#FF5C00] selection:text-white"
+        style={{ zoom: 1.25 }}>
         {editMode && (
           <div className="bg-orange-500 text-white text-center py-1.5 text-xs font-extrabold tracking-wider uppercase z-50 sticky top-0"
             data-testid="edit-mode-banner">

@@ -1359,11 +1359,10 @@ Lint clean. Verified via desktop screenshots (1440×900): élke admin-pagina (Ov
 - ✅ `LoginPage.jsx` detecteert nu `?register=1` of `?view=register` op de generieke `/login` route en redirect direct naar `/?register=1` (via `window.location.replace`, geen history-spam).
 - ✅ `MarketingLandingV2.jsx` opent de RegisterModal automatisch wanneer `?register=1` in de URL aanwezig is, en haalt de query parameter daarna weg via `history.replaceState` zodat een reload de popup niet opnieuw triggert.
 - ✅ Branded `/<slug>/login?register=1` routes worden NIET geredirect — klanten in een specifiek bedrijfsportaal kunnen geen nieuw bedrijf aanmaken, dus de oude register-view gedraagt zich daar correct (al wordt deze in praktijk niet gebruikt).
-## 2026-02-05 — Hero compacter (WEB2 layout)
-- ✅ Hero `minHeight` van `clamp(440px, 56vh, 620px)` → `clamp(360px, 44vh, 500px)` (kleiner).
-- ✅ Hero titel font-size van `clamp(2.25rem, 5.2vw, 4.5rem)` → `clamp(1.75rem, 3.6vw, 3.25rem)` (28% kleiner).
-- ✅ Subtitle: `text-base lg:text-xl` → `text-sm lg:text-base`. Eyebrow: `text-xs lg:text-sm` → `text-[10px] lg:text-xs`.
-- ✅ Padding: `py-10 lg:py-14` → `py-7 lg:py-10`. Marges en gaps overal compacter.
-- ✅ Greeting card: `max-w-[420px]` → `max-w-[380px]`, padding `p-7 lg:p-8` → `p-5 lg:p-6`, titel `text-2xl lg:text-[28px]` → `text-xl lg:text-2xl`.
-- ✅ Resultaat: ProductGrid cards (Inloggen / Demo / Beheer Suite / Kiosk PWA / Locaties / Appartementen / Betalingen / Facturen) zijn nu direct zichtbaar zonder scrollen op desktop.
+## 2026-02-05 — Landing pagina standaard op 125% UI-schaal
+- ✅ Eerdere "hero compacter" wijzigingen teruggedraaid (was foutieve interpretatie).
+- ✅ `MarketingLandingV2.jsx` root container krijgt `style={{ zoom: 1.25 }}` — alles op de landing wordt nu standaard 25% groter weergegeven.
+- ✅ CSS `zoom` is identiek aan native browser-zoom (gedraagt zich anders dan `transform: scale` — geen scrollbar issues of klikbaarheid problemen). Sinds 2024 in alle moderne browsers ondersteund.
+- ✅ `RegisterModal` blijft buiten de zoom-wrapper (in EditableProvider, niet in de zoom-div) zodat hij op normale schaal blijft.
+- ✅ Edit-mode banner valt eveneens binnen de zoom — consistent gevoel.
 
