@@ -1345,3 +1345,12 @@ Lint clean. Verified via desktop screenshots (1440×900): élke admin-pagina (Ov
 - ✅ **Pay-confirm scherm**: amber waarschuwing en knop-label nu universeel voor alle 3 methodes ("Verstuur ter controle"). ConfirmRow toont "Betaalbewijs" voor mope/uni5pay; Land alleen voor bank.
 - ✅ **Backend tests E2E**: Mope zonder bewijs → 400 ✓; Uni5Pay zonder bewijs → 400 ✓; Mope met PNG bewijs (7000 SRD) → OCR detecteert bedrag 7000.0, confidence 1.0, status=approved, auto_approved=True ✓.
 - ✅ **Smoke screenshot 390×844**: Mope flow toont groene QR + bedrijfsinfo (NAAR/BEDRAG/KENMERK) + groene "Open Mope app" knop + upload zone.
+
+## 2026-02-05 — Registratiepagina: Volledig fullscreen, GEEN scrollen
+- ✅ Volledig herschreven naar fullscreen split-panel layout (geen Header, geen scrollbar).
+- ✅ LINKER paneel (42% breed op desktop): branded oranje paneel met logo, "14 dagen gratis proberen" badge, hero kopij "Start uw eigen vastgoed portaal", 3 voordelen (Geen creditcard / Direct online / Inclusief alle modules), en "Log in" link onderaan.
+- ✅ RECHTER paneel: wit, gecomprimeerd formulier (h-10 inputs, kleinere spacing) — alle velden (bedrijfsnaam, adres, naam+telefoon, e-mail, wachtwoord, land, pakket) passen in viewport zonder scrollen op 800px+ hoogte.
+- ✅ Kiosk PIN veld verwijderd uit registratie (kan later in admin-instellingen worden ingesteld) om height te besparen.
+- ✅ Mobile: `flex-col lg:flex-row` — paneel wordt compacte top-banner, formulier daaronder met intern scroll indien nodig.
+- ✅ Smoke screenshot 1920×800: alle velden + submit knop zichtbaar op één scherm zonder scroll.
+
