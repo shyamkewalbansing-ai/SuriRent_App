@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { EditableProvider, EditableText, EditableImage, useLandingContent } from '../../lib/landing-editable';
 import StatusPill from '../../components/StatusPill';
+import RegisterModal from '../../components/RegisterModal';
 
 const SHOTS = {
   overzicht:     'https://customer-assets.emergentagent.com/job_vastgoed-app/artifacts/7sx9hgg7_1.png',
@@ -884,10 +885,10 @@ export default function MarketingLandingV2() {
 
   const onRegister = () => {
     if (editMode) return;
-    const t = appLink('/login?register=1');
-    if (t.startsWith('http')) window.location.href = t;
-    else navigate(t);
+    setRegisterOpen(true);
   };
+
+  const [registerOpen, setRegisterOpen] = useState(false);
 
   // Demo launcher — logt direct in op de demo en navigeert naar het juiste doel
   // (admin / huurder kiosk / klantenscherm / huurportaal). Slaat token op
@@ -970,6 +971,7 @@ export default function MarketingLandingV2() {
         <FAQSection />
         <Footer onLogin={onLogin} />
       </div>
+      <RegisterModal open={registerOpen} onClose={() => setRegisterOpen(false)} />
     </EditableProvider>
   );
 }

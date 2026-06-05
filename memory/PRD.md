@@ -1346,7 +1346,12 @@ Lint clean. Verified via desktop screenshots (1440×900): élke admin-pagina (Ov
 - ✅ **Backend tests E2E**: Mope zonder bewijs → 400 ✓; Uni5Pay zonder bewijs → 400 ✓; Mope met PNG bewijs (7000 SRD) → OCR detecteert bedrag 7000.0, confidence 1.0, status=approved, auto_approved=True ✓.
 - ✅ **Smoke screenshot 390×844**: Mope flow toont groene QR + bedrijfsinfo (NAAR/BEDRAG/KENMERK) + groene "Open Mope app" knop + upload zone.
 
-## 2026-02-05 — Registratiepagina: herzieningen teruggedraaid
-- ⏪ Nieuwe gecomprimeerde fullscreen split-panel teruggedraaid op verzoek van gebruiker.
-- ✅ Vorige clean versie hersteld: branded LEFT ("Start vandaag met SuriRent N.V." + voordelen + 14 dagen gratis card) en RIGHT (compacte "Account aanmaken" form met Geavanceerde opties dropdown).
+## 2026-02-05 — Registratie popup modal (i.p.v. separate pagina)
+- ✅ Nieuwe component `RegisterModal.jsx` in `/app/frontend/src/components/`.
+- ✅ Klik op "Registreren" knop in topbar van landing page opent nu een modale popup met **transparante donkere overlay + backdrop-blur (14px)** in plaats van te navigeren naar `/login?register=1`.
+- ✅ Modal: split panel (branded oranje LEFT met "Start uw eigen vastgoed portaal" + 3 voordelen, en form RIGHT met alle velden + plan/land keuze).
+- ✅ Sluiten via: X knop rechtsboven, ESC toets, of klik op de blur-overlay.
+- ✅ Body scroll lock terwijl modal open is.
+- ✅ Success scherm getoond IN dezelfde modal na succesvolle registratie (welkom + bankgegevens + "Naar mijn dashboard" knop).
+- ✅ De oude `/login?register=1` route blijft beschikbaar als fallback (LoginPage register mode is niet verwijderd).
 
