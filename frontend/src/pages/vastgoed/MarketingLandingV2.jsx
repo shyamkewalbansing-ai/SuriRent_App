@@ -890,6 +890,23 @@ export default function MarketingLandingV2() {
 
   const [registerOpen, setRegisterOpen] = useState(false);
 
+  // Auto-open de register popup wanneer iemand binnenkomt via een link
+  // met ?register=1 (bijvoorbeeld via een oude bookmark naar /login?register=1
+  // die door LoginPage wordt geredirect naar /?register=1).
+  useEffect(() => {
+    if (editMode) return;
+    try {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('register') === '1') {
+        setRegisterOpen(true);
+        // Maak de URL schoon zodat reload de modal niet opnieuw forceert.
+        params.delete('register');
+        const search = params.toString();
+        window.history.replaceState({}, '', `${window.location.pathname}${search ? `?${search}` : ''}`);
+      }
+    } catch { /* ignore */ }
+  }, [editMode]);
+
   // Demo launcher — logt direct in op de demo en navigeert naar het juiste doel
   // (admin / huurder kiosk / klantenscherm / huurportaal). Slaat token op
   // zodat de doelroute meteen authenticated is.

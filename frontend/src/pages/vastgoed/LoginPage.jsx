@@ -1885,6 +1885,28 @@ export default function LoginPage() {
   const [view, setView] = useState(initialView);
   const [skipRedirect, setSkipRedirect] = useState(false);
 
+  // ────────────────────────────────────────────────────────────────────
+  // Registratie modal-redirect — wanneer iemand op /login?register=1 of
+  // /login?view=register komt (bookmark, oude links, marketing CTA),
+  // sturen we hem terug naar de landing met de popup direct open.
+  // De register-pagina bestaat namelijk niet meer als losse view.
+  //
+  // BELANGRIJK: alleen op de GENERIEKE /login route. Op een branded
+  // /<slug>/login is registreren niet relevant — klanten loggen daar
+  // alleen in, er wordt geen nieuw bedrijf aangemaakt.
+  // ────────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (initialView !== 'register') return;
+    try {
+      const path = window.location.pathname || '';
+      // Plain /login → redirect. Branded /<slug>/login → laat zoals het is
+      // (de register view zal daar zelf de "alleen inloggen" mode forceren).
+      if (/^\/login(\/|$)/i.test(path)) {
+        window.location.replace('/?register=1');
+      }
+    } catch { /* ignore */ }
+  }, [initialView]);
+
   // Branding state — start from cache for instant render, then fetch fresh.
   const [branding, setBranding] = useState(() => {
     const cached = readCachedBranding();

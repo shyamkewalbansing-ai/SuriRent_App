@@ -1355,3 +1355,9 @@ Lint clean. Verified via desktop screenshots (1440×900): élke admin-pagina (Ov
 - ✅ Success scherm getoond IN dezelfde modal na succesvolle registratie (welkom + bankgegevens + "Naar mijn dashboard" knop).
 - ✅ De oude `/login?register=1` route blijft beschikbaar als fallback (LoginPage register mode is niet verwijderd).
 
+## 2026-02-05 — `/login?register=1` redirect naar landing-modal
+- ✅ `LoginPage.jsx` detecteert nu `?register=1` of `?view=register` op de generieke `/login` route en redirect direct naar `/?register=1` (via `window.location.replace`, geen history-spam).
+- ✅ `MarketingLandingV2.jsx` opent de RegisterModal automatisch wanneer `?register=1` in de URL aanwezig is, en haalt de query parameter daarna weg via `history.replaceState` zodat een reload de popup niet opnieuw triggert.
+- ✅ Branded `/<slug>/login?register=1` routes worden NIET geredirect — klanten in een specifiek bedrijfsportaal kunnen geen nieuw bedrijf aanmaken, dus de oude register-view gedraagt zich daar correct (al wordt deze in praktijk niet gebruikt).
+- ✅ Geverifieerd: `/login?register=1` → final URL `/`, modal open.
+
