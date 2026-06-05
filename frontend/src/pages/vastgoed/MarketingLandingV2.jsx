@@ -213,7 +213,7 @@ function Hero({ onDemo, onWhatsApp }) {
           De greeting card hangt over de onderrand en steekt uit in de content
           eronder via een negatieve bottom margin (zie LandingPage wrapper). */}
       <div className="relative w-full bg-[#0F0F0F] overflow-hidden"
-        style={{ minHeight: 'clamp(360px, 44vh, 500px)' }}
+        style={{ minHeight: 'clamp(440px, 56vh, 620px)' }}
         data-testid="hero-canvas">
         {/* Background screenshot — wide bleed met dark overlay */}
         <div className="absolute inset-0">
@@ -233,15 +233,15 @@ function Hero({ onDemo, onWhatsApp }) {
         </div>
 
         {/* Centered max-width content — kortere padding voor compact gevoel */}
-        <div className="relative max-w-[1280px] mx-auto px-5 lg:px-10 py-7 lg:py-10 grid lg:grid-cols-[1.15fr,1fr] gap-6 lg:gap-10 items-center"
-          style={{ minHeight: 'clamp(360px, 44vh, 500px)' }}>
+        <div className="relative max-w-[1280px] mx-auto px-5 lg:px-10 py-10 lg:py-14 grid lg:grid-cols-[1.15fr,1fr] gap-8 lg:gap-12 items-center"
+          style={{ minHeight: 'clamp(440px, 56vh, 620px)' }}>
           {/* LEFT — massive headline */}
           <div className="text-white relative z-10">
             <EditableText path="v2.hero.eyebrow" fallback="Vastgoed Suite · Suriname 2026"
               as="p"
-              className="text-[10px] lg:text-xs font-black tracking-[0.32em] uppercase text-[#FF8A3D] mb-2.5 lg:mb-3" />
+              className="text-xs lg:text-sm font-black tracking-[0.32em] uppercase text-[#FF8A3D] mb-4 lg:mb-5" />
             <h1 className="font-black tracking-[-0.035em] leading-[0.95] text-white"
-              style={{ fontSize: 'clamp(1.75rem, 3.6vw, 3.25rem)' }}
+              style={{ fontSize: 'clamp(2.25rem, 5.2vw, 4.5rem)' }}
               data-testid="hero-title">
               <EditableText path="v2.hero.title_line1" fallback="Voor als" as="span" />
               <br /><EditableText path="v2.hero.title_line2" fallback="Excel uw vastgoed" as="span" />
@@ -252,15 +252,15 @@ function Hero({ onDemo, onWhatsApp }) {
               fallback="Nu 30% sneller dan handmatig boekhouden — met Kiosk, automatische facturatie en AI-OCR voor betalingen."
               as="p"
               multiline
-              className="mt-3 lg:mt-4 text-sm lg:text-base text-white/85 font-medium max-w-xl leading-relaxed" />
-            <div className="mt-4 lg:mt-5 flex flex-col sm:flex-row gap-3">
+              className="mt-5 lg:mt-6 text-base lg:text-xl text-white/85 font-medium max-w-xl leading-relaxed" />
+            <div className="mt-6 lg:mt-7 flex flex-col sm:flex-row gap-3">
               <button onClick={onDemo} data-testid="hero-cta-action"
-                className="inline-flex items-center justify-center gap-2 h-11 lg:h-12 px-5 lg:px-6 rounded-md bg-[#FF5C00] hover:bg-[#FF8A3D] text-white text-sm font-black transition-colors shadow-[0_4px_0_0_rgba(0,0,0,0.15)]">
+                className="inline-flex items-center justify-center gap-2 h-12 lg:h-13 px-6 rounded-md bg-[#FF5C00] hover:bg-[#FF8A3D] text-white text-sm lg:text-base font-black transition-colors shadow-[0_4px_0_0_rgba(0,0,0,0.15)]">
                 <EditableText path="v2.hero.cta_primary" fallback="Bekijk de demo" as="span" />
                 <ArrowRight className="w-4 h-4" />
               </button>
               <button onClick={onWhatsApp}
-                className="inline-flex items-center justify-center gap-2 h-11 lg:h-12 px-5 lg:px-6 rounded-md bg-white/10 hover:bg-white/15 border border-white/20 text-white text-sm font-bold backdrop-blur-sm transition-colors">
+                className="inline-flex items-center justify-center gap-2 h-12 lg:h-13 px-6 rounded-md bg-white/10 hover:bg-white/15 border border-white/20 text-white text-sm lg:text-base font-bold backdrop-blur-sm transition-colors">
                 <MessageCircle className="w-5 h-5" />
                 <EditableText path="v2.hero.cta_secondary" fallback="WhatsApp ons" as="span" />
               </button>
@@ -270,16 +270,16 @@ function Hero({ onDemo, onWhatsApp }) {
           {/* RIGHT — floating dark greeting card die UIT de hero steekt
               (negatieve bottom margin op desktop zodat hij over de content
               hangt zoals op de Centraal Beheer referentie). */}
-          <div className="flex items-center justify-center lg:justify-end relative z-20 lg:mb-[-90px] xl:mb-[-110px]">
-            <div className="relative w-full max-w-[380px]">
-              <div className="rounded-2xl bg-[#0F0F0F]/95 border border-white/10 backdrop-blur-sm p-5 lg:p-6 shadow-[0_30px_60px_-20px_rgba(0,0,0,0.6)]"
+          <div className="flex items-center justify-center lg:justify-end relative z-20 lg:mb-[-110px] xl:mb-[-130px]">
+            <div className="relative w-full max-w-[420px]">
+              <div className="rounded-2xl bg-[#0F0F0F]/95 border border-white/10 backdrop-blur-sm p-7 lg:p-8 shadow-[0_30px_60px_-20px_rgba(0,0,0,0.6)]"
                 data-testid="greeting-card">
-                <h2 className="text-xl lg:text-2xl font-black tracking-tight text-white leading-tight">
+                <h2 className="text-2xl lg:text-[28px] font-black tracking-tight text-white leading-tight">
                   {greeting},
                 </h2>
                 <EditableText path="v2.greeting.subtitle" fallback="Waarmee kunnen we u vooruit helpen?"
-                  as="p" className="mt-1.5 text-sm lg:text-base text-white/70 font-medium" />
-                <div className="mt-4 relative">
+                  as="p" className="mt-2 text-base lg:text-lg text-white/70 font-medium" />
+                <div className="mt-6 relative">
                   <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 z-10" />
                   <input
                     type="text"
