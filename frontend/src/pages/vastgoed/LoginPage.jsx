@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useBrandedNavigate } from '../../lib/branded-nav';
 import { RESERVED_SLUGS } from '../../lib/branded-nav';
-import { Loader2, Delete, KeyRound, ArrowLeft, ArrowRight, Eye, EyeOff, UserPlus, LogIn, Check, CheckCircle, Globe, X as XIcon, QrCode, HelpCircle, Camera, Smartphone, Sparkles, Star } from 'lucide-react';
+import { Loader2, Delete, KeyRound, ArrowLeft, ArrowRight, Eye, EyeOff, UserPlus, LogIn, Check, CheckCircle, Globe, X as XIcon, QrCode, HelpCircle, Camera, Smartphone, Sparkles, Star, ShieldCheck, Zap, ChevronDown } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { Html5Qrcode } from 'html5-qrcode';
 import { api, formatError } from '../../lib/api';
@@ -1226,281 +1226,290 @@ function PasswordView({ initialMode = 'login', onBack, onRegistered, branding })
         {/* REGISTER op desktop: 2-panel split (form links + voordelen rechts).
             LOGIN behoudt het bestaande compacte card design. */}
         {mode === 'register' ? (
-      <div className="min-h-screen bg-white lg:grid lg:grid-cols-[1.5fr,1fr]" data-testid="auth-form">
-        {/* LEFT: het formulier — volledige hoogte, scrollbaar */}
-        <div className="px-5 py-8 sm:px-10 sm:py-10 lg:px-16 lg:py-12 lg:overflow-y-auto lg:max-h-screen">
-          <div className="max-w-2xl mx-auto">
+      <div className="min-h-screen lg:grid lg:grid-cols-2" data-testid="auth-form">
+        {/* LEFT: branded panel — vol oranje, marketing + stats */}
+        <aside className="relative px-8 py-12 sm:px-12 sm:py-16 lg:p-16 xl:p-20 text-white overflow-hidden lg:min-h-screen flex flex-col"
+          style={{ background: 'linear-gradient(160deg, #FF5C00 0%, #C74600 100%)' }}>
+          <div className="absolute -top-32 -right-32 w-[500px] h-[500px] rounded-full opacity-15 blur-3xl bg-white pointer-events-none" />
+          <div className="absolute bottom-[-20%] left-[-20%] w-[500px] h-[500px] rounded-full opacity-10 blur-3xl bg-[#FFE0C2] pointer-events-none" />
+
+          {/* Logo / merk */}
+          <div className="relative z-10">
+            <div className="flex items-center gap-3 mb-12 lg:mb-16">
+              <span className="w-12 h-12 rounded-2xl bg-white p-2 shadow-lg">
+                <img src="/kiosk-icons/mark-orange.png" alt="SuriRent" className="w-full h-full object-contain"
+                  onError={(e) => { e.currentTarget.src = '/kiosk-icons/mark-white.png'; e.currentTarget.style.filter = 'brightness(0) invert(0.2)'; }} />
+              </span>
+              <span className="text-3xl lg:text-4xl font-black tracking-tight">SURIRENT</span>
+            </div>
+
+            <h2 className="font-black tracking-tight leading-[1.05]"
+              style={{ fontSize: 'clamp(2.25rem, 4.5vw, 4rem)' }}>
+              Start vandaag met <br />
+              <span className="text-[#FFE0C2]">SuriRent N.V.</span>
+            </h2>
+            <p className="mt-6 text-base lg:text-lg text-white/85 leading-relaxed max-w-md">
+              Maak gratis een account aan en ontdek het complete vastgoedplatform voor Suriname.
+            </p>
+          </div>
+
+          {/* Glassy "14 Dagen Gratis" card */}
+          <div className="relative z-10 mt-10 lg:mt-12">
+            <div className="rounded-2xl border border-white/20 backdrop-blur-sm bg-white/[0.07] p-6">
+              <div className="flex items-start gap-4 mb-5">
+                <div className="w-12 h-12 rounded-xl bg-white/15 backdrop-blur-sm flex items-center justify-center shrink-0">
+                  <Sparkles className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <p className="text-xl font-black">14 Dagen Gratis!</p>
+                  <p className="text-sm text-white/75 mt-0.5">Geen creditcard nodig</p>
+                </div>
+              </div>
+              <ul className="space-y-3 text-sm">
+                {[
+                  'Toegang tot alle modules',
+                  'Onbeperkte gebruikers',
+                  'Volledige functionaliteit',
+                ].map((feat) => (
+                  <li key={feat} className="flex items-center gap-3">
+                    <span className="w-6 h-6 rounded-full bg-white/15 flex items-center justify-center shrink-0">
+                      <Check className="w-3.5 h-3.5 text-white" strokeWidth={3} />
+                    </span>
+                    <span className="font-semibold">{feat}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Trust signals */}
+            <div className="mt-6 space-y-3">
+              <div className="flex items-center gap-3 text-sm">
+                <span className="w-9 h-9 rounded-lg bg-white/10 flex items-center justify-center shrink-0">
+                  <ShieldCheck className="w-4 h-4 text-white" />
+                </span>
+                <span className="font-semibold text-white/90">SSL-encryptie &amp; privacy gegarandeerd</span>
+              </div>
+              <div className="flex items-center gap-3 text-sm">
+                <span className="w-9 h-9 rounded-lg bg-white/10 flex items-center justify-center shrink-0">
+                  <Zap className="w-4 h-4 text-white" />
+                </span>
+                <span className="font-semibold text-white/90">Snel en modern platform</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex-1" />
+
+          {/* Bottom stats */}
+          <div className="relative z-10 mt-10 lg:mt-12 grid grid-cols-3 gap-4 lg:gap-8">
+            {[
+              { value: '500+',  label: 'Klanten' },
+              { value: '99.9%', label: 'Uptime' },
+              { value: '24/7',  label: 'Support' },
+            ].map((s) => (
+              <div key={s.label}>
+                <p className="text-3xl lg:text-4xl font-black">{s.value}</p>
+                <p className="text-xs lg:text-sm text-white/70 font-semibold mt-1">{s.label}</p>
+              </div>
+            ))}
+          </div>
+        </aside>
+
+        {/* RIGHT: schoon wit formulier */}
+        <div className="bg-white px-6 py-10 sm:px-12 sm:py-14 lg:p-16 xl:px-20 lg:overflow-y-auto lg:max-h-screen">
+          <div className="max-w-md mx-auto">
           {branding?.slug && (
             <button onClick={onBack} data-testid="auth-back" className="flex items-center gap-2 text-sm font-medium text-slate-400 hover:text-slate-600 mb-6 transition active:scale-95">
               <ArrowLeft className="w-4 h-4" /> Terug naar PIN
             </button>
           )}
 
-          <div className="mb-8">
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-orange-50 border border-orange-100 mb-4">
-              <Sparkles className="w-4 h-4 text-[#FF5C00]" />
-              <span className="text-[11px] font-extrabold tracking-[0.18em] uppercase text-[#FF5C00]">14 dagen gratis</span>
-            </div>
-            <h2 className="text-4xl lg:text-5xl xl:text-6xl font-black text-slate-900 tracking-tight leading-[1.05]">
-              Maak uw <span className="text-[#FF5C00]">Vastgoed</span> omgeving aan
-            </h2>
-            <p className="text-base text-slate-500 mt-3">Klaar in 30 seconden — geen creditcard nodig.</p>
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-orange-50 border border-orange-100 mb-5">
+            <Sparkles className="w-3.5 h-3.5 text-[#FF5C00]" />
+            <span className="text-[11px] font-extrabold tracking-[0.18em] uppercase text-[#FF5C00]">14 Dagen Gratis</span>
           </div>
 
+          <h1 className="text-4xl lg:text-5xl font-black text-slate-900 tracking-tight leading-tight">
+            Account aanmaken
+          </h1>
+          <p className="text-base text-slate-500 mt-2 mb-8">Vul uw gegevens in om te beginnen</p>
+
           {error && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-600 rounded-xl text-center text-sm font-medium" data-testid="auth-error">
+            <div className="mb-5 p-3 bg-red-50 border border-red-200 text-red-600 rounded-xl text-sm font-medium" data-testid="auth-error">
               {error}
             </div>
           )}
 
-          <form onSubmit={submit} className="space-y-8">
-            {/* Sectie 1 — Bedrijf */}
-            <section>
-              <div className="flex items-center gap-3 mb-4 pb-3 border-b border-slate-100">
-                <span className="flex items-center justify-center w-8 h-8 rounded-full bg-[#FF5C00] text-white text-sm font-extrabold">1</span>
-                <h3 className="text-base font-extrabold text-slate-900 uppercase tracking-wider">Uw bedrijf</h3>
-              </div>
+          <form onSubmit={submit} className="space-y-5">
+            {/* Volledige naam */}
+            <div>
+              <label className="block text-sm font-bold text-slate-700 mb-2">Volledige naam</label>
+              <input type="text" value={name} onChange={(e) => setName(e.target.value)} data-testid="auth-name"
+                required minLength={2}
+                placeholder="Jan Jansen"
+                className="w-full h-12 text-base px-4 rounded-xl border border-slate-200 focus:border-[#FF5C00] focus:ring-4 focus:ring-[#FF5C00]/10 bg-white outline-none transition" />
+            </div>
 
-              <div className="mb-4">
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Bedrijfsnaam *</label>
-                <input type="text" value={companyName} onChange={(e) => setCompanyName(e.target.value)} data-testid="auth-company-name"
-                  required minLength={2}
-                  placeholder="Demo Vastgoed N.V."
-                  className="w-full h-12 text-base px-4 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] focus:ring-4 focus:ring-[#FF5C00]/10 bg-[#F9FAFB] outline-none transition" />
-                {portalPreview.slug && (() => {
-                  const okTone = slugStatus === 'available';
-                  const errTone = slugStatus === 'taken' || slugStatus === 'format';
-                  const reservedTone = slugStatus === 'reserved';
-                  const palette = errTone
-                    ? { bg: 'bg-rose-50', border: 'border-rose-200', icon: 'text-rose-600', heading: 'text-rose-700', url: 'text-rose-900' }
-                    : reservedTone
-                      ? { bg: 'bg-amber-50', border: 'border-amber-200', icon: 'text-amber-600', heading: 'text-amber-700', url: 'text-amber-900' }
-                      : { bg: 'bg-emerald-50', border: 'border-emerald-200', icon: 'text-emerald-600', heading: 'text-emerald-700', url: 'text-emerald-900' };
-                  return (
-                    <div className={`mt-2 flex items-center gap-2 px-3 py-2 rounded-xl ${palette.bg} border ${palette.border}`} data-testid="auth-portal-preview">
-                      <Globe className={`w-4 h-4 ${palette.icon} shrink-0`} />
-                      <div className="min-w-0 flex-1">
-                        <p className={`text-[10px] uppercase tracking-wider font-bold ${palette.heading}`}>Uw portaal-URL</p>
-                        <p className={`text-xs sm:text-sm font-mono font-bold ${palette.url} truncate`}>
-                          {portalPreview.host || 'app.surirent.sr'}<span className={palette.icon}>/</span>{portalPreview.slug}
-                        </p>
-                      </div>
-                      <div className="shrink-0" data-testid={`slug-status-${slugStatus}`}>
-                        {slugStatus === 'checking' && <Loader2 className="w-4 h-4 text-slate-400 animate-spin" />}
-                        {okTone && (
-                          <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-emerald-600 text-white text-[10px] font-extrabold">
-                            <Check className="w-3 h-3" />VRIJ
-                          </span>
-                        )}
-                        {slugStatus === 'taken' && (
-                          <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-rose-600 text-white text-[10px] font-extrabold">
-                            <XIcon className="w-3 h-3" />BEZET
-                          </span>
-                        )}
-                        {reservedTone && (
-                          <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-amber-500 text-white text-[10px] font-extrabold">
-                            AUTO-NAAM
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })()}
-              </div>
+            {/* Bedrijfsnaam */}
+            <div>
+              <label className="block text-sm font-bold text-slate-700 mb-2">
+                Bedrijfsnaam <span className="text-slate-400 font-medium">(optioneel)</span>
+              </label>
+              <input type="text" value={companyName} onChange={(e) => setCompanyName(e.target.value)} data-testid="auth-company-name"
+                placeholder="Uw bedrijfsnaam"
+                className="w-full h-12 text-base px-4 rounded-xl border border-slate-200 focus:border-[#FF5C00] focus:ring-4 focus:ring-[#FF5C00]/10 bg-white outline-none transition" />
+              {portalPreview.slug && companyName.length > 1 && (() => {
+                const okTone = slugStatus === 'available';
+                const errTone = slugStatus === 'taken' || slugStatus === 'format';
+                const palette = errTone
+                  ? 'bg-rose-50 border-rose-200 text-rose-700'
+                  : 'bg-emerald-50 border-emerald-200 text-emerald-700';
+                return (
+                  <div className={`mt-2 flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-bold ${palette}`} data-testid="auth-portal-preview">
+                    <Globe className="w-3.5 h-3.5 shrink-0" />
+                    <span className="font-mono truncate flex-1">{portalPreview.host || 'app.surirent.sr'}/{portalPreview.slug}</span>
+                    {slugStatus === 'checking' && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                    {okTone && <span className="font-extrabold">✓ VRIJ</span>}
+                    {slugStatus === 'taken' && <span className="font-extrabold">✗ BEZET</span>}
+                  </div>
+                );
+              })()}
+            </div>
 
-              <div className="mb-4">
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Adres</label>
-                <input type="text" value={address} onChange={(e) => setAddress(e.target.value)} data-testid="auth-address"
-                  placeholder="Bedrijfsadres (straat, huisnummer, stad)"
-                  className="w-full h-12 text-base px-4 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] focus:ring-4 focus:ring-[#FF5C00]/10 bg-[#F9FAFB] outline-none transition" />
-              </div>
+            {/* E-mailadres */}
+            <div>
+              <label className="block text-sm font-bold text-slate-700 mb-2">E-mailadres</label>
+              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} data-testid="auth-email"
+                required
+                placeholder="naam@bedrijf.sr"
+                className="w-full h-12 text-base px-4 rounded-xl border border-slate-200 focus:border-[#FF5C00] focus:ring-4 focus:ring-[#FF5C00]/10 bg-slate-50 outline-none transition" />
+            </div>
 
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Land &amp; valuta</label>
-                <div className="grid grid-cols-2 gap-3" data-testid="country-picker">
-                  {[
-                    { code: 'SR', flag: '🇸🇷', label: 'Suriname', sub: 'SRD' },
-                    { code: 'NL', flag: '🇳🇱', label: 'Nederland', sub: 'EUR' },
-                  ].map((c) => {
-                    const sel = country === c.code;
-                    return (
-                      <button key={c.code} type="button" onClick={() => setCountry(c.code)}
-                        data-testid={`country-${c.code.toLowerCase()}`}
-                        className={`rounded-xl border-2 p-3 text-center transition-all ${
-                          sel ? 'border-[#FF5C00] bg-orange-50 shadow-md shadow-orange-500/10' : 'border-slate-200 bg-white hover:border-orange-300'
-                        }`}>
-                        <div className="text-2xl leading-none mb-1">{c.flag}</div>
-                        <div className={`text-xs font-extrabold ${sel ? 'text-[#C74600]' : 'text-slate-700'}`}>{c.label}</div>
-                        <div className="text-[10px] text-slate-400 font-bold">{c.sub}</div>
-                      </button>
-                    );
-                  })}
-                </div>
+            {/* Wachtwoord */}
+            <div>
+              <label className="block text-sm font-bold text-slate-700 mb-2">Wachtwoord</label>
+              <div className="relative">
+                <input type={showPw ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)}
+                  data-testid="auth-password" required minLength={6}
+                  placeholder="••••••••••"
+                  className="w-full h-12 text-base px-4 pr-11 rounded-xl border border-slate-200 focus:border-[#FF5C00] focus:ring-4 focus:ring-[#FF5C00]/10 bg-slate-50 outline-none transition" />
+                <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                  {showPw ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                </button>
               </div>
-            </section>
+            </div>
 
-            {/* Sectie 2 — Persoonlijke gegevens */}
-            <section>
-              <div className="flex items-center gap-3 mb-4 pb-3 border-b border-slate-100">
-                <span className="flex items-center justify-center w-8 h-8 rounded-full bg-[#FF5C00] text-white text-sm font-extrabold">2</span>
-                <h3 className="text-base font-extrabold text-slate-900 uppercase tracking-wider">Uw gegevens</h3>
-              </div>
-              <div className="grid sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Uw naam</label>
-                  <input type="text" value={name} onChange={(e) => setName(e.target.value)} data-testid="auth-name"
-                    required minLength={2}
-                    placeholder="Voornaam Achternaam"
-                    className="w-full h-12 text-base px-4 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] focus:ring-4 focus:ring-[#FF5C00]/10 bg-[#F9FAFB] outline-none transition" />
+            {/* Geavanceerde opties — Telefoon, Adres, Land, PIN, Pakket — verborgen onder een toggle */}
+            <details className="group rounded-xl border border-slate-200 overflow-hidden">
+              <summary className="flex items-center justify-between cursor-pointer px-4 py-3 bg-slate-50 hover:bg-slate-100 transition-colors list-none">
+                <span className="text-sm font-bold text-slate-700">Geavanceerde opties</span>
+                <ChevronDown className="w-4 h-4 text-slate-500 transition-transform group-open:rotate-180" />
+              </summary>
+              <div className="p-4 space-y-4">
+                <div className="grid sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 mb-1.5">Telefoon</label>
+                    <input type="tel" value={telefoon} onChange={(e) => setTelefoon(e.target.value)} data-testid="auth-telefoon"
+                      placeholder="+597 ..."
+                      className="w-full h-11 text-sm px-3 rounded-lg border border-slate-200 focus:border-[#FF5C00] focus:ring-4 focus:ring-[#FF5C00]/10 bg-white outline-none transition" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 mb-1.5">Kiosk PIN</label>
+                    <input type="text" inputMode="numeric" pattern="\d{4}" maxLength={4} autoComplete="off"
+                      value={kioskPin}
+                      onChange={(e) => setKioskPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                      data-testid="auth-kiosk-pin"
+                      placeholder="• • • •"
+                      className="w-full h-11 text-sm px-3 rounded-lg border border-slate-200 focus:border-[#FF5C00] focus:ring-4 focus:ring-[#FF5C00]/10 bg-white outline-none transition font-mono tracking-[0.4em] text-center" />
+                  </div>
                 </div>
                 <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Telefoon</label>
-                  <input type="tel" value={telefoon} onChange={(e) => setTelefoon(e.target.value)} data-testid="auth-telefoon"
-                    placeholder="+597 ..."
-                    className="w-full h-12 text-base px-4 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] focus:ring-4 focus:ring-[#FF5C00]/10 bg-[#F9FAFB] outline-none transition" />
-                </div>
-              </div>
-            </section>
-
-            {/* Sectie 3 — Toegang */}
-            <section>
-              <div className="flex items-center gap-3 mb-4 pb-3 border-b border-slate-100">
-                <span className="flex items-center justify-center w-8 h-8 rounded-full bg-[#FF5C00] text-white text-sm font-extrabold">3</span>
-                <h3 className="text-base font-extrabold text-slate-900 uppercase tracking-wider">Toegang</h3>
-              </div>
-              <div className="grid sm:grid-cols-2 gap-4 mb-4">
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">E-mailadres</label>
-                  <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} data-testid="auth-email"
-                    required
-                    className="w-full h-12 text-base px-4 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] focus:ring-4 focus:ring-[#FF5C00]/10 bg-[#F9FAFB] outline-none transition"
-                    placeholder="naam@bedrijf.sr" />
+                  <label className="block text-xs font-bold text-slate-600 mb-1.5">Adres</label>
+                  <input type="text" value={address} onChange={(e) => setAddress(e.target.value)} data-testid="auth-address"
+                    placeholder="Bedrijfsadres"
+                    className="w-full h-11 text-sm px-3 rounded-lg border border-slate-200 focus:border-[#FF5C00] focus:ring-4 focus:ring-[#FF5C00]/10 bg-white outline-none transition" />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Wachtwoord</label>
-                  <div className="relative">
-                    <input type={showPw ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)}
-                      data-testid="auth-password" required minLength={6}
-                      className="w-full h-12 text-base px-4 pr-11 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] focus:ring-4 focus:ring-[#FF5C00]/10 bg-[#F9FAFB] outline-none transition" />
-                    <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
-                      {showPw ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                    </button>
+                  <label className="block text-xs font-bold text-slate-600 mb-1.5">Land &amp; valuta</label>
+                  <div className="grid grid-cols-2 gap-2" data-testid="country-picker">
+                    {[
+                      { code: 'SR', flag: '🇸🇷', label: 'Suriname', sub: 'SRD' },
+                      { code: 'NL', flag: '🇳🇱', label: 'Nederland', sub: 'EUR' },
+                    ].map((c) => {
+                      const sel = country === c.code;
+                      return (
+                        <button key={c.code} type="button" onClick={() => setCountry(c.code)}
+                          data-testid={`country-${c.code.toLowerCase()}`}
+                          className={`rounded-lg border p-2 text-center transition-all ${
+                            sel ? 'border-[#FF5C00] bg-orange-50' : 'border-slate-200 bg-white hover:border-orange-300'
+                          }`}>
+                          <span className="text-lg leading-none mr-1.5">{c.flag}</span>
+                          <span className={`text-xs font-extrabold ${sel ? 'text-[#C74600]' : 'text-slate-700'}`}>{c.label}</span>
+                          <span className="text-[10px] text-slate-400 font-bold ml-1">{c.sub}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1.5">Pakket</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {plans.map((p) => {
+                      const sel = plan === p.id;
+                      return (
+                        <button key={p.id} type="button" onClick={() => setPlan(p.id)}
+                          data-testid={`plan-${p.id}`}
+                          className={`text-left rounded-lg border p-2.5 transition-all ${
+                            sel ? 'border-[#FF5C00] bg-orange-50' : 'border-slate-200 bg-white hover:border-orange-300'
+                          }`}>
+                          <p className={`font-extrabold text-xs ${sel ? 'text-[#C74600]' : 'text-slate-900'}`}>{p.name}</p>
+                          <p className={`text-base font-extrabold mt-0.5 ${sel ? 'text-[#FF5C00]' : 'text-slate-900'}`}>
+                            {(p.currency || 'SRD').toUpperCase() === 'EUR'
+                              ? `€${Number(p.amount).toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                              : `${p.currency} ${Number(p.amount).toLocaleString('nl-NL')}`}
+                            <span className="text-[10px] text-slate-400 ml-1">/m</span>
+                          </p>
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               </div>
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Kiosk PIN (4 cijfers, optioneel)</label>
-                <input type="text" inputMode="numeric" pattern="\d{4}" maxLength={4} autoComplete="off"
-                  value={kioskPin}
-                  onChange={(e) => setKioskPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
-                  data-testid="auth-kiosk-pin"
-                  placeholder="• • • •"
-                  className="w-full sm:max-w-xs h-12 text-base px-4 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] focus:ring-4 focus:ring-[#FF5C00]/10 bg-[#F9FAFB] outline-none transition font-mono tracking-[0.5em] text-center" />
-                <p className="text-[11px] text-slate-400 mt-1.5">Voor snelle login op gedeelde kiosk-apparaten.</p>
-              </div>
-            </section>
-
-            {/* Sectie 4 — Pakket */}
-            <section>
-              <div className="flex items-center gap-3 mb-4 pb-3 border-b border-slate-100">
-                <span className="flex items-center justify-center w-8 h-8 rounded-full bg-[#FF5C00] text-white text-sm font-extrabold">4</span>
-                <h3 className="text-base font-extrabold text-slate-900 uppercase tracking-wider">Kies uw pakket</h3>
-              </div>
-              <div className="grid sm:grid-cols-2 gap-3">
-                {plans.map((p) => {
-                  const sel = plan === p.id;
-                  return (
-                    <button key={p.id} type="button" onClick={() => setPlan(p.id)}
-                      data-testid={`plan-${p.id}`}
-                      className={`text-left rounded-xl border-2 p-4 transition-all ${
-                        sel ? 'border-[#FF5C00] bg-orange-50 shadow-md shadow-orange-500/15' : 'border-slate-200 bg-white hover:border-orange-300'
-                      }`}>
-                      <div className="flex items-start justify-between mb-1">
-                        <p className={`font-extrabold text-sm ${sel ? 'text-[#C74600]' : 'text-slate-900'}`}>{p.name}</p>
-                        <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${sel ? 'border-[#FF5C00] bg-[#FF5C00]' : 'border-slate-300'}`}>
-                          {sel && <div className="w-2 h-2 rounded-full bg-white" />}
-                        </div>
-                      </div>
-                      <p className={`text-2xl font-extrabold ${sel ? 'text-[#FF5C00]' : 'text-slate-900'}`}>
-                        {(p.currency || 'SRD').toUpperCase() === 'EUR'
-                          ? `€${Number(p.amount).toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                          : `${p.currency} ${Number(p.amount).toLocaleString('nl-NL')}`}
-                        <span className="text-xs font-medium text-slate-400 ml-1">/m</span>
-                      </p>
-                      <p className="text-xs text-slate-500 mt-1.5 leading-snug">{p.description}</p>
-                    </button>
-                  );
-                })}
-              </div>
-              <p className="text-xs text-slate-400 mt-3 flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-500" /> 14 dagen gratis · daarna bankoverschrijving</p>
-            </section>
+            </details>
 
             {/* Submit */}
-            <div className="pt-4 border-t border-slate-100">
-              <button type="submit" disabled={loading} data-testid="auth-submit"
-                className="w-full h-14 bg-gradient-to-r from-[#FF5C00] to-[#FF8A3D] hover:from-[#C74600] hover:to-[#FF5C00] text-white font-extrabold text-base rounded-xl transition-all disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg shadow-orange-500/30">
-                {loading ? (<><Loader2 className="w-5 h-5 animate-spin" /> Bezig…</>)
-                  : (<>Start uw 14 dagen gratis <ArrowRight className="w-5 h-5" /></>)}
-              </button>
-              <p className="text-center text-xs text-slate-400 mt-3">
-                Door te registreren accepteert u onze voorwaarden. Geen creditcard nodig.
-              </p>
-              <p className="text-center text-sm text-slate-500 mt-3">
-                Heeft u al een account?{' '}
-                <button type="button" onClick={() => { setMode('login'); setError(''); }} className="font-bold text-[#FF5C00] hover:underline">
-                  Log in
-                </button>
-              </p>
+            <button type="submit" disabled={loading} data-testid="auth-submit"
+              className="w-full h-14 bg-[#FF5C00] hover:bg-[#C74600] text-white font-extrabold text-base rounded-xl transition-all disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg shadow-orange-500/30 mt-2">
+              {loading ? (<><Loader2 className="w-5 h-5 animate-spin" /> Bezig…</>)
+                : (<>Account aanmaken <ArrowRight className="w-5 h-5" /></>)}
+            </button>
+
+            {/* Social proof */}
+            <div className="rounded-xl bg-emerald-50/70 border border-emerald-100 p-3 flex items-center gap-3">
+              <div className="flex -space-x-2">
+                {['JK', 'SM', 'RB'].map((init, i) => (
+                  <span key={init} className={`w-8 h-8 rounded-full ring-2 ring-white flex items-center justify-center text-[10px] font-extrabold text-white shadow-sm ${
+                    i === 0 ? 'bg-emerald-500' : i === 1 ? 'bg-emerald-600' : 'bg-emerald-700'
+                  }`}>{init}</span>
+                ))}
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center gap-1">
+                  {[0,1,2,3,4].map((i) => <Star key={i} className="w-3 h-3 fill-amber-400 text-amber-400" />)}
+                </div>
+                <p className="text-xs font-bold text-slate-700 mt-0.5">500+ tevreden klanten</p>
+              </div>
             </div>
+
+            <p className="text-center text-sm text-slate-500">
+              Heeft u al een account?{' '}
+              <button type="button" onClick={() => { setMode('login'); setError(''); }} className="font-bold text-[#FF5C00] hover:underline">
+                Log hier in
+              </button>
+            </p>
           </form>
           </div>
         </div>
-
-        {/* RIGHT: voordelen panel — fullscreen, sticky */}
-        <aside className="hidden lg:flex flex-col justify-between p-12 xl:p-16 text-white relative overflow-hidden lg:sticky lg:top-0 lg:h-screen"
-          style={{ background: 'linear-gradient(160deg, #FF5C00 0%, #C74600 100%)' }}>
-          <div className="absolute -top-32 -right-32 w-[500px] h-[500px] rounded-full opacity-15 blur-3xl bg-white" />
-          <div className="absolute bottom-[-20%] left-[-20%] w-[500px] h-[500px] rounded-full opacity-10 blur-3xl bg-[#FFE0C2]" />
-
-          <div className="relative z-10">
-            <p className="text-xs font-black tracking-[0.32em] uppercase text-white/75 mb-4">SuriRent N.V.</p>
-            <h3 className="text-4xl xl:text-5xl font-black leading-[1.05]">
-              Het complete <br />vastgoed-platform <br />voor Suriname.
-            </h3>
-            <p className="text-base text-white/85 mt-6 leading-relaxed max-w-md">
-              Honderden eenheden, automatische facturatie en een Kiosk PWA — vanaf dag één klaar voor gebruik.
-            </p>
-          </div>
-
-          <ul className="relative z-10 space-y-4 my-10">
-            {[
-              'Multi-tenant white-label SaaS',
-              'Kiosk PWA voor selfservice',
-              'Automatische facturatie & boetes',
-              'AI-OCR voor betalingen',
-              'Live betalingsstatus + WhatsApp',
-              '24/7 superadmin support',
-            ].map((feat) => (
-              <li key={feat} className="flex items-start gap-3 text-base">
-                <span className="w-7 h-7 rounded-full bg-white/15 backdrop-blur-sm flex items-center justify-center shrink-0 mt-0.5">
-                  <Check className="w-4 h-4 text-white" strokeWidth={3} />
-                </span>
-                <span className="font-semibold text-white/95">{feat}</span>
-              </li>
-            ))}
-          </ul>
-
-          <div className="relative z-10 pt-8 border-t border-white/20">
-            <div className="flex items-center gap-2.5 mb-3">
-              {[0,1,2,3,4].map((i) => <Star key={i} className="w-4 h-4 fill-white text-white" />)}
-              <span className="text-sm font-extrabold text-white">5.0</span>
-            </div>
-            <p className="text-sm text-white/85 italic leading-relaxed">
-              &ldquo;Eindelijk een platform dat begrijpt hoe een Surinaams vastgoedbedrijf draait.&rdquo;
-            </p>
-            <p className="text-xs text-white/65 mt-2 font-bold uppercase tracking-wider">Pilot klant · 2026</p>
-          </div>
-        </aside>
       </div>
       ) : (
         <div
@@ -1512,6 +1521,7 @@ function PasswordView({ initialMode = 'login', onBack, onRegistered, branding })
               <ArrowLeft className="w-4 h-4" /> Terug naar PIN
             </button>
           )}
+
 
           <div className="text-center mb-5">
             <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-[#FF5C00] flex items-center justify-center mx-auto mb-3 shadow-lg shadow-orange-500/20">
