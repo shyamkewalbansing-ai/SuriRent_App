@@ -1491,3 +1491,13 @@ Lint clean. Verified via desktop screenshots (1440×900): élke admin-pagina (Ov
 2. **Backend** (`server.py` PUT /kiosk/customer-display): Mope/Uni5Pay QR-velden (`mope_qr`, `mope_ref`, `mope_mode`, etc.) worden nu ALLEEN behouden tijdens `confirm`/`receipt` steps. Bij `idle`/`method`/`overview` worden stale QR-data niet meer doorgegeven — voorkomt dat een oude QR-code eeuwig blijft hangen op het klantenscherm.
 
 Backend draait stabiel ✓ (HTTP 200)
+
+## 2026-02-06 — Robust receipt deduplicatie op klantenscherm
+- **Issue**: Klantenscherm bleef "BETALING ONTVANGEN" herhalen en flikkeren tussen schermen, ook na receipt-TTL en applyState dedup.
+- ✅ **Frontend fix**: `CustomerDisplay.jsx` houdt nu via `shownReceipt` useState bij welke receipt (receipt_number of paid_at) al getoond is. Bij volgende polls met dezelfde receipt-key wordt het effective step gedwongen naar 'idle' — geen herhalingen meer.
+- ✅ Logic: `effectiveStep = (step === 'receipt' && alreadyShown) ? 'idle' : step` — alle rendering gebruikt nu `effectiveStep` i.p.v. `step`.
+- ✅ Combineert met eerdere fixes:
+  1. Backend TTL 12s op receipt step (auto-idle)
+  2. applyState `<=` timestamp check (geen identieke updates)
+  3. Backend selectieve `mope_qr` preservatie (alleen tijdens confirm/receipt)
+  4. Verwijdering van dead-code `Uni5PayQRScreen` functie

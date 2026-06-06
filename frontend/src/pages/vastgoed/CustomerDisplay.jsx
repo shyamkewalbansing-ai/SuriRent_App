@@ -501,6 +501,7 @@ export default function CustomerDisplay() {
   const [error, setError] = useState('');
   const [pickerSlug, setPickerSlug] = useState('');
   const lastUpdate = useRef(0);
+  const [shownReceipt, setShownReceipt] = useState('');
 
   // Resolve slug via host if not known.
   useEffect(() => {
@@ -535,6 +536,18 @@ export default function CustomerDisplay() {
     bc.addEventListener('message', handler);
     return () => { bc.removeEventListener('message', handler); bc.close(); };
   }, [applyState]);
+
+  // 1b) Receipt-deduplicatie tracker — wanneer state.step naar receipt gaat,
+  // onthoud de unieke receipt-key zodat we bij volgende polls niet opnieuw
+  // de "Betaling ontvangen" popup tonen voor dezelfde transactie.
+  // Hooks MOETEN voor early-returns staan (rules-of-hooks).
+  useEffect(() => {
+    const s = state?.step;
+    const key = (state?.payment?.receipt_number || state?.payment?.paid_at || '');
+    if (s === 'receipt' && key && key !== shownReceipt) {
+      setShownReceipt(key);
+    }
+  }, [state, shownReceipt]);
 
   // 2) Backend polling — fallback voor cross-device + branding load
   const stopped = useRef(false);
@@ -612,6 +625,15 @@ export default function CustomerDisplay() {
 
   const step = state?.step || 'idle';
 
+  // Receipt deduplicatie — wanneer dezelfde betaling al getoond is (zelfde
+  // receipt_number of payment.paid_at), forceer idle. Voorkomt dat het
+  // klantenscherm telkens opnieuw "BETALING ONTVANGEN" herhaalt wanneer
+  // de operator een nieuwe sessie start zonder de display expliciet te
+  // resetten.
+  const receiptKey = (state?.payment?.receipt_number || state?.payment?.paid_at || '');
+  const alreadyShown = !!receiptKey && receiptKey === shownReceipt;
+  const effectiveStep = (step === 'receipt' && alreadyShown) ? 'idle' : step;
+
   return (
     <div className="fixed inset-0 overflow-hidden"
       style={{
@@ -623,12 +645,12 @@ export default function CustomerDisplay() {
       }}
       data-testid="cd-root">
       <AnimatePresence mode="wait">
-        {(step === 'idle' || step === 'check') && <IdleScreen branding={branding} />}
-        {step === 'select' && <GreetScreen state={state} branding={branding} />}
-        {step === 'overview' && <OverviewScreen state={state} slug={slug} />}
-        {step === 'pay' && <PayScreen state={state} />}
-        {(step === 'method' || step === 'confirm') && <MethodScreen state={state} slug={slug} />}
-        {step === 'receipt' && <ReceiptScreen state={state} />}
+        {(effectiveStep === 'idle' || effectiveStep === 'check') && <IdleScreen branding={branding} />}
+        {effectiveStep === 'select' && <GreetScreen state={state} branding={branding} />}
+        {effectiveStep === 'overview' && <OverviewScreen state={state} slug={slug} />}
+        {effectiveStep === 'pay' && <PayScreen state={state} />}
+        {(effectiveStep === 'method' || effectiveStep === 'confirm') && <MethodScreen state={state} slug={slug} />}
+        {effectiveStep === 'receipt' && <ReceiptScreen state={state} />}
       </AnimatePresence>
 
       {/* Tiny footer met bedrijfsnaam + live indicator */}
