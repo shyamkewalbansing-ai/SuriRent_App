@@ -1390,3 +1390,18 @@ Lint clean. Verified via desktop screenshots (1440×900): élke admin-pagina (Ov
 - ✅ 3 unescaped quotes in JSX strings vervangen door `&quot;` (Help modal teksten).
 - ✅ Lint errors in `LoginPage.jsx`: van 43 → 1. De resterende 1 is een pre-existing false positive van `react-hooks/set-state-in-effect` op een setInterval polling (code draait correct in productie).
 
+## 2026-02-06 — LoginPage modulair gerefactord (1960 → 257 regels)
+- ✅ Nieuwe map `/app/frontend/src/pages/vastgoed/auth/` met 8 modulaire componenten:
+  - `LoginHeader.jsx` (51 regels) — Clock + Header
+  - `QrScannerModal.jsx` (~195 regels) — camera scanner
+  - `QrLoginTab.jsx` (~100 regels) — QR login tab
+  - `PinLogin.jsx` (~450 regels) — PinLanding numpad
+  - `HelpModal.jsx` (~63 regels) — help uitleg
+  - `EmailLogin.jsx` (~675 regels) — PasswordView (e-mail/wachtwoord card)
+  - `ForgotPasswordModal.jsx` (~148 regels) — wachtwoord vergeten flow
+  - `RegisterSuccess.jsx` (~78 regels) — registratie success scherm + Bank helper
+- ✅ `LoginPage.jsx`: van 1960 → **257 regels** — nu pure orchestrator (branding-detection + view-router).
+- ✅ Alle `data-testid` attributes behouden — geen test breakage.
+- ✅ Lint errors in `LoginPage.jsx`: 0 errors. In auth/ map: alleen 1 pre-existing false positive.
+- ✅ Testing agent geverifieerd (iteration_33): 8/9 expliciete tests PASS, ene "issue" is bewuste pre-existing gedrag (branded desktop toont email-form, niet PIN-pad — al zo voor refactor). Geen regressies.
+
