@@ -1507,3 +1507,8 @@ Backend draait stabiel ✓ (HTTP 200)
 - ✅ **Fix**: Branding wordt nu alleen opnieuw geappliceerd wanneer er ECHT iets verandert. Een `lastBrandKey` (JSON-fingerprint van primary_color, logo_url, name, etc.) wordt vergeleken — alleen bij verschil triggert `applyBranding`.
 - ✅ Polling blijft elke 700ms draaien voor state-updates, maar branding wordt nu typisch slechts 1x toegepast bij eerste poll. Geen visuele flikkering meer.
 - ✅ Combineert met alle eerdere fixes voor een definitief stabiel klantenscherm.
+
+## 2026-02-06 — FINALE FIX: content-hash dedup voorkomt re-renders door heartbeats
+- **Diagnose**: De kiosk operator's heartbeat update elke 3s het customer_display DB record met een nieuwe `updated_at`, OOK als de state-content identiek is. Customer's polling zag dus elke 3s een "nieuwe" state en triggerde een React re-render → AnimatePresence speelt animaties opnieuw af → flikkering.
+- ✅ **Fix**: `applyState` doet nu een **content-hash dedup** bovenop de timestamp check. Een JSON-hash van (step, amount, currency, method, method_chosen_at, mope_qr, mope_paid_at, tenant_id, apartment_id, receipt_number) wordt vergeleken — alleen bij ECHTE content-wijziging triggert `setState` een re-render.
+- ✅ Eindeloze heartbeat-updates die alleen de timestamp wijzigen worden nu volledig genegeerd. Het klantenscherm rendert alleen bij echte state-overgangen.

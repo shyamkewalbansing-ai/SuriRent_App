@@ -514,15 +514,35 @@ export default function CustomerDisplay() {
     return () => { alive = false; };
   }, [slug]);
 
+  const lastStateKey = useRef('');
   const applyState = useCallback((newState, source) => {
-    // Negeer als de nieuwe update OUDER OF GELIJK is aan de huidige —
-    // identieke timestamps (zelfde poll-resultaat) zouden anders elke
-    // 500ms een re-render forceren en de receipt-animatie opnieuw
-    // afspelen waardoor het lijkt of de popup steeds opnieuw verschijnt.
+    // STAP 1 — Tijdstempel check: negeer oudere updates (out-of-order)
     try {
       const t = newState?.updated_at ? new Date(newState.updated_at).getTime() : Date.now();
-      if (t <= lastUpdate.current) return;
+      if (t < lastUpdate.current) return;
       lastUpdate.current = t;
+    } catch { /* ignore */ }
+    // STAP 2 — CONTENT-HASH dedup: ook al heeft de operator heartbeat een
+    // nieuwe `updated_at` gezet, als de daadwerkelijke content (step + payload)
+    // identiek is aan de vorige update, doen we NIETS. Voorkomt de constante
+    // re-renders elke 3s door operator-heartbeats die het klantenscherm
+    // anders zou laten flikkeren.
+    try {
+      const contentKey = JSON.stringify({
+        step: newState?.step,
+        // Belangrijke payload-velden voor herrendering:
+        amount: newState?.payload?.amount,
+        currency: newState?.payload?.currency,
+        method: newState?.payload?.method,
+        method_chosen_at: newState?.payload?.method_chosen_at,
+        mope_qr: newState?.payload?.mope_qr,
+        mope_paid_at: newState?.payload?.mope_paid_at,
+        tenant_id: newState?.tenant?.id,
+        apartment_id: newState?.apartment?.id,
+        receipt_number: newState?.payment?.receipt_number,
+      });
+      if (contentKey === lastStateKey.current) return;
+      lastStateKey.current = contentKey;
     } catch { /* ignore */ }
     setState(newState || { step: 'idle' });
     if (source) console.debug('[customer-display] update via', source);
