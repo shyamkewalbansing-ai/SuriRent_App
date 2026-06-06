@@ -1531,3 +1531,18 @@ Backend draait stabiel ✓ (HTTP 200)
   5. → **FLIKKERING tussen receipt en idle**
 - ✅ **Fix in KioskLayout.jsx heartbeat-effect**: Content-hash dedup toegevoegd via `pushKeyRef`. Een JSON-hash van (step, apartment.id, tenant.name, amount, currency, method, method_chosen_at, receipt_number, paid_at) wordt vergeleken — alleen bij ECHTE wijziging duwt de heartbeat naar BroadcastChannel + DB. Identieke heartbeats worden volledig genegeerd.
 - ✅ Combineert met de eerdere applyState content-hash dedup voor dubbele bescherming: zowel sender (operator) als receiver (customer-display) deduperen nu op content.
+
+## 2026-02-06 — Uni5Pay+ QR-kaart redesign + Rood/Groen status
+- ✅ **"Betaal met UNI5PAY+" branding** toegevoegd boven QR: zwarte "Betaal met" tekst + rode "UNI5PAY+" logo (E40521) met ronde "+" badge — matcht de officiële Uni5Pay sticker.
+- ✅ **Rood/Groen status border** rond QR-kaart:
+  - 🔴 ROOD `ring-red-500` + "Wacht op bedrag" badge + half-transparent rood overlay met "Nog niet actief" pill: wanneer geen QR is gegenereerd en bedrag = 0
+  - 🟢 GROEN `ring-emerald-500` + "Klaar om te scannen" badge: wanneer `payload.mope_qr` of bedrag > 0
+  - Klant ziet direct of scannen zin heeft
+- ✅ **Center logo overlay** in QR: zwart-witte cirkel met rood "+" symbool (icoon van Uni5Pay). QR niveau verhoogd naar 'H' (30% error correction) zodat scan-betrouwbaarheid behouden blijft ondanks center-cutout.
+- ✅ **"scan QR code" pill** onderaan: zwart pill met phone-icoon + tekst, exact zoals officiële Uni5Pay sticker.
+- ✅ Button is disabled wanneer niet ready — voorkomt verkeerde clicks.
+
+## ⚠️ Nog open (volgende iteratie)
+- Real-time sync van kiosk-operator clicks naar klantenscherm (heartbeat dedup mag niet blokkeren)
+- Bankoverschrijving: bank-details tonen uit bedrijf-settings wanneer klant bank selecteert
+- Contant betaalflow: visuele feedback wat er gebeurt na keuze

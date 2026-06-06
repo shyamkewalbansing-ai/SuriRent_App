@@ -4,7 +4,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { QRCodeSVG } from 'qrcode.react';
 import {
   CheckCircle2, Wallet, Home as HomeIcon, FileText, Wifi,
-  CreditCard, Banknote, Loader2, ChevronRight, QrCode,
+  CreditCard, Banknote, Smartphone, Loader2, ChevronRight, QrCode,
 } from 'lucide-react';
 import { api, fmtMoney, MONTHS_NL } from '../../lib/api';
 import {
@@ -404,47 +404,90 @@ function MethodScreen({ state, slug }) {
           </div>
         </div>
 
-        {/* ===== RECHTER KOLOM — Uni5Pay QR ===== */}
+        {/* ===== RECHTER KOLOM — Uni5Pay QR met branding + ready-status =====
+            ROOD border: nog niet klaar (geen bedrag / wachten op operator).
+            GROEN border: klaar om te scannen (Uni5Pay QR is gegenereerd OF
+            mock-modus met geldig bedrag). Helpt klant te zien wanneer
+            scannen relevant is. */}
+        {(() => {
+          const ready = Boolean(payload.mope_qr) || amt > 0;
+          const statusBorder = ready ? 'ring-emerald-500' : 'ring-red-500';
+          const statusBg = ready ? 'bg-emerald-500' : 'bg-red-500';
+          const statusText = ready ? 'Klaar om te scannen' : 'Wacht op bedrag';
+          return (
         <button
           onClick={() => pick('mope')}
-          disabled={busy}
+          disabled={busy || !ready}
           data-testid="cd-method-mope"
-          className={`bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-5 lg:p-6 shadow-2xl flex flex-col items-center text-center transition disabled:opacity-60 ${
-            customerChose && chosen === 'mope' ? 'ring-4 ring-[#FF5C00]' : ''
+          className={`bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-5 lg:p-6 shadow-2xl flex flex-col items-center text-center transition disabled:opacity-90 ring-4 ${statusBorder} ${
+            customerChose && chosen === 'mope' ? 'ring-[#FF5C00]' : ''
           }`}
         >
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-100 text-emerald-700 mb-2"
+          {/* "Betaal met UNI5PAY+" header — gebrand zoals Uni5Pay sticker */}
+          <p className="font-black text-slate-900 tracking-tight"
+            style={{ fontSize: clamp(13, 1.5, 22) }}>Betaal met</p>
+          <p className="font-black tracking-tight flex items-baseline gap-1 leading-none"
+            style={{ fontSize: clamp(22, 2.8, 38), color: '#E40521' }}>
+            UNI5PAY
+            <span className="inline-flex items-center justify-center rounded-full text-white"
+              style={{ fontSize: '0.6em', width: '1em', height: '1em', background: '#E40521', marginLeft: '0.1em' }}>+</span>
+          </p>
+
+          {/* Status badge (ROOD/GROEN) */}
+          <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full mt-2 mb-2 text-white ${statusBg}`}
             style={{ fontSize: clamp(9, 0.85, 13) }}>
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="font-black uppercase tracking-widest">Uni5Pay actief</span>
+            <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+            <span className="font-black uppercase tracking-widest">{statusText}</span>
           </div>
-          <div className="bg-white rounded-xl p-2 sm:p-3"
+
+          {/* QR met "+" logo overlay in midden */}
+          <div className="relative bg-white rounded-xl p-2"
             style={{ width: clamp(180, 22, 320), height: clamp(180, 22, 320) }}>
             {(() => {
-              // Build QR value met fallback. Beperk lengte tot 1000 chars
-              // (QRCodeSVG capaciteit bij level 'L' ≈ 1273 alfanum.).
               const fallbackUrl = `${(typeof window !== 'undefined' ? window.location.origin : '')}/api/payments/mock-pay/${payload.order_id || 'demo'}?amount=${amt}&currency=${cur}`;
               let qrValue = payload.mope_qr || fallbackUrl;
               if (typeof qrValue !== 'string') qrValue = String(qrValue || '');
-              // Te lange data → val terug op de fallback URL.
               if (qrValue.length > 1000) qrValue = fallbackUrl;
               return (
                 <QRCodeSVG
                   value={qrValue}
                   size="100%"
-                  level="L"
+                  level="H"
                   bgColor="#FFFFFF"
                   fgColor="#0F0F0F"
                   style={{ width: '100%', height: '100%' }}
+                  imageSettings={{
+                    src: '',
+                    height: 0,
+                    width: 0,
+                    excavate: true,
+                  }}
                 />
               );
             })()}
+            {/* Center logo overlay — Uni5Pay "+" icoon */}
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full flex items-center justify-center border-4 border-white bg-black"
+              style={{ width: '22%', height: '22%' }}>
+              <span className="font-black text-white" style={{ fontSize: '1.2em', color: '#E40521' }}>+</span>
+            </div>
+            {/* ROOD overlay als niet ready — visueel signaal */}
+            {!ready && (
+              <div className="absolute inset-0 bg-red-500/50 rounded-xl flex items-center justify-center">
+                <span className="bg-white text-red-700 font-black px-3 py-1.5 rounded-full"
+                  style={{ fontSize: clamp(10, 1.0, 14) }}>Nog niet actief</span>
+              </div>
+            )}
           </div>
-          <p className="font-black text-slate-900 tracking-tight mt-2 sm:mt-3"
-            style={{ fontSize: clamp(16, 1.9, 26) }}>Scan om te betalen</p>
-          <p className="text-slate-500 font-medium"
-            style={{ fontSize: clamp(11, 1.0, 14) }}>met je telefoon-camera</p>
+
+          {/* "scan QR code" pill */}
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-slate-900 text-white mt-3"
+            style={{ fontSize: clamp(12, 1.2, 16) }}>
+            <Smartphone style={{ width: clamp(14, 1.4, 20), height: clamp(14, 1.4, 20) }} />
+            <span className="font-bold">scan QR code</span>
+          </div>
         </button>
+          );
+        })()}
       </div>
 
       {error && (
