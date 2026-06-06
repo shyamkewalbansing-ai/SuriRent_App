@@ -1405,3 +1405,18 @@ Lint clean. Verified via desktop screenshots (1440×900): élke admin-pagina (Ov
 - ✅ Lint errors in `LoginPage.jsx`: 0 errors. In auth/ map: alleen 1 pre-existing false positive.
 - ✅ Testing agent geverifieerd (iteration_33): 8/9 expliciete tests PASS, ene "issue" is bewuste pre-existing gedrag (branded desktop toont email-form, niet PIN-pad — al zo voor refactor). Geen regressies.
 
+## 2026-02-06 — PWA First-Time Onboarding Screen
+- ✅ Nieuwe component `PwaOnboarding.jsx` in `/app/frontend/src/components/` met 3 grote keuze-cards:
+  - 🏢 **Ik heb een bedrijf** (met "14 dagen gratis" badge) → `/?register=1` (register wizard)
+  - 🔑 **Ik heb al een account** → mobile/desktop email login
+  - 👤 **Ik ben huurder** → `/huurder` portaal
+- ✅ Triggert alleen wanneer ALLE volgende waar zijn:
+  1. Komt van PWA (`?source=pwa` query OR `isStandalonePWA()`)
+  2. Geen keuze opgeslagen in `localStorage.pwa_onboarding_choice`
+  3. Generieke `/login` (geen branded slug)
+  4. Geen expliciete `?view=` / `?register=1` / `?target=` query (manifest shortcuts slaan onboarding over)
+  5. Geen ingelogde user
+- ✅ Stijl matcht PIN-pad: oranje full-screen + logo-cirkel + decoratieve blur-circels.
+- ✅ Keuze opgeslagen in `localStorage` zodat volgende PWA-opens direct naar de juiste flow gaan.
+- ✅ Geverifieerd: onboarding verschijnt op `/login?source=pwa` mobiel, klikken op een card slaat keuze op en navigeert naar de juiste view.
+

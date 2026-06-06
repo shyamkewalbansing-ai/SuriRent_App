@@ -11,6 +11,7 @@ import {
 } from '../../lib/branding';
 import PinLanding from './auth/PinLogin';
 import PasswordView from './auth/EmailLogin';
+import PwaOnboarding, { PWA_ONBOARDING_KEY } from '../../components/PwaOnboarding';
 
 
 // =============================================================================
@@ -41,6 +42,43 @@ export default function LoginPage() {
   })();
   const [view, setView] = useState(initialView);
   const [skipRedirect, setSkipRedirect] = useState(false);
+
+  // ────────────────────────────────────────────────────────────────────
+  // PWA Onboarding — eerste-keer welkom-scherm na PWA installatie.
+  // Toont 3 keuzes (nieuw bedrijf / inloggen / huurder) als:
+  //   1) De gebruiker komt vanaf de PWA (?source=pwa of standalone mode)
+  //   2) Er nog geen keuze is opgeslagen in localStorage
+  //   3) Generieke /login (geen branding.slug — branded portals slaan dit over)
+  // ────────────────────────────────────────────────────────────────────
+  const [showOnboarding, setShowOnboarding] = useState(() => {
+    try {
+      const fromPwa = searchParams.get('source') === 'pwa' || isStandalonePWA();
+      if (!fromPwa) return false;
+      const saved = localStorage.getItem(PWA_ONBOARDING_KEY);
+      // Als al eerder gekozen, sla onboarding over.
+      if (saved) return false;
+      // ?view=login of ?view=register expliciet meegegeven? → sla onboarding over.
+      const v = (searchParams.get('view') || '').toLowerCase();
+      if (v) return false;
+      if (searchParams.get('register') === '1') return false;
+      // ?target=kiosk of ?target=admin uit manifest shortcut? → sla over (zij weten wat ze willen).
+      if (searchParams.get('target')) return false;
+      return true;
+    } catch { return false; }
+  });
+
+  const handleOnboardingChoice = (choice) => {
+    setShowOnboarding(false);
+    if (choice === 'bedrijf') {
+      // Naar landing met register modal direct open.
+      window.location.assign('/?register=1');
+    } else if (choice === 'huurder') {
+      window.location.assign('/huurder');
+    } else {
+      // 'login' — blijf op /login en toon email/wachtwoord (of PIN op branded).
+      setView('login');
+    }
+  };
 
   // ────────────────────────────────────────────────────────────────────
   // Registratie modal-redirect — wanneer iemand op /login?register=1 of
@@ -203,6 +241,17 @@ export default function LoginPage() {
       navigate('/admin', { replace: true });
     }
   }, [user, loading, navigate, skipRedirect]);
+
+  // ────────────────────────────────────────────────────────────────────
+  // PWA Onboarding heeft voorrang op alle andere views — alleen voor
+  // eerste-keer PWA gebruikers zonder branded context en zonder ingelogde
+  // user. Branded portals (/<slug>/login) tonen direct hun PIN-pad.
+  // ────────────────────────────────────────────────────────────────────
+  if (showOnboarding && !branding?.slug && !user) {
+    return (
+      <PwaOnboarding onChoice={handleOnboardingChoice} primary={branding?.primary_color || '#FF5C00'} />
+    );
+  }
 
   if (view === 'login' || view === 'register') {
     return (
