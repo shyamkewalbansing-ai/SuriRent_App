@@ -234,6 +234,53 @@ function OverviewScreen({ state, slug }) {
 }
 
 // =====================================================================
+// TenantBanner — toont huidige huurder + appartement op betaalschermen
+// =====================================================================
+// Compact, elegant banner dat altijd zichtbaar is tijdens PAY, METHOD en
+// CONFIRM steps zodat de klant + omstanders duidelijk zien om welk
+// appartement en welke huurder het gaat. Avatar = initiaal in branded
+// cirkel; mooi met glasmorfisme bovenop het oranje achtergrond.
+function TenantBanner({ state, dense = false }) {
+  const apt = state?.apartment || {};
+  const tenant = state?.tenant || {};
+  const name = (tenant.name || apt.tenant_name || '').trim();
+  const initial = (name[0] || '?').toUpperCase();
+  if (!name && !apt.number) return null;
+  const padding = dense ? 'px-3 py-2 sm:px-4 sm:py-2.5' : 'px-4 py-3 sm:px-5 sm:py-3.5';
+  return (
+    <div data-testid="cd-tenant-banner"
+      className={`inline-flex items-center gap-3 sm:gap-4 bg-white/15 backdrop-blur-md border border-white/25 rounded-2xl shadow-lg ${padding}`}>
+      {/* Avatar — initiaal in witte cirkel met brand-kleur tekst */}
+      <div className="rounded-full bg-white text-[#FF5C00] flex items-center justify-center shrink-0 shadow-inner"
+        style={{ width: clamp(36, 4, 56), height: clamp(36, 4, 56) }}>
+        <span className="font-black tracking-tight" style={{ fontSize: clamp(16, 1.8, 26) }}>{initial}</span>
+      </div>
+      <div className="text-left min-w-0">
+        {name && (
+          <p className="font-black text-white tracking-tight leading-tight truncate"
+            style={{ fontSize: clamp(15, 1.55, 26) }} data-testid="cd-tenant-name">{name}</p>
+        )}
+        <div className="flex items-center gap-2 mt-0.5 text-white/85"
+          style={{ fontSize: clamp(11, 1.05, 16) }}>
+          {apt.number && (
+            <span className="inline-flex items-center gap-1 font-bold" data-testid="cd-apartment-number">
+              <HomeIcon style={{ width: '0.9em', height: '0.9em' }} strokeWidth={2.4} />
+              App. {apt.number}
+            </span>
+          )}
+          {apt.address && (
+            <>
+              <span className="opacity-50">·</span>
+              <span className="truncate font-medium" data-testid="cd-apartment-address">{apt.address}</span>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// =====================================================================
 // PaySelect — checklist + lopend totaal
 // =====================================================================
 function PayScreen({ state }) {
@@ -241,44 +288,164 @@ function PayScreen({ state }) {
   const cats = payload.categories || [];
   const cur = payload.currency || 'SRD';
   const amt = Number(payload.amount || 0);
+  const apt = state.apartment || {};
+  const tenant = state.tenant || {};
+  const name = (tenant.name || apt.tenant_name || '').trim();
+  const initial = (name[0] || '?').toUpperCase();
   const labels = {
     huur: 'Huur', servicekosten: 'Servicekosten',
     boete: 'Boetes', internet: 'Internet', overig: 'Overig',
   };
+  const ICONS_BY_KEY = {
+    huur: HomeIcon, servicekosten: FileText, boete: FileText,
+    internet: Wifi, overig: Wallet,
+  };
+  const isEmpty = cats.length === 0;
+  // Staggered reveal voor het hele scherm
+  const container = { hidden: {}, show: { transition: { staggerChildren: 0.06 } } };
+  const item = { hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0 } };
 
   return (
     <motion.div key="pay"
-      initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }}
-      transition={{ duration: 0.3 }}
-      className="absolute inset-0 flex flex-col items-center justify-center px-4 sm:px-8 text-white"
+      variants={container} initial="hidden" animate="show"
+      exit={{ opacity: 0, y: -20 }}
+      transition={{ duration: 0.35, ease: 'easeOut' }}
+      className="absolute inset-0 flex flex-col px-4 sm:px-8 lg:px-14 py-6 lg:py-10"
       data-testid="cd-pay">
-      <p className="font-black uppercase tracking-[0.3em] text-white/85 mb-2 text-center"
-        style={{ fontSize: clamp(10, 1.0, 16) }}>U betaalt zo</p>
-      <div className="w-full max-w-3xl bg-white rounded-2xl sm:rounded-3xl shadow-2xl p-4 sm:p-8 lg:p-10">
-        <p className="font-black uppercase tracking-widest text-slate-400"
-          style={{ fontSize: clamp(10, 1.0, 16) }}>Onderdelen</p>
-        <ul className="mt-2 sm:mt-3 space-y-2">
-          {cats.length === 0 && (
-            <li className="text-slate-400"
-              style={{ fontSize: clamp(13, 1.3, 18) }}>Nog geen onderdeel geselecteerd…</li>
+
+      {/* GRID: links = huurder-identiteit, rechts = transactie */}
+      <div className="flex-1 min-h-0 w-full max-w-[1400px] mx-auto grid grid-cols-1 lg:grid-cols-[minmax(300px,400px)_1fr] gap-5 lg:gap-10 items-stretch overflow-hidden">
+
+        {/* ===== LINKS — Huurder identiteit kaart ===== */}
+        <motion.div variants={item}
+          className="relative bg-white/10 backdrop-blur-2xl border border-white/20 rounded-3xl shadow-2xl p-5 sm:p-6 lg:p-8 flex flex-col text-white overflow-hidden">
+
+          {/* Subtle inner highlight */}
+          <div className="absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/10 to-transparent pointer-events-none rounded-t-3xl" />
+
+          <p className="relative font-black uppercase tracking-[0.35em] text-white/70"
+            style={{ fontSize: clamp(9, 0.85, 12) }}>Huurder</p>
+
+          <div className="relative mt-3 sm:mt-4 flex items-center gap-3 sm:gap-4">
+            <motion.div
+              initial={{ scale: 0.7, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+              transition={{ delay: 0.25, type: 'spring', stiffness: 220, damping: 16 }}
+              className="rounded-2xl bg-gradient-to-br from-white to-white/85 text-[#FF5C00] flex items-center justify-center shrink-0 shadow-xl"
+              style={{ width: clamp(60, 7, 92), height: clamp(60, 7, 92) }}>
+              <span className="font-black tracking-tight"
+                style={{ fontSize: clamp(28, 3.2, 44) }}>{initial}</span>
+            </motion.div>
+            <div className="min-w-0 flex-1">
+              <p className="font-black tracking-tight leading-tight text-white break-words"
+                style={{ fontSize: clamp(18, 1.85, 28) }} data-testid="cd-tenant-name">
+                {name || 'Gewaardeerde huurder'}
+              </p>
+              {apt.number && (
+                <p className="mt-1.5 font-bold text-white/80 inline-flex items-center gap-1"
+                  style={{ fontSize: clamp(12, 1.2, 16) }} data-testid="cd-apartment-number">
+                  <HomeIcon style={{ width: '0.9em', height: '0.9em' }} strokeWidth={2.4} />
+                  Appartement {apt.number}
+                </p>
+              )}
+            </div>
+          </div>
+
+          {apt.address && (
+            <div className="relative mt-4 pt-4 border-t border-white/15">
+              <p className="font-black uppercase tracking-[0.28em] text-white/55"
+                style={{ fontSize: clamp(9, 0.8, 11) }}>Adres</p>
+              <p className="mt-1 font-bold text-white/95 break-words leading-snug"
+                style={{ fontSize: clamp(13, 1.3, 18) }} data-testid="cd-apartment-address">
+                {apt.address}
+              </p>
+            </div>
           )}
-          {cats.map((c) => (
-            <li key={c.key || c.label}
-              className="flex items-center justify-between bg-slate-50 rounded-2xl px-3 sm:px-4 py-2 sm:py-3 gap-3">
-              <span className="font-bold text-slate-800 truncate"
-                style={{ fontSize: clamp(14, 1.5, 22) }}>{c.label || labels[c.key] || c.key}</span>
-              <span className="font-black text-slate-900 whitespace-nowrap"
-                style={{ fontSize: clamp(14, 1.5, 22) }}>{fmtMoney(c.value || c.amount || 0, cur)}</span>
-            </li>
-          ))}
-        </ul>
-        <div className="mt-4 sm:mt-6 border-t-2 border-slate-200 pt-3 sm:pt-4 flex items-center justify-between gap-3">
-          <p className="font-black text-slate-700" style={{ fontSize: clamp(16, 1.8, 30) }}>Totaal</p>
-          <p className="font-black text-[#FF5C00] tracking-tight whitespace-nowrap"
-            style={{ fontSize: clamp(28, 4.5, 80) }} data-testid="cd-pay-total">
-            {fmtMoney(amt, cur)}
-          </p>
-        </div>
+
+          {/* Live status pill onderin */}
+          <div className="relative mt-auto pt-4">
+            <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-400/20 border border-emerald-300/40 text-emerald-50"
+              style={{ fontSize: clamp(10, 0.9, 13) }}>
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-300 animate-pulse" />
+              <span className="font-black uppercase tracking-widest">Live samenstellen</span>
+            </span>
+          </div>
+        </motion.div>
+
+        {/* ===== RECHTS — Transactie kaart ===== */}
+        <motion.div variants={item}
+          className="relative bg-white rounded-3xl shadow-2xl p-5 sm:p-7 lg:p-10 flex flex-col min-h-0 overflow-hidden">
+
+          {/* Decoratieve gradient strip bovenin */}
+          <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-orange-400 via-[#FF5C00] to-amber-500" />
+          <div className="flex items-end justify-between mb-4 sm:mb-5">
+            <div>
+              <p className="font-black uppercase tracking-[0.32em] text-slate-400"
+                style={{ fontSize: clamp(9, 0.9, 12) }}>Uw betaling</p>
+              <h2 className="font-black text-slate-900 tracking-tight leading-tight mt-1"
+                style={{ fontSize: clamp(22, 2.6, 38) }}>Onderdelen</h2>
+            </div>
+          </div>
+
+          <ul className="space-y-2 sm:space-y-2.5 overflow-auto pr-1 -mr-1">
+            {isEmpty && (
+              <li className="flex items-center gap-3 text-slate-400 bg-slate-50 rounded-2xl px-4 py-3"
+                style={{ fontSize: clamp(13, 1.3, 18) }}>
+                <Loader2 className="animate-spin shrink-0" style={{ width: clamp(16, 1.6, 22), height: clamp(16, 1.6, 22) }} />
+                <span>Een medewerker stelt uw betaling samen…</span>
+              </li>
+            )}
+            <AnimatePresence initial={false}>
+              {cats.map((c, idx) => {
+                const Icon = ICONS_BY_KEY[c.key] || Wallet;
+                return (
+                  <motion.li
+                    key={c.key + '|' + (c.label || '') + '|' + idx}
+                    initial={{ opacity: 0, x: -18, scale: 0.97 }}
+                    animate={{ opacity: 1, x: 0, scale: 1 }}
+                    exit={{ opacity: 0, x: 18, scale: 0.97 }}
+                    transition={{ duration: 0.25, ease: 'easeOut' }}
+                    className="flex items-center justify-between bg-gradient-to-r from-orange-50/60 via-white to-white border border-slate-100 rounded-2xl px-3 sm:px-4 py-2.5 sm:py-3.5 gap-3 shadow-sm hover:shadow-md transition-shadow">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="rounded-xl bg-gradient-to-br from-orange-100 to-orange-50 text-[#FF5C00] flex items-center justify-center shrink-0 shadow-inner"
+                        style={{ width: clamp(36, 4, 52), height: clamp(36, 4, 52) }}>
+                        <Icon style={{ width: '55%', height: '55%' }} strokeWidth={2.2} />
+                      </div>
+                      <span className="font-bold text-slate-800 truncate"
+                        style={{ fontSize: clamp(14, 1.5, 22) }}>{c.label || labels[c.key] || c.key}</span>
+                    </div>
+                    <span className="font-black text-slate-900 whitespace-nowrap tabular-nums"
+                      style={{ fontSize: clamp(14, 1.5, 22) }}>{fmtMoney(c.value || c.amount || 0, cur)}</span>
+                  </motion.li>
+                );
+              })}
+            </AnimatePresence>
+          </ul>
+
+          {/* Totaal — premium accent block onderin (mt-auto duwt naar onderkant) */}
+          <div className="mt-auto pt-5 sm:pt-7 relative">
+            <div className="relative rounded-2xl overflow-hidden">
+            <div className="absolute inset-0 bg-gradient-to-br from-[#FF5C00] via-[#FF7A2D] to-amber-500" />
+            <div className="absolute inset-0 opacity-30 mix-blend-overlay"
+              style={{ backgroundImage: `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100'><filter id='n'><feTurbulence baseFrequency='1.4'/></filter><rect width='100%25' height='100%25' filter='url(%23n)' opacity='0.4'/></svg>")` }} />
+            <div className="relative flex items-end justify-between px-4 sm:px-6 py-4 sm:py-5 text-white">
+              <div>
+                <p className="font-black uppercase tracking-[0.3em] text-white/85"
+                  style={{ fontSize: clamp(9, 0.9, 12) }}>Totaal</p>
+                <p className="font-bold text-white/90 mt-0.5"
+                  style={{ fontSize: clamp(12, 1.2, 16) }}>te betalen</p>
+              </div>
+              <motion.p
+                key={amt}
+                initial={{ scale: 0.85, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+                transition={{ type: 'spring', stiffness: 200, damping: 16 }}
+                className="font-black tracking-tight whitespace-nowrap leading-none tabular-nums"
+                style={{ fontSize: clamp(28, 5.2, 84) }} data-testid="cd-pay-total">
+                {fmtMoney(amt, cur)}
+              </motion.p>
+            </div>
+            </div>
+          </div>
+        </motion.div>
       </div>
     </motion.div>
   );
@@ -358,14 +525,17 @@ function MethodScreen({ state, slug, branding }) {
       className="absolute inset-0 flex flex-col px-3 sm:px-6 lg:px-10 py-4 text-white"
       data-testid="cd-method-pick">
 
-      {/* TOP: bedrag + status */}
-      <div className="text-center mb-3 sm:mb-4">
-        <p className="font-black uppercase tracking-[0.3em] text-white/85"
-          style={{ fontSize: clamp(10, 1.0, 16) }}>Te betalen</p>
-        <p className="font-black text-white tracking-tight whitespace-nowrap"
-          style={{ fontSize: clamp(28, 4.4, 72) }} data-testid="cd-method-pick-amount">
-          {fmtMoney(amt, cur)}
-        </p>
+      {/* TOP: huurder-banner + groot bedrag */}
+      <div className="flex flex-col items-center text-center gap-3 mb-3 sm:mb-4">
+        <TenantBanner state={state} dense />
+        <div>
+          <p className="font-black uppercase tracking-[0.3em] text-white/85"
+            style={{ fontSize: clamp(10, 1.0, 16) }}>Te betalen</p>
+          <p className="font-black text-white tracking-tight whitespace-nowrap leading-none mt-1"
+            style={{ fontSize: clamp(32, 5.0, 80) }} data-testid="cd-method-pick-amount">
+            {fmtMoney(amt, cur)}
+          </p>
+        </div>
       </div>
 
       {/* 2-KOLOMS LAYOUT: LINKS andere betaalmethodes, RECHTS Uni5Pay QR.
@@ -565,13 +735,31 @@ function ReceiptScreen({ state }) {
   const p = state.payment || {};
   const cur = p.currency || 'SRD';
   const amt = Number(p.amount || 0);
+  const tenantName = (state?.tenant?.name || state?.apartment?.tenant_name || '').trim();
   return (
     <motion.div key="receipt"
       initial={{ opacity: 0, scale: 0.92 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.92 }}
       transition={{ type: 'spring', stiffness: 180, damping: 20 }}
       className="absolute inset-0 flex flex-col items-center justify-center px-4 sm:px-8"
       data-testid="cd-receipt">
-      <div className="w-full max-w-2xl bg-white rounded-2xl sm:rounded-3xl shadow-2xl p-6 sm:p-10 lg:p-12 text-center">
+
+      {/* Confetti-stijl mini-puntjes voor festive feedback */}
+      <motion.div
+        initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+        transition={{ delay: 0.2 }}
+        className="absolute inset-0 pointer-events-none overflow-hidden"
+        aria-hidden>
+        {[...Array(12)].map((_, i) => (
+          <motion.span
+            key={i}
+            initial={{ y: '-10%', x: `${(i * 8.3) - 5}%`, opacity: 0 }}
+            animate={{ y: '110%', opacity: [0, 1, 1, 0] }}
+            transition={{ duration: 2.5 + (i % 3) * 0.4, delay: 0.3 + i * 0.05, ease: 'easeIn' }}
+            className="absolute block w-2 h-2 rounded-full bg-white/80" />
+        ))}
+      </motion.div>
+
+      <div className="relative w-full max-w-2xl bg-white rounded-2xl sm:rounded-3xl shadow-2xl p-6 sm:p-10 lg:p-12 text-center">
         <motion.div
           initial={{ scale: 0 }} animate={{ scale: 1 }}
           transition={{ delay: 0.1, type: 'spring', stiffness: 200, damping: 15 }}
@@ -584,6 +772,10 @@ function ReceiptScreen({ state }) {
           style={{ fontSize: clamp(11, 1.2, 18) }}>Betaling gelukt</p>
         <p className="font-black text-slate-900 tracking-tight mt-2 sm:mt-3 whitespace-nowrap"
           style={{ fontSize: clamp(34, 6, 100) }}>{fmtMoney(amt, cur)}</p>
+        {tenantName && (
+          <p className="mt-2 text-slate-600 font-bold"
+            style={{ fontSize: clamp(13, 1.4, 20) }}>Bedankt, {tenantName}!</p>
+        )}
         {p.receipt_number && (
           <p className="text-slate-500 mt-3 sm:mt-4"
             style={{ fontSize: clamp(12, 1.3, 18) }}>
@@ -591,7 +783,7 @@ function ReceiptScreen({ state }) {
           </p>
         )}
         <p className="mt-5 text-slate-500"
-          style={{ fontSize: clamp(12, 1.3, 18) }}>Bedankt voor uw betaling!</p>
+          style={{ fontSize: clamp(12, 1.3, 18) }}>Een bewijs van uw betaling wordt afgedrukt.</p>
       </div>
     </motion.div>
   );
@@ -789,13 +981,49 @@ export default function CustomerDisplay() {
   return (
     <div className="fixed inset-0 overflow-hidden"
       style={{
-        background: `linear-gradient(155deg, ${primary} 0%, ${primary} 55%, rgba(0,0,0,0.18) 100%), ${primary}`,
+        // Cinematische gelaagde achtergrond — combineert een diagonaal lineair
+        // gradient (lichter linksboven → donkerder rechtsonder) met twee
+        // radiale "ambient" lichtbronnen die het scherm meer diepte geven.
+        background: `
+          radial-gradient(ellipse at 12% 18%, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 42%),
+          radial-gradient(ellipse at 88% 82%, rgba(0,0,0,0.28) 0%, rgba(0,0,0,0) 55%),
+          linear-gradient(155deg, ${primary} 0%, ${primary} 55%, rgba(0,0,0,0.22) 100%),
+          ${primary}
+        `,
         paddingTop: 'env(safe-area-inset-top, 0px)',
         paddingBottom: 'env(safe-area-inset-bottom, 0px)',
         paddingLeft: 'env(safe-area-inset-left, 0px)',
         paddingRight: 'env(safe-area-inset-right, 0px)',
       }}
       data-testid="cd-root">
+
+      {/* Subtiele ruis-textuur over het hele scherm — geeft een premium
+          "film grain" gevoel dat platte digitale kleuren mist. SVG inline
+          zodat er geen extra request nodig is. */}
+      <div className="absolute inset-0 pointer-events-none opacity-[0.18] mix-blend-overlay"
+        aria-hidden
+        style={{
+          backgroundImage: `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)' opacity='0.55'/></svg>")`,
+          backgroundSize: '180px 180px',
+        }} />
+
+      {/* Zachte glow-bollen die langzaam pulseren — geeft het scherm leven
+          tijdens stille momenten. */}
+      <motion.div
+        aria-hidden
+        animate={{ opacity: [0.35, 0.55, 0.35], scale: [1, 1.08, 1] }}
+        transition={{ duration: 8, repeat: Infinity, ease: 'easeInOut' }}
+        className="absolute pointer-events-none rounded-full blur-3xl"
+        style={{ width: '40vmin', height: '40vmin', left: '-8vmin', top: '8vmin',
+                 background: 'radial-gradient(circle, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0) 70%)' }} />
+      <motion.div
+        aria-hidden
+        animate={{ opacity: [0.25, 0.4, 0.25], scale: [1, 1.1, 1] }}
+        transition={{ duration: 10, repeat: Infinity, ease: 'easeInOut', delay: 1.5 }}
+        className="absolute pointer-events-none rounded-full blur-3xl"
+        style={{ width: '46vmin', height: '46vmin', right: '-10vmin', bottom: '6vmin',
+                 background: 'radial-gradient(circle, rgba(255,200,140,0.35) 0%, rgba(0,0,0,0) 70%)' }} />
+
       <AnimatePresence mode="wait">
         {(effectiveStep === 'idle' || effectiveStep === 'check') && <IdleScreen branding={branding} />}
         {effectiveStep === 'select' && <GreetScreen state={state} branding={branding} />}
