@@ -1420,3 +1420,9 @@ Lint clean. Verified via desktop screenshots (1440×900): élke admin-pagina (Ov
 - ✅ Keuze opgeslagen in `localStorage` zodat volgende PWA-opens direct naar de juiste flow gaan.
 - ✅ Geverifieerd: onboarding verschijnt op `/login?source=pwa` mobiel, klikken op een card slaat keuze op en navigeert naar de juiste view.
 
+## 2026-02-06 — Reset PWA welkom-scherm in admin sidebar
+- ✅ Nieuwe "PWA welkom-scherm resetten" knop toegevoegd in de admin sidebar footer (tussen user pill en Uitloggen knop) — alleen op desktop sidebar zichtbaar.
+- ✅ Klikken verwijdert `localStorage.pwa_onboarding_choice` en toont bevestigings-alert. Volgende PWA-open toont weer het 3-keuze welkom-scherm.
+- ✅ Subtiele stijl (klein RefreshCw icoon + small font) zodat hij niet domineert maar wel vindbaar is voor gebruikers die later van rol veranderen.
+- ✅ data-testid: `reset-pwa-onboarding-btn`.
+
