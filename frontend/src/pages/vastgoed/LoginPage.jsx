@@ -272,7 +272,7 @@ function QrLoginTab({ onSuccess, primary = '#FF5C00' }) {
   useEffect(() => { createQr(); }, [createQr]);
 
   useEffect(() => {
-    if (!qr || status !== 'pending') return;
+    if (!qr || status !== 'pending') return undefined;
     pollRef.current = setInterval(async () => {
       try {
         const { data } = await api.get(`/auth/qr/status/${qr.token}`);
@@ -337,7 +337,7 @@ function QrLoginTab({ onSuccess, primary = '#FF5C00' }) {
             Open de SuriRent app op uw telefoon
           </div>
           <p className="text-xs text-slate-500 font-medium">
-            Tik "Scan QR" en richt op deze code.
+            Tik &quot;Scan QR&quot; en richt op deze code.
           </p>
           <div className="flex items-center justify-center gap-2 mt-3">
             <Loader2 className="w-3 h-3 animate-spin text-slate-400" />
@@ -825,7 +825,7 @@ function HelpModal({ onClose, primary = '#FF5C00' }) {
             </div>
             <p className="text-sm text-slate-600 leading-relaxed pl-9">
               Tik op <strong>Scan QR</strong> linksboven om uw camera te openen. Open SuriRent in
-              een browser op uw computer, kies de "QR code" tab, en scan de QR om uw desktop in
+              een browser op uw computer, kies de &quot;QR code&quot; tab, en scan de QR om uw desktop in
               te loggen.
             </p>
           </div>
@@ -837,7 +837,7 @@ function HelpModal({ onClose, primary = '#FF5C00' }) {
             </div>
             <p className="text-sm text-slate-600 leading-relaxed pl-9">
               Vraag uw beheerder om een nieuwe PIN. Heeft u geen toegang? Tik op
-              "Inloggen met e-mail" onderaan om met uw wachtwoord in te loggen.
+              &quot;Inloggen met e-mail&quot; onderaan om met uw wachtwoord in te loggen.
             </p>
           </div>
           <button onClick={onClose}
@@ -851,171 +851,6 @@ function HelpModal({ onClose, primary = '#FF5C00' }) {
   );
 }
 
-function PinLanding_DEPRECATED({ onSuccess, onPassword, onRegister, branding, pwaTarget }) {
-
-  const verify = async (code) => {
-    setLoading(true); setError('');
-    try {
-      const { data } = await api.post('/auth/kiosk-pin', {
-        pin: code,
-        // company_slug komt uit het branded pad of de cached branding —
-        // zonder bedrijfs-context weigert backend de PIN-login.
-        company_slug: branding?.slug || undefined,
-        company_id: branding?.company_id || undefined,
-      });
-      if (data?.token) localStorage.setItem('kiosk_token', data.token);
-      if (data?.company) localStorage.setItem('kiosk_company', JSON.stringify(data.company));
-      // Detecteer of dit een MEDEWERKER-PIN was (eigen PIN) of een bedrijfs-PIN.
-      // Bij medewerker: GEEN admin_token (zij mogen niet bij Beheer), sla
-      // employee-sessie op zodat alle betalingen automatisch pending_approval
-      // krijgen met deze medewerker als ontvanger.
-      if (data?.employee?.id) {
-        // Eerst verzekerd verwijderen — een vorige admin-sessie mag geen
-        // ongewenste toegang houden voor deze medewerker.
-        try { localStorage.removeItem('admin_token'); } catch { /* ignore */ }
-        setKioskEmployee({
-          id: data.employee.id,
-          name: data.employee.name || 'Medewerker',
-          pin: data.employee.pin || code,
-        });
-        setPreferredRole('kiosk');
-      } else {
-        // Shared company-PIN: backend geeft ook een admin_token mee zodat
-        // de "Beheerder" knop direct doorgaat naar /admin. Vorige employee-
-        // sessie van een collega legen — anders blijft die meeknopen.
-        try { clearKioskEmployee(); } catch { /* ignore */ }
-        if (data?.admin_token) localStorage.setItem('admin_token', data.admin_token);
-        setPreferredRole(isAdminTarget ? 'admin' : 'kiosk');
-      }
-      onSuccess();
-    } catch (e) {
-      setError(formatError(e, 'Ongeldige PIN code'));
-      setPin(['', '', '', '']);
-    } finally { setLoading(false); }
-  };
-
-  const handleKey = (k) => {
-    if (loading) return;
-    setError('');
-    if (k === 'DEL') {
-      for (let i = 3; i >= 0; i--) {
-        if (pin[i]) { const np = [...pin]; np[i] = ''; setPin(np); return; }
-      }
-      return;
-    }
-    for (let i = 0; i < 4; i++) {
-      if (!pin[i]) {
-        const np = [...pin]; np[i] = k; setPin(np);
-        if (i === 3) verify(np.join(''));
-        return;
-      }
-    }
-  };
-
-  return (
-    <div className="flex flex-col" style={{
-      position: 'fixed', inset: 0,
-      backgroundColor: primary,
-      paddingTop: 'env(safe-area-inset-top, 0px)',
-      paddingBottom: 'env(safe-area-inset-bottom, 0px)',
-      paddingLeft: 'env(safe-area-inset-left, 0px)',
-      paddingRight: 'env(safe-area-inset-right, 0px)',
-    }}>
-      <Header branding={branding} />
-      <div className="flex-1 min-h-0 flex items-center justify-center px-2 py-2 sm:p-6 overflow-hidden">
-        <div className="bg-white rounded-2xl sm:rounded-3xl shadow-[0_20px_60px_rgba(0,0,0,0.15)] w-full max-w-md flex flex-col"
-          style={{ maxHeight: '100%', padding: 'clamp(12px, 2.5vh, 32px) clamp(14px, 4vw, 32px)' }}
-          data-testid="pin-card">
-          <div className="text-center" style={{ marginBottom: 'clamp(6px, 1.5vh, 16px)' }}>
-            <div className="rounded-2xl flex items-center justify-center mx-auto shadow-xl overflow-hidden"
-              style={{
-                background: `linear-gradient(135deg, ${primary}, ${primary}CC)`,
-                width: 'clamp(40px, 7vh, 72px)',
-                height: 'clamp(40px, 7vh, 72px)',
-                padding: 'clamp(4px, 0.8vh, 10px)',
-                marginBottom: 'clamp(4px, 1vh, 10px)',
-              }}>
-              <img src={logoUrl} alt="logo" className="w-full h-full object-contain drop-shadow-md" data-testid="pin-logo" />
-            </div>
-            <h2 className="font-bold text-slate-900 tracking-tight leading-tight"
-              style={{ fontSize: 'clamp(15px, 2.4vh, 22px)' }}
-              data-testid="pin-app-name">{isAdminTarget ? `Beheer · ${appName}` : `Welkom bij ${appName}`}</h2>
-            {tagline && !isAdminTarget && <p className="text-slate-400 leading-tight" style={{ fontSize: 'clamp(11px, 1.5vh, 13px)', marginTop: '2px' }}>{tagline}</p>}
-            {isAdminTarget && (
-              <p className="font-bold leading-tight" style={{ fontSize: 'clamp(11px, 1.5vh, 13px)', marginTop: '2px', color: primary }}>
-                Voer uw PIN in om naar het Beheer-dashboard te gaan
-              </p>
-            )}
-          </div>
-
-          {error && (
-            <div className="bg-red-50 border border-red-200 text-red-600 rounded-xl text-center font-medium"
-              style={{ fontSize: 'clamp(11px, 1.5vh, 13px)', padding: 'clamp(6px, 1vh, 10px)', marginBottom: 'clamp(6px, 1vh, 12px)' }}
-              data-testid="pin-error">
-              {error}
-            </div>
-          )}
-
-          <div className="flex justify-center" style={{ gap: 'clamp(6px, 1.5vw, 12px)', marginBottom: 'clamp(8px, 1.5vh, 16px)' }}>
-            {pin.map((digit, i) => (
-              <div key={`pin-slot-${i}`} data-testid={`pin-input-${i}`}
-                style={{
-                  width: 'clamp(36px, 9vw, 56px)',
-                  height: 'clamp(40px, 6vh, 64px)',
-                  fontSize: 'clamp(18px, 2.5vh, 24px)',
-                  ...(digit && !error ? { borderColor: primary, color: primary, backgroundColor: `${primary}10` } : {}),
-                }}
-                className={`text-center font-bold rounded-xl border-2 transition-all flex items-center justify-center ${
-                  error ? 'border-red-400 bg-red-50 text-red-600'
-                    : digit ? ''
-                    : 'border-slate-200 bg-[#F9FAFB] text-slate-300'
-                }`}>
-                {digit ? '●' : ''}
-              </div>
-            ))}
-          </div>
-
-          <div className="grid grid-cols-3 mx-auto w-full"
-            style={{ gap: 'clamp(4px, 1vh, 12px)', maxWidth: 'min(320px, 90%)' }}>
-            {['1','2','3','4','5','6','7','8','9','_e','0','DEL'].map((k) => (
-              k === '_e' ? <div key="e" /> : (
-                <button key={k} type="button" onClick={() => handleKey(k)} disabled={loading}
-                  data-testid={`keypad-${k}`}
-                  style={{ height: 'clamp(36px, 6vh, 56px)', fontSize: 'clamp(16px, 2.4vh, 24px)' }}
-                  className={`font-bold rounded-xl transition-all active:scale-90 disabled:opacity-50 flex items-center justify-center ${
-                    k === 'DEL'
-                      ? 'bg-red-50 text-red-500 hover:bg-red-100 border border-red-200'
-                      : 'bg-[#F4F5F7] text-slate-800 hover:bg-orange-50 hover:text-orange-600 border border-slate-200'
-                  }`}>
-                  {k === 'DEL' ? <Delete style={{ width: 'clamp(16px, 2.2vh, 22px)', height: 'clamp(16px, 2.2vh, 22px)' }} /> : k}
-                </button>
-              )
-            ))}
-          </div>
-
-          {loading && (
-            <div className="flex items-center justify-center gap-2 text-slate-400"
-              style={{ marginTop: 'clamp(6px, 1vh, 12px)' }}>
-              <Loader2 className="w-3 h-3 animate-spin" />
-              <span style={{ fontSize: 'clamp(10px, 1.4vh, 12px)' }} className="font-medium">Verifiëren...</span>
-            </div>
-          )}
-
-          <div className="border-t border-slate-100 flex items-center justify-center flex-wrap font-medium"
-            style={{ gap: 'clamp(8px, 2vw, 16px)', fontSize: 'clamp(10px, 1.4vh, 12px)', marginTop: 'clamp(8px, 1.5vh, 16px)', paddingTop: 'clamp(6px, 1.2vh, 12px)' }}>
-            <button onClick={onPassword} data-testid="login-password-btn" className="flex items-center gap-1 text-slate-500 hover:text-orange-500 transition">
-              <KeyRound style={{ width: 'clamp(11px, 1.6vh, 14px)', height: 'clamp(11px, 1.6vh, 14px)' }} /> Beheerder
-            </button>
-            <span className="text-slate-200">•</span>
-            <button onClick={onRegister} data-testid="login-register-btn" className="flex items-center gap-1 text-slate-500 hover:text-orange-500 transition">
-              <UserPlus style={{ width: 'clamp(11px, 1.6vh, 14px)', height: 'clamp(11px, 1.6vh, 14px)' }} /> Nieuw account
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function PasswordView({ initialMode = 'login', onBack, onRegistered, branding }) {
   const navigate = useBrandedNavigate();

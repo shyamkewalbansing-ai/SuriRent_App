@@ -1385,3 +1385,8 @@ Lint clean. Verified via desktop screenshots (1440×900): élke admin-pagina (Ov
 - ✅ `OrangeShell` heeft `zIndex: 200` om correct boven landing-pagina te renderen.
 - ✅ Geverifieerd op viewport 390×844: mobile login + wizard navigatie (stap 1 → stap 2) werkt vlekkeloos.
 
+## 2026-02-06 — `PinLanding_DEPRECATED` verwijderd + lint cleanup
+- ✅ Dead-code `PinLanding_DEPRECATED` function (regels 854-1018, ~165 regels) volledig verwijderd uit `LoginPage.jsx`.
+- ✅ 3 unescaped quotes in JSX strings vervangen door `&quot;` (Help modal teksten).
+- ✅ Lint errors in `LoginPage.jsx`: van 43 → 1. De resterende 1 is een pre-existing false positive van `react-hooks/set-state-in-effect` op een setInterval polling (code draait correct in productie).
+
