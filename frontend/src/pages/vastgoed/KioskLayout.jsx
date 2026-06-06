@@ -2230,6 +2230,10 @@ export default function KioskLayout() {
   }, []);
 
   const reset = () => {
+    // Wis ook DIRECT het klantenscherm zodat een volgende huurder niet de
+    // oude data ziet (vooral belangrijk na een betaling — operator klikt
+    // "Klaar" en de volgende klant moet meteen het welkom-scherm zien).
+    api.delete('/kiosk/customer-display').catch(() => {});
     setApartment(null); setOverview(null); setPaymentPayload(null);
     setLivePreview(null); setPaymentResult(null);
     setStep('select');

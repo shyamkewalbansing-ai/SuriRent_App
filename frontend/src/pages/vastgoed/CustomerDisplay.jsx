@@ -777,7 +777,14 @@ export default function CustomerDisplay() {
   // resetten.
   const receiptKey = (state?.payment?.receipt_number || state?.payment?.paid_at || '');
   const alreadyShown = !!receiptKey && receiptKey === shownReceipt;
-  const effectiveStep = (step === 'receipt' && alreadyShown) ? 'idle' : step;
+  // Wanneer step='select' (operator is een appartement aan het kiezen) maar
+  // er nog géén apartment is doorgegeven, moet het klantenscherm gewoon het
+  // welkom (idle) scherm tonen — niet de Greet met lege data. Greet is alleen
+  // bedoeld als er actief een huurder geselecteerd is.
+  const hasActiveTenant = !!(state?.apartment?.id || state?.tenant?.name);
+  const effectiveStep = (step === 'receipt' && alreadyShown)
+    ? 'idle'
+    : (step === 'select' && !hasActiveTenant) ? 'idle' : step;
 
   return (
     <div className="fixed inset-0 overflow-hidden"

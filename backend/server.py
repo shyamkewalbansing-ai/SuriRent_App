@@ -7337,29 +7337,47 @@ async def update_customer_display(body: CustomerDisplayIn, request: Request):
     existing_payload = existing_state.get("payload") or {}
     new_payload = new_state.get("payload") or {}
 
-    customer_locked = bool(existing_payload.get("method_chosen_at") or existing_payload.get("customer_initiated"))
-    # 1) Step-bescherming: terwijl klant betaalt mag admin niet "terug" springen.
-    if customer_locked and existing_state.get("step") in ("method", "confirm", "receipt") \
-            and new_state.get("step") in ("idle", "check", "select", "overview", "pay"):
-        new_state["step"] = existing_state.get("step")
-    # 2) Payload-bescherming: bewaar method + method_chosen_at + customer_initiated.
-    if existing_payload.get("method_chosen_at") and not new_payload.get("method_chosen_at"):
-        new_payload["method"] = existing_payload.get("method")
-        new_payload["method_chosen_at"] = existing_payload.get("method_chosen_at")
-    if existing_payload.get("customer_initiated") and not new_payload.get("customer_initiated"):
-        new_payload["customer_initiated"] = True
-        new_payload["customer_initiated_at"] = existing_payload.get("customer_initiated_at")
-        # Behoud ook bedrag + categorieën die door start-payment zijn gezet.
-        if not new_payload.get("amount") and existing_payload.get("amount"):
-            new_payload["amount"] = existing_payload["amount"]
-            new_payload["currency"] = existing_payload.get("currency") or new_payload.get("currency")
-            new_payload["categories"] = existing_payload.get("categories") or new_payload.get("categories") or []
-    # Behoud Mope/Uni5Pay QR-velden ALLEEN wanneer we in een actieve betaalfase
-    # zitten (confirm/receipt). Tijdens method-picken of idle/overview moeten
-    # oude QR-data NIET meer doorgegeven worden — anders blijft een stale QR
-    # eeuwig zichtbaar op het klantenscherm en lijkt het of de QR "vastloopt".
+    # SESSIE-RESET DETECTIE — wanneer de operator een nieuw appartement
+    # selecteert (of de sessie helemaal afsluit), moeten alle locks (vorige
+    # huurder) wissen, anders blijft het klantenscherm op de oude tenant
+    # vastzitten. Detectie:
+    #   - apartment.id is veranderd t.o.v. bestaande state
+    #   - new step in {idle, check, select} (operator is bij apartment-picker)
+    #   - bestaande state had method_chosen_at / customer_initiated / receipt
     new_step_lc = (new_state.get("step") or "").lower()
-    if new_step_lc in ("confirm", "receipt"):
+    new_apt_id = ((new_state.get("apartment") or {}) or {}).get("id")
+    existing_apt_id = ((existing_state.get("apartment") or {}) or {}).get("id")
+    apt_changed = bool(new_apt_id) and bool(existing_apt_id) and (new_apt_id != existing_apt_id)
+    session_reset = new_step_lc in ("idle", "check", "select") or apt_changed
+
+    customer_locked = bool(existing_payload.get("method_chosen_at") or existing_payload.get("customer_initiated"))
+    if session_reset:
+        # Volledige reset — geen lock-overdracht, geen QR-overdracht, geen
+        # methode-overdracht. Customer screen mag direct mee naar nieuwe huurder.
+        customer_locked = False
+        # new_payload mag eigen waarden behouden; we voegen niets toe uit existing.
+    else:
+        # 1) Step-bescherming: terwijl klant betaalt mag admin niet "terug" springen.
+        if customer_locked and existing_state.get("step") in ("method", "confirm", "receipt") \
+                and new_step_lc in ("overview", "pay"):
+            new_state["step"] = existing_state.get("step")
+        # 2) Payload-bescherming: bewaar method + method_chosen_at + customer_initiated.
+        if existing_payload.get("method_chosen_at") and not new_payload.get("method_chosen_at"):
+            new_payload["method"] = existing_payload.get("method")
+            new_payload["method_chosen_at"] = existing_payload.get("method_chosen_at")
+        if existing_payload.get("customer_initiated") and not new_payload.get("customer_initiated"):
+            new_payload["customer_initiated"] = True
+            new_payload["customer_initiated_at"] = existing_payload.get("customer_initiated_at")
+            # Behoud ook bedrag + categorieën die door start-payment zijn gezet.
+            if not new_payload.get("amount") and existing_payload.get("amount"):
+                new_payload["amount"] = existing_payload["amount"]
+                new_payload["currency"] = existing_payload.get("currency") or new_payload.get("currency")
+                new_payload["categories"] = existing_payload.get("categories") or new_payload.get("categories") or []
+    # Behoud Mope/Uni5Pay QR-velden ALLEEN wanneer we in een actieve betaalfase
+    # zitten (confirm/receipt) ÉN het geen sessie-reset is. Tijdens method-picken
+    # of idle/overview moeten oude QR-data NIET meer doorgegeven worden — anders
+    # blijft een stale QR eeuwig zichtbaar op het klantenscherm.
+    if not session_reset and new_step_lc in ("confirm", "receipt"):
         for k in ("mope_qr", "mope_ref", "mope_mode", "mope_amount", "mope_currency", "mope_created_at", "mope_paid_at"):
             if existing_payload.get(k) and not new_payload.get(k):
                 new_payload[k] = existing_payload[k]
@@ -7808,16 +7826,26 @@ async def get_customer_display(slug: str, response: Response):
     #    keert het scherm zelf terug naar idle — dit voorkomt dat het scherm
     #    "vastloopt" op een oude betaling wanneer de operator vergeet te resetten.
     #  - Alle andere staten verlopen na 5 minuten van inactiviteit.
+    #  - SCHRIJF DE RESET TERUG NAAR DE DB zodat de volgende operator-PUT
+    #    niet door de oude method_chosen_at lock geblokkeerd wordt.
     updated_at = state.get("updated_at")
     try:
         if updated_at:
             t = datetime.fromisoformat(str(updated_at).replace("Z", "+00:00"))
             age = (now_utc() - t).total_seconds()
             current_step = (state.get("step") or "").lower()
+            should_reset = False
             if current_step == "receipt" and age > 12:
-                state = {"step": "idle"}
+                should_reset = True
             elif age > 300:
-                state = {"step": "idle"}
+                should_reset = True
+            if should_reset:
+                state = {"step": "idle", "updated_at": iso(now_utc())}
+                await db.customer_display.update_one(
+                    {"company_id": c["id"]},
+                    {"$set": {"state": state, "updated_at": state["updated_at"]}},
+                    upsert=True,
+                )
     except Exception:
         pass
     return {"branding": branding, "state": state}

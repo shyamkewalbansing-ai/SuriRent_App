@@ -1,0 +1,43 @@
+{
+  "summary": "Iter 35 — Full regression on the 3 user-reported Customer Display sync/reset bugs. Backend: 8/8 pytest cases green (session-reset on apt change, session-reset on step=select+no apt, auto-idle PERSISTS in DB for stale receipt, live-preview categories roundtrip, DELETE full reset, plus auth cookie regression). Frontend: 5/5 live-sync UI checks green via Playwright + direct API push (cd-idle after DELETE, live category propagation, live amount update, receipt→idle on reset, select+null→idle, apartment swap clears old method screen).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter35_customer_display_reset.py",
+    "/app/test_reports/pytest/iter35.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "PayScreen on CustomerDisplay.jsx maps category keys to a fixed set of Dutch labels (Maandhuur / Servicekosten / Boetes / Internet). When the operator pushes a category with a custom label like 'Huur Jul', the customer screen shows the static 'Maandhuur' label rather than the operator-supplied label. This is by design for clean presentation, but worth noting: if the product wants the operator's exact label to show, PayScreen needs to fall back to the payload label. NOT BLOCKING.",
+    "CustomerDisplay.jsx is 845 lines — still over the 700-line soft limit raised in iter34. Splitting Idle/Greet/Overview/Pay/Method/Receipt into separate files is recommended for maintainability. Not blocking iter35 fixes.",
+    "Backend update_customer_display has nicely scoped session_reset detection (apt_changed OR step in {idle,check,select}). Code is readable and correctly clears method_chosen_at, customer_initiated, and mope_* QR fields on reset. Auto-idle in public GET now writes back to mongo — verified by direct DB inspection in tests. Implementation is solid."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter35_customer_display_reset.py (NEW)"
+  ],
+  "success_rate": {"backend": "100% (8/8 pytest)", "frontend": "100% (5/5 live-sync UI checks)"},
+  "test_credentials": "admin@vastgoed.sr / admin123 — login OK, cookie set HttpOnly+Secure+SameSite=Lax, /me works via cookie and Bearer fallback.",
+  "seed_data_creation": "none — tests create/delete ephemeral customer_display state via API + direct mongo write for the stale-state scenario; cleaned up at end of each test.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "All 3 user-reported bugs are FIXED and validated end-to-end: (1) Klantenscherm reset bij appartement-wissel — session_reset detection in PUT /api/kiosk/customer-display correctly fires when apt.id changes OR step transitions to idle/check/select, clearing method_chosen_at + customer_initiated + mope_* fields. UI: operator on OLD method screen → switch to NEW apartment → cd-overview renders for NEW within ~2s, no stale method screen. (2) Uni5Pay QR stale data — same session_reset clears mope_qr/mope_ref/mope_mode/mope_amount/mope_currency on apt change or step=idle/select. Also, the QR fields are now ONLY preserved while step ∈ {confirm,receipt} AND not session_reset, so during method-pick or overview no stale QR persists. (3) Live preview categories — PUT step=pay with categories[] roundtrips intact through public GET; customer screen re-renders within ~2s via the 1.5s poll. Verified Borg category and amount update flow live. ALSO VERIFIED: DELETE /api/kiosk/customer-display fully resets to {step:'idle'} (no payload), and effectiveStep on the frontend correctly maps step='select' with no apartment to 'idle' so customer never sees an empty Greet between tenants. Auto-idle for stale receipt (>12s) now PERSISTS to mongo — verified via direct pymongo inspection after the public GET fires.",
+  "detailed_results": {
+    "BE_A_apt_change_clears_method_lock": "PASS — PUT old (method+method_chosen_at) → PUT new (overview, payload=null) → public GET returns step=overview, apartment.id=NEW, method_chosen_at absent.",
+    "BE_B_select_step_no_apt_clears_lock": "PASS — PUT receipt+method_chosen_at → PUT step=select, apartment=null → public GET returns step=select, method_chosen_at absent.",
+    "BE_C_auto_idle_persists_to_db": "PASS — direct mongo write with updated_at -20s for step=receipt → public GET returns step=idle AND direct mongo re-query confirms doc.state.step=='idle' (persistence proven). Subsequent fresh PUT step=overview takes effect with no old lock interference.",
+    "BE_D_live_preview_categories_roundtrip": "PASS — PUT step=pay categories=[huur:75, internet:10] amount=85 → public GET returns same categories array intact with keys, labels, and values preserved.",
+    "BE_E_delete_fully_resets": "PASS — PUT pay state → DELETE → public GET returns step=idle, payload absent/null.",
+    "BE_F_auth_cookie_regression": "PASS — login sets access_token cookie (HttpOnly+Secure+SameSite=Lax), /api/auth/me works via cookie-only and via Bearer-only fallback.",
+    "FE_1_cd_idle_after_delete": "PASS — DELETE → cd-idle visible within 2.5s on /kiosk/klant?c=surirent.",
+    "FE_2_live_preview_categories": "PASS — PUT pay with 2 categories and amount=85 → customer screen shows cd-pay, cd-pay-total='SRD 85,00', Internet line visible. (Minor: 'Huur Jul' custom label rendered as default 'Maandhuur' because PayScreen uses fixed Dutch labels by key — by-design.)",
+    "FE_3_live_amount_update": "PASS — PUT pay updated amount=175 with Borg category → cd-pay-total updates to 'SRD 175,00' and Borg line appears within 2.5s.",
+    "FE_4_reset_between_tenants": "PASS — PUT receipt → cd-receipt visible → DELETE → cd-idle visible within 2.5s, cd-receipt gone.",
+    "FE_5_select_with_no_apt_shows_idle": "PASS — PUT step=select apartment=null → cd-idle visible, cd-greet NOT visible (effectiveStep mapping working).",
+    "FE_6_apt_swap_clears_method_screen": "PASS — PUT method (OLD apt) → cd-method-pick visible → PUT overview (NEW apt) → cd-overview visible, method screen no longer rendered."
+  },
+  "rca_of_the_issue": "n/a — all 3 user-reported issues are FIXED and verified. The fix architecture is: (a) session_reset in update_customer_display PUT handler clears all locks when apt changes or step goes idle/check/select; (b) auto-idle in public GET now writes the reset back to mongo so the next operator PUT starts from a clean slate; (c) frontend KioskLayout reset() calls DELETE /api/kiosk/customer-display for immediate customer-screen reset; (d) effectiveStep maps select+no-apt to idle so the customer never sees an empty Greet between tenants; (e) livePreview onLiveChange in PaySelect pushes operator's category/amount selections via PUT for ~500ms-2s live propagation."
+}
