@@ -199,6 +199,18 @@ export function MobileEmailLogin({ onBack, onForgot, branding }) {
               <><LogIn className="w-5 h-5" /> Inloggen</>
             )}
           </button>
+
+          {/* Registreer link — alleen op generieke /login (geen branded portal). */}
+          {!branding?.slug && (
+            <p className="text-center text-white/85 text-sm font-medium pt-3">
+              Nog geen account?{' '}
+              <button type="button" onClick={() => { window.location.assign('/?register=1'); }}
+                data-testid="mobile-login-to-register"
+                className="font-extrabold text-white underline underline-offset-2">
+                Registreer hier
+              </button>
+            </p>
+          )}
         </form>
       </div>
     </OrangeShell>
