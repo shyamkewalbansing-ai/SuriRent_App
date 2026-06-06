@@ -1432,3 +1432,9 @@ Lint clean. Verified via desktop screenshots (1440×900): élke admin-pagina (Ov
 - ✅ Mobiele admins kunnen nu zelf hun PWA-keuze resetten zonder over te schakelen naar desktop.
 - ✅ Geverifieerd op 390×844 viewport: login → klik "+" FAB → drawer toont reset-knop + logout knop ✓
 
+## 2026-02-06 — Educatieve hint over manifest shortcuts op welkom-scherm
+- ✅ Nieuwe "Snelkoppelingen direct vanaf je home-screen" sectie onderaan `PwaOnboarding.jsx` (boven footer-tekst, onder de 3 keuze-cards).
+- ✅ Lightbulb icoon + uitleg dat long-press op het PWA-icoon **Kiosk / Beheer / Mijn Huurportaal** snelkoppelingen toont (geconfigureerd in `manifest.json` shortcuts).
+- ✅ Subtiele stijl: witte semi-transparante card met backdrop-blur, blijft binnen het oranje thema.
+- ✅ data-testid: `pwa-onboarding-tip`.
+

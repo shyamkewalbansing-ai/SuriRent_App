@@ -14,7 +14,7 @@
 // naar de juiste flow gaat.
 // =====================================================================
 import { useEffect } from 'react';
-import { Building2, KeyRound, User, ArrowRight, Sparkles } from 'lucide-react';
+import { Building2, KeyRound, User, ArrowRight, Sparkles, Lightbulb } from 'lucide-react';
 
 export const PWA_ONBOARDING_KEY = 'pwa_onboarding_choice';
 
@@ -141,8 +141,33 @@ export default function PwaOnboarding({ onChoice, primary = '#FF5C00' }) {
           ))}
         </div>
 
+        {/* "Wist je dat?" — uitleg over manifest shortcuts.
+            Geconfigureerd in /app/frontend/public/manifest.json: Open Kiosk /
+            Beheer / Mijn huurportaal. Gebruikers ontdekken deze via een
+            long-press op het PWA icoon op hun home-screen (iOS én Android). */}
+        <div className="w-full max-w-md mt-5 rounded-2xl bg-white/10 backdrop-blur-sm border border-white/20 p-4"
+          data-testid="pwa-onboarding-tip">
+          <div className="flex items-start gap-3">
+            <div className="shrink-0 w-9 h-9 rounded-xl bg-white/15 border border-white/20 flex items-center justify-center">
+              <Lightbulb className="w-4.5 h-4.5 text-white" strokeWidth={2.2} />
+            </div>
+            <div className="min-w-0">
+              <p className="text-white font-extrabold text-sm leading-tight">
+                Snelkoppelingen direct vanaf je home-screen
+              </p>
+              <p className="text-white/75 text-xs leading-snug mt-1">
+                Houd het SuriRent-icoon op je telefoon ingedrukt voor directe toegang tot
+                <span className="font-bold text-white"> Kiosk</span>,
+                <span className="font-bold text-white"> Beheer</span> of
+                <span className="font-bold text-white"> Mijn Huurportaal</span> —
+                zonder eerst dit scherm te zien.
+              </p>
+            </div>
+          </div>
+        </div>
+
         {/* Footer */}
-        <p className="text-white/60 text-[11px] font-medium text-center mt-6">
+        <p className="text-white/60 text-[11px] font-medium text-center mt-4">
           U kunt deze keuze later altijd wijzigen via uw profiel.
         </p>
       </div>
