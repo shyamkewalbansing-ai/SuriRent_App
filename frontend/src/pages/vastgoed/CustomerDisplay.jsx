@@ -451,29 +451,23 @@ function MethodScreen({ state, slug }) {
               return (
                 <QRCodeSVG
                   value={qrValue}
-                  size="100%"
+                  size={256}
                   level="H"
                   bgColor="#FFFFFF"
                   fgColor="#0F0F0F"
                   style={{ width: '100%', height: '100%' }}
-                  imageSettings={{
-                    src: '',
-                    height: 0,
-                    width: 0,
-                    excavate: true,
-                  }}
                 />
               );
             })()}
-            {/* Center logo overlay — Uni5Pay "+" icoon */}
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full flex items-center justify-center border-4 border-white bg-black"
-              style={{ width: '22%', height: '22%' }}>
-              <span className="font-black text-white" style={{ fontSize: '1.2em', color: '#E40521' }}>+</span>
+            {/* Center logo overlay — Uni5Pay "+" icoon (compacter zodat QR scanbaar blijft) */}
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full flex items-center justify-center border-2 border-white bg-white shadow-lg"
+              style={{ width: '18%', height: '18%' }}>
+              <span className="font-black leading-none" style={{ fontSize: '1.4em', color: '#E40521' }}>+</span>
             </div>
             {/* ROOD overlay als niet ready — visueel signaal */}
             {!ready && (
-              <div className="absolute inset-0 bg-red-500/50 rounded-xl flex items-center justify-center">
-                <span className="bg-white text-red-700 font-black px-3 py-1.5 rounded-full"
+              <div className="absolute inset-2 bg-red-500/55 rounded-lg flex items-center justify-center">
+                <span className="bg-white text-red-700 font-black px-3 py-1.5 rounded-full shadow-lg"
                   style={{ fontSize: clamp(10, 1.0, 14) }}>Nog niet actief</span>
               </div>
             )}
