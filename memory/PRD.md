@@ -1426,3 +1426,9 @@ Lint clean. Verified via desktop screenshots (1440×900): élke admin-pagina (Ov
 - ✅ Subtiele stijl (klein RefreshCw icoon + small font) zodat hij niet domineert maar wel vindbaar is voor gebruikers die later van rol veranderen.
 - ✅ data-testid: `reset-pwa-onboarding-btn`.
 
+## 2026-02-06 — Reset PWA welkom-scherm ook in MobileSheet drawer
+- ✅ Identieke reset-knop toegevoegd in de MobileSheet drawer footer (opent via de center "+" FAB button in de mobiele bottom-bar) — tussen email-display en grote rode Uitloggen knop.
+- ✅ data-testid: `mobile-sheet-reset-pwa-onboarding`.
+- ✅ Mobiele admins kunnen nu zelf hun PWA-keuze resetten zonder over te schakelen naar desktop.
+- ✅ Geverifieerd op 390×844 viewport: login → klik "+" FAB → drawer toont reset-knop + logout knop ✓
+
