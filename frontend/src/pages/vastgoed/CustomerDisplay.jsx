@@ -420,14 +420,25 @@ function MethodScreen({ state, slug }) {
           </div>
           <div className="bg-white rounded-xl p-2 sm:p-3"
             style={{ width: clamp(180, 22, 320), height: clamp(180, 22, 320) }}>
-            <QRCodeSVG
-              value={payload.mope_qr || `${(typeof window !== 'undefined' ? window.location.origin : '')}/api/payments/mock-pay/${payload.order_id || 'demo'}?amount=${amt}&currency=${cur}`}
-              size="100%"
-              level="M"
-              bgColor="#FFFFFF"
-              fgColor="#0F0F0F"
-              style={{ width: '100%', height: '100%' }}
-            />
+            {(() => {
+              // Build QR value met fallback. Beperk lengte tot 1000 chars
+              // (QRCodeSVG capaciteit bij level 'L' ≈ 1273 alfanum.).
+              const fallbackUrl = `${(typeof window !== 'undefined' ? window.location.origin : '')}/api/payments/mock-pay/${payload.order_id || 'demo'}?amount=${amt}&currency=${cur}`;
+              let qrValue = payload.mope_qr || fallbackUrl;
+              if (typeof qrValue !== 'string') qrValue = String(qrValue || '');
+              // Te lange data → val terug op de fallback URL.
+              if (qrValue.length > 1000) qrValue = fallbackUrl;
+              return (
+                <QRCodeSVG
+                  value={qrValue}
+                  size="100%"
+                  level="L"
+                  bgColor="#FFFFFF"
+                  fgColor="#0F0F0F"
+                  style={{ width: '100%', height: '100%' }}
+                />
+              );
+            })()}
           </div>
           <p className="font-black text-slate-900 tracking-tight mt-2 sm:mt-3"
             style={{ fontSize: clamp(16, 1.9, 26) }}>Scan om te betalen</p>

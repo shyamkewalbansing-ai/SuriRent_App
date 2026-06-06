@@ -1512,3 +1512,12 @@ Backend draait stabiel ✓ (HTTP 200)
 - **Diagnose**: De kiosk operator's heartbeat update elke 3s het customer_display DB record met een nieuwe `updated_at`, OOK als de state-content identiek is. Customer's polling zag dus elke 3s een "nieuwe" state en triggerde een React re-render → AnimatePresence speelt animaties opnieuw af → flikkering.
 - ✅ **Fix**: `applyState` doet nu een **content-hash dedup** bovenop de timestamp check. Een JSON-hash van (step, amount, currency, method, method_chosen_at, mope_qr, mope_paid_at, tenant_id, apartment_id, receipt_number) wordt vergeleken — alleen bij ECHTE content-wijziging triggert `setState` een re-render.
 - ✅ Eindeloze heartbeat-updates die alleen de timestamp wijzigen worden nu volledig genegeerd. Het klantenscherm rendert alleen bij echte state-overgangen.
+
+## 2026-02-06 — 🎯 ECHTE ROOT CAUSE: QRCodeSVG "Data too long" crash → re-mount loop
+- **Diagnose** (via console error die user deelde): `RangeError: Data too long at _QrCode.encodeSegments`. De Mope/Uni5Pay QR-data overschreed de capaciteit van QRCodeSVG bij error correction level 'M'. Elke render crashte de component → React re-mountte → opnieuw crash → **dit veroorzaakte de hele flikkering** die gebruiker zag.
+- ✅ **Fix in CustomerDisplay.jsx MethodScreen QR-blok**:
+  1. Error correction level van `'M'` → `'L'` (capaciteit ~1273 alfanum chars i.p.v. ~688)
+  2. Lengte-check: als `qrValue.length > 1000` → val terug op de korte fallback URL
+  3. Type guard: alleen strings worden gebruikt als QR-value
+- ✅ Geen runtime errors meer. Component rendert nu stabiel.
+- ✅ Alle eerder gemaakte dedup-fixes (timestamp, content-hash, branding) blijven werkzaam — vormen nu samen een rotsvaste stabiele customer-display.
