@@ -1,0 +1,42 @@
+{
+  "summary": "Iter 33 — Frontend regression validation of the LoginPage refactor (1960→257 line orchestrator + /auth/ subcomponents). 8/9 explicit test items PASS as-implemented. One test item (item #4 'Branded /surirent/login on DESKTOP shows the PIN-pad') is technically not the default view on desktop — but this is INTENTIONAL preserved behavior from before the refactor (PinLogin component contains a code comment: 'Desktop default: skip PIN keypad and show email login form directly. Mobile keeps PIN-first flow'). The PIN-pad is fully functional and reachable via the 'Terug naar PIN' link; PIN 1234 successfully calls /api/auth/kiosk-pin and navigates to /surirent/kiosk. All other refactor flows (generic /login email card, forgot-password modal, admin login → /admin, /login?register=1 → / with modal, marketing topbar Registreren, full register-modal create-company flow with success screen, and QR-code tab) work identically to pre-refactor.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/surirent/login DESKTOP", "issues": ["Branded portal default-view on desktop is the email-form, NOT the PIN-pad. This matches the explicit code intent (comment in LoginPage.jsx lines 34-40) and was the same before the refactor — but the testing request item #4 expects the PIN-pad as the default. If the desired UX is PIN-first on branded URLs even on desktop, remove the `window.innerWidth >= 1024` desktop short-circuit on the branded code-path (it should only apply when there is no branding.slug). On mobile (< 1024px) PIN-pad is the default as expected. PIN flow itself works perfectly when shown."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Decide whether branded /<slug>/login on DESKTOP should default to PIN-pad (current behavior: email-form, with 'Terug naar PIN' link to switch). If yes, scope the desktop short-circuit in LoginPage.jsx initialView() to only fire when branding?.slug is absent.",
+    "[Pre-existing, unchanged by refactor] Branding logo on /surirent/login currently renders 'Gopi Appartement' header (a recently-registered test company appears to have inherited or collided with the slug). Verify slug-uniqueness enforcement on /api/auth/register / company creation.",
+    "[Pre-existing] No DELETE for landing-leads or TEST_-prefixed companies — test data from iter32+33 will accumulate."
+  ],
+  "critical_code_review_comments": [
+    "Refactor cleanly splits LoginPage.jsx into PinLogin, EmailLogin, QrLoginTab, QrScannerModal, HelpModal, ForgotPasswordModal, LoginHeader, RegisterSuccess. All data-testids are preserved (auth-form, auth-email, auth-password, auth-submit, auth-forgot-link, auth-switch-mode, auth-back, tab-password, tab-qr, qr-login-tab, qr-switch-password, pin-welcome, pin-company-name, keypad-0..9, keypad-del, pin-input-0..3, pin-error, login-password-btn, login-register-btn, login-scan-qr-btn, login-help-btn, forgot-password-modal, forgot-email, forgot-channel-*, forgot-send-btn, forgot-code, forgot-new-password, forgot-reset-btn, forgot-done-close, register-modal, register-modal-company/name/email/password/address/phone/country-*/plan-*/submit/error/close, register-success, register-success-continue).",
+    "EmailLogin.jsx is ~671 lines — still a large file. Could be further split into LoginCard / RegisterCard / RegisterModeSelector. Not blocking.",
+    "PinLogin.jsx duplicates a large block of JSX for the 'logged-in vs not-logged-in' branches (lines 153-260 vs 295-440). Consider extracting a single layout component to reduce duplication."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (frontend-only request)", "frontend": "100% functional; 8/9 explicit test items pass as-implemented, 1 is a UX expectation mismatch vs preserved pre-refactor behavior"},
+  "test_credentials": "admin@vastgoed.sr / admin123 ✓ | Kiosk PIN 1234 ✓",
+  "seed_data_creation": "1 new company 'Refactor Test BV' (admin email refactor-test-1780738953@example.com / testpass123) created via the marketing-landing → RegisterModal flow as part of TEST8. Success screen appeared, so a Company + admin user now exists in DB.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Refactor of LoginPage.jsx is functionally complete and non-regressing. Notable: the desktop default view on /<slug>/login is the email-form (preserved pre-refactor behavior). The PIN-pad is one click away via 'Terug naar PIN' / data-testid='auth-back'. Mobile (<1024px) defaults to PIN-pad. All 30+ data-testids preserved across the split. Sub-component locations: /app/frontend/src/pages/vastgoed/auth/{PinLogin,EmailLogin,QrLoginTab,QrScannerModal,HelpModal,LoginHeader,ForgotPasswordModal,RegisterSuccess}.jsx + /app/frontend/src/components/RegisterModal.jsx.",
+  "detailed_results": {
+    "TEST1_generic_login_desktop_card": "PASS — auth-form, auth-email, auth-password, auth-submit, auth-forgot-link, auth-switch-mode ('Registreer hier'), tab-qr all present",
+    "TEST2_forgot_password_modal": "PASS — clicking auth-forgot-link opens forgot-password-modal containing forgot-email input",
+    "TEST3_admin_login_redirect": "PASS — admin@vastgoed.sr/admin123 → /admin (via Beheerder Login form)",
+    "TEST4_branded_pin_pad_DESKTOP_default": "MISMATCH-PRESERVED — /surirent/login on desktop defaults to email-form (Beheerder Login) NOT PIN-pad. This is the original/intended behavior per LoginPage code comments. PIN-pad is reachable via 'Terug naar PIN' (data-testid='auth-back') link.",
+    "TEST4b_pin_pad_when_shown": "PASS — After clicking auth-back: pin-welcome ='PIN Login', pin-company-name='Vul de 4-cijferige PIN in voor Gopi Appartement', keypad-0..9 + keypad-del all rendered, 'Inloggen met e-mail' link present at bottom",
+    "TEST5_pin_1234_to_kiosk": "PASS — Typing 1-2-3-4 calls /api/auth/kiosk-pin → navigates to /surirent/kiosk",
+    "TEST6_login_register_redirect": "PASS — /login?register=1 → redirects to / and opens register-modal with company-name + email + password inputs",
+    "TEST7_marketing_topbar_registreren": "PASS — Marketing / loads, topheader-register button visible, clicking opens register-modal",
+    "TEST8_register_modal_full_create": "PASS — Filled company='Refactor Test BV', name='Refactor Test', unique email, password='testpass123', country=SR, plan=starter → submit → register-success screen shown",
+    "TEST9_qr_tab_on_login": "PASS — tab-qr visible on generic /login, click → qr-login-tab panel with QR-code SVG renders and 'Gebruik wachtwoord' switch-link present"
+  },
+  "rca_of_the_issue": "Test item #4 (branded /surirent/login should show PIN-pad on desktop) does not match current implementation because LoginPage.jsx initialView() unconditionally returns 'login' (email-form) when window.innerWidth >= 1024, regardless of branding.slug. This is intentional and pre-existing — the comment in code says 'Desktop default: skip PIN keypad and show email login form directly. Mobile keeps PIN-first flow (more tactile + branded).' If product wants PIN-first on branded desktop, the condition `if (window.innerWidth >= 1024) return 'login';` should be guarded by `&& !brandingSlugDetected` or the early-detected slug. No code fix applied because the refactor was explicitly required to be functionally identical to before — preserving this default is correct refactor behavior."
+}
