@@ -1360,9 +1360,28 @@ Lint clean. Verified via desktop screenshots (1440×900): élke admin-pagina (Ov
 - ✅ `MarketingLandingV2.jsx` opent de RegisterModal automatisch wanneer `?register=1` in de URL aanwezig is, en haalt de query parameter daarna weg via `history.replaceState` zodat een reload de popup niet opnieuw triggert.
 - ✅ Branded `/<slug>/login?register=1` routes worden NIET geredirect — klanten in een specifiek bedrijfsportaal kunnen geen nieuw bedrijf aanmaken, dus de oude register-view gedraagt zich daar correct (al wordt deze in praktijk niet gebruikt).
 ## 2026-02-05 — Landing pagina standaard op 125% UI-schaal
-- ✅ Eerdere "hero compacter" wijzigingen teruggedraaid (was foutieve interpretatie).
-- ✅ `MarketingLandingV2.jsx` root container krijgt `style={{ zoom: 1.25 }}` — alles op de landing wordt nu standaard 25% groter weergegeven.
-- ✅ CSS `zoom` is identiek aan native browser-zoom (gedraagt zich anders dan `transform: scale` — geen scrollbar issues of klikbaarheid problemen). Sinds 2024 in alle moderne browsers ondersteund.
-- ✅ `RegisterModal` blijft buiten de zoom-wrapper (in EditableProvider, niet in de zoom-div) zodat hij op normale schaal blijft.
-- ✅ Edit-mode banner valt eveneens binnen de zoom — consistent gevoel.
+- ⏪ Teruggedraaid op verzoek van gebruiker.
+
+## 2026-02-06 — Mobile auth = native app-stijl (PIN-pad gevoel)
+- ✅ Nieuwe component `MobileAuthShell.jsx` met gedeelde `OrangeShell` wrapper (full-screen oranje canvas, safe-area, decoratieve blur-circels + diagonal curves — exact zelfde visuele patroon als `PinLanding`).
+- ✅ **`MobileEmailLogin`** — vervangt het witte card-design van PasswordView op mobiele schermen (<640px). Bevat:
+  - "Welkom terug" header in PinLanding-stijl
+  - Witte logo-cirkel met groene online-dot
+  - SuriRent app-naam in caps
+  - Witte rounded-pill inputs voor e-mail + wachtwoord
+  - Wit pill "Inloggen" button onderaan
+  - Onthoud-mij + wachtwoord-vergeten links
+- ✅ **`MobileRegisterWizard`** — vervangt RegisterModal op mobiel met een 4-stappen wizard die voelt als een native app onboarding:
+  - **Stap 1**: Bedrijf (companyName + adres + live slug-check)
+  - **Stap 2**: Persoon (naam + telefoon)
+  - **Stap 3**: Account (e-mail + wachtwoord)
+  - **Stap 4**: Pakket (land + plan keuze)
+  - Progress dots bovenaan, "Vorige"/"Sluiten" links, "Volgende →" / "Account aanmaken" wit pill onderaan
+  - Per stap valideren — knop disabled tot stap valide is
+  - Success-scherm met witte check-cirkel + "Naar mijn dashboard"
+- ✅ Nieuwe utility `useIsMobile(breakpoint=640)` hook in `/app/frontend/src/lib/use-is-mobile.js` voor responsive component-rendering.
+- ✅ `RegisterModal.jsx`: op mobiel render direct `<MobileRegisterWizard>`, op desktop het oude split-panel modal met blur-overlay.
+- ✅ `LoginPage.jsx` PasswordView: op mobiel + `mode === 'login'` render direct `<MobileEmailLogin>`, anders het bestaande witte card-design.
+- ✅ `OrangeShell` heeft `zIndex: 200` om correct boven landing-pagina te renderen.
+- ✅ Geverifieerd op viewport 390×844: mobile login + wizard navigatie (stap 1 → stap 2) werkt vlekkeloos.
 

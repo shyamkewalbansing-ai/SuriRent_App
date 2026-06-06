@@ -12,6 +12,8 @@ import {
 import { api, formatError } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { RESERVED_SLUGS } from '../lib/branded-nav';
+import { useIsMobile } from '../lib/use-is-mobile';
+import { MobileRegisterWizard } from './MobileAuthShell';
 
 function Bank({ label, value, mono }) {
   return (
@@ -24,6 +26,7 @@ function Bank({ label, value, mono }) {
 
 export default function RegisterModal({ open, onClose }) {
   const { register } = useAuth();
+  const isMobile = useIsMobile();
 
   const [name, setName] = useState('');
   const [companyName, setCompanyName] = useState('');
@@ -123,6 +126,13 @@ export default function RegisterModal({ open, onClose }) {
   };
 
   if (!open) return null;
+
+  // Op mobiel: toon een full-screen step-wizard die voelt als een
+  // native app (zelfde oranje stijl als de PIN-pad). Op desktop blijft
+  // het split-panel modal met blur-overlay.
+  if (isMobile) {
+    return <MobileRegisterWizard onClose={onClose} />;
+  }
 
   const selectedPlan = plans.find((p) => p.id === plan) || { name: plan, amount: 0, currency: 'SRD' };
   const refLabel = `ABONNEMENT — ${companyName || ''} — ${new Date().toLocaleDateString('nl-NL', { month: 'long', year: 'numeric' })}`;

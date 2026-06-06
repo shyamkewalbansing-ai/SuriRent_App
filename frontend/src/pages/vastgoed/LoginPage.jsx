@@ -13,6 +13,8 @@ import {
   detectCompanySlug, fetchBranding, fetchBrandingByHost, applyBranding,
   resolveLogoUrl, readCachedBranding, clearBrandingCache,
 } from '../../lib/branding';
+import { useIsMobile } from '../../lib/use-is-mobile';
+import { MobileEmailLogin } from '../../components/MobileAuthShell';
 
 function Clock() {
   const [t, setT] = useState(new Date());
@@ -1018,6 +1020,7 @@ function PinLanding_DEPRECATED({ onSuccess, onPassword, onRegister, branding, pw
 function PasswordView({ initialMode = 'login', onBack, onRegistered, branding }) {
   const navigate = useBrandedNavigate();
   const { login, register } = useAuth();
+  const isMobile = useIsMobile();
   const [mode, setMode] = useState(initialMode); // 'login' | 'register'
   const [email, setEmail] = useState(() => {
     try { return localStorage.getItem('saved_login_email') || ''; } catch { return ''; }
@@ -1209,6 +1212,27 @@ function PasswordView({ initialMode = 'login', onBack, onRegistered, branding })
     };
     return <RegisterSuccess plan={selectedPlan} company={companyName} bankDetails={bankDetails}
       onContinue={goToOwnPortal} />;
+  }
+
+  // ────────────────────────────────────────────────────────────────────
+  // MOBILE LOGIN — toon de "app-stijl" oranje full-screen e-mail/wachtwoord
+  // login op telefoon + PWA. Dit voelt identiek aan de PIN-pad ervaring
+  // (zelfde oranje canvas, logo-cirkel, welkom-header, witte input pillen).
+  // Op desktop blijft het bestaande witte card-design behouden.
+  // ────────────────────────────────────────────────────────────────────
+  if (mode === 'login' && isMobile) {
+    return (
+      <>
+        <MobileEmailLogin
+          onBack={() => { try { onBack?.(); } catch { /* ignore */ } }}
+          onForgot={() => setShowForgot(true)}
+          branding={branding}
+        />
+        {showForgot && (
+          <ForgotPasswordModal initialEmail={email} onClose={() => setShowForgot(false)} />
+        )}
+      </>
+    );
   }
 
   return (
