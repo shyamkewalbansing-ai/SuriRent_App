@@ -449,15 +449,10 @@ function MethodScreen({ state, slug }) {
     amber: 'bg-amber-50 text-amber-700',
   };
 
-  // Speciale uitzondering: wanneer de operator expliciet "Uni5Pay only"
-  // heeft gepusht (mope met mope_qr veld), gebruik het Uni5PayQRScreen
-  // dat speciaal voor die situatie ontworpen is.
-  if (customerChose && chosen === 'mope' && payload.mope_qr) {
-    return <Uni5PayQRScreen state={state} slug={slug} />;
-  }
-  // Andere methode-keuzes: GEEN scherm-wissel. De klant blijft op deze
-  // pagina (methodes links + QR rechts) zodat een per ongeluk gekozen
-  // methode geen verkeerde betaling vastlegt — de medewerker bevestigt.
+  // GEEN aparte Uni5PayQRScreen meer — de QR staat al permanent rechts in
+  // het 2-koloms layout hieronder. Wanneer klant op de QR-card tikt, krijgt
+  // hij een oranje ring als visuele feedback, maar het scherm blijft hetzelfde.
+  // (Dit voorkomt dat klanten "vastlopen" op een wachtscherm.)
 
   return (
     <motion.div key="method-pick"

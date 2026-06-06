@@ -1472,3 +1472,8 @@ Lint clean. Verified via desktop screenshots (1440×900): élke admin-pagina (Ov
 - ✅ Geselecteerde methode (na klant-tik) krijgt oranje `ring-4` accent voor visuele feedback zonder scherm-wissel.
 - ✅ Bottom hint past zich aan: "Scan de QR-code of tik op een methode" → "De medewerker bevestigt uw betaling..."
 
+
+## 2026-02-06 — Bug fix: Klantenscherm liep vast op Uni5Pay-betaling
+- **Issue**: Bij Uni5Pay-betaling schakelde CustomerDisplay over naar een aparte `Uni5PayQRScreen` wachtscherm — klant kon niets meer.
+- ✅ Fix: early-return naar `Uni5PayQRScreen` verwijderd. Klant blijft op het 2-koloms keuze-scherm (methodes links + Uni5Pay QR rechts) — geen aparte wachtscherm meer.
+- ✅ Uni5PayQRScreen functie blijft als dead-code (kan later opgeruimd worden, blokkeert niets).
