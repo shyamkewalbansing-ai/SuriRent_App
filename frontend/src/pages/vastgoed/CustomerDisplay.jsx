@@ -134,112 +134,133 @@ function OverviewScreen({ state, slug }) {
     { key: 'internet', label: 'Internet', value: internet, icon: Wifi, muted: internet === 0 },
   ];
 
+  const container = { hidden: {}, show: { transition: { staggerChildren: 0.06 } } };
+  const itemVar = { hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0 } };
+
   return (
     <motion.div key="overview"
-      initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }}
-      transition={{ duration: 0.3 }}
-      className="absolute inset-0 flex flex-col p-3 sm:p-6 lg:p-10"
+      variants={container} initial="hidden" animate="show"
+      exit={{ opacity: 0, y: -20 }}
+      className="absolute inset-0 flex flex-col px-4 sm:px-8 lg:px-14 py-6 lg:py-10"
       data-testid="cd-overview">
-      <div className="text-white mb-3 sm:mb-5 px-1">
-        <p className="font-black uppercase tracking-[0.3em] text-white/85"
-          style={{ fontSize: clamp(9, 0.9, 14) }}>
-          Financieel overzicht voor
-        </p>
-        <h2 className="font-black tracking-tight leading-tight"
-          style={{ fontSize: clamp(22, 3.6, 56) }}>
-          {tenant.name || apt.tenant_name}
-        </h2>
-        {apt.number && <p className="text-white/85 mt-0.5"
-          style={{ fontSize: clamp(12, 1.3, 20) }}>Appartement {apt.number}</p>}
-      </div>
-      <div className="flex-1 min-h-0 flex flex-col lg:grid lg:grid-cols-5 gap-3 sm:gap-4 overflow-hidden">
-        {/* LEFT — line items */}
-        <div className="lg:col-span-3 bg-white rounded-2xl sm:rounded-3xl shadow-2xl p-3 sm:p-5 lg:p-7 flex flex-col min-h-0 overflow-hidden">
-          <h3 className="font-black text-slate-900 mb-2 sm:mb-3"
-            style={{ fontSize: clamp(14, 1.4, 22) }}>Specificatie</h3>
-          <div className="flex-1 divide-y divide-slate-100 overflow-auto">
+
+      <div className="flex-1 min-h-0 w-full max-w-[1400px] mx-auto grid grid-cols-1 lg:grid-cols-[minmax(300px,400px)_1fr] gap-5 lg:gap-10 items-stretch overflow-hidden">
+
+        {/* ===== LINKS — Huurder identiteit kaart ===== */}
+        <motion.div variants={itemVar}>
+          <TenantIdentityCard state={state}
+            statusLabel={hasBalance ? 'Openstaand saldo' : 'Volledig bij'}
+            statusKind={hasBalance ? 'warn' : 'live'} />
+        </motion.div>
+
+        {/* ===== RECHTS — Financieel overzicht ===== */}
+        <motion.div variants={itemVar}
+          className="relative bg-white rounded-3xl shadow-2xl p-5 sm:p-7 lg:p-9 flex flex-col min-h-0 overflow-hidden">
+
+          {/* Gradient strip bovenin */}
+          <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-orange-400 via-[#FF5C00] to-amber-500" />
+
+          <div className="mb-4 sm:mb-5">
+            <p className="font-black uppercase tracking-[0.32em] text-slate-400"
+              style={{ fontSize: clamp(9, 0.9, 12) }}>Financieel overzicht</p>
+            <h2 className="font-black text-slate-900 tracking-tight leading-tight mt-1"
+              style={{ fontSize: clamp(22, 2.6, 38) }}>Specificatie</h2>
+          </div>
+
+          <div className="space-y-2 sm:space-y-2.5">
             {items.map((it) => {
               const Icon = it.icon;
-              const cls = it.highlight ? 'text-[#FF5C00]' : it.muted ? 'text-slate-400' : 'text-slate-900';
+              const isHi = !!it.highlight;
+              const isMu = !!it.muted;
               return (
-                <div key={it.key} className={`flex items-center justify-between py-2 sm:py-3 ${cls}`}>
-                  <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                <div key={it.key}
+                  className={`flex items-center justify-between rounded-2xl px-3 sm:px-4 py-2.5 sm:py-3.5 gap-3 border ${
+                    isHi
+                      ? 'bg-gradient-to-r from-orange-100 via-orange-50 to-white border-orange-200 shadow-md'
+                      : isMu
+                      ? 'bg-slate-50/60 border-slate-100'
+                      : 'bg-gradient-to-r from-orange-50/40 via-white to-white border-slate-100 shadow-sm'
+                  }`}>
+                  <div className="flex items-center gap-3 min-w-0">
                     <div className={`rounded-xl flex items-center justify-center shrink-0 ${
-                      it.highlight ? 'bg-orange-100 text-[#FF5C00]'
-                        : it.muted ? 'bg-slate-50 text-slate-300'
-                        : 'bg-slate-100 text-slate-500'
-                    }`} style={{ width: clamp(28, 3, 44), height: clamp(28, 3, 44) }}>
-                      <Icon style={{ width: '55%', height: '55%' }} />
+                      isHi ? 'bg-[#FF5C00] text-white shadow-inner'
+                        : isMu ? 'bg-slate-100 text-slate-300'
+                        : 'bg-gradient-to-br from-orange-100 to-orange-50 text-[#FF5C00] shadow-inner'
+                    }`} style={{ width: clamp(36, 4, 52), height: clamp(36, 4, 52) }}>
+                      <Icon style={{ width: '55%', height: '55%' }} strokeWidth={2.2} />
                     </div>
                     <div className="min-w-0">
-                      <p className={`${it.highlight ? 'font-black' : 'font-bold'} truncate`}
-                        style={{ fontSize: clamp(13, 1.3, 22) }}>{it.label}</p>
-                      {it.sub && <p className="text-slate-500 truncate"
-                        style={{ fontSize: clamp(10, 0.85, 14) }}>{it.sub}</p>}
+                      <p className={`truncate ${isHi ? 'font-black text-[#FF5C00]' : isMu ? 'font-bold text-slate-400' : 'font-bold text-slate-800'}`}
+                        style={{ fontSize: clamp(14, 1.5, 22) }}>{it.label}</p>
+                      {it.sub && <p className="text-slate-500 truncate font-medium"
+                        style={{ fontSize: clamp(10, 0.95, 14) }}>{it.sub}</p>}
                     </div>
                   </div>
-                  <p className={`shrink-0 ${it.highlight ? 'font-black' : 'font-bold'} whitespace-nowrap`}
-                    style={{ fontSize: clamp(13, 1.4, 24) }}>
+                  <p className={`shrink-0 whitespace-nowrap tabular-nums ${
+                    isHi ? 'font-black text-[#FF5C00]' : isMu ? 'font-bold text-slate-400' : 'font-black text-slate-900'
+                  }`} style={{ fontSize: clamp(14, 1.5, 22) }}>
                     {fmtMoney(it.value, cur)}
                   </p>
                 </div>
               );
             })}
           </div>
-        </div>
 
-        {/* RIGHT — Total */}
-        <div className={`lg:col-span-2 rounded-2xl sm:rounded-3xl shadow-2xl flex flex-col items-center justify-center text-center p-4 sm:p-6 lg:p-8 ${
-          hasBalance ? 'bg-white' : 'bg-gradient-to-br from-emerald-500 to-emerald-600 text-white'
-        }`}>
-          <div className={`rounded-2xl flex items-center justify-center mb-3 sm:mb-4 ${
-            hasBalance ? 'bg-orange-100 text-[#FF5C00]' : 'bg-white/20 text-white'
-          }`} style={{ width: clamp(48, 5.5, 96), height: clamp(48, 5.5, 96) }}>
-            {hasBalance ? <Wallet style={{ width: '55%', height: '55%' }} />
-              : <CheckCircle2 style={{ width: '60%', height: '60%' }} strokeWidth={2.4} />}
-          </div>
-          <p className={`font-black uppercase tracking-[0.25em] ${
-            hasBalance ? 'text-slate-400' : 'text-white/90'
-          }`} style={{ fontSize: clamp(9, 0.95, 16) }}>
-            {hasBalance ? 'Te betalen' : 'Volledig bij'}
-          </p>
-          <p className={`font-black tracking-tight mt-1 mb-1 whitespace-nowrap ${
-            hasBalance ? 'text-slate-900' : 'text-white'
-          }`} style={{ fontSize: clamp(28, 5.4, 90) }} data-testid="cd-total-due">
-            {fmtMoney(totalDue, cur)}
-          </p>
-          <p className={`mt-1 px-2 ${hasBalance ? 'text-slate-500' : 'text-white/90'}`}
-            style={{ fontSize: clamp(11, 1.2, 16) }}>
-            {hasBalance ? 'Tik hieronder om uw betaling te starten' : 'U heeft geen openstaand bedrag.'}
-          </p>
-          {hasBalance && (
-            <>
+          {/* Totaal — premium accent block onderin */}
+          <div className="mt-auto pt-5 sm:pt-7">
+            <div className={`relative rounded-2xl overflow-hidden ${hasBalance ? '' : 'bg-gradient-to-br from-emerald-500 to-emerald-600'}`}>
+              {hasBalance && (
+                <>
+                  <div className="absolute inset-0 bg-gradient-to-br from-[#FF5C00] via-[#FF7A2D] to-amber-500" />
+                  <div className="absolute inset-0 opacity-30 mix-blend-overlay"
+                    style={{ backgroundImage: `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100'><filter id='n'><feTurbulence baseFrequency='1.4'/></filter><rect width='100%25' height='100%25' filter='url(%23n)' opacity='0.4'/></svg>")` }} />
+                </>
+              )}
+              <div className="relative flex items-end justify-between gap-4 px-4 sm:px-6 py-4 sm:py-5 text-white">
+                <div className="min-w-0">
+                  <p className="font-black uppercase tracking-[0.3em] text-white/85"
+                    style={{ fontSize: clamp(9, 0.9, 12) }}>
+                    {hasBalance ? 'Te betalen' : 'Volledig bij'}
+                  </p>
+                  <p className="font-bold text-white/90 mt-0.5"
+                    style={{ fontSize: clamp(12, 1.2, 16) }}>
+                    {hasBalance ? 'totaal openstaand' : 'geen openstaand bedrag'}
+                  </p>
+                </div>
+                <motion.p
+                  key={totalDue}
+                  initial={{ scale: 0.85, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+                  transition={{ type: 'spring', stiffness: 200, damping: 16 }}
+                  className="font-black tracking-tight whitespace-nowrap leading-none tabular-nums"
+                  style={{ fontSize: clamp(28, 5.2, 84) }} data-testid="cd-total-due">
+                  {fmtMoney(totalDue, cur)}
+                </motion.p>
+              </div>
+            </div>
+
+            {hasBalance && (
               <motion.button
                 whileTap={{ scale: 0.97 }} whileHover={{ scale: 1.02 }}
                 onClick={startPayment} disabled={busy || !slug}
                 data-testid="cd-start-payment"
-                className="mt-4 sm:mt-5 w-full max-w-xs rounded-2xl bg-gradient-to-r from-[#FF8A3D] to-[#FF5C00] text-white font-black shadow-xl disabled:opacity-60 flex items-center justify-center gap-2 transition active:shadow-md"
-                style={{ height: clamp(48, 6, 80), fontSize: clamp(14, 1.6, 24) }}>
+                className="mt-3 w-full rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-black shadow-xl disabled:opacity-60 flex items-center justify-center gap-2 transition active:shadow-md"
+                style={{ height: clamp(48, 6, 72), fontSize: clamp(14, 1.6, 22) }}>
                 {busy ? <Loader2 className="animate-spin" style={{ width: clamp(18, 1.6, 26), height: clamp(18, 1.6, 26) }} />
-                  : <>BETAAL NU <ChevronRight style={{ width: clamp(18, 1.8, 28), height: clamp(18, 1.8, 28) }} /></>}
+                  : <>Betaling starten <ChevronRight style={{ width: clamp(18, 1.8, 28), height: clamp(18, 1.8, 28) }} /></>}
               </motion.button>
-              {err && <p className="mt-2 text-red-500 font-bold"
-                style={{ fontSize: clamp(11, 1.0, 14) }}>{err}</p>}
-            </>
-          )}
-        </div>
+            )}
+            {err && <p className="mt-2 text-red-500 font-bold text-center"
+              style={{ fontSize: clamp(11, 1.0, 14) }}>{err}</p>}
+          </div>
+        </motion.div>
       </div>
     </motion.div>
   );
 }
 
 // =====================================================================
-// TenantBanner — toont huidige huurder + appartement op betaalschermen
+// TenantBanner — compact horizontal pill voor smalle headers
 // =====================================================================
-// Compact, elegant banner dat altijd zichtbaar is tijdens PAY, METHOD en
-// CONFIRM steps zodat de klant + omstanders duidelijk zien om welk
-// appartement en welke huurder het gaat. Avatar = initiaal in branded
-// cirkel; mooi met glasmorfisme bovenop het oranje achtergrond.
 function TenantBanner({ state, dense = false }) {
   const apt = state?.apartment || {};
   const tenant = state?.tenant || {};
@@ -281,6 +302,87 @@ function TenantBanner({ state, dense = false }) {
 }
 
 // =====================================================================
+// TenantIdentityCard — premium identity-pane voor de linkerkolom van
+// transactional schermen (Overview, Pay, Method). Glasmorphism kaart op
+// het oranje achtergrond, avatar-initiaal in witte gradient cirkel,
+// huurder-naam met wrap, appartement-info, adres, en een statuspill.
+// =====================================================================
+function TenantIdentityCard({ state, statusLabel, statusKind = 'live', children }) {
+  const apt = state?.apartment || {};
+  const tenant = state?.tenant || {};
+  const name = (tenant.name || apt.tenant_name || '').trim();
+  const initial = (name[0] || '?').toUpperCase();
+  const statusStyles = {
+    live: 'bg-emerald-400/20 border-emerald-300/40 text-emerald-50',
+    info: 'bg-white/15 border-white/30 text-white/95',
+    warn: 'bg-amber-400/25 border-amber-300/50 text-amber-50',
+  };
+  const dotStyles = {
+    live: 'bg-emerald-300',
+    info: 'bg-white',
+    warn: 'bg-amber-300',
+  };
+  return (
+    <div className="relative bg-white/10 backdrop-blur-2xl border border-white/20 rounded-3xl shadow-2xl p-5 sm:p-6 lg:p-8 flex flex-col text-white overflow-hidden">
+      {/* Inner highlight */}
+      <div className="absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/12 to-transparent pointer-events-none rounded-t-3xl" />
+
+      <p className="relative font-black uppercase tracking-[0.35em] text-white/70"
+        style={{ fontSize: clamp(9, 0.85, 12) }}>Huurder</p>
+
+      <div className="relative mt-3 sm:mt-4 flex items-center gap-3 sm:gap-4">
+        <motion.div
+          initial={{ scale: 0.7, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+          transition={{ delay: 0.25, type: 'spring', stiffness: 220, damping: 16 }}
+          className="rounded-2xl bg-gradient-to-br from-white to-white/85 text-[#FF5C00] flex items-center justify-center shrink-0 shadow-xl"
+          style={{ width: clamp(60, 7, 92), height: clamp(60, 7, 92) }}>
+          <span className="font-black tracking-tight"
+            style={{ fontSize: clamp(28, 3.2, 44) }}>{initial}</span>
+        </motion.div>
+        <div className="min-w-0 flex-1">
+          <p className="font-black tracking-tight leading-tight text-white break-words"
+            style={{ fontSize: clamp(18, 1.85, 28) }} data-testid="cd-tenant-name">
+            {name || 'Gewaardeerde huurder'}
+          </p>
+          {apt.number && (
+            <p className="mt-1.5 font-bold text-white/80 inline-flex items-center gap-1"
+              style={{ fontSize: clamp(12, 1.2, 16) }} data-testid="cd-apartment-number">
+              <HomeIcon style={{ width: '0.9em', height: '0.9em' }} strokeWidth={2.4} />
+              Appartement {apt.number}
+            </p>
+          )}
+        </div>
+      </div>
+
+      {apt.address && (
+        <div className="relative mt-4 pt-4 border-t border-white/15">
+          <p className="font-black uppercase tracking-[0.28em] text-white/55"
+            style={{ fontSize: clamp(9, 0.8, 11) }}>Adres</p>
+          <p className="mt-1 font-bold text-white/95 break-words leading-snug"
+            style={{ fontSize: clamp(13, 1.3, 18) }} data-testid="cd-apartment-address">
+            {apt.address}
+          </p>
+        </div>
+      )}
+
+      {/* Custom slot (bv. een groot bedrag) */}
+      {children && <div className="relative mt-4">{children}</div>}
+
+      {/* Status pill onderin */}
+      {statusLabel && (
+        <div className="relative mt-auto pt-4">
+          <span className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full border ${statusStyles[statusKind] || statusStyles.live}`}
+            style={{ fontSize: clamp(10, 0.9, 13) }}>
+            <span className={`w-1.5 h-1.5 rounded-full ${dotStyles[statusKind] || dotStyles.live} animate-pulse`} />
+            <span className="font-black uppercase tracking-widest">{statusLabel}</span>
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// =====================================================================
 // PaySelect — checklist + lopend totaal
 // =====================================================================
 function PayScreen({ state }) {
@@ -288,10 +390,6 @@ function PayScreen({ state }) {
   const cats = payload.categories || [];
   const cur = payload.currency || 'SRD';
   const amt = Number(payload.amount || 0);
-  const apt = state.apartment || {};
-  const tenant = state.tenant || {};
-  const name = (tenant.name || apt.tenant_name || '').trim();
-  const initial = (name[0] || '?').toUpperCase();
   const labels = {
     huur: 'Huur', servicekosten: 'Servicekosten',
     boete: 'Boetes', internet: 'Internet', overig: 'Overig',
@@ -317,58 +415,8 @@ function PayScreen({ state }) {
       <div className="flex-1 min-h-0 w-full max-w-[1400px] mx-auto grid grid-cols-1 lg:grid-cols-[minmax(300px,400px)_1fr] gap-5 lg:gap-10 items-stretch overflow-hidden">
 
         {/* ===== LINKS — Huurder identiteit kaart ===== */}
-        <motion.div variants={item}
-          className="relative bg-white/10 backdrop-blur-2xl border border-white/20 rounded-3xl shadow-2xl p-5 sm:p-6 lg:p-8 flex flex-col text-white overflow-hidden">
-
-          {/* Subtle inner highlight */}
-          <div className="absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/10 to-transparent pointer-events-none rounded-t-3xl" />
-
-          <p className="relative font-black uppercase tracking-[0.35em] text-white/70"
-            style={{ fontSize: clamp(9, 0.85, 12) }}>Huurder</p>
-
-          <div className="relative mt-3 sm:mt-4 flex items-center gap-3 sm:gap-4">
-            <motion.div
-              initial={{ scale: 0.7, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-              transition={{ delay: 0.25, type: 'spring', stiffness: 220, damping: 16 }}
-              className="rounded-2xl bg-gradient-to-br from-white to-white/85 text-[#FF5C00] flex items-center justify-center shrink-0 shadow-xl"
-              style={{ width: clamp(60, 7, 92), height: clamp(60, 7, 92) }}>
-              <span className="font-black tracking-tight"
-                style={{ fontSize: clamp(28, 3.2, 44) }}>{initial}</span>
-            </motion.div>
-            <div className="min-w-0 flex-1">
-              <p className="font-black tracking-tight leading-tight text-white break-words"
-                style={{ fontSize: clamp(18, 1.85, 28) }} data-testid="cd-tenant-name">
-                {name || 'Gewaardeerde huurder'}
-              </p>
-              {apt.number && (
-                <p className="mt-1.5 font-bold text-white/80 inline-flex items-center gap-1"
-                  style={{ fontSize: clamp(12, 1.2, 16) }} data-testid="cd-apartment-number">
-                  <HomeIcon style={{ width: '0.9em', height: '0.9em' }} strokeWidth={2.4} />
-                  Appartement {apt.number}
-                </p>
-              )}
-            </div>
-          </div>
-
-          {apt.address && (
-            <div className="relative mt-4 pt-4 border-t border-white/15">
-              <p className="font-black uppercase tracking-[0.28em] text-white/55"
-                style={{ fontSize: clamp(9, 0.8, 11) }}>Adres</p>
-              <p className="mt-1 font-bold text-white/95 break-words leading-snug"
-                style={{ fontSize: clamp(13, 1.3, 18) }} data-testid="cd-apartment-address">
-                {apt.address}
-              </p>
-            </div>
-          )}
-
-          {/* Live status pill onderin */}
-          <div className="relative mt-auto pt-4">
-            <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-400/20 border border-emerald-300/40 text-emerald-50"
-              style={{ fontSize: clamp(10, 0.9, 13) }}>
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-300 animate-pulse" />
-              <span className="font-black uppercase tracking-widest">Live samenstellen</span>
-            </span>
-          </div>
+        <motion.div variants={item}>
+          <TenantIdentityCard state={state} statusLabel="Live samenstellen" statusKind="live" />
         </motion.div>
 
         {/* ===== RECHTS — Transactie kaart ===== */}
@@ -520,213 +568,220 @@ function MethodScreen({ state, slug, branding }) {
 
   return (
     <motion.div key="method-pick"
-      initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }}
-      transition={{ duration: 0.3 }}
-      className="absolute inset-0 flex flex-col px-3 sm:px-6 lg:px-10 py-4 text-white"
+      initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -24 }}
+      transition={{ duration: 0.35, ease: 'easeOut' }}
+      className="absolute inset-0 flex flex-col px-4 sm:px-8 lg:px-14 py-6 lg:py-10 text-white"
       data-testid="cd-method-pick">
 
-      {/* TOP: huurder-banner + groot bedrag */}
-      <div className="flex flex-col items-center text-center gap-3 mb-3 sm:mb-4">
-        <TenantBanner state={state} dense />
-        <div>
-          <p className="font-black uppercase tracking-[0.3em] text-white/85"
-            style={{ fontSize: clamp(10, 1.0, 16) }}>Te betalen</p>
-          <p className="font-black text-white tracking-tight whitespace-nowrap leading-none mt-1"
-            style={{ fontSize: clamp(32, 5.0, 80) }} data-testid="cd-method-pick-amount">
-            {fmtMoney(amt, cur)}
-          </p>
-        </div>
-      </div>
+      {/* GRID: links = huurder + bedrag, rechts = QR/bank + methodes */}
+      <div className="flex-1 min-h-0 w-full max-w-[1400px] mx-auto grid grid-cols-1 lg:grid-cols-[minmax(300px,400px)_1fr] gap-5 lg:gap-10 items-stretch overflow-hidden">
 
-      {/* 2-KOLOMS LAYOUT: LINKS andere betaalmethodes, RECHTS Uni5Pay QR.
-          Op mobiel stapelt het verticaal (QR boven, methodes onder). */}
-      <div className="flex-1 min-h-0 w-full max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-4 sm:gap-6 lg:gap-10 items-center justify-items-center">
+        {/* ===== LINKS — Huurder identity + groot bedrag ===== */}
+        <TenantIdentityCard state={state}
+          statusLabel={customerChose ? 'Methode gekozen' : 'Kies een methode'}
+          statusKind={customerChose ? 'info' : 'warn'}>
+          <div className="rounded-2xl bg-white/10 border border-white/20 px-4 py-3 sm:px-5 sm:py-4">
+            <p className="font-black uppercase tracking-[0.3em] text-white/70"
+              style={{ fontSize: clamp(9, 0.85, 12) }}>Te betalen</p>
+            <motion.p
+              key={amt}
+              initial={{ scale: 0.85, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+              transition={{ type: 'spring', stiffness: 200, damping: 16 }}
+              className="font-black tracking-tight whitespace-nowrap leading-none mt-1 tabular-nums"
+              style={{ fontSize: clamp(28, 3.5, 56) }} data-testid="cd-method-pick-amount">
+              {fmtMoney(amt, cur)}
+            </motion.p>
+          </div>
+        </TenantIdentityCard>
 
-        {/* ===== LINKER KOLOM — andere betaalmethodes ===== */}
-        <div className="w-full max-w-md">
-          <p className="font-black uppercase tracking-widest text-white/70 mb-3 text-center lg:text-left"
-            style={{ fontSize: clamp(10, 1.0, 13) }}>Of kies een andere methode</p>
-          <div className="space-y-2 sm:space-y-3">
-            {METHODS.filter((m) => m.v !== 'mope').map((m) => {
-              const Icon = ICONS[m.v];
-              const selected = customerChose && chosen === m.v;
-              return (
-                <motion.button
-                  key={m.v}
-                  whileTap={{ scale: 0.97 }}
-                  onClick={() => pick(m.v)}
-                  disabled={busy}
-                  data-testid={`cd-method-${m.v}`}
-                  className={`w-full bg-white rounded-2xl sm:rounded-3xl p-3 sm:p-4 lg:p-5 shadow-2xl flex items-center gap-3 sm:gap-4 transition disabled:opacity-50 ${
-                    selected ? 'ring-4 ring-[#FF5C00]' : ''
-                  }`}
-                >
-                  <div className={`rounded-2xl flex items-center justify-center shrink-0 ${accentMap[m.accent]}`}
-                    style={{ width: clamp(48, 5.5, 72), height: clamp(48, 5.5, 72) }}>
-                    <Icon style={{ width: '55%', height: '55%' }} strokeWidth={2.2} />
+        {/* ===== RECHTS — QR/bank + andere methodes ===== */}
+        <div className="flex flex-col gap-4 sm:gap-5 min-h-0 overflow-hidden">
+          {/* TOP — Primaire methode (Uni5Pay QR OF bank details) */}
+          {bankActive && hasBankDetails ? (
+            <div
+              data-testid="cd-bank-details-card"
+              className="bg-white rounded-3xl p-5 sm:p-6 lg:p-8 shadow-2xl ring-4 ring-amber-400 relative overflow-hidden">
+              <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-amber-400 via-amber-500 to-amber-600" />
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-3">
+                  <div className="rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center shadow-inner"
+                    style={{ width: clamp(40, 4.5, 60), height: clamp(40, 4.5, 60) }}>
+                    <CreditCard style={{ width: '55%', height: '55%' }} strokeWidth={2.4} />
                   </div>
-                  <div className="flex-1 text-left min-w-0">
+                  <div>
+                    <p className="font-black uppercase tracking-[0.28em] text-amber-700"
+                      style={{ fontSize: clamp(9, 0.85, 12) }}>Maak over naar</p>
                     <p className="font-black text-slate-900 tracking-tight leading-tight"
-                      style={{ fontSize: clamp(16, 1.8, 26) }}>{LABELS[m.v]}</p>
-                    {m.v === 'bank' && hasBankDetails ? (
-                      <div className="mt-1 space-y-0.5">
-                        {bankSR && (
-                          <p className="text-slate-700 font-bold leading-tight truncate"
-                            style={{ fontSize: clamp(11, 1.1, 15) }}>SR: {bankSR}</p>
-                        )}
-                        {bankNL && (
-                          <p className="text-slate-700 font-bold leading-tight truncate"
-                            style={{ fontSize: clamp(11, 1.1, 15) }}>NL: {bankNL}</p>
-                        )}
-                      </div>
-                    ) : (
-                      <p className="text-slate-500 leading-tight mt-0.5"
-                        style={{ fontSize: clamp(11, 1.05, 15) }}>{SUBS[m.v]}</p>
-                    )}
+                      style={{ fontSize: clamp(18, 2.0, 28) }}>Bankrekening</p>
                   </div>
-                  {selected && (
-                    <span className="shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#FF5C00] text-white text-[10px] font-black uppercase tracking-widest">
-                      ✓ Gekozen
-                    </span>
+                </div>
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-100 text-amber-800"
+                  style={{ fontSize: clamp(9, 0.85, 12) }}>
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                  <span className="font-black uppercase tracking-widest">Bank gekozen</span>
+                </span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
+                {bankSR && (
+                  <div className="bg-gradient-to-br from-amber-50 to-white border-2 border-amber-200 rounded-2xl px-3 py-2.5 sm:px-4 sm:py-3">
+                    <p className="font-black uppercase tracking-widest text-amber-700"
+                      style={{ fontSize: clamp(9, 0.85, 12) }}>Suriname</p>
+                    <p className="font-black text-slate-900 break-words leading-tight mt-0.5"
+                      style={{ fontSize: clamp(13, 1.4, 20) }}>{bankSR}</p>
+                  </div>
+                )}
+                {bankNL && (
+                  <div className="bg-gradient-to-br from-amber-50 to-white border-2 border-amber-200 rounded-2xl px-3 py-2.5 sm:px-4 sm:py-3">
+                    <p className="font-black uppercase tracking-widest text-amber-700"
+                      style={{ fontSize: clamp(9, 0.85, 12) }}>Nederland</p>
+                    <p className="font-black text-slate-900 break-words leading-tight mt-0.5"
+                      style={{ fontSize: clamp(13, 1.4, 20) }}>{bankNL}</p>
+                  </div>
+                )}
+              </div>
+              <p className="mt-3 text-slate-500 text-center"
+                style={{ fontSize: clamp(10, 0.95, 13) }}>
+                Toon uw overschrijvingsbewijs bij de balie
+              </p>
+            </div>
+          ) : (() => {
+            const ready = Boolean(payload.mope_qr) || amt > 0;
+            const statusBorder = ready ? 'ring-emerald-500' : 'ring-red-500';
+            const statusBg = ready ? 'bg-emerald-500' : 'bg-red-500';
+            const statusText = ready ? 'Klaar om te scannen' : 'Wacht op bedrag';
+            return (
+              <button
+                onClick={() => pick('mope')}
+                disabled={busy || !ready}
+                data-testid="cd-method-mope"
+                className={`bg-white rounded-3xl p-5 sm:p-6 lg:p-7 shadow-2xl flex items-center gap-5 sm:gap-7 transition disabled:opacity-90 text-left ring-4 ${statusBorder} ${
+                  customerChose && chosen === 'mope' ? 'ring-[#FF5C00]' : ''
+                } relative overflow-hidden`}
+              >
+                {/* QR met "+" logo overlay in midden */}
+                <div className="relative bg-white rounded-xl p-1.5 shrink-0"
+                  style={{ width: clamp(140, 18, 240), height: clamp(140, 18, 240) }}>
+                  {(() => {
+                    const fallbackUrl = `${(typeof window !== 'undefined' ? window.location.origin : '')}/api/payments/mock-pay/${payload.order_id || 'demo'}?amount=${amt}&currency=${cur}`;
+                    let qrValue = payload.mope_qr || fallbackUrl;
+                    if (typeof qrValue !== 'string') qrValue = String(qrValue || '');
+                    if (qrValue.length > 1000) qrValue = fallbackUrl;
+                    return (
+                      <QRCodeSVG
+                        value={qrValue}
+                        size={256}
+                        level="H"
+                        bgColor="#FFFFFF"
+                        fgColor="#0F0F0F"
+                        style={{ width: '100%', height: '100%' }}
+                      />
+                    );
+                  })()}
+                  {/* Center logo overlay */}
+                  <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full flex items-center justify-center border-2 border-white bg-white shadow-lg"
+                    style={{ width: '18%', height: '18%' }}>
+                    <span className="font-black leading-none" style={{ fontSize: '1.4em', color: '#E40521' }}>+</span>
+                  </div>
+                  {/* ROOD overlay als niet ready */}
+                  {!ready && (
+                    <div className="absolute inset-1.5 bg-red-500/55 rounded-lg flex items-center justify-center">
+                      <span className="bg-white text-red-700 font-black px-3 py-1 rounded-full shadow-lg"
+                        style={{ fontSize: clamp(9, 0.95, 13) }}>Nog niet actief</span>
+                    </div>
                   )}
-                </motion.button>
-              );
-            })}
+                </div>
+
+                {/* Tekst rechts van QR */}
+                <div className="flex-1 min-w-0">
+                  <p className="font-black uppercase tracking-[0.32em] text-slate-400"
+                    style={{ fontSize: clamp(9, 0.85, 12) }}>Snelle betaling</p>
+                  <p className="font-black text-slate-900 tracking-tight mt-1"
+                    style={{ fontSize: clamp(20, 2.2, 32) }}>Betaal met</p>
+                  <p className="font-black tracking-tight flex items-baseline gap-1 leading-none mt-0.5"
+                    style={{ fontSize: clamp(28, 3.4, 50), color: '#E40521' }}>
+                    UNI5PAY
+                    <span className="inline-flex items-center justify-center rounded-full text-white"
+                      style={{ fontSize: '0.6em', width: '1em', height: '1em', background: '#E40521', marginLeft: '0.1em' }}>+</span>
+                  </p>
+                  <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full mt-3 text-white ${statusBg}`}
+                    style={{ fontSize: clamp(10, 0.95, 14) }}>
+                    <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                    <span className="font-black uppercase tracking-widest">{statusText}</span>
+                  </div>
+                  <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-900 text-white mt-2 ml-2"
+                    style={{ fontSize: clamp(11, 1.05, 14) }}>
+                    <Smartphone style={{ width: clamp(12, 1.2, 16), height: clamp(12, 1.2, 16) }} />
+                    <span className="font-bold">scan QR met telefoon</span>
+                  </div>
+                </div>
+              </button>
+            );
+          })()}
+
+          {/* BOTTOM — Andere methodes (horizontale grid) */}
+          <div className="flex-1 min-h-0 overflow-auto">
+            <p className="font-black uppercase tracking-[0.3em] text-white/70 mb-2 sm:mb-3"
+              style={{ fontSize: clamp(10, 0.95, 13) }}>Of kies een andere methode</p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3">
+              {METHODS.filter((m) => m.v !== 'mope').map((m) => {
+                const Icon = ICONS[m.v];
+                const selected = customerChose && chosen === m.v;
+                return (
+                  <motion.button
+                    key={m.v}
+                    whileTap={{ scale: 0.97 }}
+                    whileHover={{ y: -2 }}
+                    onClick={() => pick(m.v)}
+                    disabled={busy}
+                    data-testid={`cd-method-${m.v}`}
+                    className={`bg-white rounded-2xl p-3 sm:p-4 shadow-xl flex flex-col items-start gap-2 transition disabled:opacity-50 ${
+                      selected ? 'ring-4 ring-[#FF5C00]' : ''
+                    }`}>
+                    <div className={`rounded-2xl flex items-center justify-center shrink-0 ${accentMap[m.accent]}`}
+                      style={{ width: clamp(40, 4.5, 56), height: clamp(40, 4.5, 56) }}>
+                      <Icon style={{ width: '55%', height: '55%' }} strokeWidth={2.2} />
+                    </div>
+                    <div className="text-left min-w-0 w-full">
+                      <p className="font-black text-slate-900 tracking-tight leading-tight"
+                        style={{ fontSize: clamp(14, 1.4, 20) }}>{LABELS[m.v]}</p>
+                      {m.v === 'bank' && hasBankDetails ? (
+                        <div className="mt-1 space-y-0.5">
+                          {bankSR && (
+                            <p className="text-slate-700 font-bold leading-tight truncate"
+                              style={{ fontSize: clamp(10, 0.95, 13) }}>SR: {bankSR}</p>
+                          )}
+                          {bankNL && (
+                            <p className="text-slate-700 font-bold leading-tight truncate"
+                              style={{ fontSize: clamp(10, 0.95, 13) }}>NL: {bankNL}</p>
+                          )}
+                        </div>
+                      ) : (
+                        <p className="text-slate-500 leading-tight mt-0.5 truncate"
+                          style={{ fontSize: clamp(10, 0.95, 13) }}>{SUBS[m.v]}</p>
+                      )}
+                    </div>
+                    {selected && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#FF5C00] text-white font-black uppercase tracking-widest"
+                        style={{ fontSize: clamp(8, 0.7, 10) }}>
+                        ✓ Gekozen
+                      </span>
+                    )}
+                  </motion.button>
+                );
+              })}
+            </div>
           </div>
         </div>
-
-        {/* ===== RECHTER KOLOM — Uni5Pay QR óf bank-details =====
-            Wanneer 'bank' actief is (klant of operator gekozen) tonen we
-            géén QR maar een prominente bank-details card zodat de klant
-            direct ziet waar hij naar over moet maken. Anders: Uni5Pay QR
-            met ROOD (niet klaar) / GROEN (klaar) border-indicator. */}
-        {bankActive && hasBankDetails ? (
-          <div
-            data-testid="cd-bank-details-card"
-            className="bg-white rounded-2xl sm:rounded-3xl p-5 sm:p-6 lg:p-8 shadow-2xl flex flex-col text-center ring-4 ring-amber-400 w-full max-w-md"
-          >
-            <p className="font-black uppercase tracking-[0.3em] text-amber-700"
-              style={{ fontSize: clamp(10, 1.0, 14) }}>Maak over naar</p>
-            <div className="flex items-center justify-center gap-2 mt-2 mb-3">
-              <CreditCard className="text-amber-700" style={{ width: clamp(20, 2.2, 32), height: clamp(20, 2.2, 32) }} strokeWidth={2.4} />
-              <p className="font-black text-slate-900 tracking-tight"
-                style={{ fontSize: clamp(18, 2.0, 28) }}>Bankrekening</p>
-            </div>
-            <div className="space-y-2 sm:space-y-3">
-              {bankSR && (
-                <div className="bg-amber-50 border-2 border-amber-200 rounded-2xl px-3 py-2 sm:px-4 sm:py-3 text-left">
-                  <p className="font-black uppercase tracking-widest text-amber-700"
-                    style={{ fontSize: clamp(9, 0.85, 12) }}>Suriname</p>
-                  <p className="font-black text-slate-900 break-words leading-tight mt-0.5"
-                    style={{ fontSize: clamp(14, 1.5, 22) }}>{bankSR}</p>
-                </div>
-              )}
-              {bankNL && (
-                <div className="bg-amber-50 border-2 border-amber-200 rounded-2xl px-3 py-2 sm:px-4 sm:py-3 text-left">
-                  <p className="font-black uppercase tracking-widest text-amber-700"
-                    style={{ fontSize: clamp(9, 0.85, 12) }}>Nederland</p>
-                  <p className="font-black text-slate-900 break-words leading-tight mt-0.5"
-                    style={{ fontSize: clamp(14, 1.5, 22) }}>{bankNL}</p>
-                </div>
-              )}
-            </div>
-            <p className="mt-4 text-slate-600 font-bold"
-              style={{ fontSize: clamp(11, 1.1, 15) }}>
-              Bedrag: <span className="text-amber-700 font-black">{fmtMoney(amt, cur)}</span>
-            </p>
-            <p className="mt-1 text-slate-500"
-              style={{ fontSize: clamp(10, 0.95, 13) }}>
-              Toon uw overschrijvingsbewijs bij de balie
-            </p>
-          </div>
-        ) : (() => {
-          const ready = Boolean(payload.mope_qr) || amt > 0;
-          const statusBorder = ready ? 'ring-emerald-500' : 'ring-red-500';
-          const statusBg = ready ? 'bg-emerald-500' : 'bg-red-500';
-          const statusText = ready ? 'Klaar om te scannen' : 'Wacht op bedrag';
-          return (
-        <button
-          onClick={() => pick('mope')}
-          disabled={busy || !ready}
-          data-testid="cd-method-mope"
-          className={`bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-5 lg:p-6 shadow-2xl flex flex-col items-center text-center transition disabled:opacity-90 ring-4 ${statusBorder} ${
-            customerChose && chosen === 'mope' ? 'ring-[#FF5C00]' : ''
-          }`}
-        >
-          {/* "Betaal met UNI5PAY+" header — gebrand zoals Uni5Pay sticker */}
-          <p className="font-black text-slate-900 tracking-tight"
-            style={{ fontSize: clamp(13, 1.5, 22) }}>Betaal met</p>
-          <p className="font-black tracking-tight flex items-baseline gap-1 leading-none"
-            style={{ fontSize: clamp(22, 2.8, 38), color: '#E40521' }}>
-            UNI5PAY
-            <span className="inline-flex items-center justify-center rounded-full text-white"
-              style={{ fontSize: '0.6em', width: '1em', height: '1em', background: '#E40521', marginLeft: '0.1em' }}>+</span>
-          </p>
-
-          {/* Status badge (ROOD/GROEN) */}
-          <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full mt-2 mb-2 text-white ${statusBg}`}
-            style={{ fontSize: clamp(9, 0.85, 13) }}>
-            <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
-            <span className="font-black uppercase tracking-widest">{statusText}</span>
-          </div>
-
-          {/* QR met "+" logo overlay in midden */}
-          <div className="relative bg-white rounded-xl p-2"
-            style={{ width: clamp(180, 22, 320), height: clamp(180, 22, 320) }}>
-            {(() => {
-              const fallbackUrl = `${(typeof window !== 'undefined' ? window.location.origin : '')}/api/payments/mock-pay/${payload.order_id || 'demo'}?amount=${amt}&currency=${cur}`;
-              let qrValue = payload.mope_qr || fallbackUrl;
-              if (typeof qrValue !== 'string') qrValue = String(qrValue || '');
-              if (qrValue.length > 1000) qrValue = fallbackUrl;
-              return (
-                <QRCodeSVG
-                  value={qrValue}
-                  size={256}
-                  level="H"
-                  bgColor="#FFFFFF"
-                  fgColor="#0F0F0F"
-                  style={{ width: '100%', height: '100%' }}
-                />
-              );
-            })()}
-            {/* Center logo overlay — Uni5Pay "+" icoon (compacter zodat QR scanbaar blijft) */}
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full flex items-center justify-center border-2 border-white bg-white shadow-lg"
-              style={{ width: '18%', height: '18%' }}>
-              <span className="font-black leading-none" style={{ fontSize: '1.4em', color: '#E40521' }}>+</span>
-            </div>
-            {/* ROOD overlay als niet ready — visueel signaal */}
-            {!ready && (
-              <div className="absolute inset-2 bg-red-500/55 rounded-lg flex items-center justify-center">
-                <span className="bg-white text-red-700 font-black px-3 py-1.5 rounded-full shadow-lg"
-                  style={{ fontSize: clamp(10, 1.0, 14) }}>Nog niet actief</span>
-              </div>
-            )}
-          </div>
-
-          {/* "scan QR code" pill */}
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-slate-900 text-white mt-3"
-            style={{ fontSize: clamp(12, 1.2, 16) }}>
-            <Smartphone style={{ width: clamp(14, 1.4, 20), height: clamp(14, 1.4, 20) }} />
-            <span className="font-bold">scan QR code</span>
-          </div>
-        </button>
-          );
-        })()}
       </div>
 
       {error && (
         <p className="text-white bg-red-500/30 px-3 py-1 rounded-full font-bold mt-2 mx-auto"
           style={{ fontSize: clamp(11, 1.0, 14) }}>{error}</p>
       )}
-      <p className="text-white/70 mt-2 sm:mt-3 font-bold uppercase tracking-widest text-center px-4"
-        style={{ fontSize: clamp(9, 0.95, 14) }}>
-        {customerChose
-          ? 'De medewerker bevestigt uw betaling…'
-          : 'Scan de QR-code of tik op een methode'}
-      </p>
     </motion.div>
   );
 }
+
 
 // =====================================================================
 // Receipt — succes-scherm
