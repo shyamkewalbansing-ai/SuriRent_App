@@ -2,9 +2,16 @@ import axios from 'axios';
 
 const baseURL = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
+// httpOnly auth cookies (access_token / kiosk_token / tenant_token) worden
+// door de backend gezet bij login en automatisch meegestuurd via
+// `withCredentials: true`. Dit is de PRIMAIRE auth-flow. We behouden de
+// legacy `Authorization: Bearer <localStorage-token>` fallback hieronder
+// puur voor overgangs-compatibiliteit met bestaande PWA's die nog een
+// token in localStorage hebben staan — bij volgende login (waar cookies
+// gezet worden) wordt localStorage tokens vanzelf overbodig.
 export const api = axios.create({
   baseURL,
-  withCredentials: false,
+  withCredentials: true,
 });
 
 // Attach bearer token if present (fallback to cookie auth)

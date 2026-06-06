@@ -561,7 +561,7 @@ const PAY_ITEMS_TEMPLATE = [
   { id: 'internet', label: 'Internet', icon: Wifi, desc: 'Internetaansluiting' },
 ];
 
-function PaySelect({ overview, onBack, onConfirm }) {
+function PaySelect({ overview, onBack, onConfirm, onLiveChange }) {
   const { tenant, apartment: apt, balance, internet, total_due, isAdvance = false,
     open_invoices: openInvoices = [], open_invoices_total: openInvoicesTotal = 0,
     current_invoices: currentInvoicesRaw = [],
@@ -686,6 +686,37 @@ function PaySelect({ overview, onBack, onConfirm }) {
     if (selectedPlanItems.length > 0) labels.push(`Regeling (${selectedPlanItems.length}× termijn)`);
     return labels.join(' + ');
   };
+
+  // Live-sync naar het klantenscherm: zodra de operator iets aanvinkt of
+  // een bedrag intikt, sturen we het lopende totaal + de geselecteerde
+  // onderdelen door naar KioskLayout. KioskLayout broadcast dit dan
+  // (via BroadcastChannel + PUT) naar het klantenscherm zodat de klant
+  // realtime ziet wat er gebeurt. Dedup wordt door KioskLayout's push-hash
+  // afgehandeld.
+  useEffect(() => {
+    if (typeof onLiveChange !== 'function') return;
+    if (activeAmount <= 0) { onLiveChange(null); return; }
+    const cats = [];
+    selectedInvItems.forEach((inv) => {
+      const label = inv.period_month
+        ? `Huur ${MONTHS_NL[inv.period_month - 1]} ${inv.period_year || ''}`.trim()
+        : 'Huur';
+      cats.push({ key: 'huur', label, value: Number(inv.outstanding || 0) });
+    });
+    if (selectedSynCurrent > 0) {
+      cats.push({ key: 'huur', label: 'Huur (huidige maand)', value: selectedSynCurrent });
+    }
+    if (selected.has('boete')) cats.push({ key: 'boete', label: 'Boetes', value: amounts.boete || 0 });
+    if (selected.has('internet')) cats.push({ key: 'internet', label: 'Internet', value: amounts.internet || 0 });
+    selectedPlanItems.forEach((it, i) => {
+      cats.push({ key: 'overig', label: `Regeling termijn ${i + 1}`, value: it.amount });
+    });
+    if (hasCustom) {
+      cats.push({ key: 'overig', label: isAdvance ? 'Vooruitbetaling' : 'Gedeeltelijke betaling', value: parseFloat(custom) });
+    }
+    onLiveChange({ amount: activeAmount, currency: cur, categories: cats });
+  }, [activeAmount, hasCustom, custom, cur, isAdvance, selected, selectedInvItems, selectedPlanItems, selectedSynCurrent, onLiveChange]);
+
 
   const press = (k) => {
     if (k === 'DEL') setCustom((c) => c.slice(0, -1));
@@ -2018,6 +2049,12 @@ export default function KioskLayout() {
   const [apartment, setApartment] = useState(null);
   const [overview, setOverview] = useState(null);
   const [paymentPayload, setPaymentPayload] = useState(null);
+  // Live-preview voor het klantenscherm tijdens de "pay" stap. Wordt door
+  // PaySelect realtime bijgewerkt naarmate de operator categorieën aanvinkt
+  // of via het keypad een bedrag intikt — zodat de klant op zijn scherm
+  // het lopend totaal en de geselecteerde onderdelen meteen ziet, vóórdat
+  // de operator op "Verder" tikt.
+  const [livePreview, setLivePreview] = useState(null);
   const [paymentResult, setPaymentResult] = useState(null);
   const [company, setCompany] = useState(getKioskCompany());
 
@@ -2102,10 +2139,18 @@ export default function KioskLayout() {
         balance: overview.balance, apartment: overview.apartment,
         internet: overview.internet || 0, total_due: overview.total_due || 0,
       } : null;
+      // Tijdens 'pay' tonen we de live preview van de operator-selectie
+      // (categorieën + lopend totaal) zodat het klantenscherm meteen
+      // meebeweegt. Zodra de operator op "Verder" tikt wordt paymentPayload
+      // gevuld en gebruikt — die heeft voorrang.
+      const livePayload = (!paymentPayload && step === 'pay' && livePreview) ? {
+        amount: livePreview.amount, currency: livePreview.currency,
+        categories: livePreview.categories || [],
+      } : null;
       const payload = paymentPayload ? {
         amount: paymentPayload.amount, currency: paymentPayload.currency,
         categories: paymentPayload.categories || [], method: paymentPayload.method,
-      } : null;
+      } : livePayload;
       const payment = paymentResult ? {
         amount: paymentResult.amount, currency: paymentResult.currency,
         receipt_number: paymentResult.receipt_number, method: paymentResult.method,
@@ -2126,6 +2171,9 @@ export default function KioskLayout() {
           a: body.apartment?.id, t: body.tenant?.name,
           amt: body.payload?.amount, cur: body.payload?.currency,
           m: body.payload?.method, mc: body.payload?.method_chosen_at,
+          // Categorieën in de hash zodat live-preview wijzigingen
+          // (b.v. operator vinkt "Internet" aan met €0) een push triggeren.
+          cats: (body.payload?.categories || []).map((c) => `${c.key || c.label}:${c.value || 0}`).join('|'),
           r: body.payment?.receipt_number, pa: body.payment?.paid_at,
         });
       } catch { contentKey = String(Math.random()); }
@@ -2143,7 +2191,7 @@ export default function KioskLayout() {
     push();
     const hb = setInterval(push, 3000);
     return () => clearInterval(hb);
-  }, [step, apartment, overview, paymentPayload, paymentResult]);
+  }, [step, apartment, overview, paymentPayload, paymentResult, livePreview]);
 
   // "Beheerder" knop in de kiosk: als de PIN-login een admin-token heeft
   // afgegeven (PIN is shared secret van het bedrijf), spring direct naar
@@ -2182,7 +2230,8 @@ export default function KioskLayout() {
   }, []);
 
   const reset = () => {
-    setApartment(null); setOverview(null); setPaymentPayload(null); setPaymentResult(null);
+    setApartment(null); setOverview(null); setPaymentPayload(null);
+    setLivePreview(null); setPaymentResult(null);
     setStep('select');
   };
 
@@ -2253,7 +2302,8 @@ export default function KioskLayout() {
           )}
           {step === 'pay' && overview && (
             <PaySelect overview={overview} onBack={() => setStep('overview')}
-              onConfirm={(p) => { setPaymentPayload(p); setStep('method'); }} />
+              onLiveChange={setLivePreview}
+              onConfirm={(p) => { setLivePreview(null); setPaymentPayload(p); setStep('method'); }} />
           )}
           {step === 'method' && paymentPayload && overview && (
             <MethodSelect payload={paymentPayload} overview={overview} onBack={() => setStep('pay')}

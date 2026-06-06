@@ -1,103 +1,29 @@
-# Test Credentials - Vastgoed Kiosk (Multi-Company SaaS)
+# Test Credentials
 
-## Superadmin (manages all companies)
-- Email: `super@surirent.sr`
-- Password: `super123`
-- Role: `superadmin`
-- `company_id`: null (can simulate any company via header `x-active-company: <company_id>`)
+## Admin (Beheerder)
+- **URL**: /login (admin tab)
+- **Email**: `admin@vastgoed.sr`
+- **Password**: `admin123`
+- **Role**: admin
+- **Company**: Dado Vastgoed Beheer (slug: `surirent`)
 
-## Admin Company A — SuriRent N.V. (default)
-- Email: `admin@vastgoed.sr`
-- Password: `admin123`
-- Role: `admin`
-- Company slug: `surirent`
-
-## Admin Company B — Test Vastgoed B (created in iteration 5 for isolation tests)
-- Email: `adminb@test.sr`
-- Password: `adminb123`
-- Role: `admin`
-- Company slug: `test-vastgoed-b`
+## Demo (gedeeld)
+- **URL**: /login (demo tab) of klik "Demo proberen"
+- **Email**: `demo@surirent.sr`
+- **Password**: `demo1234`
+- **Slug**: `demo`
 
 ## Kiosk PIN
-- Default PIN (Company A): `1234`
-- Each company has its OWN kiosk PIN, unique across all companies.
-
-Endpoints:
-- `POST /api/auth/kiosk-pin` body `{"pin":"1234"}` → matches PIN against all companies, returns token with that company's scope.
-- `POST /api/auth/kiosk-set-pin` (admin auth required) — sets PIN for active company; rejects if PIN already used by another company.
+- **Default PIN**: `1234`
+- **Login flow**: `/login?target=kiosk` → PIN-pad
 
 ## Tenant Portal
-- Login URL: `/huurder`
-- Dashboard URL: `/huurder/portaal`
-- Test tenant (Company A): `Bharat Kewalbansing` (email `shyam@kewalbansing.net`, PIN `4242`)
-- Note: Jan de Vries seed is not always present in fresh DBs — use Bharat for tenant-kiosk flows.
-- Login accepteert email of telefoon (volledig string OF alleen cijfers) — case-insensitive voor email.
+- **URL**: `/huurder` of `/tenant-portal`
+- **Login**: per huurder via email + wachtwoord (set bij onboarding)
 
-## Kiosk Medewerker PIN (Approval Workflow + Direct Login)
-- First kiosk employee (Maria K.) PIN: `9999` (reset during iteration_17 voor test stabiliteit)
-- Second kiosk employee (Rayshree) PIN: `8888` (reset during iteration_18)
-- Tenant Bharat Kewalbansing PIN: `7777` (set during iteration_24 voor testing van /c/surirent/kiosk/huurder)
-- **NIEUW 2026-02-26**: medewerkers loggen direct in op `/login` met hun eigen PIN → landen op `/kiosk` met employee-sessie. GEEN admin_token, dus geen toegang tot Beheer.
-- **PIN-uniqueness** wereldwijd afgedwongen — geen botsingen tussen company-PINs en employee-PINs (409 met naam in detail).
-- Endpoints:
-  - `POST /api/auth/kiosk-pin` body `{pin}` — match-volgorde: company-PIN → employee-PIN. Employee-match returnt `{token, employee, admin_token:null}`.
-  - `POST /api/employees/{id}/kiosk-pin` body `{pin}` — admin sets/rotates employee PIN (uniqueness afgedwongen)
-  - `POST /api/auth/kiosk-set-pin` body `{pin}` — admin sets company-shared PIN (uniqueness afgedwongen)
-  - `POST /api/kiosk/employee-verify` body `{pin}` — legacy: kiosk verifies employee in eigen sessie (nog gebruikt door de inline LoginSheet)
-  - `POST /api/kiosk/payments?employee_id=X&employee_pin=Y` — submit met pending_approval
-  - `POST /api/payments/{id}/approve` body `{signature_data_url}` — admin approves
-  - `POST /api/payments/{id}/reject` body `{reason}` — admin rejects
-  - `GET /api/payments/pending-count` — admin bell badge
-
-## Frontend Routes (dual-domain architecture)
-Production:
-- `https://surirent.sr/` — Marketing landing (marketing host only)
-- `https://app.surirent.sr/` — Login (root of app host)
-- `https://app.surirent.sr/login` — PIN keypad + admin login (toggle)
-- `https://app.surirent.sr/admin` — Beheer dashboard (protected)
-- `https://app.surirent.sr/kiosk` — Kiosk flow (requires kiosk_token in localStorage)
-- `https://app.surirent.sr/onderteken/:token` — Contract sign page
-- `https://app.surirent.sr/huurder` — Tenant login
-- `https://app.surirent.sr/huurder/portaal` — Tenant dashboard
-
-Preview / local (hybrid single-domain — both REACT_APP_MARKETING_HOST and REACT_APP_APP_URL empty):
-- `/` — Marketing landing
-- `/login`, `/admin`, `/kiosk`, `/onderteken/:token`, `/huurder`, `/huurder/portaal`
-- Legacy `/vastgoed/*` paths redirect to the new root paths automatically.
-
-## Multi-Company Architecture Notes
-- `get_current_user` sets `user["active_company_id"]`:
-  - For normal admin → equal to `user["company_id"]`
-  - For superadmin → comes from header `x-active-company` or query `?company_id=...`, falls back to `user["company_id"]` (which is null → unscoped, sees everything).
-- `scope(user)` returns `{"company_id": active_company_id}` or `{}` (unscoped, only when superadmin has no header).
-- All tenant-scoped collections (apartments, tenants, payments, contracts, invoices, employees, salaries, deposits, maintenance, kasgeld, ai_sessions, push_subs) carry `company_id`.
-
-## API Endpoints
-### Auth
-- `POST /api/auth/login` `{email, password}` → `{token, user, company}`
-- `POST /api/auth/register` `{name, email, password}` → joins default company
-- `POST /api/auth/logout`
-- `GET /api/auth/me` (auth) → `{...user, active_company_id, active_company}`
-- `POST /api/auth/kiosk-pin` `{pin}` → `{token, company}`
-- `POST /api/auth/kiosk-set-pin` `{pin}` (auth)
-
-### Companies (superadmin only)
-- `GET /api/companies` — list with `stats {apartments, tenants, admins}`
-- `POST /api/companies` `{name, slug, plan, active, contact_email, contact_phone, address}`
-- `PUT /api/companies/{cid}`
-- `DELETE /api/companies/{cid}` (refuses if data exists)
-- `POST /api/companies/{cid}/seed-admin` `{name, email, password}` — create first admin for company
-
-### Apartments, Tenants, Payments, Contracts, Invoices, Employees, Salaries, Deposits, Maintenance, Kasgeld
-All standard CRUD, automatically scoped by `company_id` via `scope(user)`.
-
-### Tenant Portal
-- `POST /api/tenant-portal/login` `{identifier, pin}` → `{token, tenant}`
-- `GET /api/tenant-portal/me`
-- `GET /api/tenant-portal/overview`
-- `GET /api/tenant-portal/payments`
-- `GET /api/tenant-portal/contracts`
-- `GET/POST /api/tenant-portal/maintenance`
-- `POST /api/tenant-portal/logout`
-
-Frontend sends Bearer token from localStorage (`admin_token`, `kiosk_token`, `tenant_token`).
+## Auth endpoints (httpOnly cookies, ook Bearer fallback)
+- `POST /api/auth/login` — admin/staff (cookie: `access_token`)
+- `POST /api/auth/kiosk-pin` — kiosk PIN (cookie: `kiosk_token`)
+- `POST /api/tenant-portal/login` — huurder (cookie: `tenant_token`)
+- `POST /api/auth/logout` — wist alle 3 cookies
+- `GET /api/auth/me` — werkt met cookie OF `Authorization: Bearer ...`

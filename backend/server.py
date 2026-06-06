@@ -908,8 +908,13 @@ api = APIRouter(prefix="/api")
 # Auth routes
 # =====================================================================
 def _set_access_cookie(response: Response, token: str, name="access_token", minutes=ACCESS_MIN):
+    # Cookies worden gemarkeerd `Secure` op HTTPS (preview + productie) en
+    # `SameSite=Lax` zodat ze niet door 3rd-party scripts mee-genomen kunnen
+    # worden. We schakelen `secure` uit op lokale http dev (COOKIE_SECURE=0)
+    # zodat developer-tools nog werken zonder TLS.
+    secure_flag = (os.environ.get("COOKIE_SECURE", "1").strip() == "1")
     response.set_cookie(
-        key=name, value=token, httponly=True, secure=False,
+        key=name, value=token, httponly=True, secure=secure_flag,
         samesite="lax", max_age=minutes * 60, path="/",
     )
 
@@ -1180,8 +1185,11 @@ async def login(body: LoginIn, response: Response):
 
 @api.post("/auth/logout")
 async def logout(response: Response):
-    response.delete_cookie("access_token", path="/")
-    response.delete_cookie("kiosk_token", path="/")
+    # Wis alle auth-cookies — admin, kiosk én tenant. Hierdoor kan een
+    # gebruiker via één centrale /auth/logout call alle sessies invalideren
+    # zonder dat we per role aparte endpoints hoeven aan te roepen.
+    for name in ("access_token", "kiosk_token", "tenant_token"):
+        response.delete_cookie(name, path="/")
     return {"ok": True}
 
 
@@ -7784,7 +7792,10 @@ async def get_customer_display(slug: str, response: Response):
         raise HTTPException(status_code=400, detail="Ongeldige slug")
     c = await db.companies.find_one(
         {"slug": slug.lower()},
-        {"_id": 0, "id": 1, "name": 1, "slug": 1, "branding": 1},
+        {"_id": 0, "id": 1, "name": 1, "slug": 1, "branding": 1,
+         "bank_account_sr": 1, "bank_account_nl": 1,
+         "contact_email": 1, "contact_phone": 1, "address": 1,
+         "mope_account": 1, "uni5pay_account": 1},
     )
     if not c:
         raise HTTPException(status_code=404, detail="Bedrijf niet gevonden")

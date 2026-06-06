@@ -287,7 +287,7 @@ function PayScreen({ state }) {
 // Toont 5 grote tap-tegels; na tap wordt de keuze naar de backend
 // gestuurd zodat de admin Kiosk automatisch verder kan.
 // =====================================================================
-function MethodScreen({ state, slug }) {
+function MethodScreen({ state, slug, branding }) {
   const payload = state.payload || {};
   const cur = payload.currency || 'SRD';
   const amt = Number(payload.amount || 0);
@@ -303,6 +303,14 @@ function MethodScreen({ state, slug }) {
   const LABELS = { contant: 'Contant', bank: 'Bankoverschrijving', mope: 'Uni5Pay', sumup: 'SumUp' };
   const SUBS = { contant: 'Betaal contant aan de balie', bank: 'Overschrijving naar bankrekening',
     mope: 'Scan QR-code om te betalen', sumup: 'Kaart of contactloos' };
+
+  // Bankoverschrijving gegevens — komen uit de branding (admin-instellingen).
+  // We tonen ze altijd zichtbaar onder de bank-tegel en, als de klant/operator
+  // bank kiest, groot rechts in beeld i.p.v. de Uni5Pay QR.
+  const bankSR = (branding?.bank_account_sr || '').trim();
+  const bankNL = (branding?.bank_account_nl || '').trim();
+  const hasBankDetails = !!(bankSR || bankNL);
+  const bankActive = chosen === 'bank';
 
   const METHODS = [
     { v: 'contant', accent: 'emerald' },
@@ -390,8 +398,21 @@ function MethodScreen({ state, slug }) {
                   <div className="flex-1 text-left min-w-0">
                     <p className="font-black text-slate-900 tracking-tight leading-tight"
                       style={{ fontSize: clamp(16, 1.8, 26) }}>{LABELS[m.v]}</p>
-                    <p className="text-slate-500 leading-tight mt-0.5"
-                      style={{ fontSize: clamp(11, 1.05, 15) }}>{SUBS[m.v]}</p>
+                    {m.v === 'bank' && hasBankDetails ? (
+                      <div className="mt-1 space-y-0.5">
+                        {bankSR && (
+                          <p className="text-slate-700 font-bold leading-tight truncate"
+                            style={{ fontSize: clamp(11, 1.1, 15) }}>SR: {bankSR}</p>
+                        )}
+                        {bankNL && (
+                          <p className="text-slate-700 font-bold leading-tight truncate"
+                            style={{ fontSize: clamp(11, 1.1, 15) }}>NL: {bankNL}</p>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-slate-500 leading-tight mt-0.5"
+                        style={{ fontSize: clamp(11, 1.05, 15) }}>{SUBS[m.v]}</p>
+                    )}
                   </div>
                   {selected && (
                     <span className="shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#FF5C00] text-white text-[10px] font-black uppercase tracking-widest">
@@ -404,12 +425,51 @@ function MethodScreen({ state, slug }) {
           </div>
         </div>
 
-        {/* ===== RECHTER KOLOM — Uni5Pay QR met branding + ready-status =====
-            ROOD border: nog niet klaar (geen bedrag / wachten op operator).
-            GROEN border: klaar om te scannen (Uni5Pay QR is gegenereerd OF
-            mock-modus met geldig bedrag). Helpt klant te zien wanneer
-            scannen relevant is. */}
-        {(() => {
+        {/* ===== RECHTER KOLOM — Uni5Pay QR óf bank-details =====
+            Wanneer 'bank' actief is (klant of operator gekozen) tonen we
+            géén QR maar een prominente bank-details card zodat de klant
+            direct ziet waar hij naar over moet maken. Anders: Uni5Pay QR
+            met ROOD (niet klaar) / GROEN (klaar) border-indicator. */}
+        {bankActive && hasBankDetails ? (
+          <div
+            data-testid="cd-bank-details-card"
+            className="bg-white rounded-2xl sm:rounded-3xl p-5 sm:p-6 lg:p-8 shadow-2xl flex flex-col text-center ring-4 ring-amber-400 w-full max-w-md"
+          >
+            <p className="font-black uppercase tracking-[0.3em] text-amber-700"
+              style={{ fontSize: clamp(10, 1.0, 14) }}>Maak over naar</p>
+            <div className="flex items-center justify-center gap-2 mt-2 mb-3">
+              <CreditCard className="text-amber-700" style={{ width: clamp(20, 2.2, 32), height: clamp(20, 2.2, 32) }} strokeWidth={2.4} />
+              <p className="font-black text-slate-900 tracking-tight"
+                style={{ fontSize: clamp(18, 2.0, 28) }}>Bankrekening</p>
+            </div>
+            <div className="space-y-2 sm:space-y-3">
+              {bankSR && (
+                <div className="bg-amber-50 border-2 border-amber-200 rounded-2xl px-3 py-2 sm:px-4 sm:py-3 text-left">
+                  <p className="font-black uppercase tracking-widest text-amber-700"
+                    style={{ fontSize: clamp(9, 0.85, 12) }}>Suriname</p>
+                  <p className="font-black text-slate-900 break-words leading-tight mt-0.5"
+                    style={{ fontSize: clamp(14, 1.5, 22) }}>{bankSR}</p>
+                </div>
+              )}
+              {bankNL && (
+                <div className="bg-amber-50 border-2 border-amber-200 rounded-2xl px-3 py-2 sm:px-4 sm:py-3 text-left">
+                  <p className="font-black uppercase tracking-widest text-amber-700"
+                    style={{ fontSize: clamp(9, 0.85, 12) }}>Nederland</p>
+                  <p className="font-black text-slate-900 break-words leading-tight mt-0.5"
+                    style={{ fontSize: clamp(14, 1.5, 22) }}>{bankNL}</p>
+                </div>
+              )}
+            </div>
+            <p className="mt-4 text-slate-600 font-bold"
+              style={{ fontSize: clamp(11, 1.1, 15) }}>
+              Bedrag: <span className="text-amber-700 font-black">{fmtMoney(amt, cur)}</span>
+            </p>
+            <p className="mt-1 text-slate-500"
+              style={{ fontSize: clamp(10, 0.95, 13) }}>
+              Toon uw overschrijvingsbewijs bij de balie
+            </p>
+          </div>
+        ) : (() => {
           const ready = Boolean(payload.mope_qr) || amt > 0;
           const statusBorder = ready ? 'ring-emerald-500' : 'ring-red-500';
           const statusBg = ready ? 'bg-emerald-500' : 'bg-red-500';
@@ -585,6 +645,10 @@ export default function CustomerDisplay() {
         method_chosen_at: newState?.payload?.method_chosen_at,
         mope_qr: newState?.payload?.mope_qr,
         mope_paid_at: newState?.payload?.mope_paid_at,
+        // Categorieën-lengte + labels meenemen zodat operator-aanvinkingen
+        // (zelfs als ze het totaalbedrag onveranderd laten, bv. Internet=0)
+        // het klantenscherm WEL re-renderen.
+        cats: (newState?.payload?.categories || []).map((c) => `${c.key || c.label}:${c.value || 0}`).join('|'),
         tenant_id: newState?.tenant?.id,
         apartment_id: newState?.apartment?.id,
         receipt_number: newState?.payment?.receipt_number,
@@ -730,7 +794,7 @@ export default function CustomerDisplay() {
         {effectiveStep === 'select' && <GreetScreen state={state} branding={branding} />}
         {effectiveStep === 'overview' && <OverviewScreen state={state} slug={slug} />}
         {effectiveStep === 'pay' && <PayScreen state={state} />}
-        {(effectiveStep === 'method' || effectiveStep === 'confirm') && <MethodScreen state={state} slug={slug} />}
+        {(effectiveStep === 'method' || effectiveStep === 'confirm') && <MethodScreen state={state} slug={slug} branding={branding} />}
         {effectiveStep === 'receipt' && <ReceiptScreen state={state} />}
       </AnimatePresence>
 
