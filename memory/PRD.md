@@ -1482,3 +1482,12 @@ Lint clean. Verified via desktop screenshots (1440×900): élke admin-pagina (Ov
 - **Issue**: Op het klantenscherm verscheen telkens opnieuw de "Betaling gelukt" popup, wisselend met het beginscherm, en bleef uiteindelijk vastlopen op de laatste betaling.
 - ✅ **Backend fix** (`server.py` GET /public/customer-display/{slug}): Receipt status heeft nu een eigen TTL van 12 seconden (was 5 minuten algemeen). Na 12s vervalt het scherm automatisch terug naar idle, zelfs als de medewerker vergeet expliciet te resetten.
 - ✅ **Frontend fix** (`CustomerDisplay.jsx` applyState): identieke `updated_at` timestamps worden nu genegeerd (`<=` i.p.v. `<`). Voorkomt dat elke 500ms-poll een re-render forceert die de receipt-animatie opnieuw afspeelt — wat eerder leek alsof de popup steeds opnieuw verscheen.
+
+## 2026-02-06 — Bug fix: Klantenscherm flikkering + auto-Uni5Pay vastloop
+**Twee diepere fixes** bovenop de vorige:
+
+1. **Frontend**: `Uni5PayQRScreen` functie **volledig verwijderd** uit `CustomerDisplay.jsx` (~110 regels dead code weg). Zelfs als oude code paths nog naar deze functie verwijzen kan hij nu niet meer renderen — onmogelijk om in dit wachtscherm te "vastlopen".
+
+2. **Backend** (`server.py` PUT /kiosk/customer-display): Mope/Uni5Pay QR-velden (`mope_qr`, `mope_ref`, `mope_mode`, etc.) worden nu ALLEEN behouden tijdens `confirm`/`receipt` steps. Bij `idle`/`method`/`overview` worden stale QR-data niet meer doorgegeven — voorkomt dat een oude QR-code eeuwig blijft hangen op het klantenscherm.
+
+Backend draait stabiel ✓ (HTTP 200)

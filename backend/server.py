@@ -7346,10 +7346,15 @@ async def update_customer_display(body: CustomerDisplayIn, request: Request):
             new_payload["amount"] = existing_payload["amount"]
             new_payload["currency"] = existing_payload.get("currency") or new_payload.get("currency")
             new_payload["categories"] = existing_payload.get("categories") or new_payload.get("categories") or []
-    # Behoud Mope QR/ref/mode/paid_at over admin heartbeats heen.
-    for k in ("mope_qr", "mope_ref", "mope_mode", "mope_amount", "mope_currency", "mope_created_at", "mope_paid_at"):
-        if existing_payload.get(k) and not new_payload.get(k):
-            new_payload[k] = existing_payload[k]
+    # Behoud Mope/Uni5Pay QR-velden ALLEEN wanneer we in een actieve betaalfase
+    # zitten (confirm/receipt). Tijdens method-picken of idle/overview moeten
+    # oude QR-data NIET meer doorgegeven worden — anders blijft een stale QR
+    # eeuwig zichtbaar op het klantenscherm en lijkt het of de QR "vastloopt".
+    new_step_lc = (new_state.get("step") or "").lower()
+    if new_step_lc in ("confirm", "receipt"):
+        for k in ("mope_qr", "mope_ref", "mope_mode", "mope_amount", "mope_currency", "mope_created_at", "mope_paid_at"):
+            if existing_payload.get(k) and not new_payload.get(k):
+                new_payload[k] = existing_payload[k]
     if new_payload:
         new_state["payload"] = new_payload
 
