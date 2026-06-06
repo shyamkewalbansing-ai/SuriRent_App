@@ -2087,6 +2087,7 @@ export default function KioskLayout() {
   //  3) Heartbeat elke 3s — overwrite stale state in DB, voorkomt vastlopen
   useEffect(() => {
     if (step === 'check') return undefined;
+    const pushKeyRef = { current: '' };
     const buildBody = () => {
       const apt = apartment ? {
         id: apartment.id, number: apartment.number, address: apartment.address || '',
@@ -2114,6 +2115,22 @@ export default function KioskLayout() {
     };
     const push = () => {
       const body = buildBody();
+      // CONTENT-HASH dedup: alleen pushen wanneer er ECHT iets is veranderd.
+      // Anders zou de heartbeat elke 3s dezelfde receipt-state terug-pushen
+      // naar de DB met een nieuwe timestamp, wat het klantenscherm zou laten
+      // flikkeren tussen idle (na 12s TTL) en receipt (door nieuwe push).
+      let contentKey = '';
+      try {
+        contentKey = JSON.stringify({
+          s: body.step,
+          a: body.apartment?.id, t: body.tenant?.name,
+          amt: body.payload?.amount, cur: body.payload?.currency,
+          m: body.payload?.method, mc: body.payload?.method_chosen_at,
+          r: body.payment?.receipt_number, pa: body.payment?.paid_at,
+        });
+      } catch { contentKey = String(Math.random()); }
+      if (contentKey === pushKeyRef.current) return;
+      pushKeyRef.current = contentKey;
       try {
         if (typeof BroadcastChannel !== 'undefined') {
           const bc = new BroadcastChannel('surirent-customer-display');

@@ -1521,3 +1521,13 @@ Backend draait stabiel ✓ (HTTP 200)
   3. Type guard: alleen strings worden gebruikt als QR-value
 - ✅ Geen runtime errors meer. Component rendert nu stabiel.
 - ✅ Alle eerder gemaakte dedup-fixes (timestamp, content-hash, branding) blijven werkzaam — vormen nu samen een rotsvaste stabiele customer-display.
+
+## 2026-02-06 — DE WERKELIJKE ROOT CAUSE: Operator-heartbeat duwde steeds receipt terug
+- **Diagnose**: Mijn 12s receipt-TTL op backend zou werken, MAAR de operator's `KioskLayout` heartbeat-useEffect duwt elke 3s dezelfde state naar de DB. Wanneer step='receipt' en operator nog niet geklikt heeft op "Volgende":
+  1. Backend zet state op receipt + nieuwe `updated_at`
+  2. Customer polling fetcht state → applyState past toe → render receipt
+  3. Na 12s vervalt het via TTL → polling krijgt `idle` → render idle
+  4. 3s later: heartbeat duwt receipt opnieuw → DB nieuw → poll → render receipt
+  5. → **FLIKKERING tussen receipt en idle**
+- ✅ **Fix in KioskLayout.jsx heartbeat-effect**: Content-hash dedup toegevoegd via `pushKeyRef`. Een JSON-hash van (step, apartment.id, tenant.name, amount, currency, method, method_chosen_at, receipt_number, paid_at) wordt vergeleken — alleen bij ECHTE wijziging duwt de heartbeat naar BroadcastChannel + DB. Identieke heartbeats worden volledig genegeerd.
+- ✅ Combineert met de eerdere applyState content-hash dedup voor dubbele bescherming: zowel sender (operator) als receiver (customer-display) deduperen nu op content.
