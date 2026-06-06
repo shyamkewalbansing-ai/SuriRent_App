@@ -4,7 +4,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { QRCodeSVG } from 'qrcode.react';
 import {
   CheckCircle2, Wallet, Home as HomeIcon, FileText, Wifi,
-  CreditCard, Banknote, Smartphone, Loader2, ChevronRight, QrCode,
+  CreditCard, Banknote, Smartphone, Loader2, ChevronRight, QrCode, ShieldCheck,
 } from 'lucide-react';
 import { api, fmtMoney, MONTHS_NL } from '../../lib/api';
 import {
@@ -738,6 +738,15 @@ export default function CustomerDisplay() {
       <div className="absolute bottom-2 left-3 right-3 flex items-center justify-between text-white/70 font-bold pointer-events-none"
         style={{ fontSize: clamp(9, 0.7, 12) }}>
         <span data-testid="cd-footer-company" className="truncate">{branding?.name}</span>
+
+        {/* Veilig & betrouwbaar badge — slot icoon midden onderaan */}
+        <span data-testid="cd-footer-trust"
+          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 backdrop-blur-sm border border-white/15 text-white/85 shrink-0"
+          style={{ fontSize: clamp(9, 0.75, 12) }}>
+          <ShieldCheck style={{ width: clamp(10, 0.95, 14), height: clamp(10, 0.95, 14) }} strokeWidth={2.5} />
+          <span className="font-black tracking-widest uppercase">Veilig &amp; betrouwbaar</span>
+        </span>
+
         <span className="flex items-center gap-2 shrink-0">
           <LiveDot lastUpdate={lastUpdate.current} />
           <span className="uppercase tracking-widest">Klantenscherm</span>
