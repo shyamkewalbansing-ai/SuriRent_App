@@ -1303,9 +1303,10 @@ function MethodSelect({ payload, overview, onBack, onConfirm }) {
     // gaan via Uni5Pay (mock-modus tot echte API credentials beschikbaar zijn).
     { v: 'mope', l: 'Uni5Pay', sub: 'Scan QR-code om te betalen', icon: QrCode, accent: 'emerald' },
   ];
-  // Poll het klantenscherm: zodra de klant zelf een methode kiest, gaan we
-  // automatisch door naar het bevestig-scherm. Gebruikt het geauthenticeerde
-  // endpoint zodat slug-config er niet toe doet.
+  // Poll het klantenscherm puur om te VISUALISEREN welke methode de klant
+  // heeft aangeraakt — we navigeren GEEN automatisch door. De medewerker
+  // moet altijd zelf bevestigen via de "Bevestig" knop. Dit voorkomt dat
+  // een per ongeluk geraakte methode de betaling vastlegt.
   const [customerPicked, setCustomerPicked] = useState(null);
   useEffect(() => {
     let stopped = false;
@@ -1315,7 +1316,6 @@ function MethodSelect({ payload, overview, onBack, onConfirm }) {
         const { data } = await api.get(`/kiosk/customer-display?t=${Date.now()}`);
         const m = data?.state?.payload?.method;
         const at = data?.state?.payload?.method_chosen_at;
-        // Alleen reageren wanneer KLANT zelf heeft getikt.
         if (at && m && !stopped) setCustomerPicked(m);
       } catch { /* ignore */ }
       if (!stopped) timer = setTimeout(tick, 600);
@@ -1323,9 +1323,7 @@ function MethodSelect({ payload, overview, onBack, onConfirm }) {
     tick();
     return () => { stopped = true; if (timer) clearTimeout(timer); };
   }, []);
-  useEffect(() => {
-    if (customerPicked) onConfirm({ ...payload, method: customerPicked });
-  }, [customerPicked, onConfirm, payload]);
+  // GEEN useEffect die automatisch onConfirm aanroept — medewerker bevestigt.
 
   return (
     <div className="h-full bg-orange-500 flex flex-col" style={{ padding: '1.5vh 1.5vw 0' }}>

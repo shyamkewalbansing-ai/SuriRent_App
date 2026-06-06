@@ -433,46 +433,14 @@ function MethodScreen({ state, slug }) {
     }
   };
 
-  // Wanneer de klant al een methode heeft gekozen → toon bevestig-scherm.
-  if (customerChose) {
-    const Icon = ICONS[chosen] || CreditCard;
-    // Speciaal voor Uni5Pay: QR-code tonen om te scannen.
-    if (chosen === 'mope' && payload.mope_qr) {
-      return <Uni5PayQRScreen state={state} slug={slug} />;
-    }
-    return (
-      <motion.div key="method-confirm"
-        initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}
-        transition={{ duration: 0.3 }}
-        className="absolute inset-0 flex flex-col items-center justify-center px-4 sm:px-8 text-white"
-        data-testid="cd-method">
-        <p className="font-black uppercase tracking-[0.3em] text-white/85 mb-3"
-          style={{ fontSize: clamp(10, 1.0, 16) }}>U heeft gekozen</p>
-        <div className="w-full max-w-2xl bg-white rounded-2xl sm:rounded-3xl shadow-2xl p-6 sm:p-10 lg:p-12 text-center">
-          <div className="rounded-2xl bg-orange-100 text-[#FF5C00] flex items-center justify-center mx-auto mb-3 sm:mb-5"
-            style={{ width: clamp(56, 7, 120), height: clamp(56, 7, 120) }}>
-            <Icon style={{ width: '55%', height: '55%' }} strokeWidth={2.2} />
-          </div>
-          <p className="font-black text-slate-900 tracking-tight mt-1"
-            style={{ fontSize: clamp(26, 3.6, 62) }}>{LABELS[chosen] || chosen}</p>
-          <div className="my-4 sm:my-6 h-px bg-slate-100" />
-          <p className="font-black uppercase tracking-widest text-slate-400"
-            style={{ fontSize: clamp(10, 1.0, 16) }}>Bedrag</p>
-          <p className="font-black text-[#FF5C00] tracking-tight mt-1 whitespace-nowrap"
-            style={{ fontSize: clamp(34, 6, 100) }} data-testid="cd-method-total">
-            {fmtMoney(amt, cur)}
-          </p>
-          <p className="mt-4 sm:mt-6 text-slate-500"
-            style={{ fontSize: clamp(12, 1.2, 18) }}>
-            <Loader2 className="inline-block mr-2 animate-spin text-[#FF5C00]" style={{ width: clamp(14, 1.4, 20), height: clamp(14, 1.4, 20) }} />
-            De medewerker bevestigt uw betaling…
-          </p>
-        </div>
-      </motion.div>
-    );
-  }
+  // BELANGRIJK: we tonen NIET meer een "U heeft gekozen" overlay wanneer
+  // de klant tikt. De keuze wordt visueel gemarkeerd (geselecteerde methode
+  // krijgt accent-rand), maar het scherm blijft hetzelfde — methodes links,
+  // QR rechts. De medewerker bevestigt aan de kiosk-zijde. Hierdoor kan een
+  // per ongeluk geraakte methode niet automatisch een betaling vastleggen.
+  // (De oude "U heeft gekozen" flow is uitgeschakeld — operator beslist.)
 
-  // Anders: tap-grid om methode te kiezen.
+  // accentMap moet boven de eerste branch staan zodat beide returns hem zien.
   const accentMap = {
     emerald: 'bg-emerald-50 text-emerald-600',
     sky: 'bg-sky-50 text-sky-600',
@@ -481,36 +449,85 @@ function MethodScreen({ state, slug }) {
     amber: 'bg-amber-50 text-amber-700',
   };
 
+  // Speciale uitzondering: wanneer de operator expliciet "Uni5Pay only"
+  // heeft gepusht (mope met mope_qr veld), gebruik het Uni5PayQRScreen
+  // dat speciaal voor die situatie ontworpen is.
+  if (customerChose && chosen === 'mope' && payload.mope_qr) {
+    return <Uni5PayQRScreen state={state} slug={slug} />;
+  }
+  // Andere methode-keuzes: GEEN scherm-wissel. De klant blijft op deze
+  // pagina (methodes links + QR rechts) zodat een per ongeluk gekozen
+  // methode geen verkeerde betaling vastlegt — de medewerker bevestigt.
+
   return (
     <motion.div key="method-pick"
       initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }}
       transition={{ duration: 0.3 }}
-      className="absolute inset-0 flex flex-col items-center justify-center px-3 sm:px-6 lg:px-10 py-4 text-white"
+      className="absolute inset-0 flex flex-col px-3 sm:px-6 lg:px-10 py-4 text-white"
       data-testid="cd-method-pick">
 
-      {/* HEADER — bedrag */}
-      <div className="text-center mb-3">
+      {/* TOP: bedrag + status */}
+      <div className="text-center mb-3 sm:mb-4">
         <p className="font-black uppercase tracking-[0.3em] text-white/85"
           style={{ fontSize: clamp(10, 1.0, 16) }}>Te betalen</p>
         <p className="font-black text-white tracking-tight whitespace-nowrap"
-          style={{ fontSize: clamp(28, 4.4, 70) }} data-testid="cd-method-pick-amount">
+          style={{ fontSize: clamp(28, 4.4, 72) }} data-testid="cd-method-pick-amount">
           {fmtMoney(amt, cur)}
         </p>
       </div>
 
-      {/* QR-EERST: Uni5Pay QR direct prominent in beeld, customer hoeft niet
-          eerst een methode te kiezen. Scant gewoon en de betaling start.
-          De andere methodes (Contant / Bank / SumUp) staan kleiner onderaan
-          als alternatief. */}
-      <div className="w-full max-w-4xl flex flex-col lg:flex-row items-center justify-center gap-4 sm:gap-6 lg:gap-8 mb-4">
+      {/* 2-KOLOMS LAYOUT: LINKS andere betaalmethodes, RECHTS Uni5Pay QR.
+          Op mobiel stapelt het verticaal (QR boven, methodes onder). */}
+      <div className="flex-1 min-h-0 w-full max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-4 sm:gap-6 lg:gap-10 items-center justify-items-center">
 
-        {/* QR-kaart */}
+        {/* ===== LINKER KOLOM — andere betaalmethodes ===== */}
+        <div className="w-full max-w-md">
+          <p className="font-black uppercase tracking-widest text-white/70 mb-3 text-center lg:text-left"
+            style={{ fontSize: clamp(10, 1.0, 13) }}>Of kies een andere methode</p>
+          <div className="space-y-2 sm:space-y-3">
+            {METHODS.filter((m) => m.v !== 'mope').map((m) => {
+              const Icon = ICONS[m.v];
+              const selected = customerChose && chosen === m.v;
+              return (
+                <motion.button
+                  key={m.v}
+                  whileTap={{ scale: 0.97 }}
+                  onClick={() => pick(m.v)}
+                  disabled={busy}
+                  data-testid={`cd-method-${m.v}`}
+                  className={`w-full bg-white rounded-2xl sm:rounded-3xl p-3 sm:p-4 lg:p-5 shadow-2xl flex items-center gap-3 sm:gap-4 transition disabled:opacity-50 ${
+                    selected ? 'ring-4 ring-[#FF5C00]' : ''
+                  }`}
+                >
+                  <div className={`rounded-2xl flex items-center justify-center shrink-0 ${accentMap[m.accent]}`}
+                    style={{ width: clamp(48, 5.5, 72), height: clamp(48, 5.5, 72) }}>
+                    <Icon style={{ width: '55%', height: '55%' }} strokeWidth={2.2} />
+                  </div>
+                  <div className="flex-1 text-left min-w-0">
+                    <p className="font-black text-slate-900 tracking-tight leading-tight"
+                      style={{ fontSize: clamp(16, 1.8, 26) }}>{LABELS[m.v]}</p>
+                    <p className="text-slate-500 leading-tight mt-0.5"
+                      style={{ fontSize: clamp(11, 1.05, 15) }}>{SUBS[m.v]}</p>
+                  </div>
+                  {selected && (
+                    <span className="shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#FF5C00] text-white text-[10px] font-black uppercase tracking-widest">
+                      ✓ Gekozen
+                    </span>
+                  )}
+                </motion.button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* ===== RECHTER KOLOM — Uni5Pay QR ===== */}
         <button
           onClick={() => pick('mope')}
           disabled={busy}
           data-testid="cd-method-mope"
-          className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 lg:p-7 shadow-2xl active:shadow-lg disabled:opacity-60 transition flex flex-col items-center text-center"
-          style={{ minWidth: clamp(220, 22, 360) }}
+          className={`bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-5 lg:p-6 shadow-2xl flex flex-col items-center text-center transition disabled:opacity-60 ${
+            customerChose && chosen === 'mope' ? 'ring-4 ring-[#FF5C00]' : ''
+          }`}
         >
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-100 text-emerald-700 mb-2"
             style={{ fontSize: clamp(9, 0.85, 13) }}>
@@ -518,9 +535,9 @@ function MethodScreen({ state, slug }) {
             <span className="font-black uppercase tracking-widest">Uni5Pay actief</span>
           </div>
           <div className="bg-white rounded-xl p-2 sm:p-3"
-            style={{ width: clamp(180, 20, 280), height: clamp(180, 20, 280) }}>
+            style={{ width: clamp(180, 22, 320), height: clamp(180, 22, 320) }}>
             <QRCodeSVG
-              value={payload.mope_qr || `${(typeof window !== 'undefined' ? window.location.origin : '')}/mock-pay/${payload.order_id || 'demo'}?amount=${amt}&currency=${cur}`}
+              value={payload.mope_qr || `${(typeof window !== 'undefined' ? window.location.origin : '')}/api/payments/mock-pay/${payload.order_id || 'demo'}?amount=${amt}&currency=${cur}`}
               size="100%"
               level="M"
               bgColor="#FFFFFF"
@@ -529,48 +546,22 @@ function MethodScreen({ state, slug }) {
             />
           </div>
           <p className="font-black text-slate-900 tracking-tight mt-2 sm:mt-3"
-            style={{ fontSize: clamp(16, 1.9, 28) }}>Scan om te betalen</p>
+            style={{ fontSize: clamp(16, 1.9, 26) }}>Scan om te betalen</p>
           <p className="text-slate-500 font-medium"
-            style={{ fontSize: clamp(11, 1.0, 14) }}>Of tik om Uni5Pay te bevestigen</p>
+            style={{ fontSize: clamp(11, 1.0, 14) }}>met je telefoon-camera</p>
         </button>
-
-        {/* Alternatieve methodes — kleiner, naast (of onder op mobile) de QR */}
-        <div className="flex flex-row lg:flex-col gap-2 sm:gap-3 w-full lg:w-auto">
-          <p className="hidden lg:block font-black uppercase tracking-widest text-white/70 text-center mb-1"
-            style={{ fontSize: clamp(9, 0.9, 12) }}>Of betaal met</p>
-          {METHODS.filter((m) => m.v !== 'mope').map((m) => {
-            const Icon = ICONS[m.v];
-            return (
-              <motion.button
-                key={m.v}
-                whileTap={{ scale: 0.96 }} whileHover={{ x: 3 }}
-                onClick={() => pick(m.v)} disabled={busy}
-                data-testid={`cd-method-${m.v}`}
-                className="flex-1 lg:flex-none bg-white/10 hover:bg-white/15 active:bg-white/20 border border-white/20 backdrop-blur-sm rounded-2xl p-2 sm:p-3 lg:p-4 flex items-center justify-center lg:justify-start gap-2 lg:gap-3 transition active:scale-95 disabled:opacity-50"
-                style={{ minWidth: clamp(70, 8, 180) }}
-              >
-                <div className={`rounded-xl flex items-center justify-center ${accentMap[m.accent]} shrink-0`}
-                  style={{ width: clamp(28, 3.2, 48), height: clamp(28, 3.2, 48) }}>
-                  <Icon style={{ width: '60%', height: '60%' }} strokeWidth={2.2} />
-                </div>
-                <div className="text-left hidden sm:block">
-                  <p className="font-black text-white tracking-tight leading-tight"
-                    style={{ fontSize: clamp(11, 1.1, 17) }}>{LABELS[m.v]}</p>
-                  <p className="text-white/65 leading-tight hidden lg:block"
-                    style={{ fontSize: clamp(9, 0.85, 12) }}>{SUBS[m.v]}</p>
-                </div>
-              </motion.button>
-            );
-          })}
-        </div>
       </div>
 
       {error && (
-        <p className="text-white bg-red-500/30 px-3 py-1 rounded-full font-bold mt-2"
+        <p className="text-white bg-red-500/30 px-3 py-1 rounded-full font-bold mt-2 mx-auto"
           style={{ fontSize: clamp(11, 1.0, 14) }}>{error}</p>
       )}
-      <p className="text-white/70 mt-2 font-bold uppercase tracking-widest text-center px-4"
-        style={{ fontSize: clamp(9, 0.95, 14) }}>Scan de QR-code of kies een andere methode</p>
+      <p className="text-white/70 mt-2 sm:mt-3 font-bold uppercase tracking-widest text-center px-4"
+        style={{ fontSize: clamp(9, 0.95, 14) }}>
+        {customerChose
+          ? 'De medewerker bevestigt uw betaling…'
+          : 'Scan de QR-code of tik op een methode'}
+      </p>
     </motion.div>
   );
 }

@@ -1460,3 +1460,15 @@ Lint clean. Verified via desktop screenshots (1440×900): élke admin-pagina (Ov
 - ✅ QRCodeSVG library gebruikt voor client-side QR rendering.
 - ✅ data-testids behouden: `cd-method-mope`, `cd-method-contant`, etc.
 
+## 2026-02-06 — CustomerDisplay: 2-koloms layout + autoprogressie weg
+**Bug:** Wanneer klant op customer-display een methode tikte, ging het systeem automatisch door naar het bevestig-scherm — een per ongeluk gekozen methode werd direct vastgelegd.
+- ✅ KioskLayout MethodSelect: de `useEffect` die automatisch `onConfirm` aanriep bij klant-keuze is verwijderd. Medewerker bevestigt nu ALTIJD zelf via de "Bevestig" knop.
+- ✅ CustomerDisplay MethodScreen: de "U heeft gekozen" overlay is verwijderd. Klant blijft op het methode-keuze scherm; zijn keuze wordt visueel gemarkeerd via een oranje `ring-4` rand + groene "✓ Gekozen" badge.
+
+**UX:** 2-koloms layout op de CustomerDisplay
+- ✅ LINKS: andere betaalmethodes (Contant / SumUp / Bank) als grote witte cards in een verticale stack, met icoon links + label + omschrijving.
+- ✅ RECHTS: Uni5Pay QR-code prominent als aparte witte card met "UNI5PAY ACTIEF" badge + pulserende emerald dot.
+- ✅ Tonen op desktop side-by-side via `grid-cols-1 lg:grid-cols-[1fr_auto]`, op mobile/tablet stapelt het verticaal.
+- ✅ Geselecteerde methode (na klant-tik) krijgt oranje `ring-4` accent voor visuele feedback zonder scherm-wissel.
+- ✅ Bottom hint past zich aan: "Scan de QR-code of tik op een methode" → "De medewerker bevestigt uw betaling..."
+
