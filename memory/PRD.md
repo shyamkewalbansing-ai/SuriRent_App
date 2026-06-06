@@ -1501,3 +1501,9 @@ Backend draait stabiel ✓ (HTTP 200)
   2. applyState `<=` timestamp check (geen identieke updates)
   3. Backend selectieve `mope_qr` preservatie (alleen tijdens confirm/receipt)
   4. Verwijdering van dead-code `Uni5PayQRScreen` functie
+
+## 2026-02-06 — REAL ROOT CAUSE: applyBranding op elke poll = flikkering
+- **Diagnose via Network tab**: Customer display deed elke 700ms een poll → 24.7 kB response. Op iedere response werd `applyBranding(d.branding)` aangeroepen, wat CSS-variabelen reset, favicon herschrijft, en logo opnieuw applyt. Dit veroorzaakte de constante visuele flikkering.
+- ✅ **Fix**: Branding wordt nu alleen opnieuw geappliceerd wanneer er ECHT iets verandert. Een `lastBrandKey` (JSON-fingerprint van primary_color, logo_url, name, etc.) wordt vergeleken — alleen bij verschil triggert `applyBranding`.
+- ✅ Polling blijft elke 700ms draaien voor state-updates, maar branding wordt nu typisch slechts 1x toegepast bij eerste poll. Geen visuele flikkering meer.
+- ✅ Combineert met alle eerdere fixes voor een definitief stabiel klantenscherm.

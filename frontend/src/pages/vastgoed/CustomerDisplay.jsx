@@ -555,13 +555,26 @@ export default function CustomerDisplay() {
     stopped.current = false;
     if (!slug) return () => { stopped.current = true; };
     let timer;
+    // Track branding fingerprint zodat we alleen applyBranding aanroepen
+    // wanneer er ECHT iets verandert — anders triggert elke poll (elke
+    // 700ms) een CSS-variabelen reset + favicon re-write die het hele
+    // klantenscherm doet flikkeren.
+    let lastBrandKey = '';
     const tick = async () => {
       try {
         const { data: d } = await api.get(`/public/customer-display/${slug}?t=${Date.now()}`);
         if (stopped.current) return;
         if (d?.branding) {
-          applyBranding(d.branding);
-          setBranding(d.branding);
+          const b = d.branding;
+          const key = JSON.stringify({
+            p: b.primary_color, s: b.secondary_color, n: b.name,
+            l: b.logo_url, a: b.app_name,
+          });
+          if (key !== lastBrandKey) {
+            applyBranding(b);
+            setBranding(b);
+            lastBrandKey = key;
+          }
         }
         if (d?.state) applyState(d.state, 'poll');
         setError('');
