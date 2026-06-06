@@ -1438,3 +1438,25 @@ Lint clean. Verified via desktop screenshots (1440×900): élke admin-pagina (Ov
 - ✅ Subtiele stijl: witte semi-transparante card met backdrop-blur, blijft binnen het oranje thema.
 - ✅ data-testid: `pwa-onboarding-tip`.
 
+## 2026-02-06 — PWA register fix + Mope verwijderd + Uni5Pay Mock + Kiosk QR-eerst UX
+**Bug fix:** PWA Registreer-knop werkte niet op productie.
+- ✅ Root cause: op split-domain (app.surirent.sr + surirent.sr) rendert `/` op het app-subdomein de LoginPage, niet de Marketing Landing. `window.location.assign('/?register=1')` belandt dus op login.
+- ✅ Fix: gebruik `publicMarketingUrl()` voor cross-domain navigatie in PwaOnboarding handler + MobileEmailLogin "Registreer hier" link + LoginPage `/login?register=1` redirect.
+
+**Mope → Uni5Pay migratie (mock-modus):**
+- ✅ `backend/payments_service.py` herschreven: Uni5Pay is nu de primaire gateway met een werkende **mock-modus** (UNI5PAY_MOCK=1). Mope functies blijven als deprecated aliases voor backward compat (DB records met `provider: "mope"` blijven werken, webhooks `/api/webhooks/mope*` blijven werken).
+- ✅ `UNI5PAY_BASE=https://payment.uni5pay.sr/api/v1` toegevoegd aan `backend/.env` (gereed voor echte API).
+- ✅ Frontend bulk-rename: alle "Mope" labels → "Uni5Pay" in 11 JSX files (KioskLayout, TenantKioskLayout, CustomerDisplay, SaasSettings, BusinessInfo, MijnAbonnement, Subscriptions, Settings, SetupWizard, Payments, MarketingLanding).
+- ✅ Dubbele "Uni5Pay" method-entries verwijderd uit KioskLayout, TenantKioskLayout, CustomerDisplay (eerder waren er aparte `mope` en `uni5pay` keys).
+
+**Mock Pay endpoint:**
+- ✅ Nieuwe route `GET /api/payments/mock-pay/{ref}?amount=X&currency=Y` levert een professionele HTML mock-betaalpagina (oranje SuriRent stijl, "Ik heb betaald" knop, success state).
+- ✅ Wanneer klant de QR scant in mock-modus komt zijn telefoon hier — voor visuele demonstratie van de flow tot echte Uni5Pay API live is.
+
+**Kiosk QR-eerst UX:**
+- ✅ `CustomerDisplay.jsx` MethodScreen volledig herwerkt: de Uni5Pay QR wordt nu **direct prominent in beeld** getoond met "UNI5PAY ACTIEF" badge en pulserende indicator — klant hoeft niet eerst een methode te kiezen.
+- ✅ Alternatieve methodes (Contant / Bank / SumUp) staan als kleinere knoppen naast de QR (desktop) of eronder (mobile).
+- ✅ QR encodet `payload.mope_qr` als die door operator gezet is, anders een fallback URL naar `/mock-pay/{order_id}` zodat klanten direct kunnen scannen.
+- ✅ QRCodeSVG library gebruikt voor client-side QR rendering.
+- ✅ data-testids behouden: `cd-method-mope`, `cd-method-contant`, etc.
+

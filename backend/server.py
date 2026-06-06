@@ -16,7 +16,7 @@ from typing import List, Optional, Literal
 
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, Response, Query, UploadFile, File, Body, Form
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse, JSONResponse
+from fastapi.responses import StreamingResponse, JSONResponse, HTMLResponse
 from pydantic import BaseModel, EmailStr, Field
 from motor.motor_asyncio import AsyncIOMotorClient
 from contextlib import asynccontextmanager
@@ -11176,6 +11176,101 @@ def _slug_aware_start_url(role: str, slug: str | None) -> str:
     if role == "kiosk":
         return f"/{slug}/kiosk?source=pwa"
     return f"/{slug}/login?source=pwa&view=admin"
+
+
+
+# =====================================================================
+# Uni5Pay MOCK pay page
+#
+# Wanneer een klant de QR op de kiosk scant in mock-modus
+# (UNI5PAY_MOCK=1), komt zijn telefoon op deze pagina terecht. Hier ziet
+# de klant het bedrag en kan op "Ik heb betaald" tikken — wat een
+# bevestigings-scherm toont. De daadwerkelijke status-sync met de kiosk
+# komt later wanneer echte Uni5Pay webhooks beschikbaar zijn.
+# =====================================================================
+@app.get("/api/payments/mock-pay/{ref}", response_class=HTMLResponse)
+async def uni5pay_mock_pay_page(ref: str, amount: str = "0", currency: str = "SRD"):
+    safe_ref = (ref or "")[:64]
+    safe_amount = (amount or "0")[:16]
+    safe_currency = (currency or "SRD").upper()[:6]
+    if safe_currency not in ("SRD", "EUR", "USD"):
+        safe_currency = "SRD"
+    return f"""<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+<title>Uni5Pay — Betaling</title>
+<style>
+  *,*::before,*::after {{ box-sizing: border-box; }}
+  body {{ margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+         background: #FF5C00; color: white; min-height: 100vh; display: flex; flex-direction: column;
+         align-items: center; justify-content: center; padding: 24px; -webkit-font-smoothing: antialiased; }}
+  .card {{ background: white; color: #0F0F0F; border-radius: 28px; padding: 32px 24px; max-width: 420px;
+          width: 100%; box-shadow: 0 30px 80px -20px rgba(0,0,0,0.4); text-align: center; }}
+  .badge {{ display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 999px;
+            background: #ECFDF5; color: #047857; font-size: 11px; font-weight: 800; letter-spacing: 0.15em;
+            text-transform: uppercase; margin-bottom: 12px; }}
+  .dot {{ width: 6px; height: 6px; border-radius: 50%; background: #10B981; animation: pulse 1.6s infinite; }}
+  @keyframes pulse {{ 0%,100% {{ opacity: 1; }} 50% {{ opacity: 0.4; }} }}
+  h1 {{ font-size: 22px; font-weight: 900; letter-spacing: -0.02em; margin: 4px 0 4px; }}
+  .ref {{ font-family: ui-monospace, SFMono-Regular, monospace; font-size: 11px;
+          color: #94A3B8; word-break: break-all; margin-bottom: 22px; }}
+  .amount {{ font-size: 44px; font-weight: 900; color: #FF5C00; letter-spacing: -0.02em; margin: 6px 0; }}
+  .amount span {{ font-size: 16px; color: #94A3B8; font-weight: 700; margin-left: 4px; }}
+  .label {{ font-size: 11px; font-weight: 800; letter-spacing: 0.18em; text-transform: uppercase;
+            color: #94A3B8; margin-top: 6px; }}
+  hr {{ border: none; border-top: 1px solid #E2E8F0; margin: 22px 0; }}
+  button {{ width: 100%; height: 56px; border: none; border-radius: 14px; background: #FF5C00; color: white;
+            font-size: 17px; font-weight: 900; cursor: pointer; transition: transform 0.1s, background 0.2s; }}
+  button:active {{ transform: scale(0.97); background: #C74600; }}
+  button:disabled {{ background: #94A3B8; cursor: not-allowed; }}
+  .mock-note {{ font-size: 10px; color: #CBD5E1; margin-top: 16px; line-height: 1.4; }}
+  .success {{ display: none; }}
+  .success.show {{ display: block; animation: fadeIn 0.3s; }}
+  .pay-form.hide {{ display: none; }}
+  .success svg {{ width: 80px; height: 80px; margin: 8px auto 16px; display: block; }}
+  @keyframes fadeIn {{ from {{ opacity: 0; transform: scale(0.95); }} to {{ opacity: 1; transform: scale(1); }} }}
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="pay-form" id="payForm">
+      <span class="badge"><span class="dot"></span>UNI5PAY MOCK</span>
+      <h1>SuriRent betaling</h1>
+      <p class="ref">REF · {safe_ref}</p>
+      <p class="label">Bedrag</p>
+      <p class="amount">{safe_currency} {safe_amount}<span>/eenmalig</span></p>
+      <hr />
+      <button id="payBtn" onclick="completePay()">Ik heb betaald</button>
+      <p class="mock-note">
+        ⓘ Dit is een mock-betaalpagina. Bij integratie van de echte Uni5Pay API
+        zal deze pagina vervangen worden door de officiële Uni5Pay checkout.
+      </p>
+    </div>
+    <div class="success" id="success">
+      <svg viewBox="0 0 80 80" fill="none">
+        <circle cx="40" cy="40" r="36" fill="#ECFDF5" stroke="#10B981" stroke-width="3" />
+        <path d="M24 42 L36 54 L58 28" stroke="#10B981" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" />
+      </svg>
+      <h1 style="color:#047857">Bedankt!</h1>
+      <p style="color:#475569;font-size:14px;margin:8px 0 0">Je betaling is geregistreerd. Je kunt dit venster sluiten.</p>
+    </div>
+  </div>
+  <script>
+    function completePay() {{
+      const btn = document.getElementById('payBtn');
+      btn.disabled = true;
+      btn.textContent = 'Bezig...';
+      setTimeout(() => {{
+        document.getElementById('payForm').classList.add('hide');
+        document.getElementById('success').classList.add('show');
+      }}, 600);
+    }}
+  </script>
+</body>
+</html>
+"""
 
 
 @app.get("/api/pwa/manifest")

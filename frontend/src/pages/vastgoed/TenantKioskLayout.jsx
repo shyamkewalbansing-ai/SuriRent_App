@@ -968,15 +968,14 @@ function TenantPaySelect({ overview, onBack, onConfirm }) {
 }
 
 // =====================================================================
-// PAY METHOD — Bankoverschrijving / Mope / Uni5Pay
+// PAY METHOD — Bankoverschrijving / Uni5Pay / Uni5Pay
 // =====================================================================
 function TenantPayMethod({ payload, overview, onBack, onConfirm }) {
   const { tenant, apartment: apt } = overview;
   const cur = payload.currency || 'SRD';
   const methods = [
     { v: 'bank', l: 'Bankoverschrijving', sub: 'Upload bankafschrift', icon: Landmark, accent: 'sky' },
-    { v: 'mope', l: 'Mope', sub: 'Scan QR-code', icon: QrCode, accent: 'emerald' },
-    { v: 'uni5pay', l: 'Uni5Pay', sub: 'Scan QR-code', icon: Smartphone, accent: 'red' },
+    { v: 'mope', l: 'Uni5Pay', sub: 'Scan QR-code om te betalen', icon: QrCode, accent: 'emerald' },
   ];
   return (
     <div className="h-full flex flex-col" style={{ padding: '1.5vh 1.5vw 0' }} data-testid="tk-pay-method">
@@ -1188,7 +1187,7 @@ function TenantPayBank({ payload, overview, branding, onBack, onConfirm }) {
 
 
 // =====================================================================
-// PAY MOBILE — Mope / Uni5Pay: QR + open-app + upload bewijs (verplicht)
+// PAY MOBILE — Uni5Pay / Uni5Pay: QR + open-app + upload bewijs (verplicht)
 // =====================================================================
 function TenantPayMobile({ payload, overview, branding, onBack, onConfirm }) {
   const { tenant, apartment: apt } = overview;
@@ -1198,12 +1197,12 @@ function TenantPayMobile({ payload, overview, branding, onBack, onConfirm }) {
   const [err, setErr] = useState('');
   const fileRef = useRef(null);
 
-  const isMope = payload.method === 'mope';
-  const providerName = isMope ? 'Mope' : 'Uni5Pay';
-  const account = isMope ? (branding?.mope_account || '') : (branding?.uni5pay_account || '');
-  const accent = isMope ? 'emerald' : 'rose';
-  const accentBg = isMope ? 'bg-emerald-100' : 'bg-rose-100';
-  const accentText = isMope ? 'text-emerald-700' : 'text-rose-700';
+  const isUni5Pay = payload.method === 'mope';
+  const providerName = isUni5Pay ? 'Uni5Pay' : 'Uni5Pay';
+  const account = isUni5Pay ? (branding?.mope_account || '') : (branding?.uni5pay_account || '');
+  const accent = isUni5Pay ? 'emerald' : 'rose';
+  const accentBg = isUni5Pay ? 'bg-emerald-100' : 'bg-rose-100';
+  const accentText = isUni5Pay ? 'text-emerald-700' : 'text-rose-700';
 
   // QR payload — bevat alle relevante info zodat een betaal-app het kan
   // herkennen. Voor echte deep-link integraties wordt dit meestal door de
@@ -1217,7 +1216,7 @@ function TenantPayMobile({ payload, overview, branding, onBack, onConfirm }) {
   ].join('\n');
 
   // Deep link — fallback naar zoeken in store als app niet geïnstalleerd
-  const deepLink = isMope
+  const deepLink = isUni5Pay
     ? `mope://pay?to=${encodeURIComponent(account)}&amount=${payload.amount}&currency=${cur}`
     : `uni5pay://pay?to=${encodeURIComponent(account)}&amount=${payload.amount}&currency=${cur}`;
 
@@ -1274,7 +1273,7 @@ function TenantPayMobile({ payload, overview, branding, onBack, onConfirm }) {
               <div className="flex flex-col items-center mb-3" data-testid="tk-mobile-qr">
                 <div className={`p-3 rounded-2xl ${accentBg}`}>
                   <QRCodeSVG value={qrPayload} size={180} level="M" includeMargin={false}
-                    bgColor="transparent" fgColor={isMope ? '#047857' : '#9f1239'} />
+                    bgColor="transparent" fgColor={isUni5Pay ? '#047857' : '#9f1239'} />
                 </div>
                 <p className="text-[10px] text-slate-500 mt-2 text-center">
                   Scan met uw {providerName} app
@@ -1298,7 +1297,7 @@ function TenantPayMobile({ payload, overview, branding, onBack, onConfirm }) {
               </div>
               <a href={deepLink} data-testid="tk-mobile-open-app"
                 className={`mt-3 w-full inline-flex items-center justify-center gap-2 h-12 rounded-xl font-bold text-sm ${
-                  isMope ? 'bg-emerald-500 hover:bg-emerald-600' : 'bg-rose-500 hover:bg-rose-600'
+                  isUni5Pay ? 'bg-emerald-500 hover:bg-emerald-600' : 'bg-rose-500 hover:bg-rose-600'
                 } text-white shadow-md active:scale-95 transition`}>
                 <Smartphone className="w-4 h-4" /> Open {providerName} app
               </a>
@@ -1429,7 +1428,7 @@ function TenantPayConfirm({ payload, overview, onBack, onPaid }) {
   const methodLabel = {
     contant: 'Contant',
     bank: 'Bankoverschrijving',
-    mope: 'Mope (QR-code)',
+    mope: 'Uni5Pay (QR-code)',
     uni5pay: 'Uni5Pay (QR-code)',
   }[payload.method] || payload.method;
 

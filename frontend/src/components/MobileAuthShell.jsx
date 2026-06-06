@@ -20,6 +20,7 @@ import {
 import { api, formatError } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { RESERVED_SLUGS } from '../lib/branded-nav';
+import { publicMarketingUrl } from '../lib/env';
 
 // ────────────────────────────────────────────────────────────────────
 // Shared shell — oranje canvas + safe-area + decorative blurs.
@@ -200,11 +201,14 @@ export function MobileEmailLogin({ onBack, onForgot, branding }) {
             )}
           </button>
 
-          {/* Registreer link — alleen op generieke /login (geen branded portal). */}
+          {/* Registreer link — alleen op generieke /login (geen branded portal).
+              Navigeer naar het MARKETING domein (publicMarketingUrl) zodat dit
+              ook op split-domain productie (app.surirent.sr → surirent.sr) werkt;
+              op het app-subdomein zou `/` de LoginPage tonen i.p.v. de landing. */}
           {!branding?.slug && (
             <p className="text-center text-white/85 text-sm font-medium pt-3">
               Nog geen account?{' '}
-              <button type="button" onClick={() => { window.location.assign('/?register=1'); }}
+              <button type="button" onClick={() => { window.location.assign(`${publicMarketingUrl()}/?register=1`); }}
                 data-testid="mobile-login-to-register"
                 className="font-extrabold text-white underline underline-offset-2">
                 Registreer hier

@@ -430,7 +430,7 @@ const DEFAULT_FEATURES = [
   { icon: 'ScanFace', title: 'Kiosk Terminal', desc: 'Selfservice terminal met 4-cijferige PIN voor snelle huurbetaling door huurders. De kern van SuriRent.', featured: true },
   { icon: 'Wallet', title: 'Multi-valuta', desc: 'SRD, USD en EUR zij aan zij. Aparte saldi per valuta.', featured: false },
   { icon: 'Users', title: 'Huurders & Appartementen', desc: 'Beheer huurders en koppel ze aan appartementen in één klik.', featured: false },
-  { icon: 'CreditCard', title: 'Meerdere betalingswijzen', desc: 'Contant, bank, Mope en SumUp — flexibele opties.', featured: false },
+  { icon: 'CreditCard', title: 'Meerdere betalingswijzen', desc: 'Contant, bank, Uni5Pay en SumUp — flexibele opties.', featured: false },
   { icon: 'Building2', title: 'Appartement overzicht', desc: 'Centraal beheer met bezettingsgraad en huurinkomsten.', featured: false },
   { icon: 'Shield', title: 'JWT Beveiliging', desc: 'Veilige login met JWT cookies en bcrypt wachtwoord-hashing.', featured: false },
   { icon: 'Zap', title: 'Live saldo', desc: 'Bekijk direct openstaande huur en betalingsgeschiedenis.', featured: false },

@@ -8,7 +8,7 @@ import { api, formatError } from '../../../lib/api';
 const SECTIONS = [
   { id: 'smtp', label: 'E-mail (SMTP)', icon: Mail, desc: 'Verstuur kwitanties en facturen via je eigen SMTP server.' },
   { id: 'twilio', label: 'WhatsApp & SMS', icon: MessageCircle, desc: 'Twilio integratie voor WhatsApp- en SMS-meldingen.' },
-  { id: 'mope', label: 'Mope betalingen', icon: CreditCard, desc: 'Online betalingen via Mope (Suriname).' },
+  { id: 'mope', label: 'Uni5Pay betalingen', icon: CreditCard, desc: 'Online betalingen via Uni5Pay (Suriname).' },
   { id: 'uni5pay', label: 'Uni5Pay betalingen', icon: CreditCard, desc: 'Online betalingen via Uni5Pay.' },
   { id: 'shelly', label: 'Shelly elektriciteit', icon: Zap, desc: 'Smart breakers per appartement (Shelly Cloud).' },
   { id: 'invoicing', label: 'Facturen automatisering', icon: FileText, desc: 'Automatische maand-facturen na grace periode.' },
@@ -156,9 +156,9 @@ export function PaymentGatewayForm({ section, initial }) {
         desc="Wanneer aan kunnen huurders facturen online betalen." />
       {section === 'mope' && (
         <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 text-sm text-slate-700">
-          <p className="font-black text-[#FF5C00] mb-1">Mope test/live-token aanvragen</p>
+          <p className="font-black text-[#FF5C00] mb-1">Uni5Pay test/live-token aanvragen</p>
           <p className="mb-2">
-            Voor een werkende QR-code (die de echte Mope-app herkent) heeft u een
+            Voor een werkende QR-code (die de echte Uni5Pay-app herkent) heeft u een
             API-token nodig van Mopé. Stuur een mail naar{' '}
             <a href="mailto:info@mope.sr" className="text-[#FF5C00] font-bold underline">info@mope.sr</a>{' '}
             of bezoek <a href="https://mope.sr/contact" target="_blank" rel="noreferrer"

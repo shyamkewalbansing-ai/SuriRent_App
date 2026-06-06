@@ -732,7 +732,7 @@ function PaySelect({ overview, onBack, onConfirm }) {
       ? 'huur' : plainCategory;
     onConfirm({
       tenant_id: tenant.id, apartment_id: apt.id,
-      amount: selectedTotal,  // totaal incl. plan items (voor display + Mope QR)
+      amount: selectedTotal,  // totaal incl. plan items (voor display + Uni5Pay QR)
       plain_amount: selectedPlainTotal + selectedInvTotal + selectedSynCurrent,  // alleen plain + invoice + synth current
       currency: cur, category, method: 'contant',
       period_month: category === 'huur' && balance.next_period ? balance.next_period.month : null,
@@ -1291,15 +1291,17 @@ function PlanArrangedReceipt({ plan, currency, tenant, onClose }) {
 }
 
 // =====================================================================
-// Method select — Contant / Mope / Uni5Pay
+// Method select — Contant / Uni5Pay
 // =====================================================================
 function MethodSelect({ payload, overview, onBack, onConfirm }) {
   const { tenant, apartment: apt } = overview;
   const cur = payload.currency || 'SRD';
   const methods = [
     { v: 'contant', l: 'Contant', sub: 'Betaal met contant geld', icon: Banknote, accent: 'emerald' },
-    { v: 'mope', l: 'Mope', sub: 'Scan QR-code', icon: QrCode, accent: 'emerald' },
-    { v: 'uni5pay', l: 'Uni5Pay', sub: 'Scan QR-code', icon: Smartphone, accent: 'red' },
+    // Uni5Pay is de primaire online-gateway. De methode-string blijft 'mope'
+    // voor backward compat met bestaande DB records; de label en gateway-call
+    // gaan via Uni5Pay (mock-modus tot echte API credentials beschikbaar zijn).
+    { v: 'mope', l: 'Uni5Pay', sub: 'Scan QR-code om te betalen', icon: QrCode, accent: 'emerald' },
   ];
   // Poll het klantenscherm: zodra de klant zelf een methode kiest, gaan we
   // automatisch door naar het bevestig-scherm. Gebruikt het geauthenticeerde
@@ -1380,8 +1382,8 @@ function PaymentConfirm({ payload, overview, onBack, onSuccess }) {
   const { tenant, apartment: apt } = overview;
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState('');
-  const isMope = (payload.method || '').toLowerCase() === 'mope';
-  const [mope, setMope] = useState(null);  // { qr, ref, mode }
+  const isUni5Pay = (payload.method || '').toLowerCase() === 'mope';
+  const [mope, setUni5Pay] = useState(null);  // { qr, ref, mode }
   const [waitingPaid, setWaitingPaid] = useState(false);
 
   const submit = async () => {
@@ -1411,16 +1413,16 @@ function PaymentConfirm({ payload, overview, onBack, onSuccess }) {
     finally { setLoading(false); }
   };
 
-  // Mope: bij open van dit scherm meteen een QR-code laten genereren
-  // (in mock-modus = lokale QR; in live-modus = echte Mope API call).
+  // Uni5Pay: bij open van dit scherm meteen een QR-code laten genereren
+  // (in mock-modus = lokale QR; in live-modus = echte Uni5Pay API call).
   useEffect(() => {
-    if (!isMope || mope) return;
+    if (!isUni5Pay || mope) return;
     let cancelled = false;
     (async () => {
       try {
         const { data } = await api.post('/kiosk/mope/create-qr');
         if (!cancelled) {
-          setMope({ qr: data.qr, ref: data.ref, mode: data.mode, api_error: data.api_error });
+          setUni5Pay({ qr: data.qr, ref: data.ref, mode: data.mode, api_error: data.api_error });
           setWaitingPaid(true);
         }
       } catch (e) {
@@ -1428,10 +1430,10 @@ function PaymentConfirm({ payload, overview, onBack, onSuccess }) {
       }
     })();
     return () => { cancelled = true; };
-  }, [isMope, mope]);
+  }, [isUni5Pay, mope]);
 
   // Poll mope_paid_at — zodra de klant op "Ik heb betaald" tikt op het
-  // klantenscherm (of de echte Mope webhook arriveert), maken we hier de
+  // klantenscherm (of de echte Uni5Pay webhook arriveert), maken we hier de
   // betaling automatisch aan in de DB en gaan naar het receipt-scherm.
   useEffect(() => {
     if (!waitingPaid) return undefined;
@@ -1444,14 +1446,14 @@ function PaymentConfirm({ payload, overview, onBack, onSuccess }) {
         const ref = data?.state?.payload?.mope_ref;
         if (paidAt && ref && !stopped) {
           setWaitingPaid(false);
-          // Voeg de Mope-referentie als note toe en submit.
-          const finalPayload = { ...payload, note: `${payload.note || 'Mope'} · Ref ${ref}`.trim() };
+          // Voeg de Uni5Pay-referentie als note toe en submit.
+          const finalPayload = { ...payload, note: `${payload.note || 'Uni5Pay'} · Ref ${ref}`.trim() };
           setLoading(true);
           try {
             for (const pi of (finalPayload.plan_items || [])) {
               await api.post(withKioskEmployee(`/kiosk/payment-plans/${pi.plan_id}/installments/${pi.seq}/pay`), {
                 method: finalPayload.method, amount: pi.amount,
-                note: `Operator Kiosk Mope · termijn ${pi.seq} · Ref ${ref}`,
+                note: `Operator Kiosk Uni5Pay · termijn ${pi.seq} · Ref ${ref}`,
               });
             }
             let pay = null;
@@ -1476,8 +1478,8 @@ function PaymentConfirm({ payload, overview, onBack, onSuccess }) {
     return () => { stopped = true; if (timer) clearTimeout(timer); };
   }, [waitingPaid, payload, onSuccess]);
 
-  // Mope-scherm: toon QR + "Wacht op klant"-banner (admin Kiosk variant).
-  if (isMope) {
+  // Uni5Pay-scherm: toon QR + "Wacht op klant"-banner (admin Kiosk variant).
+  if (isUni5Pay) {
     return (
       <div className="h-full bg-orange-500 flex flex-col" style={{ padding: '1.5vh 1.5vw 0' }}>
         <div className="flex items-center justify-between flex-wrap gap-2 px-1 sm:px-2 py-2">
@@ -1485,7 +1487,7 @@ function PaymentConfirm({ payload, overview, onBack, onSuccess }) {
             className="flex items-center gap-1.5 text-white font-bold bg-white/20 backdrop-blur-sm rounded-lg px-3 py-1.5 sm:px-4 sm:py-2">
             <ArrowLeft className="w-4 h-4" /> <span className="text-xs sm:text-sm">Terug</span>
           </button>
-          <span className="text-sm sm:text-base font-semibold text-white">Mope-betaling actief</span>
+          <span className="text-sm sm:text-base font-semibold text-white">Uni5Pay-betaling actief</span>
           <div className="text-right text-white">
             <p className="text-xs sm:text-sm font-semibold">{tenant.name}</p>
             <p className="text-[10px] sm:text-xs opacity-70">Appt. {apt.number}</p>
@@ -1493,7 +1495,7 @@ function PaymentConfirm({ payload, overview, onBack, onSuccess }) {
         </div>
         <div className="flex-1 min-h-0 overflow-auto flex items-center justify-center pb-6">
           <div className="bg-white rounded-3xl w-full max-w-xl p-6 sm:p-8 shadow-2xl text-center">
-            <p className="text-xs font-black uppercase tracking-widest text-slate-400">Mope-betaling</p>
+            <p className="text-xs font-black uppercase tracking-widest text-slate-400">Uni5Pay-betaling</p>
             <p className="text-4xl sm:text-5xl font-black text-[#FF5C00] tracking-tight mt-1 mb-4">
               {fmtMoney(payload.amount, payload.currency)}
             </p>
@@ -1506,7 +1508,7 @@ function PaymentConfirm({ payload, overview, onBack, onSuccess }) {
               <>
                 <div className="mx-auto bg-white p-2 rounded-2xl ring-4 ring-orange-100"
                   style={{ width: 220, height: 220 }}>
-                  <img src={mope.qr} alt="Mope QR" className="w-full h-full object-contain" />
+                  <img src={mope.qr} alt="Uni5Pay QR" className="w-full h-full object-contain" />
                 </div>
                 <p className="mt-4 text-sm font-bold text-slate-700">
                   Klant scant de QR-code op het klantenscherm
@@ -1520,7 +1522,7 @@ function PaymentConfirm({ payload, overview, onBack, onSuccess }) {
                   )}
                   {mope.mode === 'test' && (
                     <span className="ml-2 px-2 py-0.5 rounded bg-sky-100 text-sky-700 font-bold uppercase tracking-wider text-[10px]">
-                      Mope test
+                      Uni5Pay test
                     </span>
                   )}
                   {mope.mode === 'live' && (
@@ -1531,9 +1533,9 @@ function PaymentConfirm({ payload, overview, onBack, onSuccess }) {
                 </p>
                 {mope.api_error && (
                   <div className="mt-3 p-2.5 bg-amber-50 border border-amber-200 text-amber-800 rounded-xl text-xs">
-                    <p className="font-bold">Mope-API niet bereikbaar — terug naar mock-modus.</p>
+                    <p className="font-bold">Uni5Pay-API niet bereikbaar — terug naar mock-modus.</p>
                     <p className="opacity-80 mt-1 break-all">{mope.api_error.slice(0, 180)}</p>
-                    <p className="mt-1">Vraag een geldig token aan via <a href="mailto:info@mope.sr" className="underline font-bold">info@mope.sr</a> en plak het in Instellingen → Mope.</p>
+                    <p className="mt-1">Vraag een geldig token aan via <a href="mailto:info@mope.sr" className="underline font-bold">info@mope.sr</a> en plak het in Instellingen → Uni5Pay.</p>
                   </div>
                 )}
                 <div className="my-4 flex items-center gap-2 text-emerald-600 font-bold text-sm justify-center">

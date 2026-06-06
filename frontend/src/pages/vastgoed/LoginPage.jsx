@@ -9,6 +9,7 @@ import {
   detectCompanySlug, fetchBranding, fetchBrandingByHost, applyBranding,
   resolveLogoUrl, readCachedBranding, clearBrandingCache,
 } from '../../lib/branding';
+import { publicMarketingUrl } from '../../lib/env';
 import PinLanding from './auth/PinLogin';
 import PasswordView from './auth/EmailLogin';
 import PwaOnboarding, { PWA_ONBOARDING_KEY } from '../../components/PwaOnboarding';
@@ -70,8 +71,14 @@ export default function LoginPage() {
   const handleOnboardingChoice = (choice) => {
     setShowOnboarding(false);
     if (choice === 'bedrijf') {
-      // Naar landing met register modal direct open.
-      window.location.assign('/?register=1');
+      // BELANGRIJK: op split-domain productie (app.surirent.sr + surirent.sr)
+      // rendert `/` op het app-subdomein de LoginPage, NIET de marketing
+      // landing. We moeten dus expliciet naar het marketing-domein navigeren
+      // anders eindigt de gebruiker terug op het login scherm.
+      // publicMarketingUrl() geeft `https://surirent.sr` op productie en
+      // de huidige origin op preview/hybrid.
+      const target = `${publicMarketingUrl()}/?register=1`;
+      window.location.assign(target);
     } else if (choice === 'huurder') {
       window.location.assign('/huurder');
     } else {
@@ -97,7 +104,9 @@ export default function LoginPage() {
       // Plain /login → redirect. Branded /<slug>/login → laat zoals het is
       // (de register view zal daar zelf de "alleen inloggen" mode forceren).
       if (/^\/login(\/|$)/i.test(path)) {
-        window.location.replace('/?register=1');
+        // Cross-domain safe: op productie (app.subdomein) is `/` LoginPage,
+        // dus we moeten naar het marketing-domein navigeren.
+        window.location.replace(`${publicMarketingUrl()}/?register=1`);
       }
     } catch { /* ignore */ }
   }, [initialView]);

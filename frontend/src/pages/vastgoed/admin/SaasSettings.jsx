@@ -165,16 +165,16 @@ export default function SaasSettings() {
             onChange={(v) => upd('banking', { whatsapp: v })} testid="bank-whatsapp" />
         </Section>
 
-        <Section title="Mope online betalen" icon={CreditCard} accent="bg-emerald-100 text-emerald-600">
-          <Toggle label="Mope ingeschakeld" hint="Klanten kunnen direct online betalen via Mope"
+        <Section title="Uni5Pay online betalen" icon={CreditCard} accent="bg-emerald-100 text-emerald-600">
+          <Toggle label="Uni5Pay ingeschakeld" hint="Klanten kunnen direct online betalen via Uni5Pay"
             value={data.mope?.enabled} onChange={(v) => upd('mope', { enabled: v })} testid="mope-enabled" />
           <Field label="Merchant ID" value={data.mope?.merchant_id} mono
             onChange={(v) => upd('mope', { merchant_id: v })} testid="mope-merchant-id" />
           <Field label={data.mope?.api_key_set ? 'API Key (vervang om te wijzigen)' : 'API Key'} type="password"
             value={data.mope?.api_key || ''} placeholder={data.mope?.api_key_set ? '••••••••••••' : ''}
             onChange={(v) => upd('mope', { api_key: v })} testid="mope-api-key"
-            hint={data.mope?.api_key_set ? 'Een sleutel is opgeslagen. Laat leeg om de bestaande te behouden.' : 'Verkrijg deze bij uw Mope-account.'} />
-          <Toggle label="Test modus" hint="Gebruik de test-omgeving van Mope (geen echte betalingen)"
+            hint={data.mope?.api_key_set ? 'Een sleutel is opgeslagen. Laat leeg om de bestaande te behouden.' : 'Verkrijg deze bij uw Uni5Pay-account.'} />
+          <Toggle label="Test modus" hint="Gebruik de test-omgeving van Uni5Pay (geen echte betalingen)"
             value={data.mope?.test_mode} onChange={(v) => upd('mope', { test_mode: v })} testid="mope-test-mode" />
         </Section>
 

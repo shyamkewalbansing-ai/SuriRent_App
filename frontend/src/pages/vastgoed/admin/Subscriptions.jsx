@@ -167,7 +167,7 @@ function PaymentRegistrationModal({ companies, defaultCompanyId, onClose, onSave
             <div className="grid grid-cols-4 gap-2">
               {[
                 { v: 'bank', l: 'Bank', icon: Landmark },
-                { v: 'mope', l: 'Mope', icon: CreditCard },
+                { v: 'mope', l: 'Uni5Pay', icon: CreditCard },
                 { v: 'contant', l: 'Contant', icon: Banknote },
                 { v: 'overig', l: 'Overig', icon: MoreVertical },
               ].map((m) => {

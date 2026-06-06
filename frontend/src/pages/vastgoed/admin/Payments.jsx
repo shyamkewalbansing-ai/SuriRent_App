@@ -39,7 +39,7 @@ function startOfDayUTC(d) {
 const METHOD_LABELS = {
   contant: 'Contant',
   bank: 'Bank',
-  mope: 'Mope',
+  mope: 'Uni5Pay',
   sumup: 'SumUp',
   uni5pay: 'Uni5Pay',
 };
@@ -602,7 +602,7 @@ function PaymentForm({ tenants, onCancel, onSaved, initialInvoice = null }) {
                 className="w-full mt-1 h-12 px-3 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] outline-none bg-white">
                 <option value="contant">Contant</option>
                 <option value="bank">Bank</option>
-                <option value="mope">Mope</option>
+                <option value="mope">Uni5Pay</option>
                 <option value="sumup">SumUp</option>
                 <option value="uni5pay">Uni5Pay</option>
               </select>

@@ -25,7 +25,7 @@ const STEPS = [
   { id: 'kiosk', label: 'Kiosk PIN', icon: KeySquare, settings: true },
   { id: 'twilio', label: 'WhatsApp & SMS', icon: MessageCircle, settings: true },
   { id: 'shelly', label: 'Shelly elektriciteit', icon: Zap, settings: true },
-  { id: 'mope', label: 'Mope betalingen', icon: CreditCard, settings: true },
+  { id: 'mope', label: 'Uni5Pay betalingen', icon: CreditCard, settings: true },
   { id: 'uni5pay', label: 'Uni5Pay betalingen', icon: CreditCard, settings: true },
   { id: 'locations', label: 'Locaties', icon: MapPin },
   { id: 'apartment', label: 'Appartementen', icon: Home },

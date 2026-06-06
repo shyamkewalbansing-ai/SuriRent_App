@@ -99,7 +99,7 @@ function OnlinePayBox({ options, openInvoice, onErr }) {
           <button onClick={() => pay('mope')} disabled={!!busy} data-testid="pay-with-mope"
             className="w-full h-14 rounded-xl bg-emerald-500 hover:bg-emerald-400 transition text-white font-extrabold flex items-center justify-center gap-2 disabled:opacity-50">
             {busy === 'mope' ? <Loader2 className="w-5 h-5 animate-spin" /> : <CreditCard className="w-5 h-5" />}
-            <span>Betaal met Mope</span>
+            <span>Betaal met Uni5Pay</span>
             <span className="text-xs opacity-80">· SRD {Number(options.amount).toLocaleString('nl-NL')}</span>
           </button>
         )}

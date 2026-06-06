@@ -127,19 +127,19 @@ export default function BusinessInfo() {
         {/* Mobile wallets */}
         <div className="bg-white border border-slate-200 rounded-2xl p-4 lg:col-span-2">
           <h3 className="text-sm font-extrabold text-slate-900 mb-1 flex items-center gap-2">
-            📱 Mobile wallets (Mope & Uni5Pay)
+            📱 Mobile wallets (Uni5Pay & Uni5Pay)
           </h3>
           <p className="text-[11px] text-slate-500 mb-3 leading-relaxed">
-            Huurders scannen een QR-code in hun Mope of Uni5Pay app, betalen, en uploaden een schermafdruk als bewijs. Het systeem controleert automatisch via OCR.
+            Huurders scannen een QR-code in hun Uni5Pay of Uni5Pay app, betalen, en uploaden een schermafdruk als bewijs. Het systeem controleert automatisch via OCR.
           </p>
           <div className="grid sm:grid-cols-2 gap-4">
             <label className="block">
-              <span className="block text-xs font-bold text-slate-700 mb-1">Mope rekening</span>
+              <span className="block text-xs font-bold text-slate-700 mb-1">Uni5Pay rekening</span>
               <input type="text" value={b.mope_account || ''} onChange={(e) => upd('mope_account', e.target.value)}
-                placeholder="bv. Mope ID of telefoonnummer +597 ..."
+                placeholder="bv. Uni5Pay ID of telefoonnummer +597 ..."
                 data-testid="bi-mope"
                 className="w-full h-10 px-3 border-2 border-slate-200 rounded-lg text-sm focus:border-slate-900 focus:outline-none" />
-              <p className="text-[10px] text-slate-400 mt-0.5">Mope ID, merchant-code of telefoonnummer waarmee huurders kunnen betalen</p>
+              <p className="text-[10px] text-slate-400 mt-0.5">Uni5Pay ID, merchant-code of telefoonnummer waarmee huurders kunnen betalen</p>
             </label>
             <label className="block">
               <span className="block text-xs font-bold text-slate-700 mb-1">Uni5Pay rekening</span>
