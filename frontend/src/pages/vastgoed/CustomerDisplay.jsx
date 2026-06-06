@@ -266,7 +266,7 @@ function PayScreen({ state }) {
             <li key={c.key || c.label}
               className="flex items-center justify-between bg-slate-50 rounded-2xl px-3 sm:px-4 py-2 sm:py-3 gap-3">
               <span className="font-bold text-slate-800 truncate"
-                style={{ fontSize: clamp(14, 1.5, 22) }}>{labels[c.key] || c.label || c.key}</span>
+                style={{ fontSize: clamp(14, 1.5, 22) }}>{c.label || labels[c.key] || c.key}</span>
               <span className="font-black text-slate-900 whitespace-nowrap"
                 style={{ fontSize: clamp(14, 1.5, 22) }}>{fmtMoney(c.value || c.amount || 0, cur)}</span>
             </li>

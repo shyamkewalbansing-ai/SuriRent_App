@@ -1,3 +1,44 @@
+# Vastgoed Kiosk — PRD
+
+## Session 2026-02-06 (iter 35) — Customer Display sync/reset + httpOnly cookies ✅
+
+### Fixes implemented
+1. **Live preview categories (P0)** — KioskLayout PaySelect now calls `onLiveChange({amount, currency, categories})` on every selection. KioskLayout pushes this `livePreview` via BroadcastChannel + PUT, so the customer screen shows the operator's selections within ~500ms (poll) and instantly via BroadcastChannel on same-browser screens. Categories include operator-supplied labels (e.g. "Huur Jul 2026").
+2. **Session-reset detection (P0)** — backend `update_customer_display` now detects when apartment.id changes OR new step is in {idle,check,select}. On detect, ALL locks are cleared: method_chosen_at, customer_initiated, and all mope_* QR fields. This was the root cause of the customer screen staying stuck on the previous tenant after a payment / when switching apartments.
+3. **Auto-idle persists to DB (P0)** — public GET /api/public/customer-display/{slug} auto-idle logic (receipt > 12s, others > 300s) now writes the idle state BACK to mongo. Previously was in-memory only, so the next operator PUT was still blocked by the stale lock.
+4. **`reset()` clears customer screen** — KioskLayout `reset()` (called after receipt "Klaar") now calls `api.delete('/kiosk/customer-display')` to immediately wipe the customer screen.
+5. **effectiveStep maps select+no-apt → idle** — frontend mapping fix so the customer never sees a broken Greet screen between tenants.
+6. **Uni5Pay UI polish** — UNI5PAY+ branded header with red logo, RED ring + "WACHT OP BEDRAG" badge when amount=0, EMERALD ring + "KLAAR OM TE SCANNEN" badge when amount>0, "Nog niet actief" overlay when QR is not ready.
+7. **Bank transfer details on customer screen** — `_company_branding_response` projection extended to include `bank_account_sr`, `bank_account_nl`. MethodScreen renders inline `SR:` / `NL:` lines under the Bankoverschrijving tile, AND swaps the Uni5Pay QR column for a prominent amber bank-details card (`data-testid=cd-bank-details-card`) when `chosen === 'bank'`.
+
+### httpOnly cookie auth migration (P0 — 7e keer overgeslagen, NU GEDAAN)
+- Backend already set `access_token` / `kiosk_token` / `tenant_token` cookies. We hardened: `secure=True` (driven by `COOKIE_SECURE` env, default 1), `httponly=True`, `samesite=lax`. Logout endpoint clears all 3 cookies.
+- Frontend axios: `withCredentials: true` so cookies are sent on every /api request. Legacy `Authorization: Bearer <localStorage-token>` fallback retained transitionally for cached PWA clients.
+- Backend `extract_token()` reads cookie first, falls back to Authorization header. All routes work via either auth method.
+- Verified: cookie-only `/api/auth/me` returns 200 (no Bearer header).
+
+### Test reports
+- `/app/test_reports/iteration_34.json` — cookies + Customer Display Uni5Pay/bank/border: 10/10 PASS
+- `/app/test_reports/iteration_35.json` — sync/reset fixes: 13/13 PASS
+- `/app/backend/tests/test_iter34_cookies_and_customer_display.py`
+- `/app/backend/tests/test_iter35_customer_display_reset.py`
+
+### Files changed this session
+- `/app/backend/server.py` — `_set_access_cookie` (Secure flag via env), `/auth/logout` (clears 3 cookies), `update_customer_display` (session_reset detection), `get_customer_display` (auto-idle persists), `/public/customer-display/{slug}` (projection adds bank_account_sr/nl), `_company_branding_response`.
+- `/app/frontend/src/lib/api.js` — `withCredentials: true`.
+- `/app/frontend/src/pages/vastgoed/KioskLayout.jsx` — `livePreview` state, `onLiveChange` to PaySelect, `reset()` calls DELETE, `buildBody` pushes livePreview during pay step, `pushKeyRef` content-hash includes `cats`.
+- `/app/frontend/src/pages/vastgoed/CustomerDisplay.jsx` — MethodScreen receives `branding`, bank tile inline details, bank-details swap card, applyState dedup includes `cats`, effectiveStep maps select+no-apt to idle, PayScreen prefers `c.label` over static labels.
+
+### Still open (next priorities)
+- **server.py refactor (P0)** — file is 11.748 regels, modulariseer in routes/auth.py, routes/billing.py, routes/landing.py, routes/saas.py, routes/kiosk.py, routes/tenant.py
+- **Shelly Smart Breakers (P1)** — hardware integratie voor slim schakelen
+- **Betalingsgeschiedenis bij achterstallige huurders (P3)** — Invoices.jsx tenant-view uitbreiden
+- **CustomerDisplay.jsx splitsen (P2)** — 845 regels → splitsen in `./customer-display/{Idle,Greet,Overview,Pay,Method,Receipt,Picker}.jsx`
+- **Remove access_token from login response body (P2)** — als alle PWA's gemigreerd zijn, kan de Bearer fallback weg en realiseren we volledige XSS-hardening
+
+---
+
+
 # Vastgoed Kiosk - PRD
 
 ## Session 2026-06-03 (v28) — Full Editable Landing + Per-Company Public Landings ✅
