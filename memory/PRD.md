@@ -1477,3 +1477,8 @@ Lint clean. Verified via desktop screenshots (1440×900): élke admin-pagina (Ov
 - **Issue**: Bij Uni5Pay-betaling schakelde CustomerDisplay over naar een aparte `Uni5PayQRScreen` wachtscherm — klant kon niets meer.
 - ✅ Fix: early-return naar `Uni5PayQRScreen` verwijderd. Klant blijft op het 2-koloms keuze-scherm (methodes links + Uni5Pay QR rechts) — geen aparte wachtscherm meer.
 - ✅ Uni5PayQRScreen functie blijft als dead-code (kan later opgeruimd worden, blokkeert niets).
+
+## 2026-02-06 — Bug fix: Klantenscherm popup "betaling gelukt" bleef terugkomen
+- **Issue**: Op het klantenscherm verscheen telkens opnieuw de "Betaling gelukt" popup, wisselend met het beginscherm, en bleef uiteindelijk vastlopen op de laatste betaling.
+- ✅ **Backend fix** (`server.py` GET /public/customer-display/{slug}): Receipt status heeft nu een eigen TTL van 12 seconden (was 5 minuten algemeen). Na 12s vervalt het scherm automatisch terug naar idle, zelfs als de medewerker vergeet expliciet te resetten.
+- ✅ **Frontend fix** (`CustomerDisplay.jsx` applyState): identieke `updated_at` timestamps worden nu genegeerd (`<=` i.p.v. `<`). Voorkomt dat elke 500ms-poll een re-render forceert die de receipt-animatie opnieuw afspeelt — wat eerder leek alsof de popup steeds opnieuw verscheen.

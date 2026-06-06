@@ -625,14 +625,16 @@ export default function CustomerDisplay() {
   }, [slug]);
 
   const applyState = useCallback((newState, source) => {
-    // Negeer als de nieuwe update OUDER is dan de huidige.
+    // Negeer als de nieuwe update OUDER OF GELIJK is aan de huidige —
+    // identieke timestamps (zelfde poll-resultaat) zouden anders elke
+    // 500ms een re-render forceren en de receipt-animatie opnieuw
+    // afspelen waardoor het lijkt of de popup steeds opnieuw verschijnt.
     try {
       const t = newState?.updated_at ? new Date(newState.updated_at).getTime() : Date.now();
-      if (t < lastUpdate.current) return;
+      if (t <= lastUpdate.current) return;
       lastUpdate.current = t;
     } catch { /* ignore */ }
     setState(newState || { step: 'idle' });
-    // eslint-disable-next-line no-console
     if (source) console.debug('[customer-display] update via', source);
   }, []);
 

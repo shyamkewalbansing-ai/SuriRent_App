@@ -7786,12 +7786,21 @@ async def get_customer_display(slug: str, response: Response):
     doc = await db.customer_display.find_one({"company_id": c["id"]}, {"_id": 0})
     branding = _company_branding_response(c)
     state = (doc or {}).get("state") or {"step": "idle"}
-    # Auto-idle wanneer er meer dan 5 minuten geen update is geweest.
+    # Auto-idle voor stale states:
+    #  - Receipt (betalingscherm) blijft maximaal 12 seconden zichtbaar zodat
+    #    de klant het ziet en de medewerker tijd heeft om af te ronden. Na 12s
+    #    keert het scherm zelf terug naar idle — dit voorkomt dat het scherm
+    #    "vastloopt" op een oude betaling wanneer de operator vergeet te resetten.
+    #  - Alle andere staten verlopen na 5 minuten van inactiviteit.
     updated_at = state.get("updated_at")
     try:
         if updated_at:
             t = datetime.fromisoformat(str(updated_at).replace("Z", "+00:00"))
-            if (now_utc() - t).total_seconds() > 300:
+            age = (now_utc() - t).total_seconds()
+            current_step = (state.get("step") or "").lower()
+            if current_step == "receipt" and age > 12:
+                state = {"step": "idle"}
+            elif age > 300:
                 state = {"step": "idle"}
     except Exception:
         pass
