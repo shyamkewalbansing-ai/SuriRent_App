@@ -11,7 +11,8 @@ import {
   detectCompanySlug, fetchBrandingByHost, applyBranding, resolveLogoUrl,
 } from '../../lib/branding';
 
-const POLL_MS = 500;
+const POLL_MS_ACTIVE = 200;   // tijdens transactie (pay/method/confirm) — snelle live updates
+const POLL_MS_IDLE = 1500;    // tijdens idle/welkom — minder netwerk-druk
 const BROADCAST_CHANNEL = 'surirent-customer-display';
 
 // Tailwind-vrije fluid-clamp utility (px), responsive zonder breakpoint-explosies.
@@ -939,6 +940,9 @@ export default function CustomerDisplay() {
     // 700ms) een CSS-variabelen reset + favicon re-write die het hele
     // klantenscherm doet flikkeren.
     let lastBrandKey = '';
+    // Houd referentie bij naar laatste state-step zodat we adaptief kunnen
+    // pollen — snel tijdens transactie, traag tijdens idle.
+    let lastStep = 'idle';
     const tick = async () => {
       try {
         const { data: d } = await api.get(`/public/customer-display/${slug}?t=${Date.now()}`);
@@ -955,14 +959,22 @@ export default function CustomerDisplay() {
             lastBrandKey = key;
           }
         }
-        if (d?.state) applyState(d.state, 'poll');
+        if (d?.state) {
+          applyState(d.state, 'poll');
+          lastStep = (d.state.step || 'idle').toLowerCase();
+        }
         setError('');
       } catch (e) {
         if (!stopped.current) {
           setError(e?.response?.status === 404 ? 'Onbekende bedrijfscode' : 'Verbindingsfout');
         }
       }
-      if (!stopped.current) timer = setTimeout(tick, POLL_MS);
+      // Adaptieve interval: tijdens actieve transactie (pay/method/confirm/overview)
+      // pollen we 5× per seconde voor instant gevoel. Tijdens idle/select/check
+      // zakken we naar 1.5s om bandbreedte te besparen.
+      const activeSteps = ['pay', 'method', 'confirm', 'overview'];
+      const interval = activeSteps.includes(lastStep) ? POLL_MS_ACTIVE : POLL_MS_IDLE;
+      if (!stopped.current) timer = setTimeout(tick, interval);
     };
     tick();
     return () => { stopped.current = true; if (timer) clearTimeout(timer); };

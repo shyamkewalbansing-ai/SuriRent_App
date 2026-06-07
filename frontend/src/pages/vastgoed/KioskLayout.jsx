@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useBrandedNavigate } from '../../lib/branded-nav';
 import { AnimatePresence, motion } from 'framer-motion';
+import { QRCodeSVG } from 'qrcode.react';
 import {
   Building2, ArrowRight, ArrowLeft, Banknote, Receipt, LogOut, MapPin,
   Check, Loader2, Home, X, Wallet, FileText, Wifi, AlertCircle,
@@ -693,9 +694,21 @@ function PaySelect({ overview, onBack, onConfirm, onLiveChange }) {
   // (via BroadcastChannel + PUT) naar het klantenscherm zodat de klant
   // realtime ziet wat er gebeurt. Dedup wordt door KioskLayout's push-hash
   // afgehandeld.
+  // Content-hash ref voor live preview — voorkomt dat we onLiveChange
+  // meermaals per render afvuren wanneer de selectie qua INHOUD identiek
+  // is (selectedInvItems/PlanItems zijn nieuwe arrays elke render). Zonder
+  // deze guard zou de parent voor elke re-render setLivePreview triggeren
+  // en zo dubbele renders + onnodige PUTs veroorzaken.
+  const lastLivePreviewKeyRef = useRef('');
   useEffect(() => {
     if (typeof onLiveChange !== 'function') return;
-    if (activeAmount <= 0) { onLiveChange(null); return; }
+    if (activeAmount <= 0) {
+      if (lastLivePreviewKeyRef.current !== '__null__') {
+        lastLivePreviewKeyRef.current = '__null__';
+        onLiveChange(null);
+      }
+      return;
+    }
     const cats = [];
     selectedInvItems.forEach((inv) => {
       const label = inv.period_month
@@ -714,8 +727,12 @@ function PaySelect({ overview, onBack, onConfirm, onLiveChange }) {
     if (hasCustom) {
       cats.push({ key: 'overig', label: isAdvance ? 'Vooruitbetaling' : 'Gedeeltelijke betaling', value: parseFloat(custom) });
     }
-    onLiveChange({ amount: activeAmount, currency: cur, categories: cats });
-  }, [activeAmount, hasCustom, custom, cur, isAdvance, selected, selectedInvItems, selectedPlanItems, selectedSynCurrent, onLiveChange]);
+    const key = JSON.stringify({ a: activeAmount, c: cur, cs: cats.map((x) => `${x.key}:${x.label}:${x.value}`) });
+    if (key !== lastLivePreviewKeyRef.current) {
+      lastLivePreviewKeyRef.current = key;
+      onLiveChange({ amount: activeAmount, currency: cur, categories: cats });
+    }
+  }, [activeAmount, hasCustom, custom, cur, isAdvance, selected, selectedInvItems, selectedPlanItems, selectedSynCurrent, amounts.boete, amounts.internet, onLiveChange]);
 
 
   const press = (k) => {
@@ -1529,9 +1546,28 @@ function PaymentConfirm({ payload, overview, onBack, onSuccess }) {
               {fmtMoney(payload.amount, payload.currency)}
             </p>
             {!mope ? (
-              <div className="py-8 flex flex-col items-center gap-3 text-slate-500">
-                <Loader2 className="w-8 h-8 animate-spin text-[#FF5C00]" />
-                <p className="text-sm font-bold">QR-code wordt aangemaakt…</p>
+              <div className="py-4 flex flex-col items-center gap-2">
+                {/* Optimistische QR — direct zichtbaar voor de operator
+                    met de fallback mock-pay URL. Zodra de backend de
+                    echte Uni5Pay QR retourneert (mope-state hieronder),
+                    swappen we naar de officiële QR. */}
+                <div className="mx-auto bg-white p-2 rounded-2xl ring-4 ring-orange-100 relative"
+                  style={{ width: 220, height: 220 }}>
+                  <QRCodeSVG
+                    value={`${(typeof window !== 'undefined' ? window.location.origin : '')}/api/payments/mock-pay/preview?amount=${payload.amount}&currency=${payload.currency || 'SRD'}`}
+                    size={256}
+                    level="H"
+                    bgColor="#FFFFFF"
+                    fgColor="#0F0F0F"
+                    style={{ width: '100%', height: '100%' }}
+                  />
+                  {/* Subtle "loading official QR" overlay */}
+                  <div className="absolute inset-2 rounded-xl bg-white/85 backdrop-blur-sm flex flex-col items-center justify-center gap-2 pointer-events-none">
+                    <Loader2 className="w-7 h-7 animate-spin text-[#FF5C00]" />
+                    <p className="text-xs font-black uppercase tracking-widest text-slate-600">QR wordt opgehaald…</p>
+                  </div>
+                </div>
+                <p className="text-xs text-slate-500 mt-2">Uni5Pay genereert de officiële QR</p>
               </div>
             ) : (
               <>
@@ -2189,7 +2225,11 @@ export default function KioskLayout() {
       api.put('/kiosk/customer-display', body).catch(() => {});
     };
     push();
-    const hb = setInterval(push, 3000);
+    // Heartbeat: elke 1.5s een keepalive push. De content-hash dedup in
+    // `push()` zorgt dat we GEEN onnodige PUTs doen — alleen wanneer de
+    // state daadwerkelijk verandert. 1.5s ipv 3s zodat een stale state
+    // sneller wordt opgemerkt en gecorrigeerd.
+    const hb = setInterval(push, 1500);
     return () => clearInterval(hb);
   }, [step, apartment, overview, paymentPayload, paymentResult, livePreview]);
 

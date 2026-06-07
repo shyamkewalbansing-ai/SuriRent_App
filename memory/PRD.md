@@ -1,5 +1,36 @@
 # Vastgoed Kiosk — PRD
 
+## Session 2026-02-06 (iter 36) — Snellere live sync + premium herontwerp ✅
+
+### Performance verbeteringen
+1. **Adaptief pollen op customer screen** — `POLL_MS_ACTIVE = 200ms` (5×/sec) tijdens transactie (`pay`/`method`/`confirm`/`overview`), `POLL_MS_IDLE = 1500ms` tijdens idle/welkom. Max cross-device latency nu ~200ms.
+2. **KioskLayout heartbeat** verlaagd van 3s → 1.5s; stale state wordt nu sneller gedetecteerd.
+3. **PaySelect onLiveChange dedup** — content-hash ref (`lastLivePreviewKeyRef`) voorkomt dubbele setLivePreview calls bij elke render (selectedInvItems/PlanItems waren nieuwe array-refs per render → onLiveChange firede meermaals). Nu vuurt het effect alleen wanneer de samengestelde categories-inhoud ECHT verandert.
+4. **Optimistische QR op operator-zijde** — KioskLayout's `PaymentConfirm` toont DIRECT een client-side fallback QR (mock-pay URL) terwijl backend Uni5Pay aanroept. Daaroverheen een subtiele "QR wordt opgehaald…" overlay. Zodra de officiële QR terug is wordt automatisch geswapt. Geen meer "QR-code wordt aangemaakt" wachttijd.
+
+### UI / UX herontwerp
+- **`TenantIdentityCard`** — herbruikbare glassmorphism kaart met avatar-initiaal, naam (wrap-safe), App.nr, adres, en flexibele status pill (live/info/warn). Gebruikt in PayScreen, OverviewScreen én MethodScreen.
+- **OverviewScreen split-pane** — links: huurder identity + status pill (oranje=openstaand/groen=bij); rechts: specificatie met highlight rij voor openstaande huur + premium gradient totaal-balk + donkere "Betaling starten" CTA.
+- **MethodScreen split-pane** — links: huurder identity + groot TE BETALEN bedrag-paneel; rechts: prominente Uni5Pay QR card boven (met UNI5PAY+ logo, KLAAR/WACHT pill, "scan met telefoon" pill), en 3-koloms grid van andere methodes (Contant, SumUp, Bankoverschrijving inline SR/NL nummers) onder.
+- **Cinematische achtergrond** — multi-stop radiale lichtbronnen + linear gradient + SVG-grain ruistextuur + 2 pulserende ambient bollen.
+- **Tabular nums** voor alle geldbedragen.
+
+### Files changed this session (iter36)
+- `/app/frontend/src/pages/vastgoed/CustomerDisplay.jsx` — POLL_MS adaptief, TenantIdentityCard component, PayScreen/OverviewScreen/MethodScreen volledig hertekend, cinematische background, autoidle persist.
+- `/app/frontend/src/pages/vastgoed/KioskLayout.jsx` — QRCodeSVG import, optimistische QR in PaymentConfirm, heartbeat 1.5s, PaySelect onLiveChange dedup met lastLivePreviewKeyRef.
+
+### Still open (next priorities)
+- 🟠 **server.py refactor (P0)** — 11.748 regels modulariseren naar `routes/{auth,billing,landing,kiosk,saas,tenant}.py`
+- 🟡 **Shelly Smart Breakers (P1)** — hardware integratie voor slim schakelen
+- 🟡 **Betalingsgeschiedenis bij achterstallige huurders (P3)** — Invoices.jsx tenant-view uitbreiden met paid-history naast outstanding
+- 🟡 **CustomerDisplay.jsx splitsen (P2)** — 1127 regels → `customer-display/{Idle,Greet,Overview,Pay,Method,Receipt}.jsx`
+- 🟡 **Bearer fallback uit login response halen (P2)** — wanneer PWA-fleet gemigreerd is, kan localStorage tokens volledig weg
+
+---
+
+
+# Vastgoed Kiosk — PRD
+
 ## Session 2026-02-06 (iter 35) — Customer Display sync/reset + httpOnly cookies ✅
 
 ### Fixes implemented
