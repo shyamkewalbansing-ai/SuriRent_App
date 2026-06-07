@@ -2423,17 +2423,6 @@ export default function KioskLayout() {
 
   return (
     <div className="kiosk-fullscreen bg-orange-500" data-testid="kiosk-root">
-      {/* GLOBALE "VOLGENDE HUURDER" KNOP — altijd zichtbaar zodra er
-          een huurder is geselecteerd. Eén tik en het klantenscherm + de
-          Kiosk gaan direct terug naar het appartement-selectiescherm
-          zodat de volgende huurder geholpen kan worden. Confirmatie-modal
-          voorkomt per ongeluk indrukken tijdens een lopende betaling. */}
-      {apartment && step !== 'check' && step !== 'select' && (
-        <NextTenantButton
-          step={step}
-          onConfirm={reset}
-        />
-      )}
       <AnimatePresence mode="wait">
         <motion.div key={step} variants={variants}
           initial="enter" animate="center" exit="exit"
