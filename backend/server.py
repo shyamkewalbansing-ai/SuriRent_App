@@ -7296,6 +7296,29 @@ async def kiosk_tenant_overview(tenant_id: str, _session=Depends(get_kiosk_sessi
 # =====================================================================
 # Customer Display (klantenscherm)
 # =====================================================================
+#
+# REALTIME PUSH — Server-Sent Events
+# ----------------------------------
+# Naast de polling-fallback houden we per company-slug een verzameling
+# asyncio.Queue's bij. Bij elke succesvolle PUT signaleren we ALLE
+# verbonden klantenschermen direct via deze queues. Cross-device latency
+# zakt zo van ~250ms (poll) naar <50ms (instant push).
+import asyncio as _asyncio
+_cd_subscribers: dict = {}  # slug → set[asyncio.Queue]
+_cd_lock = _asyncio.Lock()
+
+async def _cd_publish(slug: str, payload: dict) -> None:
+    """Stuur een nieuwe state naar alle verbonden klantenschermen voor deze
+    company-slug. Stille foutafhandeling — als een client weg is, kan de
+    queue overlopen maar dat blokkeert de PUT niet."""
+    async with _cd_lock:
+        queues = list(_cd_subscribers.get(slug.lower(), ()))
+    for q in queues:
+        try:
+            q.put_nowait(payload)
+        except Exception:
+            pass  # queue vol of gesloten — client opruimen gebeurt in de stream-loop
+
 class CustomerDisplayIn(BaseModel):
     step: str  # 'idle'|'select'|'overview'|'pay'|'method'|'confirm'|'receipt'
     apartment: Optional[dict] = None
@@ -7390,6 +7413,14 @@ async def update_customer_display(body: CustomerDisplayIn, request: Request):
         {"$set": {"company_id": cid, "state": new_state, "updated_at": new_state["updated_at"]}},
         upsert=True,
     )
+    # Push instant naar alle verbonden klantenschermen via SSE.
+    try:
+        company = await db.companies.find_one({"id": cid}, {"_id": 0, "slug": 1})
+        slug = (company or {}).get("slug")
+        if slug:
+            await _cd_publish(slug.lower(), {"state": new_state})
+    except Exception:
+        pass
     return {"ok": True, "updated_at": new_state["updated_at"]}
 
 
@@ -7461,6 +7492,15 @@ async def clear_customer_display(request: Request):
                       "updated_at": iso(now_utc())}},
             upsert=True,
         )
+        # Publish reset naar SSE-luisteraars zodat customer screens
+        # direct teruggaan naar welkom (zonder polling-wachttijd).
+        try:
+            company = await db.companies.find_one({"id": cid}, {"_id": 0, "slug": 1})
+            slug = (company or {}).get("slug")
+            if slug:
+                await _cd_publish(slug.lower(), {"state": {"step": "idle", "updated_at": iso(now_utc())}})
+        except Exception:
+            pass
     return {"ok": True}
 
 
@@ -7849,6 +7889,67 @@ async def get_customer_display(slug: str, response: Response):
     except Exception:
         pass
     return {"branding": branding, "state": state}
+
+
+# =====================================================================
+# SSE STREAM — REALTIME PUSH naar het klantenscherm
+# =====================================================================
+# Het klantenscherm subscribet hier via EventSource. Wanneer de operator
+# de Kiosk-state pusht (PUT /kiosk/customer-display), wordt er via
+# _cd_publish() een event op de queue gezet en INSTANT doorgestuurd.
+# Cross-device latency: typisch <50ms ipv 250ms via polling.
+# Polling blijft als fallback voor PWA-clients zonder EventSource-support.
+from fastapi.responses import StreamingResponse
+
+
+@api.get("/public/customer-display/{slug}/stream")
+async def customer_display_stream(slug: str, request: Request):
+    if not slug or len(slug) > 80:
+        raise HTTPException(status_code=400, detail="Ongeldige slug")
+    c = await db.companies.find_one({"slug": slug.lower()}, {"_id": 0, "id": 1})
+    if not c:
+        raise HTTPException(status_code=404, detail="Bedrijf niet gevonden")
+    key = slug.lower()
+    queue: _asyncio.Queue = _asyncio.Queue(maxsize=32)
+    async with _cd_lock:
+        _cd_subscribers.setdefault(key, set()).add(queue)
+
+    async def event_gen():
+        try:
+            # Stuur de huidige state direct bij verbinding zodat de client
+            # niet hoeft te wachten op de volgende PUT.
+            doc = await db.customer_display.find_one({"company_id": c["id"]}, {"_id": 0})
+            initial = (doc or {}).get("state") or {"step": "idle"}
+            yield f"event: state\ndata: {json.dumps({'state': initial})}\n\n"
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    # Korte timeout zodat we periodiek een heartbeat-comment
+                    # kunnen sturen (houdt de SSE-connection open door proxies
+                    # die idle TCP-verbindingen sluiten na ~30s).
+                    msg = await _asyncio.wait_for(queue.get(), timeout=20.0)
+                    yield f"event: state\ndata: {json.dumps(msg)}\n\n"
+                except _asyncio.TimeoutError:
+                    yield ": keepalive\n\n"
+        finally:
+            async with _cd_lock:
+                subs = _cd_subscribers.get(key)
+                if subs is not None:
+                    subs.discard(queue)
+                    if not subs:
+                        _cd_subscribers.pop(key, None)
+
+    return StreamingResponse(
+        event_gen(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "X-Accel-Buffering": "no",  # nginx: disable buffering
+            "Connection": "keep-alive",
+        },
+    )
+
 
 
 

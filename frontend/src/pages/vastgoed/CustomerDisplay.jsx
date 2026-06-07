@@ -11,8 +11,9 @@ import {
   detectCompanySlug, fetchBrandingByHost, applyBranding, resolveLogoUrl,
 } from '../../lib/branding';
 
-const POLL_MS_ACTIVE = 200;   // tijdens transactie (pay/method/confirm) — snelle live updates
-const POLL_MS_IDLE = 1500;    // tijdens idle/welkom — minder netwerk-druk
+const POLL_MS_ACTIVE = 250;   // tijdens transactie — snelle live updates (4×/sec)
+const POLL_MS_IDLE = 800;     // tijdens idle/welkom — nog steeds snel zodat de
+                              // overgang idle→pay binnen ~0.8s zichtbaar is
 const BROADCAST_CHANNEL = 'surirent-customer-display';
 
 // Tailwind-vrije fluid-clamp utility (px), responsive zonder breakpoint-explosies.
@@ -916,6 +917,43 @@ export default function CustomerDisplay() {
     bc.addEventListener('message', handler);
     return () => { bc.removeEventListener('message', handler); bc.close(); };
   }, [applyState]);
+
+  // 1c) SSE — Server-Sent Events voor INSTANT cross-device push (<50ms).
+  // De backend pushed elke state-update direct via deze persistent
+  // connection. Polling blijft als fallback voor clients zonder
+  // EventSource-support (alle moderne browsers ondersteunen het).
+  useEffect(() => {
+    if (!slug) return undefined;
+    if (typeof EventSource === 'undefined') return undefined;
+    const baseURL = process.env.REACT_APP_BACKEND_URL;
+    const url = `${baseURL}/api/public/customer-display/${slug}/stream`;
+    let es;
+    let alive = true;
+    const connect = () => {
+      if (!alive) return;
+      try {
+        es = new EventSource(url, { withCredentials: false });
+        es.addEventListener('state', (e) => {
+          try {
+            const d = JSON.parse(e.data || '{}');
+            if (d?.state) applyState(d.state, 'sse');
+          } catch { /* ignore parse errors */ }
+        });
+        es.onerror = () => {
+          // Automatische reconnect na 1s — EventSource heeft default reconnect,
+          // maar bij sommige proxies is het sneller om de connectie expliciet
+          // weg te gooien en opnieuw op te zetten.
+          try { es?.close(); } catch { /* ignore */ }
+          if (alive) setTimeout(connect, 1000);
+        };
+      } catch { /* ignore */ }
+    };
+    connect();
+    return () => {
+      alive = false;
+      try { es?.close(); } catch { /* ignore */ }
+    };
+  }, [slug, applyState]);
 
   // 1b) Receipt-deduplicatie tracker — wanneer state.step naar receipt gaat,
   // onthoud de unieke receipt-key zodat we bij volgende polls niet opnieuw
