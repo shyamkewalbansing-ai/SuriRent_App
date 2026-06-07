@@ -857,7 +857,6 @@ export default function CustomerDisplay() {
   const [state, setState] = useState({ step: 'idle' });
   const [error, setError] = useState('');
   const [pickerSlug, setPickerSlug] = useState('');
-  const lastUpdate = useRef(0);
   const [shownReceipt, setShownReceipt] = useState('');
 
   // Resolve slug via host if not known.
@@ -871,14 +870,11 @@ export default function CustomerDisplay() {
     return () => { alive = false; };
   }, [slug]);
 
+  const lastUpdate = useRef(0);
   const lastStateKey = useRef('');
   const applyState = useCallback((newState, source) => {
-    // STAP 1 — Tijdstempel check: negeer oudere updates (out-of-order)
-    try {
-      const t = newState?.updated_at ? new Date(newState.updated_at).getTime() : Date.now();
-      if (t < lastUpdate.current) return;
-      lastUpdate.current = t;
-    } catch { /* ignore */ }
+    // STAP 1 — Tijdstempel: altijd Date.now() (browsertijd) gebruiken zodat
+    lastUpdate.current = Date.now();
     // STAP 2 — CONTENT-HASH dedup: ook al heeft de operator heartbeat een
     // nieuwe `updated_at` gezet, als de daadwerkelijke content (step + payload)
     // identiek is aan de vorige update, doen we NIETS. Voorkomt de constante
@@ -1152,7 +1148,7 @@ export default function CustomerDisplay() {
         </span>
 
         <span className="flex items-center gap-2 shrink-0">
-          <LiveDot lastUpdate={lastUpdate.current} />
+          <LiveDot getLastUpdate={() => lastUpdate.current} />
           <span className="uppercase tracking-widest">Klantenscherm</span>
         </span>
       </div>
@@ -1160,12 +1156,15 @@ export default function CustomerDisplay() {
   );
 }
 
-function LiveDot({ lastUpdate }) {
+function LiveDot({ getLastUpdate }) {
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
   }, []);
+  // Lees lastUpdate elke tick uit de live ref-getter — een prop-waarde zou
+  // stale zijn want de parent re-rendert niet bij elke poll/SSE-tick.
+  const lastUpdate = typeof getLastUpdate === 'function' ? getLastUpdate() : 0;
   const stale = !lastUpdate || (now - lastUpdate) > 4000;
   return (
     <span title={lastUpdate ? new Date(lastUpdate).toLocaleTimeString('nl-NL') : 'geen update'}
