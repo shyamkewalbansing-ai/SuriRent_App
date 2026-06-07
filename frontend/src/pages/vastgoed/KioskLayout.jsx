@@ -2128,6 +2128,39 @@ export default function KioskLayout() {
     };
   }, []);
 
+  // CLEANUP — wanneer het kiosk-component unmount (operator navigeert
+  // weg, sluit tab, refreshed) OF de pagina verborgen wordt, reset het
+  // klantenscherm naar idle. sendBeacon werkt ook tijdens unload (regular
+  // fetch wordt door browser geannuleerd). Dit is een safety-net naast de
+  // explicit `reset()` en `exit()` calls.
+  useEffect(() => {
+    const beaconReset = () => {
+      try {
+        const url = `${process.env.REACT_APP_BACKEND_URL}/api/kiosk/customer-display/reset-beacon`;
+        const blob = new Blob([JSON.stringify({})], { type: 'application/json' });
+        navigator.sendBeacon?.(url, blob);
+      } catch { /* ignore */ }
+    };
+    const onVis = () => {
+      // Wanneer pagina verborgen wordt (tab gewisseld, scherm uit) reset
+      // het klantenscherm zodat het niet eindeloos op de vorige huurder
+      // blijft hangen. Bij terugkeer naar de tab pushed Kiosk gewoon de
+      // current state opnieuw via heartbeat.
+      if (document.visibilityState === 'hidden') beaconReset();
+    };
+    window.addEventListener('pagehide', beaconReset);
+    window.addEventListener('beforeunload', beaconReset);
+    document.addEventListener('visibilitychange', onVis);
+    return () => {
+      window.removeEventListener('pagehide', beaconReset);
+      window.removeEventListener('beforeunload', beaconReset);
+      document.removeEventListener('visibilitychange', onVis);
+      // Component unmount = navigatie naar andere pagina binnen SPA.
+      // Reset hier ook expliciet zodat ander scherm niet de oude state ziet.
+      beaconReset();
+    };
+  }, []);
+
   const exit = useCallback(() => {
     // Reset customer-display naar idle bij uitloggen.
     api.delete('/kiosk/customer-display').catch(() => {});
@@ -2341,7 +2374,7 @@ export default function KioskLayout() {
               onAdmin={hasAdminAccess ? adminMode : null} onExit={exit} />
           )}
           {step === 'overview' && apartment && (
-            <TenantOverview apartment={apartment} onBack={() => setStep('select')}
+            <TenantOverview apartment={apartment} onBack={reset}
               onPay={(d) => { setOverview(d); setStep('pay'); }} />
           )}
           {step === 'pay' && overview && (

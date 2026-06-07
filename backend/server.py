@@ -7471,6 +7471,45 @@ async def kiosk_get_customer_display(request: Request):
 
 
 
+@api.post("/kiosk/customer-display/reset-beacon")
+async def reset_customer_display_beacon(request: Request):
+    """Beacon-veilige reset zonder auth header — wordt aangeroepen via
+    `navigator.sendBeacon()` wanneer de kiosk-tab sluit, refreshed of
+    gehide wordt. We accepteren het kiosk-cookie OF het admin-cookie als
+    bewijs van eigenaarschap. Geen 401 — beacon-call moet snel falen-of-
+    slagen zonder de browser-unload te blokkeren.
+
+    Resultaat: zet customer_display van het bedrijf op idle, gevolgd door
+    een SSE-push zodat het klantenscherm direct welkom toont."""
+    cid = None
+    try:
+        ks = await get_kiosk_session(request)
+        cid = ks.get("company_id")
+    except HTTPException:
+        pass
+    if not cid:
+        try:
+            user = await get_current_user(request)
+            cid = company_id_of(user)
+        except HTTPException:
+            cid = None
+    if cid:
+        idle_state = {"step": "idle", "updated_at": iso(now_utc())}
+        await db.customer_display.update_one(
+            {"company_id": cid},
+            {"$set": {"state": idle_state, "updated_at": idle_state["updated_at"]}},
+            upsert=True,
+        )
+        try:
+            company = await db.companies.find_one({"id": cid}, {"_id": 0, "slug": 1})
+            slug = (company or {}).get("slug")
+            if slug:
+                await _cd_publish(slug.lower(), {"state": idle_state})
+        except Exception:
+            pass
+    return {"ok": True}
+
+
 @api.delete("/kiosk/customer-display")
 async def clear_customer_display(request: Request):
     cid = None
@@ -7877,7 +7916,12 @@ async def get_customer_display(slug: str, response: Response):
             should_reset = False
             if current_step == "receipt" and age > 12:
                 should_reset = True
-            elif age > 300:
+            elif age > 60:
+                # Verlaagd van 300s → 60s zodat een verlaten kiosk (operator
+                # ging weg zonder uit te loggen) niet eindeloos op de vorige
+                # huurder blijft hangen. Tijdens een actieve sessie pusht
+                # de kiosk elke 1.5s een heartbeat dus het scherm blijft
+                # gewoon levend zolang de operator daar zit.
                 should_reset = True
             if should_reset:
                 state = {"step": "idle", "updated_at": iso(now_utc())}
