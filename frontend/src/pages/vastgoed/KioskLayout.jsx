@@ -6,7 +6,7 @@ import {
   Building2, ArrowRight, ArrowLeft, Banknote, Receipt, LogOut, MapPin,
   Check, Loader2, Home, X, Wallet, FileText, Wifi, AlertCircle,
   Smartphone, QrCode, ShieldCheck, Clock as ClockIcon, Printer, Download,
-  User, Settings as SettingsIcon, Hash, CheckCircle, Calendar,
+  User, UserRound, Settings as SettingsIcon, Hash, CheckCircle, Calendar,
 } from 'lucide-react';
 import { api, formatError, fmtMoney, MONTHS_NL } from '../../lib/api';
 import { playSuccessPing, playErrorBuzz } from '../../lib/tap-sounds';
@@ -20,6 +20,70 @@ const variants = {
   center: { opacity: 1, x: 0 },
   exit: { opacity: 0, x: -60 },
 };
+
+// =====================================================================
+// NextTenantButton — globale "Volgende huurder" knop met confirm-modal
+// =====================================================================
+// Operator kan op elk moment (overview/pay/method/confirm/receipt) klikken
+// om DIRECT terug te keren naar het appartement-selectiescherm. Het
+// klantenscherm wordt mee gewist (via reset → DELETE customer-display).
+// Tijdens 'overview' is geen confirm nodig (operator kijkt alleen), bij
+// 'pay'/'method'/'confirm' (lopende transactie) eerst een confirm-modal
+// om per ongeluk klikken te voorkomen.
+function NextTenantButton({ step, onConfirm }) {
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const needsConfirm = ['pay', 'method', 'confirm'].includes(step);
+  const handleClick = () => {
+    if (needsConfirm) { setConfirmOpen(true); return; }
+    onConfirm();
+  };
+  return (
+    <>
+      <button
+        type="button"
+        onClick={handleClick}
+        data-testid="kiosk-next-tenant-btn"
+        className="fixed top-3 right-3 sm:top-4 sm:right-4 z-40 inline-flex items-center gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-full bg-white/95 hover:bg-white text-orange-600 font-black shadow-2xl border-2 border-white/40 backdrop-blur-md transition active:scale-95"
+        style={{ fontSize: 'clamp(12px, 1.1vmin + 9px, 16px)' }}
+      >
+        <UserRound className="w-4 h-4 sm:w-5 sm:h-5" strokeWidth={2.6} />
+        <span className="hidden xs:inline sm:inline">Volgende huurder</span>
+        <span className="xs:hidden sm:hidden">Volgende</span>
+      </button>
+
+      {confirmOpen && (
+        <div className="fixed inset-0 z-50 bg-black/55 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setConfirmOpen(false)}
+          data-testid="kiosk-next-tenant-confirm">
+          <div className="bg-white rounded-3xl shadow-2xl p-6 sm:p-8 max-w-md w-full"
+            onClick={(e) => e.stopPropagation()}>
+            <div className="rounded-2xl bg-amber-100 text-amber-700 w-14 h-14 flex items-center justify-center mb-4">
+              <AlertCircle className="w-7 h-7" strokeWidth={2.4} />
+            </div>
+            <h3 className="font-black text-slate-900 text-xl mb-1">Sessie afbreken?</h3>
+            <p className="text-slate-600 text-sm mb-5">
+              Er loopt een betaling. Weet je zeker dat je de huidige huurder wilt afsluiten en naar de volgende wilt gaan?
+            </p>
+            <div className="flex gap-2">
+              <button type="button"
+                onClick={() => setConfirmOpen(false)}
+                className="flex-1 h-12 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold transition active:scale-95">
+                Annuleren
+              </button>
+              <button type="button"
+                onClick={() => { setConfirmOpen(false); onConfirm(); }}
+                data-testid="kiosk-next-tenant-confirm-yes"
+                className="flex-1 h-12 rounded-2xl bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-black shadow-lg transition active:scale-95 flex items-center justify-center gap-2">
+                <UserRound className="w-5 h-5" strokeWidth={2.6} />
+                Volgende huurder
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
 
 function getKioskCompany() {
   try {
@@ -2034,8 +2098,9 @@ function ReceiptScreen({ payment, overview, onDone }) {
             ],
           }}
           transition={{ delay: 3.1, duration: 1.7, repeat: Infinity, ease: 'easeInOut' }}
-          className="w-full h-12 bg-orange-500 hover:bg-orange-600 text-white text-base font-extrabold rounded-xl">
-          Klaar
+          className="w-full h-14 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white text-lg font-black rounded-2xl flex items-center justify-center gap-2 shadow-xl">
+          <UserRound className="w-5 h-5" strokeWidth={2.6} />
+          Volgende huurder
         </motion.button>
         <p className="text-center text-xs text-slate-400 mt-2" data-testid="receipt-autoreturn">
           Automatisch terug naar startscherm in 10 seconden
@@ -2358,6 +2423,17 @@ export default function KioskLayout() {
 
   return (
     <div className="kiosk-fullscreen bg-orange-500" data-testid="kiosk-root">
+      {/* GLOBALE "VOLGENDE HUURDER" KNOP — altijd zichtbaar zodra er
+          een huurder is geselecteerd. Eén tik en het klantenscherm + de
+          Kiosk gaan direct terug naar het appartement-selectiescherm
+          zodat de volgende huurder geholpen kan worden. Confirmatie-modal
+          voorkomt per ongeluk indrukken tijdens een lopende betaling. */}
+      {apartment && step !== 'check' && step !== 'select' && (
+        <NextTenantButton
+          step={step}
+          onConfirm={reset}
+        />
+      )}
       <AnimatePresence mode="wait">
         <motion.div key={step} variants={variants}
           initial="enter" animate="center" exit="exit"
