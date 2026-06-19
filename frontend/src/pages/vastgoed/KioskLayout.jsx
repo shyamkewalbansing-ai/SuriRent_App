@@ -2202,6 +2202,35 @@ export default function KioskLayout() {
       setTimeout(() => setNfcToast(null), 4000);
     };
 
+    // === Web NFC API (Android Chrome) ===
+    // Wanneer de Kiosk draait op een Android-tablet/telefoon, kan de
+    // BUILT-IN NFC chip kaarten uitlezen via de Web NFC API. Vereist HTTPS
+    // en user-gesture om de scan te starten. iOS Safari ondersteunt dit
+    // NIET (Apple heeft Web NFC geblokkeerd). Voor iOS gebruik je in plaats
+    // daarvan NFC URL-tags die `https://<domain>/kiosk/nfc?c=<UID>` open.
+    let ndefReader = null;
+    let ndefAbort = null;
+    const startWebNfc = async () => {
+      if (typeof window === 'undefined' || !('NDEFReader' in window)) return;
+      try {
+        ndefReader = new window.NDEFReader();
+        ndefAbort = new AbortController();
+        await ndefReader.scan({ signal: ndefAbort.signal });
+        ndefReader.addEventListener('reading', (ev) => {
+          // serialNumber kan formaten als "04:a1:b2:c3:d4" hebben
+          const raw = ev?.serialNumber || '';
+          const uid = String(raw).toUpperCase().replace(/[^A-Z0-9]/g, '');
+          if (uid.length >= 6) handleScan(uid);
+        });
+      } catch (err) {
+        // Permission denied of niet ondersteund — stille fallback (HID/URL werkt nog steeds)
+        if (err?.name !== 'AbortError') {
+          console.warn('Web NFC niet beschikbaar:', err?.message || err);
+        }
+      }
+    };
+    startWebNfc();
+
     const onKey = (e) => {
       // Skip als gebruiker actief in een invoerveld typt
       const tag = (e.target?.tagName || '').toLowerCase();
@@ -2233,7 +2262,50 @@ export default function KioskLayout() {
     return () => {
       window.removeEventListener('keydown', onKey);
       if (timer) clearTimeout(timer);
+      // Stop de Web NFC scan op unmount / step-change
+      try { ndefAbort?.abort(); } catch (err) { /* noop */ }
     };
+  }, [step]);
+
+  // ===================================================================
+  // URL-TAG NFC (iOS Safari + Android — universele fallback)
+  // ===================================================================
+  // Wanneer een NFC-tag geprogrammeerd is met een URL als
+  // `https://<jouw-domain>/kiosk?nfc=04A1B2C3D4`, dan opent de
+  // telefoon (iOS én Android) automatisch Safari/Chrome naar die URL
+  // wanneer de huurder zijn telefoon tegen de tag tikt. Wij vangen de
+  // `?nfc=` query-param hier af en doen dezelfde lookup-flow.
+  useEffect(() => {
+    if (step !== 'select') return undefined;
+    try {
+      const url = new URL(window.location.href);
+      const uidFromUrl = (url.searchParams.get('nfc') || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+      if (uidFromUrl.length < 6) return undefined;
+      // Direct verwerken (zelfde flow als HID/Web NFC)
+      (async () => {
+        try {
+          const { data } = await api.post('/kiosk/nfc-lookup', { card_id: uidFromUrl });
+          if (data?.found && data?.apartment) {
+            const apt = data.apartment;
+            if (data.tenant?.name && !apt.tenant_name) apt.tenant_name = data.tenant.name;
+            setApartment(apt);
+            setStep('overview');
+            setNfcToast({ kind: 'ok', msg: `Welkom — ${apt.tenant_name || `App. ${apt.number}`}` });
+          } else {
+            setNfcToast({ kind: 'err', msg: 'Kaart niet herkend.' });
+          }
+        } catch (err) {
+          console.error('URL-tag NFC lookup failed', err);
+        }
+        setTimeout(() => setNfcToast(null), 4000);
+        // Wis de query-param uit de URL zodat refresh niet opnieuw triggert
+        try {
+          url.searchParams.delete('nfc');
+          window.history.replaceState({}, '', url.toString());
+        } catch (err) { /* noop */ }
+      })();
+    } catch (err) { console.error('URL-tag NFC parse failed', err); }
+    return undefined;
   }, [step]);
 
   const exit = useCallback(() => {
@@ -2442,7 +2514,9 @@ export default function KioskLayout() {
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/15 backdrop-blur-md border border-white/30 text-white/90"
               style={{ fontSize: 'clamp(10px, 0.9vmin + 9px, 13px)' }}>
               <Hash className="w-3.5 h-3.5" strokeWidth={2.4} />
-              <span className="font-bold uppercase tracking-widest">NFC-kaart tappen kan ook</span>
+              <span className="font-bold uppercase tracking-widest">
+                NFC-kaart tappen (USB / Android / iPhone-tag)
+              </span>
             </div>
           ) : (
             <div data-testid="kiosk-nfc-toast"

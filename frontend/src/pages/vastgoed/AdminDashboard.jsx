@@ -1460,6 +1460,34 @@ function NfcCardField({ apartmentId, currentValue }) {
           </button>
         </div>
       )}
+      {value && (
+        <div className="mt-2 p-2 rounded-xl bg-slate-50 border border-slate-200">
+          <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">
+            iPhone/Android NFC-tag URL
+          </p>
+          <div className="flex items-center gap-2">
+            <code className="flex-1 text-[11px] font-mono text-slate-700 truncate bg-white px-2 py-1.5 rounded border border-slate-200">
+              {`${window.location.origin}/kiosk?nfc=${value}`}
+            </code>
+            <button type="button"
+              onClick={() => {
+                try {
+                  navigator.clipboard?.writeText(`${window.location.origin}/kiosk?nfc=${value}`);
+                  setMsg('URL gekopieerd');
+                  setTimeout(() => setMsg(''), 2000);
+                } catch (err) { console.error('Clipboard write failed', err); }
+              }}
+              data-testid="apt-nfc-copy-url"
+              className="px-2.5 h-8 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-[11px] font-black whitespace-nowrap">
+              Kopieer
+            </button>
+          </div>
+          <p className="text-[10px] text-slate-500 mt-1">
+            Schrijf deze URL naar een NFC-tag met een app als "NFC Tools".
+            Huurder tikt zijn telefoon op de tag → wordt automatisch herkend.
+          </p>
+        </div>
+      )}
       {!pending && !value && (
         <p className="mt-1.5 text-[11px] text-orange-700/80">
           Tap een kaart op de Kiosk en klik dan "Koppel".
