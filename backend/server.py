@@ -7475,113 +7475,6 @@ async def kiosk_get_customer_display(request: Request):
 
 
 
-# =====================================================================
-# NFC TAP — huurder identificatie via USB HID-lezer (kaart-UID)
-# =====================================================================
-# Workflow:
-#  1. USB HID NFC-lezer (bv. ACR122) gedraagt zich als toetsenbord en
-#     "typt" het kaart-UID gevolgd door Enter zodra een kaart getapt wordt.
-#  2. Frontend Kiosk vangt deze rapid burst + Enter af en stuurt het UID
-#     naar POST /api/kiosk/nfc-lookup.
-#  3. Bij match → operator gaat direct naar het juiste appartement.
-#     Bij geen match → frontend toont melding, EN backend onthoudt het
-#     UID in een korte "pending"-buffer zodat de admin het via het
-#     admin-paneel bij het juiste appartement kan koppelen.
-#
-# Datamodel:
-#  - apartments.nfc_card_id (string, uniek per bedrijf)
-#  - In-memory dict `_nfc_pending[company_id]` = {"card_id":..., "ts":...}
-#    voor self-enroll (5 minuten geldigheid).
-import time as _time
-_nfc_pending: dict = {}
-_NFC_PENDING_TTL = 300.0
-
-
-def _normalize_nfc(card_id: str) -> str:
-    """Standaardiseer UID naar uppercase alfanumeriek zonder scheidingstekens."""
-    if not card_id:
-        return ""
-    return "".join(c for c in str(card_id).strip().upper() if c.isalnum())
-
-
-class NfcLookupIn(BaseModel):
-    card_id: str
-
-
-class NfcAssignIn(BaseModel):
-    card_id: Optional[str] = None
-    use_pending: bool = False
-
-
-@api.post("/kiosk/nfc-lookup")
-async def kiosk_nfc_lookup(body: NfcLookupIn, request: Request):
-    ks = await get_kiosk_session(request)
-    cid = ks.get("company_id")
-    if not cid:
-        raise HTTPException(status_code=403, detail="Geen kiosk-sessie")
-    uid = _normalize_nfc(body.card_id)
-    if not uid:
-        raise HTTPException(status_code=400, detail="Lege kaart-UID")
-    apt = await db.apartments.find_one(
-        {"company_id": cid, "nfc_card_id": uid}, {"_id": 0},
-    )
-    if not apt:
-        _nfc_pending[cid] = {"card_id": uid, "ts": _time.time()}
-        return {"found": False, "card_id": uid}
-    tenant = None
-    if apt.get("tenant_id"):
-        tenant = await db.tenants.find_one(
-            {"id": apt["tenant_id"]},
-            {"_id": 0, "id": 1, "name": 1, "email": 1, "phone": 1,
-             "internet_amount": 1, "internet_currency": 1},
-        )
-    return {"found": True, "card_id": uid, "apartment": apt, "tenant": tenant}
-
-
-@api.get("/admin/nfc/pending")
-async def admin_nfc_pending(user: dict = Depends(get_current_user)):
-    cid = company_id_of(user)
-    pend = _nfc_pending.get(cid)
-    if not pend:
-        return {"pending": None}
-    if _time.time() - pend["ts"] > _NFC_PENDING_TTL:
-        _nfc_pending.pop(cid, None)
-        return {"pending": None}
-    return {"pending": {"card_id": pend["card_id"],
-                       "scanned_seconds_ago": int(_time.time() - pend["ts"])}}
-
-
-@api.put("/admin/apartments/{apt_id}/nfc-card")
-async def admin_assign_nfc_card(apt_id: str, body: NfcAssignIn,
-                                 user: dict = Depends(get_current_user)):
-    cid = company_id_of(user)
-    apt = await db.apartments.find_one({"id": apt_id, **scope(user)}, {"_id": 0})
-    if not apt:
-        raise HTTPException(status_code=404, detail="Appartement niet gevonden")
-    if body.use_pending:
-        pend = _nfc_pending.get(cid)
-        if not pend or _time.time() - pend["ts"] > _NFC_PENDING_TTL:
-            raise HTTPException(status_code=400, detail="Geen recente kaart gescand")
-        uid = pend["card_id"]
-    else:
-        uid = _normalize_nfc(body.card_id or "") or None
-    if uid:
-        clash = await db.apartments.find_one(
-            {"company_id": cid, "nfc_card_id": uid, "id": {"$ne": apt_id}},
-            {"_id": 0, "id": 1, "number": 1},
-        )
-        if clash:
-            raise HTTPException(
-                status_code=409,
-                detail=f"Kaart is al gekoppeld aan appartement {clash.get('number')}",
-            )
-    upd = {"nfc_card_id": uid} if uid else {"nfc_card_id": None}
-    await db.apartments.update_one({"id": apt_id}, {"$set": upd})
-    if uid:
-        _nfc_pending.pop(cid, None)
-    return {"ok": True, "apartment_id": apt_id, "nfc_card_id": uid}
-
-
 
 @api.post("/kiosk/customer-display/reset-beacon")
 async def reset_customer_display_beacon(request: Request):
@@ -11227,6 +11120,22 @@ async def morning_briefing(user=Depends(require_role("admin"))):
 
 
 app.include_router(api)
+
+# =====================================================================
+# Modulaire route-bestanden (zie /app/backend/routes/) — incrementele
+# refactor om server.py op te splitsen in behapbare logische modules.
+# De _deps module krijgt referenties naar shared dependencies zodat
+# route-modules geen circulaire imports nodig hebben.
+# =====================================================================
+from routes import _deps as _route_deps  # noqa: E402
+from routes import nfc as _nfc_routes    # noqa: E402
+
+_route_deps.db = db
+_route_deps.get_current_user = get_current_user
+_route_deps.get_kiosk_session = get_kiosk_session
+_route_deps.company_id_of = company_id_of
+_route_deps.scope = scope
+app.include_router(_nfc_routes.router, prefix="/api")
 
 async def _notify_tenant_installment_paid(plan_id: str, seq: int) -> None:
     """Stuur een korte WhatsApp/SMS bevestiging naar de huurder na een
