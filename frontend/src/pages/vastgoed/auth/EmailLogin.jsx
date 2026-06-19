@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import {
   Loader2, KeyRound, ArrowLeft, ArrowRight, Eye, EyeOff, LogIn, Check,
-  Globe, QrCode, Sparkles, Star, ShieldCheck, Zap, ChevronDown,
+  Globe, Sparkles, Star, ShieldCheck, Zap, ChevronDown,
 } from 'lucide-react';
 import { api, formatError } from '../../../lib/api';
 import { useAuth } from '../../../lib/auth';
@@ -11,7 +11,6 @@ import { useIsMobile } from '../../../lib/use-is-mobile';
 import { MobileEmailLogin } from '../../../components/MobileAuthShell';
 import ForgotPasswordModal from './ForgotPasswordModal';
 import RegisterSuccess from './RegisterSuccess';
-import QrLoginTab from './QrLoginTab';
 import Header from './LoginHeader';
 
 function PasswordView({ initialMode = 'login', onBack, onRegistered, branding }) {
@@ -52,8 +51,6 @@ function PasswordView({ initialMode = 'login', onBack, onRegistered, branding })
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  // QR vs password login method (alleen relevant in mode === 'login').
-  const [loginMethod, setLoginMethod] = useState('password');
 
   // Build the query that drives the plan-currency on the registration form.
   // Explicit country wins; otherwise the phone is used for auto-detect.
@@ -558,45 +555,8 @@ function PasswordView({ initialMode = 'login', onBack, onRegistered, branding })
             </div>
           )}
 
-          {/* Tab toggle: e-mail/wachtwoord vs QR code */}
-          <div className="mb-5 grid grid-cols-2 gap-1.5 p-1 bg-slate-100 rounded-xl"
-            data-testid="login-method-tabs">
-            <button type="button" onClick={() => setLoginMethod('password')}
-              data-testid="tab-password"
-              className={`h-10 rounded-lg text-sm font-bold transition-all flex items-center justify-center gap-1.5 ${
-                loginMethod === 'password'
-                  ? 'bg-white text-slate-900 shadow-sm'
-                  : 'text-slate-500 hover:text-slate-700'
-              }`}>
-              <KeyRound className="w-4 h-4" /> Wachtwoord
-            </button>
-            <button type="button" onClick={() => setLoginMethod('qr')}
-              data-testid="tab-qr"
-              className={`h-10 rounded-lg text-sm font-bold transition-all flex items-center justify-center gap-1.5 ${
-                loginMethod === 'qr'
-                  ? 'bg-white text-slate-900 shadow-sm'
-                  : 'text-slate-500 hover:text-slate-700'
-              }`}>
-              <QrCode className="w-4 h-4" /> QR code
-            </button>
-          </div>
-
-          {loginMethod === 'qr' ? (
-            <div className="py-6">
-              <QrLoginTab
-                primary={branding?.primary_color || '#FF5C00'}
-                onSuccess={() => { window.location.assign('/admin'); }}
-              />
-              <p className="text-center text-xs text-slate-400 mt-5">
-                Geen telefoon bij de hand?{' '}
-                <button onClick={() => setLoginMethod('password')}
-                  data-testid="qr-switch-password"
-                  className="font-bold text-[#FF5C00] hover:underline">
-                  Gebruik wachtwoord
-                </button>
-              </p>
-            </div>
-          ) : (
+          {/* QR login tab is bewust verwijderd — operator kiest altijd
+              direct via e-mail + wachtwoord. */}
 
           <form onSubmit={submit} className="space-y-3">
                 <div>
@@ -639,7 +599,6 @@ function PasswordView({ initialMode = 'login', onBack, onRegistered, branding })
               )}
             </button>
           </form>
-          )}
 
           {/* Mode switcher — alleen op generieke /login. Op /<slug>/login is
               registratie niet relevant (klanten loggen in, ze maken geen
@@ -655,7 +614,7 @@ function PasswordView({ initialMode = 'login', onBack, onRegistered, branding })
             </p>
           )}
         </div>
-        )}
+      )}
       </div>
 
       {showForgot && (
