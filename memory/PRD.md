@@ -1,5 +1,36 @@
 # Vastgoed Kiosk — PRD
 
+## Session 2026-02-06 (iter 37) — NFC tap-in + critical security ✅
+
+### Nieuwe feature: NFC kaart-identificatie (USB HID-lezer)
+- **Backend** `/api/kiosk/nfc-lookup` accepteert kaart-UID, zoekt apartment via `apartments.nfc_card_id`. Bij geen match → in-memory `_nfc_pending` buffer (5 min TTL) zodat admin kan koppelen.
+- **Admin endpoints**: `GET /api/admin/nfc/pending` (toont laatst gescande niet-gekoppelde kaart) + `PUT /api/admin/apartments/{id}/nfc-card` (handmatig OF `use_pending: true` voor self-enroll).
+- **Frontend Kiosk** HID-listener op `step='select'`: detecteert rapid burst toetsen (<120ms gap, ≥6 alfanumerieke chars) + Enter-terminator. Skipt wanneer een input focus heeft. Match → `setApartment + setStep('overview')`. Mismatch → toast + backend-pending registratie.
+- **Frontend Admin** `<NfcCardField>` component in `ApartmentForm`: manuele UID-invoer + "Koppel" knop voor de pending scan (2s polling alleen wanneer modal open). Conflict-detectie als kaart al elders gekoppeld is.
+- **Verified e2e** via Playwright: Kiosk → keyboard input "04A1B2C3D4" + Enter → "Appt. HUIS 7A" geselecteerd, overview geladen.
+
+### Critical security fixes (uit code review)
+1. **`exec()` verwijderd** uit `test_push_devices.py` — vervangen door veilige `importlib.util` + `getattr()` lookup.
+2. **`postMessage` wildcards verwijderd** — `TenantPublicLanding.jsx:500,505` en `MarketingLandingV2.jsx:968` gebruiken nu `window.location.origin` als specifieke target. Voorkomt data-leakage naar kwaadaardige iframe-listeners.
+3. **DEMO credentials** in `server.py` overridebaar via env (`DEMO_EMAIL`, `DEMO_PASSWORD`, `DEMO_COMPANY_SLUG`). Default blijft publieke demo zoals voorheen.
+
+### Still open (uit code review — backlog)
+- 🟠 server.py refactor (P0) — 12.030 regels modulariseren
+- 🟡 220 missing hook deps + 438+ empty catch blocks (iteratief werk)
+- 🟡 Resterende localStorage instances (56 — niet kritisch want auth nu via httpOnly cookies)
+- 🟡 Shelly Smart Breakers (P1)
+- 🟡 Betalingsgeschiedenis bij achterstallige huurders (P3)
+- 🟡 CustomerDisplay.jsx splitsen
+
+### Test reports
+- `/app/test_reports/iteration_34.json` — cookies + Customer Display visuals: 10/10 PASS
+- `/app/test_reports/iteration_35.json` — sync/reset fixes: 13/13 PASS
+
+---
+
+
+# Vastgoed Kiosk — PRD
+
 ## Session 2026-02-06 (iter 36) — Snellere live sync + premium herontwerp ✅
 
 ### Performance verbeteringen

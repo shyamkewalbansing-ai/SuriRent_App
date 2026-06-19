@@ -497,12 +497,23 @@ export default function TenantPublicLanding({
 
   // PostMessage patches naar parent (TenantLandingEditor iframe).
   const onPatch = useCallback((p) => {
-    try { window.parent?.postMessage({ type: 'landing-edit-patch', ...p }, '*'); } catch { /* noop */ }
+    // Specifieke origin gebruiken in plaats van '*' om data-leakage naar
+    // mogelijk kwaadaardige iframes te voorkomen. Het parent-window is
+    // ALTIJD onze eigen admin op REACT_APP_BACKEND_URL — als de origin om
+    // wat voor reden dan ook niet matched, faalt het bericht stil i.p.v.
+    // naar een willekeurige luisteraar te lekken.
+    try {
+      const target = window.location.origin;
+      window.parent?.postMessage({ type: 'landing-edit-patch', ...p }, target);
+    } catch (err) { console.error('landing-edit-patch postMessage failed', err); }
   }, []);
 
   useEffect(() => {
     if (!editMode) return;
-    try { window.parent?.postMessage({ type: 'landing-edit-ready' }, '*'); } catch { /* noop */ }
+    try {
+      const target = window.location.origin;
+      window.parent?.postMessage({ type: 'landing-edit-ready' }, target);
+    } catch (err) { console.error('landing-edit-ready postMessage failed', err); }
   }, [editMode]);
 
   if (loading) {

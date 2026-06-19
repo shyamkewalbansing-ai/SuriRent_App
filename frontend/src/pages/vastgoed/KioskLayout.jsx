@@ -21,70 +21,6 @@ const variants = {
   exit: { opacity: 0, x: -60 },
 };
 
-// =====================================================================
-// NextTenantButton — globale "Volgende huurder" knop met confirm-modal
-// =====================================================================
-// Operator kan op elk moment (overview/pay/method/confirm/receipt) klikken
-// om DIRECT terug te keren naar het appartement-selectiescherm. Het
-// klantenscherm wordt mee gewist (via reset → DELETE customer-display).
-// Tijdens 'overview' is geen confirm nodig (operator kijkt alleen), bij
-// 'pay'/'method'/'confirm' (lopende transactie) eerst een confirm-modal
-// om per ongeluk klikken te voorkomen.
-function NextTenantButton({ step, onConfirm }) {
-  const [confirmOpen, setConfirmOpen] = useState(false);
-  const needsConfirm = ['pay', 'method', 'confirm'].includes(step);
-  const handleClick = () => {
-    if (needsConfirm) { setConfirmOpen(true); return; }
-    onConfirm();
-  };
-  return (
-    <>
-      <button
-        type="button"
-        onClick={handleClick}
-        data-testid="kiosk-next-tenant-btn"
-        className="fixed top-3 right-3 sm:top-4 sm:right-4 z-40 inline-flex items-center gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-full bg-white/95 hover:bg-white text-orange-600 font-black shadow-2xl border-2 border-white/40 backdrop-blur-md transition active:scale-95"
-        style={{ fontSize: 'clamp(12px, 1.1vmin + 9px, 16px)' }}
-      >
-        <UserRound className="w-4 h-4 sm:w-5 sm:h-5" strokeWidth={2.6} />
-        <span className="hidden xs:inline sm:inline">Volgende huurder</span>
-        <span className="xs:hidden sm:hidden">Volgende</span>
-      </button>
-
-      {confirmOpen && (
-        <div className="fixed inset-0 z-50 bg-black/55 backdrop-blur-sm flex items-center justify-center p-4"
-          onClick={() => setConfirmOpen(false)}
-          data-testid="kiosk-next-tenant-confirm">
-          <div className="bg-white rounded-3xl shadow-2xl p-6 sm:p-8 max-w-md w-full"
-            onClick={(e) => e.stopPropagation()}>
-            <div className="rounded-2xl bg-amber-100 text-amber-700 w-14 h-14 flex items-center justify-center mb-4">
-              <AlertCircle className="w-7 h-7" strokeWidth={2.4} />
-            </div>
-            <h3 className="font-black text-slate-900 text-xl mb-1">Sessie afbreken?</h3>
-            <p className="text-slate-600 text-sm mb-5">
-              Er loopt een betaling. Weet je zeker dat je de huidige huurder wilt afsluiten en naar de volgende wilt gaan?
-            </p>
-            <div className="flex gap-2">
-              <button type="button"
-                onClick={() => setConfirmOpen(false)}
-                className="flex-1 h-12 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold transition active:scale-95">
-                Annuleren
-              </button>
-              <button type="button"
-                onClick={() => { setConfirmOpen(false); onConfirm(); }}
-                data-testid="kiosk-next-tenant-confirm-yes"
-                className="flex-1 h-12 rounded-2xl bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-black shadow-lg transition active:scale-95 flex items-center justify-center gap-2">
-                <UserRound className="w-5 h-5" strokeWidth={2.6} />
-                Volgende huurder
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </>
-  );
-}
-
 function getKioskCompany() {
   try {
     const raw = localStorage.getItem('kiosk_company');
@@ -2158,6 +2094,7 @@ export default function KioskLayout() {
   const [livePreview, setLivePreview] = useState(null);
   const [paymentResult, setPaymentResult] = useState(null);
   const [company, setCompany] = useState(getKioskCompany());
+  const [nfcToast, setNfcToast] = useState(null); // {kind:'ok'|'err', msg}
 
   useEffect(() => {
     // document.title wordt centraal beheerd door usePwaManifest() in App.js
@@ -2225,6 +2162,79 @@ export default function KioskLayout() {
       beaconReset();
     };
   }, []);
+
+  // ===================================================================
+  // NFC TAP-LISTENER (USB HID-kaartlezer)
+  // ===================================================================
+  // Een USB HID NFC-lezer (bv. ACR122U) gedraagt zich als een toetsenbord
+  // en "typt" het kaart-UID in rappe burst gevolgd door Enter zodra een
+  // kaart wordt getapt. We luisteren wereldwijd op de kiosk en accepteren
+  // de scan ALLEEN als:
+  //   - er geen tekstveld de focus heeft (anders breekt typen kapot),
+  //   - de toetsaanslagen kort op elkaar volgen (<35ms gemiddeld, mens
+  //     typt 80-200ms tussen toetsen),
+  //   - de string ≥6 karakters lang is (NFC UID's zijn doorgaans 8-14
+  //     hex chars).
+  // Op een match navigeren we DIRECT naar het overview-scherm; geen
+  // operator-actie meer nodig.
+  useEffect(() => {
+    if (step !== 'select') return undefined;  // alleen actief op picker
+    let buffer = '';
+    let lastTs = 0;
+    let timer = null;
+
+    const handleScan = async (uid) => {
+      try {
+        const { data } = await api.post('/kiosk/nfc-lookup', { card_id: uid });
+        if (data?.found && data?.apartment) {
+          const apt = data.apartment;
+          // Verrijk met tenant-naam zodat de overview-card direct compleet is
+          if (data.tenant?.name && !apt.tenant_name) apt.tenant_name = data.tenant.name;
+          setApartment(apt);
+          setStep('overview');
+          setNfcToast({ kind: 'ok', msg: `Welkom — ${apt.tenant_name || `App. ${apt.number}`}` });
+        } else {
+          setNfcToast({ kind: 'err', msg: 'Kaart niet herkend. Geef de admin de kaart om te koppelen.' });
+        }
+      } catch (err) {
+        setNfcToast({ kind: 'err', msg: 'Kon kaart niet uitlezen. Probeer opnieuw.' });
+      }
+      setTimeout(() => setNfcToast(null), 4000);
+    };
+
+    const onKey = (e) => {
+      // Skip als gebruiker actief in een invoerveld typt
+      const tag = (e.target?.tagName || '').toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || e.target?.isContentEditable) return;
+
+      const now = Date.now();
+      const gap = now - lastTs;
+      lastTs = now;
+
+      // Reset buffer als er een lange pauze was (handmatige toets)
+      if (gap > 120 && buffer.length > 0) buffer = '';
+
+      if (e.key === 'Enter') {
+        const candidate = buffer.trim();
+        buffer = '';
+        if (candidate.length >= 6) handleScan(candidate);
+        return;
+      }
+      // Accepteer alleen alfanumeriek (NFC UID's zijn hex)
+      if (e.key.length === 1 && /[A-Za-z0-9]/.test(e.key)) {
+        buffer += e.key;
+        // Safety: clear buffer na 800ms inactiviteit
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(() => { buffer = ''; }, 800);
+      }
+    };
+
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      if (timer) clearTimeout(timer);
+    };
+  }, [step]);
 
   const exit = useCallback(() => {
     // Reset customer-display naar idle bij uitloggen.
@@ -2423,6 +2433,33 @@ export default function KioskLayout() {
 
   return (
     <div className="kiosk-fullscreen bg-orange-500" data-testid="kiosk-root">
+      {/* NFC TAP HINT — alleen op het apartement-picker scherm. Geeft de
+          medewerker visueel feedback dat het systeem op NFC-kaarten luistert,
+          en toont scan-resultaten. */}
+      {step === 'select' && (
+        <div className="absolute top-3 left-1/2 -translate-x-1/2 z-30 pointer-events-none">
+          {!nfcToast ? (
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/15 backdrop-blur-md border border-white/30 text-white/90"
+              style={{ fontSize: 'clamp(10px, 0.9vmin + 9px, 13px)' }}>
+              <Hash className="w-3.5 h-3.5" strokeWidth={2.4} />
+              <span className="font-bold uppercase tracking-widest">NFC-kaart tappen kan ook</span>
+            </div>
+          ) : (
+            <div data-testid="kiosk-nfc-toast"
+              className={`inline-flex items-center gap-2 px-4 py-2 rounded-full shadow-2xl font-black ${
+                nfcToast.kind === 'ok'
+                  ? 'bg-emerald-500 text-white'
+                  : 'bg-red-500 text-white'
+              }`}
+              style={{ fontSize: 'clamp(12px, 1.1vmin + 9px, 16px)' }}>
+              {nfcToast.kind === 'ok'
+                ? <CheckCircle className="w-4 h-4" strokeWidth={2.6} />
+                : <AlertCircle className="w-4 h-4" strokeWidth={2.6} />}
+              <span>{nfcToast.msg}</span>
+            </div>
+          )}
+        </div>
+      )}
       <AnimatePresence mode="wait">
         <motion.div key={step} variants={variants}
           initial="enter" animate="center" exit="exit"

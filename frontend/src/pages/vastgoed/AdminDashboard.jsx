@@ -1389,6 +1389,87 @@ function Overview() {
   );
 }
 
+// ============== NFC Card field (Apartments) ==============
+// Manueel UID invullen óf "Pak laatste scan" klikken om een verse tap-scan
+// van de Kiosk over te nemen. Pending-poll werkt alleen wanneer het modal
+// open staat — geen achtergrondverkeer.
+function NfcCardField({ apartmentId, currentValue }) {
+  const [value, setValue] = useState(currentValue || '');
+  const [pending, setPending] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState('');
+
+  useEffect(() => {
+    let alive = true;
+    const tick = async () => {
+      try {
+        const { data } = await api.get('/admin/nfc/pending');
+        if (!alive) return;
+        setPending(data?.pending || null);
+      } catch (err) {
+        console.error('Failed to fetch pending NFC scan', err);
+      }
+    };
+    tick();
+    const id = setInterval(tick, 2000);
+    return () => { alive = false; clearInterval(id); };
+  }, []);
+
+  const save = async (cardId, usePending = false) => {
+    setBusy(true); setMsg('');
+    try {
+      const { data } = await api.put(`/admin/apartments/${apartmentId}/nfc-card`,
+        usePending ? { use_pending: true } : { card_id: cardId || null });
+      setValue(data?.nfc_card_id || '');
+      setMsg(data?.nfc_card_id ? `Kaart gekoppeld: ${data.nfc_card_id}` : 'Koppeling gewist');
+      setPending(null);
+    } catch (e) {
+      console.error('Failed to assign NFC card', e);
+      setMsg(formatError(e));
+    }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <div data-testid="apt-nfc-field" className="rounded-2xl bg-orange-50/60 border border-orange-200 p-3">
+      <label className="text-xs font-bold uppercase tracking-widest text-orange-700">NFC-kaart (UID)</label>
+      <div className="flex gap-2 mt-1">
+        <input value={value} onChange={(e) => setValue(e.target.value)}
+          placeholder="Bv. 04A1B2C3D4"
+          data-testid="apt-nfc-input"
+          className="flex-1 h-11 px-3 rounded-xl border-2 border-orange-200 focus:border-[#FF5C00] outline-none bg-white text-sm font-mono" />
+        <button type="button" onClick={() => save(value, false)}
+          disabled={busy}
+          data-testid="apt-nfc-save"
+          className="px-3 h-11 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold disabled:opacity-50 text-sm">
+          Opslaan
+        </button>
+      </div>
+      {pending && (
+        <div className="mt-2 flex items-center justify-between gap-2 p-2 rounded-xl bg-emerald-50 border border-emerald-200">
+          <div className="min-w-0">
+            <p className="text-[10px] font-black uppercase tracking-widest text-emerald-700">Recent gescand</p>
+            <p className="font-mono font-bold text-emerald-900 truncate text-sm">{pending.card_id}</p>
+            <p className="text-[10px] text-emerald-700/80">{pending.scanned_seconds_ago}s geleden</p>
+          </div>
+          <button type="button" onClick={() => save(null, true)}
+            disabled={busy}
+            data-testid="apt-nfc-use-pending"
+            className="px-3 h-9 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-black uppercase tracking-widest whitespace-nowrap disabled:opacity-50">
+            Koppel
+          </button>
+        </div>
+      )}
+      {!pending && !value && (
+        <p className="mt-1.5 text-[11px] text-orange-700/80">
+          Tap een kaart op de Kiosk en klik dan "Koppel".
+        </p>
+      )}
+      {msg && <p className="mt-1.5 text-xs font-bold text-emerald-700">{msg}</p>}
+    </div>
+  );
+}
+
 // ============== Apartments ==============
 function ApartmentForm({ initial, onCancel, onSaved }) {
   const [data, setData] = useState(initial || { number: '', address: '', rent_amount: 0, currency: 'SRD', description: '', location_id: '', photo_url: '' });
@@ -1471,6 +1552,10 @@ function ApartmentForm({ initial, onCancel, onSaved }) {
               <p className="text-[11px] text-slate-400 mt-1">Maak eerst locaties aan in de tab "Locaties" om appartementen te groeperen.</p>
             )}
           </div>
+          {initial?.id && (
+            <NfcCardField apartmentId={initial.id}
+              currentValue={initial.nfc_card_id || ''} />
+          )}
           <div>
             <label className="text-xs font-bold uppercase tracking-widest text-slate-500">Beschrijving</label>
             <textarea value={data.description} onChange={(e) => setData({ ...data, description: e.target.value })}

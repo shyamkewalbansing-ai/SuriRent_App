@@ -9,6 +9,8 @@ import os
 import pytest
 import requests
 import importlib.util
+import sys
+
 
 def _load_react_url():
     # Read from frontend/.env since this var is not exported into the pytest shell.
@@ -37,25 +39,28 @@ def auth_headers(admin_token):
             "Content-Type": "application/json"}
 
 
-# ---------- Helper: load _device_label_from_ua from server.py without importing the whole app ----------
+# ---------- Helper: load _device_label_from_ua from server.py ----------
+# Veiligere variant zonder exec(): we importeren de module via importlib en
+# halen de functie eruit met getattr. Importeren van server.py is iets
+# zwaarder dan exec() van een gehapt fragment, maar veiliger en
+# onderhoudbaarder — als de signature/implementatie wijzigt, blijven de
+# tests werken zonder string-parsing.
 def _load_label_fn():
-    import re  # noqa: F401  (used by server.py snippet copied below)
-    spec = importlib.util.spec_from_file_location("_srv_inspect", "/app/backend/server.py")
-    # Importing the full server is heavy + side-effecty; instead replicate the function by reading from the file.
-    src = open("/app/backend/server.py").read()
-    start = src.index("def _device_label_from_ua(")
-    # Find end: next unindented line starting with @ or def at column 0
-    rest = src[start:]
-    lines = rest.split("\n")
-    out = [lines[0]]
-    for ln in lines[1:]:
-        if ln and not ln.startswith((" ", "\t")) and (ln.startswith("def ") or ln.startswith("@") or ln.startswith("class ")):
-            break
-        out.append(ln)
-    fn_src = "\n".join(out)
-    ns = {}
-    exec(fn_src, ns)
-    return ns["_device_label_from_ua"]
+    if "_srv_under_test" not in sys.modules:
+        # Voorkom dat de app uvicorn opstart: spec.loader.exec_module
+        # voert top-level code uit; server.py heeft `if __name__ == "__main__"`
+        # blokken voor runtime, dus dit is veilig voor onze function-import.
+        sys.path.insert(0, "/app/backend")
+        spec = importlib.util.spec_from_file_location(
+            "_srv_under_test", "/app/backend/server.py"
+        )
+        mod = importlib.util.module_from_spec(spec)
+        sys.modules["_srv_under_test"] = mod
+        spec.loader.exec_module(mod)
+    fn = getattr(sys.modules["_srv_under_test"], "_device_label_from_ua", None)
+    if fn is None:
+        raise RuntimeError("_device_label_from_ua not found in server.py")
+    return fn
 
 
 _label_fn = _load_label_fn()

@@ -961,12 +961,15 @@ export default function MarketingLandingV2() {
   }, []);
 
   // Signaleer parent dat we klaar zijn — handig om edit-bar te tonen pas
-  // wanneer de iframe daadwerkelijk gerenderd is.
+  // wanneer de iframe daadwerkelijk gerenderd is. Specifieke origin
+  // gebruiken (parent is altijd same-origin admin) om data-leakage naar
+  // kwaadaardige iframe-luisteraars te voorkomen.
   useEffect(() => {
     if (!editMode) return;
     try {
-      window.parent?.postMessage({ type: 'landing-edit-ready' }, '*');
-    } catch { /* no-op */ }
+      const target = window.location.origin;
+      window.parent?.postMessage({ type: 'landing-edit-ready' }, target);
+    } catch (err) { console.error('landing-edit-ready postMessage failed', err); }
   }, [editMode]);
 
   return (
