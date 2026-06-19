@@ -8,6 +8,7 @@ import { fetchBranding, applyBranding, setStoredSlug } from '../lib/branding';
  */
 export const RESERVED_TOP_PATHS = new Set([
   'login', 'admin', 'kiosk', 'huurder', 'onderteken', 'c', 'vastgoed',
+  'site',
   'api', 'static', 'assets', 'public', 'manifest.json', 'sw.js',
   'favicon.ico', 'robots.txt', 'sitemap.xml', 'index.html',
 ]);

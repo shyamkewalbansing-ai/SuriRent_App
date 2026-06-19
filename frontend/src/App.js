@@ -43,6 +43,7 @@ if (typeof window !== 'undefined') {
 
 const MarketingLanding = lazyWithRetry(() => import('./pages/vastgoed/MarketingLandingV2'));
 const TenantPublicLanding = lazyWithRetry(() => import('./pages/vastgoed/TenantPublicLanding'));
+const PublicLandingBySlug = lazyWithRetry(() => import('./pages/vastgoed/PublicLandingBySlug'));
 const LoginPage = lazyWithRetry(() => import('./pages/vastgoed/LoginPage'));
 const AdminDashboard = lazyWithRetry(() => import('./pages/vastgoed/AdminDashboard'));
 const KioskLayout = lazyWithRetry(() => import('./pages/vastgoed/KioskLayout'));
@@ -108,6 +109,7 @@ function MarketingRoutes() {
   return (
     <Routes>
       <Route path="/" element={<MarketingLanding />} />
+      <Route path="/site/:slug" element={<PublicLandingBySlug />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
@@ -164,6 +166,7 @@ function AppRoutes() {
       <Route path="/" element={<LoginPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/landing-preview" element={<TenantPublicLanding />} />
+      <Route path="/site/:slug" element={<PublicLandingBySlug />} />
       <Route path="/admin/*" element={<Protected><AdminDashboard /></Protected>} />
       <Route path="/kiosk" element={<KioskLayout />} />
       <Route path="/kiosk/huurder" element={<TenantKioskLayout />} />
@@ -203,6 +206,7 @@ function HybridRoutes() {
       <Route path="/" element={<MarketingLanding />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/landing-preview" element={<TenantPublicLanding />} />
+      <Route path="/site/:slug" element={<PublicLandingBySlug />} />
       <Route path="/admin/*" element={<Protected><AdminDashboard /></Protected>} />
       <Route path="/kiosk" element={<KioskLayout />} />
       <Route path="/kiosk/huurder" element={<TenantKioskLayout />} />

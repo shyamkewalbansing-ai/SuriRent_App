@@ -2946,6 +2946,43 @@ async def public_company_landing(request: Request, host: Optional[str] = None):
     }
 
 
+@api.get("/public/company-landing/by-slug/{slug}")
+async def public_company_landing_by_slug(slug: str):
+    """Slug-based publieke landing — altijd bereikbaar, ook zonder custom
+    domein. Hiermee kan elk bedrijf een live shareable URL hebben in de
+    vorm van /site/<slug>. Returnt dezelfde shape als /public/company-landing
+    (found, company, content, apartments)."""
+    slug_norm = (slug or "").strip().lower()
+    if not slug_norm:
+        return {"found": False}
+    company = await db.companies.find_one(
+        {"slug": slug_norm},
+        {"_id": 0, "id": 1, "name": 1, "slug": 1, "branding": 1, "address": 1,
+         "contact_email": 1, "contact_phone": 1, "whatsapp_phone": 1},
+    )
+    if not company:
+        return {"found": False}
+
+    landing_doc = await db.company_landings.find_one({"id": company["id"]}, {"_id": 0}) or {}
+    content = landing_doc.get("published") or {}
+
+    apartments = []
+    cursor = db.apartments.find(
+        {"company_id": company["id"], "status": {"$in": ["vacant", "available"]}},
+        {"_id": 0, "id": 1, "number": 1, "address": 1, "rent_amount": 1,
+         "currency": 1, "description": 1, "photo_url": 1, "status": 1},
+    ).sort("created_at", -1)
+    async for a in cursor:
+        apartments.append(a)
+
+    return {
+        "found": True,
+        "company": company,
+        "content": content,
+        "apartments": apartments,
+    }
+
+
 @api.get("/companies/me/landing")
 async def get_my_landing(mode: Literal["draft", "published"] = "draft",
                           user=Depends(get_current_user)):
@@ -3494,6 +3531,7 @@ async def get_my_url_info(request: Request, user=Depends(get_current_user)):
     base_url = f"{scheme}://{app_domain}" if app_domain else ""
     query_url = f"{base_url}/login?c={slug}" if base_url else ""
     path_url = f"{base_url}/{slug}" if base_url else ""
+    landing_url = f"{base_url}/site/{slug}" if base_url else ""
     kiosk_url = f"{base_url}/{slug}/kiosk" if base_url else ""
     tenant_kiosk_url = f"{base_url}/{slug}/kiosk/huurder" if base_url else ""
     tenant_portal_url = tenant_kiosk_url
@@ -3519,6 +3557,7 @@ async def get_my_url_info(request: Request, user=Depends(get_current_user)):
         "primary_url": custom_domain_url or path_url or query_url,
         "query_url": query_url,
         "path_url": path_url,
+        "landing_url": landing_url,
         "kiosk_url": kiosk_url,
         "tenant_kiosk_url": tenant_kiosk_url,
         "tenant_portal_url": tenant_portal_url,

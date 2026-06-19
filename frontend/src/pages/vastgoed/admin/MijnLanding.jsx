@@ -36,11 +36,12 @@ function setPath(obj, path, value) {
   return out;
 }
 
-function CustomDomainCard({ currentDomain, onSaved }) {
+function CustomDomainCard({ currentDomain, landingUrl, onSaved }) {
   const [domain, setDomain] = useState(currentDomain || '');
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
   const [savedMsg, setSavedMsg] = useState('');
+  const [copied, setCopied] = useState(false);
   const save = async () => {
     setSaving(true); setErr(''); setSavedMsg('');
     try {
@@ -53,17 +54,62 @@ function CustomDomainCard({ currentDomain, onSaved }) {
       setSaving(false);
     }
   };
+  const copyLanding = async () => {
+    if (!landingUrl) return;
+    try {
+      await navigator.clipboard.writeText(landingUrl);
+      setCopied(true); setTimeout(() => setCopied(false), 1500);
+    } catch { /* clipboard unavailable */ }
+  };
   return (
-    <div className="bg-white rounded-2xl border border-slate-100 p-5" data-testid="custom-domain-card">
-      <div className="flex items-start gap-3 mb-3">
-        <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0">
-          <Globe className="w-5 h-5" />
+    <div className="space-y-4">
+      {/* PUBLIEKE LANDING — altijd live, ook zonder custom domein. */}
+      {landingUrl && (
+        <div className="bg-gradient-to-br from-orange-500 to-amber-500 text-white rounded-2xl p-5 shadow-[0_10px_30px_-12px_rgba(255,92,0,0.55)]"
+          data-testid="landing-url-card">
+          <div className="flex items-start gap-3 mb-3">
+            <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
+              <Globe className="w-5 h-5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[10px] uppercase tracking-[0.2em] font-black text-white/80">Live — deel met je huurders</p>
+              <h3 className="text-base font-extrabold leading-tight">Jouw publieke landing</h3>
+              <p className="text-xs text-white/85 mt-0.5">Werkt direct, ook zonder eigen domein. Bezoekers zien hier je beschikbare appartementen.</p>
+            </div>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <div className="flex-1 bg-white/15 backdrop-blur rounded-xl px-3 py-2.5 font-mono text-xs sm:text-sm truncate"
+              data-testid="landing-url-value">
+              {landingUrl}
+            </div>
+            <div className="flex gap-2">
+              <button onClick={copyLanding} data-testid="landing-url-copy"
+                className={`h-11 px-4 rounded-xl font-extrabold text-xs sm:text-sm inline-flex items-center gap-1.5 transition ${
+                  copied ? 'bg-emerald-500 text-white' : 'bg-white/20 hover:bg-white/30 text-white'
+                }`}>
+                {copied ? <CheckCircle2 className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                {copied ? 'Gekopieerd' : 'Kopieer'}
+              </button>
+              <a href={landingUrl} target="_blank" rel="noreferrer" data-testid="landing-url-open"
+                className="h-11 px-4 rounded-xl bg-white text-orange-600 hover:bg-orange-50 font-extrabold text-xs sm:text-sm inline-flex items-center gap-1.5">
+                <ExternalLink className="w-4 h-4" /> Bekijk live
+              </a>
+            </div>
+          </div>
         </div>
-        <div>
-          <h3 className="font-extrabold text-slate-900">Eigen domein</h3>
-          <p className="text-xs text-slate-500 mt-0.5">Activeer deze landing op uw eigen domein (bv. <span className="font-mono">gopiappartements.com</span>).</p>
+      )}
+
+      {/* CUSTOM DOMEIN — optioneel, voor wie een eigen URL wil. */}
+      <div className="bg-white rounded-2xl border border-slate-100 p-5" data-testid="custom-domain-card">
+        <div className="flex items-start gap-3 mb-3">
+          <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0">
+            <Globe className="w-5 h-5" />
+          </div>
+          <div>
+            <h3 className="font-extrabold text-slate-900">Eigen domein <span className="text-xs font-bold text-slate-400 uppercase tracking-widest ml-1">optioneel</span></h3>
+            <p className="text-xs text-slate-500 mt-0.5">Activeer deze landing ook op je eigen domein (bv. <span className="font-mono">gopiappartements.com</span>).</p>
+          </div>
         </div>
-      </div>
       <div className="flex flex-col sm:flex-row gap-2">
         <input value={domain} onChange={(e) => setDomain(e.target.value)}
           data-testid="custom-domain-input"
@@ -90,6 +136,7 @@ function CustomDomainCard({ currentDomain, onSaved }) {
           <p className="text-slate-400">DNS-propagatie duurt 5-60 minuten.</p>
         </div>
       )}
+      </div>
     </div>
   );
 }
@@ -103,6 +150,7 @@ export default function MijnLanding() {
   const [publishing, setPublishing] = useState(false);
   const [hasUnpublished, setHasUnpublished] = useState(false);
   const [customDomain, setCustomDomain] = useState('');
+  const [landingUrl, setLandingUrl] = useState('');
   const [err, setErr] = useState('');
   const [toast, setToast] = useState('');
   const [device, setDevice] = useState('desktop');
@@ -120,6 +168,12 @@ export default function MijnLanding() {
       setHasUnpublished(!!data.has_unpublished_changes);
       setCustomDomain(data.custom_domain || '');
       setDirty(false);
+      // Haal ook de publieke landing URL op — werkt altijd, custom domein
+      // is alleen een upgrade. Gefaalde fetch is niet-blokkerend.
+      try {
+        const { data: urlInfo } = await api.get('/companies/me/url-info');
+        setLandingUrl(urlInfo?.landing_url || '');
+      } catch { /* niet-kritiek — knop blijft alleen verborgen */ }
     } catch (e) {
       setErr(formatError(e));
     } finally {
@@ -236,7 +290,7 @@ export default function MijnLanding() {
         <p className="text-sm text-slate-500 mt-1">Bewerk uw publieke bedrijfslanding waarop bezoekers uw beschikbare appartementen zien.</p>
       </div>
 
-      <CustomDomainCard currentDomain={customDomain} onSaved={(d) => setCustomDomain(d)} />
+      <CustomDomainCard currentDomain={customDomain} landingUrl={landingUrl} onSaved={(d) => setCustomDomain(d)} />
 
       {/* Editor toolbar + iframe */}
       <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden" data-testid="mijn-landing-editor">
@@ -271,10 +325,11 @@ export default function MijnLanding() {
             className="h-9 w-9 rounded-lg border border-slate-200 hover:border-red-300 hover:bg-red-50 hover:text-red-700 text-slate-500 flex items-center justify-center">
             <Trash2 className="w-4 h-4" />
           </button>
-          {customDomain && (
-            <a href={`https://${customDomain}`} target="_blank" rel="noreferrer"
+          {(customDomain || landingUrl) && (
+            <a href={customDomain ? `https://${customDomain}` : landingUrl} target="_blank" rel="noreferrer"
+              data-testid="tenant-landing-live-open"
               className="h-9 w-9 rounded-lg border border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-500 flex items-center justify-center"
-              title="Open live op uw domein">
+              title={customDomain ? 'Open live op uw domein' : 'Open publieke landing'}>
               <ExternalLink className="w-4 h-4" />
             </a>
           )}

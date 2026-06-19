@@ -183,6 +183,32 @@ export default function MyUrlCard({ compact = false }) {
           </div>
         )}
 
+        {/* Publieke landing — altijd live, ook zonder custom domein.
+            Deel deze met huurders om je beschikbare appartementen te tonen. */}
+        {info.landing_url && (
+          <div className="bg-gradient-to-r from-orange-500/20 to-amber-500/10 backdrop-blur border border-orange-300/30 rounded-xl p-3 flex items-center gap-2"
+            data-testid="my-url-landing-card">
+            <div className="shrink-0 w-9 h-9 rounded-lg bg-orange-500/30 flex items-center justify-center">
+              <Globe className="w-4 h-4 text-orange-200" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[10px] uppercase tracking-widest font-black text-white/80">Publieke landing · deel met huurders</p>
+              <p className="font-mono text-xs sm:text-sm text-white truncate" data-testid="my-url-landing">{info.landing_url}</p>
+            </div>
+            <button type="button" onClick={() => setQr({ kind: 'login', label: 'Publieke landing', url: info.landing_url })}
+              data-testid="my-url-landing-qr" title="Toon QR-code"
+              className="shrink-0 h-9 w-9 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center">
+              <QrCode className="w-4 h-4" />
+            </button>
+            <a href={info.landing_url} target="_blank" rel="noreferrer"
+              data-testid="my-url-landing-open"
+              className="shrink-0 h-9 px-3 rounded-lg bg-white/10 hover:bg-white/20 text-xs font-bold inline-flex items-center gap-1.5">
+              <ExternalLink className="w-3.5 h-3.5" /> Open
+            </a>
+            <CopyButton value={info.landing_url} testid="my-url-landing-copy" />
+          </div>
+        )}
+
         {/* Kiosk URLs — compacte rij */}
         {!compact && info.kiosk_url && (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
