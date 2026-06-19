@@ -1,5 +1,28 @@
 # Vastgoed Kiosk — PRD
 
+## Session 2026-02-06 (iter 38) — Admin sidebar opschoning + Instellingen-hub ✅
+
+### Wat is gebouwd
+- **Nieuwe `InstellingenHub.jsx`** — één centrale pagina (`/admin/instellingen`) met links een verticale sub-nav (Mijn abonnement, Mijn landing, Setup wizard, Bedrijfsgegevens, Branding, Integraties, Backup & herstel) en rechts de bestaande pagina-component embedded.
+- **Sidebar opgeschoond** — 7 losse Account-items (`mijn_abonnement`, `mijn_landing`, `setup_wizard`, `business_info`, `branding`, `backup_restore`, `settings`) vervangen door één "Instellingen" entry.
+- **Legacy URL aliassen** — Oude paden zoals `/admin/branding`, `/admin/settings`, `/admin/mijn_abonnement` redirecten automatisch naar `/admin/instellingen#<sectie>` (werkt voor branded én onbranded paden).
+- **Deep-linking via hash** — `#abonnement`, `#landing`, `#setup`, `#bedrijf`, `#branding`, `#integraties`, `#backup` openen direct de juiste categorie.
+- **Pad-parsing fix** — URL → tab sync vond voorheen alleen `/admin/<tab>`, herkende geen branded `/<slug>/admin/<tab>`. Beide werken nu.
+
+### Files changed
+- `/app/frontend/src/pages/vastgoed/admin/InstellingenHub.jsx` (nieuw, ~190 regels)
+- `/app/frontend/src/pages/vastgoed/AdminDashboard.jsx` (BASE_TABS, SIDEBAR_GROUPS, imports, render-switch, legacy redirect)
+
+### Verified
+- Sidebar toont alleen "Instellingen" onder Account-sectie ✅
+- Hub mount + 7 sub-categorieën zichtbaar ✅
+- Wisselen tussen sub-categorieën rendert juiste component ✅
+- Legacy `/surirent/admin/branding` redirect → `/surirent/admin/instellingen#branding` ✅
+- Integraties sub-nav (SMTP/Twilio/etc.) blijft werken binnen hub ✅
+
+---
+
+
 ## Session 2026-02-06 (iter 37) — NFC tap-in + critical security ✅
 
 ### Nieuwe feature: NFC kaart-identificatie (USB HID-lezer)

@@ -7,11 +7,11 @@ import {
   Building2, Users, Receipt, LayoutDashboard, LogOut, Plus, Trash2, Pencil,
   X, Check, Loader2, Search, Home, Banknote, KeySquare, ChevronRight, Wallet,
   FileText, ShieldCheck, Wrench, FileSignature, Bell, Briefcase, Mail,
-  Zap, Power, Menu, MoreHorizontal, MapPin, Crown, Paintbrush, Palette,
+  Zap, Power, Menu, MoreHorizontal, MapPin, Paintbrush,
   Gauge, Activity, Clock as ClockIcon, Monitor, QrCode, Printer,
-  ReceiptText, UsersRound, Building, Calendar, Sparkles,
-  AlertCircle, UserPlus, TrendingUp, ArrowUpRight, Package, Database,
-  ScanLine, RefreshCw,
+  ReceiptText, UsersRound, Building, Calendar,
+  AlertCircle, UserPlus, TrendingUp, ArrowUpRight, Package,
+  ScanLine, RefreshCw, Settings as SettingsIcon,
 } from 'lucide-react';
 import { api, formatError, fmtMoney, MONTHS_NL, openAuthedPdf } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
@@ -28,21 +28,15 @@ import Kasgeld from './admin/Kasgeld';
 import Notifications from './admin/Notifications';
 import PaymentPlans from './admin/PaymentPlans';
 import Companies from './admin/Companies';
-import SettingsPage from './admin/Settings';
+import InstellingenHub from './admin/InstellingenHub';
 import Locations from './admin/Locations';
 import Subscriptions from './admin/Subscriptions';
 import SaasOverview from './admin/SaasOverview';
 import SaasSettings from './admin/SaasSettings';
 import LandingEditor from './admin/LiveLandingEditor';
-import MijnLanding from './admin/MijnLanding';
 import PlansAdmin from './admin/PlansAdmin';
-import BackupRestore from './admin/BackupRestore';
-import Branding from './admin/Branding';
-import BusinessInfo from './admin/BusinessInfo';
-import SetupWizard from './admin/SetupWizard';
 import SetupWizardSheet from './admin/SetupWizardSheet';
 import MyUrlCard from '../../components/MyUrlCard';
-import MijnAbonnement from './admin/MijnAbonnement';
 import TrialBanner from '../../components/TrialBanner';
 import ImpersonationBanner from '../../components/ImpersonationBanner';
 import LiveIndicator from '../../components/LiveIndicator';
@@ -71,13 +65,7 @@ const BASE_TABS = [
   { id: 'kasgeld', label: 'Kasgeld', icon: Wallet },
   { id: 'employees', label: 'Werknemers', icon: Users },
   { id: 'notifications', label: 'Notificaties', icon: Bell },
-  { id: 'mijn_abonnement', label: 'Mijn Abonnement', icon: Crown },
-  { id: 'mijn_landing', label: 'Mijn Landing', icon: Paintbrush },
-  { id: 'setup_wizard', label: 'Setup Wizard', icon: Sparkles },
-  { id: 'business_info', label: 'Bedrijfsgegevens', icon: Briefcase },
-  { id: 'branding', label: 'Branding', icon: Palette },
-  { id: 'backup_restore', label: 'Backup & Herstel', icon: Database },
-  { id: 'settings', label: 'Instellingen', icon: KeySquare },
+  { id: 'instellingen', label: 'Instellingen', icon: SettingsIcon },
 ];
 const SUPER_TABS = [
   { id: 'saas_overview', label: 'SaaS Overzicht', icon: LayoutDashboard },
@@ -100,7 +88,7 @@ const SIDEBAR_GROUPS = {
   hoofd: { label: 'Hoofd', ids: ['overview', 'locations', 'apartments', 'tenants', 'contracts'] },
   geld: { label: 'Financieel', ids: ['payments', 'invoices', 'payment_plans', 'deposits', 'kasgeld'] },
   ops: { label: 'Operaties', ids: ['maintenance', 'employees', 'notifications'] },
-  account: { label: 'Account', ids: ['mijn_abonnement', 'mijn_landing', 'setup_wizard', 'business_info', 'branding', 'backup_restore', 'settings'] },
+  account: { label: 'Account', ids: ['instellingen'] },
   // SaaS Superadmin groep — split per functie. Volgorde: overzicht, klanten,
   // dagelijkse acties (OCR + facturen/betalingen), instellingen.
   saas: { label: 'SaaS Beheer', ids: [
@@ -2433,7 +2421,6 @@ export default function AdminDashboard() {
   // in het "+"-menu opduikt. Desktop sidebar laat hem wel staan.
   const sheetTabs = tabs.filter((t) => t.id !== 'overview');
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [settingsSection, setSettingsSection] = useState(null);
   // Auto-open Setup Wizard als bottom-sheet / modal voor nieuwe bedrijven.
   // Activatie: setup-status laat zien dat <2 van de 5 stappen klaar zijn EN
   // de admin heeft de wizard nog niet bewust gesloten voor dit bedrijf.
@@ -2460,16 +2447,34 @@ export default function AdminDashboard() {
   //  • Notification click handlers in de service worker (sw.js navigeert
   //    naar /admin/invoices of /admin/notifications)
   //  • Bookmarks / shared links
+  //  • Legacy paden (mijn_abonnement, settings, branding, ...) blijven
+  //    werken door ze te aliasen naar /admin/instellingen#<sectie>.
   useEffect(() => {
     const path = location.pathname.replace(/\/+$/, '');
     const seg = path.split('/').filter(Boolean);
-    if (seg[0] === 'admin' && seg[1]) {
-      const wanted = seg[1];
-      if (tabs.find((t) => t.id === wanted) && wanted !== tab) {
-        setTab(wanted);
-      }
+    // Pad kan zowel /admin/<tab> als /<slug>/admin/<tab> zijn (branded).
+    const adminIdx = seg.indexOf('admin');
+    if (adminIdx === -1 || !seg[adminIdx + 1]) return;
+    const wanted = seg[adminIdx + 1];
+    // Legacy aliases — map oude tab-id's naar de nieuwe Instellingen-hub.
+    const LEGACY_TO_HUB = {
+      mijn_abonnement: 'abonnement',
+      mijn_landing: 'landing',
+      setup_wizard: 'setup',
+      business_info: 'bedrijf',
+      branding: 'branding',
+      backup_restore: 'backup',
+      settings: 'integraties',
+    };
+    if (Object.prototype.hasOwnProperty.call(LEGACY_TO_HUB, wanted)) {
+      navigate(`/admin/instellingen#${LEGACY_TO_HUB[wanted]}`, { replace: true });
+      setTab('instellingen');
+      return;
     }
-  }, [location.pathname, tabs, tab]);
+    if (tabs.find((t) => t.id === wanted) && wanted !== tab) {
+      setTab(wanted);
+    }
+  }, [location.pathname, tabs, tab, navigate]);
 
   // tab → URL sync (zonder rerender storm). Update browser URL bij tab wissel.
   const handleSetTab = (id) => {
@@ -2567,14 +2572,6 @@ export default function AdminDashboard() {
           {tab === 'plans' && <PlansAdmin />}
           {tab === 'saas_settings' && <SaasSettings />}
           {tab === 'landing_editor' && <LandingEditor />}
-          {tab === 'setup_wizard' && (
-            <SetupWizard onJumpTo={(target) => {
-              if (target?.section) setSettingsSection(target.section);
-              if (target?.tab) setTab(target.tab);
-            }} />
-          )}
-          {tab === 'business_info' && <BusinessInfo />}
-          {tab === 'branding' && <Branding />}
           {tab === 'overview' && <Overview />}
           {tab === 'locations' && <Locations />}
           {tab === 'apartments' && <Apartments />}
@@ -2588,10 +2585,7 @@ export default function AdminDashboard() {
           {tab === 'kasgeld' && <Kasgeld />}
           {tab === 'employees' && <Employees />}
           {tab === 'notifications' && <Notifications />}
-          {tab === 'mijn_abonnement' && <MijnAbonnement />}
-          {tab === 'mijn_landing' && <MijnLanding />}
-          {tab === 'backup_restore' && <BackupRestore />}
-          {tab === 'settings' && <SettingsPage initialSection={settingsSection} />}
+          {tab === 'instellingen' && <InstellingenHub />}
         </main>
       </div>
       <MobileTabBar active={tab} onChange={handleSetTab} tabs={tabs} user={user}
