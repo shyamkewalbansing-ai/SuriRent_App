@@ -28,18 +28,6 @@ function HelpModal({ onClose, primary = '#FF5C00' }) {
             <div className="flex items-center gap-2 mb-2">
               <span className="w-7 h-7 rounded-lg flex items-center justify-center text-white text-xs font-black"
                 style={{ background: primary }}>2</span>
-              <h4 className="text-sm font-black text-slate-900">QR scannen (desktop login)</h4>
-            </div>
-            <p className="text-sm text-slate-600 leading-relaxed pl-9">
-              Tik op <strong>Scan QR</strong> linksboven om uw camera te openen. Open SuriRent in
-              een browser op uw computer, kies de &quot;QR code&quot; tab, en scan de QR om uw desktop in
-              te loggen.
-            </p>
-          </div>
-          <div>
-            <div className="flex items-center gap-2 mb-2">
-              <span className="w-7 h-7 rounded-lg flex items-center justify-center text-white text-xs font-black"
-                style={{ background: primary }}>3</span>
               <h4 className="text-sm font-black text-slate-900">PIN vergeten?</h4>
             </div>
             <p className="text-sm text-slate-600 leading-relaxed pl-9">

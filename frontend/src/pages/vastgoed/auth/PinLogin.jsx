@@ -1,17 +1,15 @@
 import { useState, useEffect } from 'react';
-import { Loader2, Delete, KeyRound, UserPlus, LogIn, QrCode, HelpCircle } from 'lucide-react';
+import { Loader2, Delete, KeyRound, UserPlus, LogIn, HelpCircle } from 'lucide-react';
 import { api, formatError } from '../../../lib/api';
 import { setPreferredRole } from '../../../lib/pwaRole';
 import { setKioskEmployee, clearKioskEmployee } from '../../../components/KioskEmployee';
 import Header from './LoginHeader';
-import QrScannerModal from './QrScannerModal';
 import HelpModal from './HelpModal';
 
 function PinLanding({ onSuccess, onPassword, onRegister, branding, pwaTarget }) {
   const [pin, setPin] = useState(['', '', '', '']);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [showScanner, setShowScanner] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
 
   // Persoonlijke PIN-modus: als dit apparaat een onthouden gebruiker heeft,
@@ -151,12 +149,8 @@ function PinLanding({ onSuccess, onPassword, onRegister, branding, pwaTarget }) 
         <div className="flex-1 flex items-start sm:items-center justify-center p-3 sm:p-6">
           <div className="bg-white rounded-3xl shadow-[0_20px_60px_rgba(0,0,0,0.15)] w-full max-w-xl p-5 sm:p-8 md:p-10"
             data-testid="auth-form">
-            {/* Top action bar: Scan QR + Help — als pillen rechtsboven */}
-            <div className="flex items-center justify-between mb-4">
-              <button onClick={() => setShowScanner(true)} data-testid="login-scan-qr-btn"
-                className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-colors">
-                <QrCode className="w-3.5 h-3.5" /> Scan QR
-              </button>
+            {/* Top action bar: Help — rechtsboven */}
+            <div className="flex items-center justify-end mb-4">
               <button onClick={() => setShowHelp(true)} data-testid="login-help-btn"
                 className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-colors">
                 <HelpCircle className="w-3.5 h-3.5" /> Help
@@ -261,7 +255,6 @@ function PinLanding({ onSuccess, onPassword, onRegister, branding, pwaTarget }) 
         </div>
 
         {/* Modals */}
-        {showScanner && <QrScannerModal onClose={() => setShowScanner(false)} primary={primary} />}
         {showHelp && <HelpModal onClose={() => setShowHelp(false)} primary={primary} />}
       </div>
     );
@@ -289,14 +282,9 @@ function PinLanding({ onSuccess, onPassword, onRegister, branding, pwaTarget }) 
         </svg>
       </div>
 
-      {/* TOP ACTION BAR — Scan QR linksboven, Help rechtsboven */}
+      {/* TOP ACTION BAR — Help rechtsboven */}
       <div className="relative z-10 flex items-center justify-between px-5"
         style={{ paddingTop: 'clamp(12px, 2vh, 24px)', paddingBottom: 'clamp(8px, 1.5vh, 16px)' }}>
-        <button onClick={() => setShowScanner(true)} data-testid="login-scan-qr-btn"
-          className="flex items-center gap-2 px-3 py-2 rounded-full bg-white/15 hover:bg-white/25 backdrop-blur-sm border border-white/20 transition-all text-white text-sm font-bold">
-          <QrCode className="w-4 h-4" />
-          Scan QR
-        </button>
         <button onClick={() => setShowHelp(true)} data-testid="login-help-btn"
           className="flex items-center gap-2 px-3 py-2 rounded-full bg-white/15 hover:bg-white/25 backdrop-blur-sm border border-white/20 transition-all text-white text-sm font-bold">
           <HelpCircle className="w-4 h-4" />
@@ -442,14 +430,13 @@ function PinLanding({ onSuccess, onPassword, onRegister, branding, pwaTarget }) 
       </div>
 
       {/* Modals */}
-      {showScanner && <QrScannerModal onClose={() => setShowScanner(false)} primary={primary} />}
       {showHelp && <HelpModal onClose={() => setShowHelp(false)} primary={primary} />}
     </div>
   );
 }
 
 // =============================================================================
-// HelpModal — uitleg over hoe PIN + QR login werkt
+// HelpModal — uitleg over hoe PIN login werkt
 // =============================================================================
 
 export default PinLanding;
