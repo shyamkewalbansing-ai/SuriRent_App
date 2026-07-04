@@ -377,6 +377,7 @@ class TenantOut(TenantIn):
     apartment_number: Optional[str] = None
     rent_amount: Optional[float] = None
     currency: Optional[str] = None
+    nfc_card_id: Optional[str] = None
     created_at: str
 
 
@@ -4940,6 +4941,97 @@ class TenantPinLoginIn(BaseModel):
     pin: str = Field(min_length=4, max_length=4)
     company_id: Optional[str] = None
     company_slug: Optional[str] = None
+
+
+# =====================================================================
+# NFC-only Huurder Kiosk login
+# =====================================================================
+# /kiosk/huurder gebruikt NFC kaarten/tags als ENIGE login-methode.
+# Werkt via Web NFC (Android Chrome), USB HID NFC-lezer (Windows/Android-tablet
+# in keyboard-mode), of universele URL-tag (?nfc=<UID>) voor iOS Safari.
+# Een huurder krijgt zijn kaart toegekend door de beheerder via
+# `PUT /api/admin/tenants/{id}/nfc-card`.
+
+def _normalize_nfc_uid(card_id: str) -> str:
+    """Normalize NFC UID: uppercase, alphanumeric only. Zelfde regels als
+    de operator-Kiosk nfc-lookup voor consistentie."""
+    if not card_id:
+        return ""
+    return "".join(c for c in str(card_id).strip().upper() if c.isalnum())
+
+
+class TenantNfcLoginIn(BaseModel):
+    card_id: str
+    company_id: Optional[str] = None
+    company_slug: Optional[str] = None
+
+
+class TenantNfcAssignIn(BaseModel):
+    card_id: Optional[str] = None
+
+
+@api.post("/tenant-portal/nfc-login")
+async def tenant_portal_nfc_login(body: TenantNfcLoginIn, request: Request, response: Response):
+    """NFC-tap login voor de Huurder Kiosk. Zoekt huurder via
+    `tenants.nfc_card_id` binnen de gegeven bedrijfscontext."""
+    uid = _normalize_nfc_uid(body.card_id)
+    if not uid or len(uid) < 4:
+        raise HTTPException(status_code=400, detail="Lege of ongeldige kaart-UID")
+    cid = body.company_id
+    if not cid and body.company_slug:
+        c = await db.companies.find_one({"slug": body.company_slug.lower()}, {"_id": 0, "id": 1})
+        cid = c["id"] if c else None
+    if not cid:
+        raise HTTPException(status_code=400, detail="Bedrijfscontext ontbreekt")
+    # Throttle per IP × bedrijf — voorkom brute-forcing UID-ruimte.
+    throttle_key = f"tenant-nfc:{_client_ip(request)}:{cid}"
+    _pin_throttle_check(throttle_key)
+    tenant = await db.tenants.find_one(
+        {"company_id": cid, "nfc_card_id": uid},
+        {"_id": 0, "id": 1, "name": 1, "email": 1, "phone": 1, "apartment_id": 1},
+    )
+    if not tenant:
+        _pin_throttle_fail(throttle_key)
+        raise HTTPException(
+            status_code=404,
+            detail="Onbekende NFC-kaart. Vraag de beheerder om uw kaart te koppelen.",
+        )
+    _pin_throttle_clear(throttle_key)
+    token = create_token({"sub": tenant["id"], "type": "tenant"}, TENANT_TOKEN_MIN)
+    _set_access_cookie(response, token, name="tenant_token", minutes=TENANT_TOKEN_MIN)
+    return {
+        "token": token,
+        "tenant": {
+            "id": tenant["id"], "name": tenant.get("name"),
+            "email": tenant.get("email"), "phone": tenant.get("phone"),
+        },
+    }
+
+
+@api.put("/admin/tenants/{tenant_id}/nfc-card")
+async def admin_assign_tenant_nfc_card(
+    tenant_id: str, body: TenantNfcAssignIn, user=Depends(get_current_user),
+):
+    """Beheerder koppelt/verwijdert een NFC-kaart aan een huurder. Leeg
+    `card_id` ⇒ koppeling wissen. UID is uniek binnen het bedrijf."""
+    cid = company_id_of(user)
+    tenant = await db.tenants.find_one({"id": tenant_id, **scope(user)}, {"_id": 0})
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Huurder niet gevonden")
+    uid = _normalize_nfc_uid(body.card_id or "") or None
+    if uid:
+        clash = await db.tenants.find_one(
+            {"company_id": cid, "nfc_card_id": uid, "id": {"$ne": tenant_id}},
+            {"_id": 0, "id": 1, "name": 1},
+        )
+        if clash:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Kaart is al gekoppeld aan huurder {clash.get('name') or clash.get('id')}",
+            )
+    upd = {"nfc_card_id": uid} if uid else {"nfc_card_id": None}
+    await db.tenants.update_one({"id": tenant_id}, {"$set": upd})
+    return {"ok": True, "tenant_id": tenant_id, "nfc_card_id": uid}
 
 
 @api.get("/tenant-portal/welcome/{tenant_id}")

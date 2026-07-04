@@ -211,62 +211,131 @@ function SetupPinView({ branding, tenantSetup, onSetupComplete }) {
 
 
 // =====================================================================
-// LOGIN view — PIN-only (geen email-stap meer)
+// LOGIN view — NFC-only (PIN flow is verwijderd op verzoek van de eigenaar).
+// Werkt via 3 input-bronnen:
+//   1. Web NFC API (Android Chrome) — built-in NFC chip via NDEFReader
+//   2. USB HID NFC-lezer (keyboard emulation) — rapid burst + Enter
+//   3. URL-tag `?nfc=<UID>` (iOS Safari + universele fallback)
+// Onbekende kaart → duidelijke melding "vraag de beheerder om te koppelen".
 // =====================================================================
 function LoginView({ branding, onLoggedIn, prefill }) {
-  const [pin, setPin] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  // Aantal foute pogingen — na 3 tonen we de "Vergeten? Vraag nieuwe PIN" knop
-  // zodat de huurder zelfstandig een nieuwe code kan aanvragen ipv naar de
-  // receptie te moeten bellen.
-  const [failedAttempts, setFailedAttempts] = useState(0);
-  const [showForgotSheet, setShowForgotSheet] = useState(false);
+  const [hint, setHint] = useState('');
+  const [lastUid, setLastUid] = useState('');
+  // refs voor handleScan deps zonder rerender storm
+  const busyRef = useRef(false);
+  const navigate = useBrandedNavigate();
 
-  const onDigit = (d) => setPin((p) => (p.length >= PIN_LENGTH ? p : p + d));
-  const onBack = () => setPin((p) => p.slice(0, -1));
+  const handleScan = useCallback(async (rawUid) => {
+    if (busyRef.current) return;
+    const uid = String(rawUid || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (uid.length < 4) return;
+    busyRef.current = true;
+    setBusy(true);
+    setError('');
+    setHint('');
+    setLastUid(uid);
+    try {
+      const payload = { card_id: uid };
+      if (branding?.id) payload.company_id = branding.id;
+      else if (branding?.slug) payload.company_slug = branding.slug;
+      else throw new Error('Geen bedrijfscontext gevonden — open de Huurder Kiosk via de QR-code.');
+      const { data } = await api.post('/tenant-portal/nfc-login', payload);
+      localStorage.setItem(TENANT_TOKEN_KEY, data.token);
+      try { playSuccessPing(); } catch { /* noop */ }
+      onLoggedIn();
+    } catch (e) {
+      try { playErrorBuzz(); } catch { /* noop */ }
+      setError(formatError(e) || 'Onbekende NFC-kaart');
+      setHint('Vraag de beheerder om uw kaart te koppelen.');
+      // Reset busy zodat de huurder direct opnieuw kan tikken
+      setTimeout(() => { busyRef.current = false; }, 500);
+    } finally {
+      setBusy(false);
+    }
+  }, [branding?.id, branding?.slug, onLoggedIn]);
 
+  // === URL-tag NFC (iOS Safari + universele fallback) ===
+  // Een NFC-tag geprogrammeerd met `https://<host>/kiosk/huurder?nfc=<UID>`
+  // opent automatisch in Safari/Chrome. Wij detecteren `?nfc=` en doen
+  // direct een login-poging. URL wordt schoongemaakt na lezen.
   useEffect(() => {
-    if (pin.length !== PIN_LENGTH) return;
-    let cancelled = false;
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const nfc = params.get('nfc');
+      if (nfc && nfc.length >= 4) {
+        handleScan(nfc);
+        params.delete('nfc');
+        const qs = params.toString();
+        const clean = window.location.pathname + (qs ? `?${qs}` : '') + window.location.hash;
+        window.history.replaceState(null, '', clean);
+      }
+    } catch { /* ignore */ }
+  }, [handleScan]);
+
+  // === Web NFC (Android Chrome) ===
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('NDEFReader' in window)) return undefined;
+    let reader = null;
+    let abort = null;
     (async () => {
-      setBusy(true); setError('');
       try {
-        let data;
-        if (prefill?.email) {
-          // QR-mode: we kennen de huurder al, normale identifier-login
-          ({ data } = await api.post('/tenant-portal/login', { identifier: prefill.email, pin }));
-        } else if (branding?.id) {
-          // Standalone modus: alléén PIN + bedrijfscontext
-          ({ data } = await api.post('/tenant-portal/pin-login', { pin, company_id: branding.id }));
-        } else if (branding?.slug) {
-          ({ data } = await api.post('/tenant-portal/pin-login', { pin, company_slug: branding.slug }));
-        } else {
-          throw new Error('Geen bedrijfscontext gevonden — open de Huurder Kiosk via de QR-code.');
+        reader = new window.NDEFReader();
+        abort = new AbortController();
+        await reader.scan({ signal: abort.signal });
+        reader.addEventListener('reading', (ev) => {
+          const raw = ev?.serialNumber || '';
+          const uid = String(raw).toUpperCase().replace(/[^A-Z0-9]/g, '');
+          if (uid.length >= 4) handleScan(uid);
+        });
+      } catch (err) {
+        if (err?.name !== 'AbortError') {
+          // Permission denied / niet gevraagd — niet kritiek, HID + URL werken nog.
+          console.warn('Web NFC niet beschikbaar:', err?.message || err);
         }
-        if (cancelled) return;
-        localStorage.setItem(TENANT_TOKEN_KEY, data.token);
-        setFailedAttempts(0);
-        onLoggedIn();
-      } catch (e) {
-        if (!cancelled) {
-          setError(formatError(e) || 'Onjuiste PIN');
-          setFailedAttempts((n) => n + 1);
-          // Reset het invoerveld na een korte trillende animatie.
-          setTimeout(() => { if (!cancelled) setPin(''); }, 350);
-        }
-      } finally { if (!cancelled) setBusy(false); }
+      }
     })();
-    return () => { cancelled = true; };
-    // eslint-disable-next-line
-  }, [pin]);
+    return () => { try { abort?.abort(); } catch { /* noop */ } };
+  }, [handleScan]);
+
+  // === USB HID NFC-lezer (keyboard emulation) ===
+  // Detecteert rapid burst (<120ms gap, ≥4 alfanumeriek chars) + Enter.
+  useEffect(() => {
+    let buffer = '';
+    let lastTs = 0;
+    let timer = null;
+    const onKey = (e) => {
+      const tag = (e.target?.tagName || '').toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || e.target?.isContentEditable) return;
+      const now = Date.now();
+      const gap = now - lastTs;
+      lastTs = now;
+      if (gap > 120 && buffer.length > 0) buffer = '';
+      if (e.key === 'Enter') {
+        const candidate = buffer.trim();
+        buffer = '';
+        if (candidate.length >= 4) handleScan(candidate);
+        return;
+      }
+      if (e.key.length === 1 && /[A-Za-z0-9]/.test(e.key)) {
+        buffer += e.key;
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(() => { buffer = ''; }, 800);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      if (timer) clearTimeout(timer);
+    };
+  }, [handleScan]);
 
   const welcome = prefill?.firstName
     ? `Welkom ${prefill.firstName}`
     : (branding?.app_name || branding?.name || 'Huurder Kiosk');
-  const sub = prefill?.apartmentNumber
-    ? `Appartement ${prefill.apartmentNumber}`
-    : (branding?.tagline || 'Voer uw 4-cijferige PIN in om in te loggen');
+
+  const hasWebNfc = typeof window !== 'undefined' && 'NDEFReader' in window;
 
   return (
     <div className="min-h-full w-full flex flex-col items-center justify-center px-5 py-8"
@@ -275,7 +344,7 @@ function LoginView({ branding, onLoggedIn, prefill }) {
         initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.35 }}
         className="w-full max-w-md flex flex-col items-center text-center">
-        {/* Logo / huis-icoon */}
+        {/* Logo */}
         <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-3xl bg-white/95 shadow-2xl flex items-center justify-center p-3 mb-5">
           {branding?.logo_url ? (
             <img src={resolveLogoUrl(branding.logo_url)} alt="logo"
@@ -290,58 +359,73 @@ function LoginView({ branding, onLoggedIn, prefill }) {
         <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight" data-testid="tk-welcome">
           {welcome}
         </h1>
-        {prefill?.apartmentNumber && (
-          <p className="text-sm font-bold text-white/90 mt-2 px-3 py-1 rounded-full bg-white/15"
-            data-testid="tk-prefill-apt">
-            {sub}
-          </p>
-        )}
-        {!prefill?.apartmentNumber && (
-          <p className="text-sm text-white/85 mt-2 max-w-xs">{sub}</p>
-        )}
+        <p className="text-sm text-white/85 mt-2 max-w-xs">
+          {branding?.tagline || 'Tik uw NFC-kaart om in te loggen'}
+        </p>
 
-        {/* PIN dots */}
-        <motion.div
-          animate={error ? { x: [-8, 8, -6, 6, -3, 3, 0] } : { x: 0 }}
-          transition={{ duration: 0.4 }}
-          className="mt-7 mb-3">
-          <PinDots value={pin} error={!!error} />
-        </motion.div>
-        {error && (
-          <p className="text-xs font-bold text-white/95 bg-red-500/30 px-3 py-1 rounded-full mb-4"
-            data-testid="tk-pin-error">{error}</p>
-        )}
-
-        <div className="mt-2">
-          <PinPad value={pin} onDigit={onDigit} onBack={onBack} busy={busy} />
+        {/* NFC TAP ZONE — grote pulserende cirkel met kaart-icoon */}
+        <div className="relative mt-10 mb-4" data-testid="tk-nfc-tap-zone">
+          {/* Pulserende ringen — visueel signaal dat de scanner ACTIEF luistert */}
+          {!busy && !error && (
+            <>
+              <span aria-hidden className="absolute inset-0 rounded-full bg-white/20 animate-ping" style={{ animationDuration: '2.2s' }} />
+              <span aria-hidden className="absolute inset-2 rounded-full bg-white/15 animate-ping" style={{ animationDuration: '2.6s', animationDelay: '0.4s' }} />
+            </>
+          )}
+          <motion.div
+            animate={error ? { x: [-8, 8, -6, 6, -3, 3, 0] } : busy ? { scale: [1, 1.05, 1] } : { scale: 1 }}
+            transition={error ? { duration: 0.4 } : busy ? { duration: 1.0, repeat: Infinity } : { duration: 0.2 }}
+            className={`relative w-44 h-44 sm:w-52 sm:h-52 rounded-full flex items-center justify-center shadow-[0_20px_50px_-10px_rgba(0,0,0,0.45)] ${
+              error
+                ? 'bg-gradient-to-br from-red-500 to-red-700'
+                : busy
+                ? 'bg-gradient-to-br from-emerald-400 to-emerald-600'
+                : 'bg-white'
+            }`}
+          >
+            {busy ? (
+              <Loader2 className={`w-20 h-20 sm:w-24 sm:h-24 ${error ? 'text-white' : 'text-white'} animate-spin`} />
+            ) : error ? (
+              <AlertCircle className="w-20 h-20 sm:w-24 sm:h-24 text-white" strokeWidth={2.2} />
+            ) : (
+              <Smartphone className="w-20 h-20 sm:w-24 sm:h-24 text-[color:var(--brand-primary,#FF5C00)]" strokeWidth={2} />
+            )}
+          </motion.div>
         </div>
 
+        {/* STATUS */}
         {busy && (
-          <div className="mt-4 flex items-center gap-2 text-white/90 text-sm">
-            <Loader2 className="w-4 h-4 animate-spin" /> Bezig met inloggen…
+          <p className="text-sm font-bold text-white/95 mt-1" data-testid="tk-nfc-busy">
+            Kaart gelezen — bezig met inloggen…
+          </p>
+        )}
+        {!busy && error && (
+          <div className="mt-1 max-w-xs" data-testid="tk-nfc-error">
+            <p className="text-sm font-bold text-white bg-red-500/40 px-4 py-2 rounded-full inline-block">
+              {error}
+            </p>
+            {hint && <p className="text-xs text-white/85 mt-2">{hint}</p>}
+            {lastUid && <p className="text-[10px] font-mono text-white/60 mt-2">UID: {lastUid}</p>}
           </div>
         )}
-
-        {/* Na 3 foute pogingen → tonen "Vergeten?" knop. Voorkomt receptie-bellen. */}
-        {failedAttempts >= 3 && !busy && (
-          <motion.button
-            initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-            onClick={() => setShowForgotSheet(true)}
-            data-testid="tk-forgot-pin-btn"
-            className="mt-5 inline-flex items-center gap-2 px-5 py-3 bg-white/15 hover:bg-white/25 active:bg-white/30 backdrop-blur-md text-white font-bold rounded-2xl border border-white/20 text-sm min-h-[48px]">
-            <HelpCircle className="w-4 h-4" />
-            PIN vergeten? Vraag nieuwe code
-          </motion.button>
+        {!busy && !error && (
+          <p className="text-sm font-bold text-white/90 mt-1" data-testid="tk-nfc-idle">
+            Houd uw kaart of telefoon tegen de scanner
+          </p>
         )}
-      </motion.div>
 
-      {showForgotSheet && (
-        <ForgotPinSheet
-          branding={branding}
-          onClose={() => setShowForgotSheet(false)}
-          onSent={() => { setFailedAttempts(0); setError(''); setPin(''); }}
-        />
-      )}
+        {/* Subtiele info-pill onderaan over de input-bronnen */}
+        <p className="mt-6 text-[10px] font-bold uppercase tracking-[0.22em] text-white/55">
+          {hasWebNfc ? 'Web NFC actief' : 'NFC-lezer & URL-tag'} · {branding?.name || ''}
+        </p>
+
+        {/* Logout/back voor het geval iemand per ongeluk hier komt */}
+        <button onClick={() => navigate('/')}
+          data-testid="tk-nfc-cancel"
+          className="mt-8 text-xs font-bold text-white/70 hover:text-white underline underline-offset-4">
+          Sluiten
+        </button>
+      </motion.div>
     </div>
   );
 }
@@ -2048,9 +2132,6 @@ export default function TenantKioskLayout() {
               className="min-h-full w-full">
               {needsCompanyPick && !prefill?.email && !tenantSetup ? (
                 <CompanyPicker onPicked={(data) => { setBranding(data); setNeedsCompanyPick(false); }} />
-              ) : tenantSetup && !tenantSetup.has_pin ? (
-                <SetupPinView branding={branding} tenantSetup={tenantSetup}
-                  onSetupComplete={() => { setTenantSetup(null); setAuthed(true); }} />
               ) : (
                 <LoginView branding={branding}
                   prefill={prefill || (tenantSetup ? { firstName: tenantSetup.firstName } : null)}
