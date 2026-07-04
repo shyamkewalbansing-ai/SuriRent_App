@@ -2046,14 +2046,13 @@ function ShellyControlModal({ apt, onClose, onChanged }) {
     </div>
   );
 }
-function TenantNfcField({ tenantId, currentValue, onChange }) {
-  // NFC-kaart koppelen aan huurder voor /kiosk/huurder login. Hergebruikt
-  // dezelfde "pending scan" buffer als de appartement-NFC flow zodat de
-  // beheerder snel kan koppelen na een fysieke kaart-scan.
-  const [value, setValue] = useState(currentValue || '');
+function TenantNfcField({ tenantId, value, onChange }) {
+  // Controlled input — parent bezit state, wij tonen alleen input +
+  // pending-scan overname + preview van de NFC-tag URL. Opslaan gebeurt
+  // via de hoofd-Opslaan knop van het formulier, zodat er maar ÉÉN
+  // handeling is voor de gebruiker.
   const [pending, setPending] = useState(null);
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState('');
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -2071,50 +2070,35 @@ function TenantNfcField({ tenantId, currentValue, onChange }) {
     return () => { alive = false; clearInterval(id); };
   }, []);
 
-  const save = async (cardId) => {
-    if (!tenantId) {
-      setMsg('Sla de huurder eerst op voordat je een kaart koppelt.');
-      return;
-    }
-    setBusy(true); setMsg('');
-    try {
-      const { data } = await api.put(`/admin/tenants/${tenantId}/nfc-card`,
-        { card_id: cardId || null });
-      setValue(data?.nfc_card_id || '');
-      onChange?.(data?.nfc_card_id || '');
-      setMsg(data?.nfc_card_id ? `Kaart gekoppeld: ${data.nfc_card_id}` : 'Koppeling gewist');
-      setPending(null);
-    } catch (e) {
-      console.error('Failed to assign tenant NFC card', e);
-      setMsg(formatError(e));
-    } finally { setBusy(false); }
-  };
-
   const tenantKioskNfcUrl = (() => {
+    if (!value) return '';
     try {
       const slug = localStorage.getItem('pwa_company_slug') || '';
       const origin = window.location.origin;
       const base = slug ? `${origin}/${slug}/kiosk/huurder` : `${origin}/kiosk/huurder`;
-      return value ? `${base}?nfc=${value}` : '';
+      return `${base}?nfc=${value}`;
     } catch { return ''; }
   })();
+
+  const copyUrl = () => {
+    if (!tenantKioskNfcUrl) return;
+    try {
+      navigator.clipboard?.writeText(tenantKioskNfcUrl);
+      setCopied(true); setTimeout(() => setCopied(false), 1500);
+    } catch (err) { console.error('Clipboard write failed', err); }
+  };
 
   return (
     <div data-testid="tenant-nfc-field" className="rounded-2xl bg-orange-50/60 border border-orange-200 p-3">
       <label className="text-xs font-bold uppercase tracking-widest text-orange-700">
         NFC-kaart voor /kiosk/huurder login
       </label>
-      <div className="flex gap-2 mt-1">
-        <input value={value} onChange={(e) => setValue(e.target.value)}
-          placeholder="Bv. 04A1B2C3D4"
-          data-testid="tenant-nfc-input"
-          className="flex-1 h-11 px-3 rounded-xl border-2 border-orange-200 focus:border-[#FF5C00] outline-none bg-white text-sm font-mono" />
-        <button type="button" onClick={() => save(value)} disabled={busy || !tenantId}
-          data-testid="tenant-nfc-save"
-          className="px-3 h-11 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold disabled:opacity-50 text-sm">
-          Opslaan
-        </button>
-      </div>
+      <input
+        value={value || ''}
+        onChange={(e) => onChange?.(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
+        placeholder="Bv. 04A1B2C3D4"
+        data-testid="tenant-nfc-input"
+        className="w-full mt-1 h-11 px-3 rounded-xl border-2 border-orange-200 focus:border-[#FF5C00] outline-none bg-white text-sm font-mono uppercase" />
       {pending && (
         <div className="mt-2 flex items-center justify-between gap-2 p-2 rounded-xl bg-emerald-50 border border-emerald-200">
           <div className="min-w-0">
@@ -2122,10 +2106,10 @@ function TenantNfcField({ tenantId, currentValue, onChange }) {
             <p className="font-mono font-bold text-emerald-900 truncate text-sm">{pending.card_id}</p>
             <p className="text-[10px] text-emerald-700/80">{pending.scanned_seconds_ago}s geleden</p>
           </div>
-          <button type="button" onClick={() => save(pending.card_id)} disabled={busy || !tenantId}
+          <button type="button" onClick={() => onChange?.(pending.card_id)}
             data-testid="tenant-nfc-use-pending"
-            className="px-3 h-9 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-black uppercase tracking-widest whitespace-nowrap disabled:opacity-50">
-            Koppel
+            className="px-3 h-9 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-black uppercase tracking-widest whitespace-nowrap">
+            Gebruik
           </button>
         </div>
       )}
@@ -2138,54 +2122,74 @@ function TenantNfcField({ tenantId, currentValue, onChange }) {
             <code className="flex-1 text-[11px] font-mono text-slate-700 truncate bg-white px-2 py-1.5 rounded border border-slate-200">
               {tenantKioskNfcUrl}
             </code>
-            <button type="button"
-              onClick={() => {
-                try {
-                  navigator.clipboard?.writeText(tenantKioskNfcUrl);
-                  setMsg('URL gekopieerd');
-                  setTimeout(() => setMsg(''), 2000);
-                } catch (err) { console.error('Clipboard write failed', err); }
-              }}
+            <button type="button" onClick={copyUrl}
               data-testid="tenant-nfc-copy-url"
-              className="px-2.5 h-8 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-[11px] font-black whitespace-nowrap">
-              Kopieer
+              className={`px-2.5 h-8 rounded-lg text-white text-[11px] font-black whitespace-nowrap ${
+                copied ? 'bg-emerald-500' : 'bg-slate-900 hover:bg-slate-800'
+              }`}>
+              {copied ? 'Gekopieerd' : 'Kopieer'}
             </button>
           </div>
           <p className="text-[10px] text-slate-500 mt-1">
             Schrijf deze URL naar een NFC-tag (bv. via &quot;NFC Tools&quot; app).
-            Huurder tikt zijn telefoon op de tag → wordt automatisch ingelogd.
           </p>
         </div>
       )}
-      {!tenantId && (
-        <p className="mt-1.5 text-[11px] text-orange-700/80">
-          Sla de huurder eerst op om een kaart te kunnen koppelen.
-        </p>
-      )}
-      {msg && <p className="mt-1.5 text-[11px] font-bold text-emerald-700">{msg}</p>}
+      <p className="mt-1.5 text-[11px] text-orange-700/80">
+        Wordt opgeslagen samen met de rest van de huurder — 1× onderaan op Opslaan klikken.
+        {!tenantId && ' Nieuwe huurders: eerst Opslaan, kaart wordt daarna direct meegenomen.'}
+      </p>
     </div>
   );
 }
 
 function TenantForm({ initial, apartments, onCancel, onSaved }) {
-  const [data, setData] = useState(initial || { name: '', phone: '', email: '', apartment_id: '', internet_amount: 0 });
+  const [data, setData] = useState(initial || {
+    name: '', phone: '', email: '', apartment_id: '', internet_amount: 0,
+    nfc_card_id: '',
+  });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  // Onthoud wat de NFC-kaart was BIJ HET LADEN, zodat we alleen een extra
+  // PUT doen wanneer de gebruiker de kaart daadwerkelijk heeft gewijzigd.
+  const originalNfc = (initial?.nfc_card_id || '').toUpperCase();
+
   const save = async () => {
     setLoading(true); setError('');
     try {
       const payload = {
-        ...data,
+        name: data.name,
+        phone: data.phone || '',
+        email: data.email || '',
         apartment_id: data.apartment_id || null,
         internet_amount: parseFloat(data.internet_amount) || 0,
       };
+      let saved;
       if (initial?.id) {
         const { data: r } = await api.put(`/tenants/${initial.id}`, payload);
-        onSaved(r);
+        saved = r;
       } else {
         const { data: r } = await api.post('/tenants', payload);
-        onSaved(r);
+        saved = r;
       }
+      // NFC-kaart synchroniseren (aparte endpoint met uniciteit-check).
+      const newNfc = (data.nfc_card_id || '').toUpperCase();
+      if (newNfc !== originalNfc && saved?.id) {
+        try {
+          const { data: nfcRes } = await api.put(
+            `/admin/tenants/${saved.id}/nfc-card`,
+            { card_id: newNfc || null },
+          );
+          saved = { ...saved, nfc_card_id: nfcRes?.nfc_card_id || null };
+        } catch (e) {
+          // Kaart-conflict of validatie fout: toon aan gebruiker, hoofd-
+          // huurder is wel opgeslagen dus we sluiten NIET automatisch.
+          setError(`Huurder opgeslagen, maar kaart niet gekoppeld: ${formatError(e)}`);
+          setLoading(false);
+          return;
+        }
+      }
+      onSaved(saved);
     } catch (e) { setError(formatError(e)); }
     finally { setLoading(false); }
   };
@@ -2237,12 +2241,12 @@ function TenantForm({ initial, apartments, onCancel, onSaved }) {
               className="w-full mt-1 h-12 px-4 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] outline-none" />
             <p className="text-[11px] text-slate-400 mt-1">Vast maandelijks bedrag dat in de kiosk als regelpost "Internet" verschijnt. 0 = niet tonen.</p>
           </div>
-          {/* NFC kaart koppelen — primaire login-methode voor /kiosk/huurder.
-              Alleen tonen voor bestaande huurders (id bekend); bij nieuwe
-              huurders verschijnt het veld zodra "Opslaan" is gedrukt. */}
+          {/* NFC kaart koppelen — controlled input. Wordt bij de hoofd-
+              Opslaan meegeslagen. Voor nieuwe huurders: eerst tenant
+              aanmaken, dan NFC in dezelfde submit. */}
           <TenantNfcField
             tenantId={initial?.id || ''}
-            currentValue={initial?.nfc_card_id || ''}
+            value={data.nfc_card_id || ''}
             onChange={(uid) => setData((d) => ({ ...d, nfc_card_id: uid }))}
           />
         </div>
