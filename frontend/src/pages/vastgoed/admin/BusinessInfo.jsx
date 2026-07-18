@@ -31,6 +31,7 @@ export default function BusinessInfo() {
         contact_email: b.contact_email || '',
         contact_phone: b.contact_phone || '',
         address: b.address || '',
+        kkf_number: b.kkf_number || '',
         bank_account_sr: b.bank_account_sr || '',
         bank_account_nl: b.bank_account_nl || '',
         mope_account: b.mope_account || '',
@@ -97,6 +98,15 @@ export default function BusinessInfo() {
             <input type="text" value={b.address || ''} onChange={(e) => upd('address', e.target.value)}
               placeholder="Straat 123, Paramaribo" data-testid="bi-address"
               className="w-full h-10 px-3 border-2 border-slate-200 rounded-lg text-sm focus:border-slate-900 focus:outline-none" />
+          </label>
+          <label className="block mt-3">
+            <span className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1.5">
+              <Landmark className="w-3.5 h-3.5" /> KKF-nummer
+            </span>
+            <input type="text" value={b.kkf_number || ''} onChange={(e) => upd('kkf_number', e.target.value)}
+              placeholder="bv. 173157" data-testid="bi-kkf"
+              className="w-full h-10 px-3 border-2 border-slate-200 rounded-lg text-sm focus:border-slate-900 focus:outline-none" />
+            <p className="text-[11px] text-slate-400 mt-0.5">Kamer van Koophandel en Fabrieken registratienummer — verschijnt in de footer van uw publieke landing.</p>
           </label>
         </div>
 

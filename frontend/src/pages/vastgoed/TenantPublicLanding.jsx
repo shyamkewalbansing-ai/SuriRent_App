@@ -416,13 +416,48 @@ function ContactSection({ company }) {
 }
 
 function TenantFooter({ company }) {
+  const hasContact = !!(company?.address || company?.kkf_number || company?.contact_phone || company?.contact_email);
   return (
-    <footer className="bg-slate-900 text-white/60 border-t border-white/10 py-8">
-      <div className="max-w-[1280px] mx-auto px-5 lg:px-10 flex flex-wrap items-center justify-between gap-3">
-        <p className="text-xs">© {new Date().getFullYear()} <span className="font-bold text-white">{company?.name}</span>. Alle rechten voorbehouden.</p>
-        <p className="text-[10px] tracking-widest uppercase">
-          Powered by <a href="https://surirent.sr" target="_blank" rel="noreferrer" className="text-[#FF8A3D] hover:text-orange-300 font-bold">SuriRent</a>
-        </p>
+    <footer className="bg-slate-900 text-white/60 border-t border-white/10 py-8" data-testid="tenant-footer">
+      <div className="max-w-[1280px] mx-auto px-5 lg:px-10 space-y-4">
+        {hasContact && (
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
+            {company?.address && (
+              <div data-testid="footer-address">
+                <p className="text-[10px] font-black uppercase tracking-widest text-white/40 mb-1">Adres</p>
+                <p className="text-white/80 leading-snug">{company.address}</p>
+              </div>
+            )}
+            {company?.kkf_number && (
+              <div data-testid="footer-kkf">
+                <p className="text-[10px] font-black uppercase tracking-widest text-white/40 mb-1">KKF</p>
+                <p className="text-white/80 font-mono">{company.kkf_number}</p>
+              </div>
+            )}
+            {company?.contact_phone && (
+              <div data-testid="footer-phone">
+                <p className="text-[10px] font-black uppercase tracking-widest text-white/40 mb-1">Telefoon</p>
+                <a href={`tel:${company.contact_phone}`} className="text-white/80 hover:text-white transition">
+                  {company.contact_phone}
+                </a>
+              </div>
+            )}
+            {company?.contact_email && (
+              <div data-testid="footer-email">
+                <p className="text-[10px] font-black uppercase tracking-widest text-white/40 mb-1">E-mail</p>
+                <a href={`mailto:${company.contact_email}`} className="text-white/80 hover:text-white transition break-all">
+                  {company.contact_email}
+                </a>
+              </div>
+            )}
+          </div>
+        )}
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-white/5">
+          <p className="text-xs">© {new Date().getFullYear()} <span className="font-bold text-white">{company?.name}</span>. Alle rechten voorbehouden.</p>
+          <p className="text-[10px] tracking-widest uppercase">
+            Powered by <a href="https://surirent.sr" target="_blank" rel="noreferrer" className="text-[#FF8A3D] hover:text-orange-300 font-bold">SuriRent</a>
+          </p>
+        </div>
       </div>
     </footer>
   );

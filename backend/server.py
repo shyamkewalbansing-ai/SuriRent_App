@@ -2921,7 +2921,8 @@ async def public_company_landing(request: Request, host: Optional[str] = None):
     company = await db.companies.find_one(
         {"custom_domain": target},
         {"_id": 0, "id": 1, "name": 1, "slug": 1, "branding": 1, "address": 1,
-         "contact_email": 1, "contact_phone": 1, "whatsapp_phone": 1},
+         "contact_email": 1, "contact_phone": 1, "whatsapp_phone": 1,
+         "kkf_number": 1},
     )
     if not company:
         return {"found": False}
@@ -2959,7 +2960,8 @@ async def public_company_landing_by_slug(slug: str):
     company = await db.companies.find_one(
         {"slug": slug_norm},
         {"_id": 0, "id": 1, "name": 1, "slug": 1, "branding": 1, "address": 1,
-         "contact_email": 1, "contact_phone": 1, "whatsapp_phone": 1},
+         "contact_email": 1, "contact_phone": 1, "whatsapp_phone": 1,
+         "kkf_number": 1},
     )
     if not company:
         return {"found": False}
@@ -3263,6 +3265,7 @@ def _company_branding_response(c: dict) -> dict:
         "contact_email": c.get("contact_email") or "",
         "contact_phone": c.get("contact_phone") or "",
         "address": c.get("address") or "",
+        "kkf_number": c.get("kkf_number") or "",
         "bank_account_sr": c.get("bank_account_sr") or "",
         "bank_account_nl": c.get("bank_account_nl") or "",
         "mope_account": c.get("mope_account") or "",
@@ -3388,6 +3391,7 @@ class CompanyProfileIn(BaseModel):
     contact_email: Optional[str] = None
     contact_phone: Optional[str] = None
     address: Optional[str] = None
+    kkf_number: Optional[str] = None
     bank_account_sr: Optional[str] = None
     bank_account_nl: Optional[str] = None
     mope_account: Optional[str] = None
@@ -3416,6 +3420,8 @@ async def put_my_company_profile(
         update["contact_phone"] = body.contact_phone.strip()[:60]
     if body.address is not None:
         update["address"] = body.address.strip()[:300]
+    if body.kkf_number is not None:
+        update["kkf_number"] = body.kkf_number.strip()[:60]
     if body.bank_account_sr is not None:
         update["bank_account_sr"] = body.bank_account_sr.strip()[:200]
     if body.bank_account_nl is not None:
