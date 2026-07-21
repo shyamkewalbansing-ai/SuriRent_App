@@ -8,7 +8,7 @@ import {
   Menu, X, Search, Lock, ChevronRight, ChevronDown, ChevronUp,
   LayoutDashboard, MapPin, Home as HomeIcon, Receipt, FileText, Users,
   Wallet, ScanLine, Building2, MessageCircle, Mail, Phone,
-  Star, ArrowRight,
+  Star, ArrowRight, Landmark,
 } from 'lucide-react';
 import { EditableProvider, EditableText, EditableImage, useLandingContent } from '../../lib/landing-editable';
 import StatusPill from '../../components/StatusPill';
@@ -812,8 +812,14 @@ function Footer({ onLogin }) {
               <li className="flex items-center gap-2"><Phone className="w-4 h-4 text-[#FF8A3D]" />
                 <EditableText path="v2.footer.phone" fallback="+597 XXX XXX" as="span" />
               </li>
-              <li className="flex items-center gap-2"><Users className="w-4 h-4 text-[#FF8A3D]" />
-                <EditableText path="v2.footer.address" fallback="Paramaribo, SR" as="span" />
+              <li className="flex items-start gap-2"><Users className="w-4 h-4 text-[#FF8A3D] mt-0.5 shrink-0" />
+                <EditableText path="v2.footer.address"
+                  fallback="Kewalbansingweg 7, Paramaribo Suriname — South America"
+                  as="span" multiline />
+              </li>
+              <li className="flex items-center gap-2"><Landmark className="w-4 h-4 text-[#FF8A3D]" />
+                <span className="text-[10px] font-black uppercase tracking-widest text-white/50 mr-1">KKF</span>
+                <EditableText path="v2.footer.kkf_number" fallback="173157" as="span" className="font-mono" />
               </li>
               <li className="pt-2">
                 <button onClick={onLogin} data-testid="footer-login"
