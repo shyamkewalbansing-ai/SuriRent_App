@@ -87,8 +87,6 @@ function TopHeader({ onLogin, onRegister }) {
           <span className="text-xl md:text-2xl font-black tracking-tight text-[#0F0F0F]">
             <EditableText path="v2.brand.name_prefix" fallback="Suri" as="span" />
             <EditableText path="v2.brand.name_suffix" fallback="Rent" as="span" className="text-[#FF5C00]" />
-            <span> </span>
-            <EditableText path="v2.brand.legal_suffix" fallback="N.V" as="span" className="text-slate-400 font-bold" />
           </span>
         </button>
 
@@ -780,8 +778,6 @@ function Footer({ onLogin }) {
               <span className="text-base font-black text-white">
                 <EditableText path="v2.brand.name_prefix" fallback="Suri" as="span" />
                 <EditableText path="v2.brand.name_suffix" fallback="Rent" as="span" className="text-[#FF5C00]" />
-                <span> </span>
-                <EditableText path="v2.brand.legal_suffix" fallback="N.V" as="span" className="text-white/60" />
               </span>
             </div>
             <EditableText path="v2.footer.tagline"
@@ -831,7 +827,7 @@ function Footer({ onLogin }) {
           </div>
         </div>
         <div className="mt-12 pt-8 border-t border-white/10 flex flex-wrap items-center justify-between gap-4">
-          <p className="text-xs text-white/40">© {new Date().getFullYear()} SuriRent N.V. Alle rechten voorbehouden.</p>
+          <p className="text-xs text-white/40">© {new Date().getFullYear()} SuriRent. Alle rechten voorbehouden.</p>
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
             <span className="text-xs font-semibold text-white/40">Alle systemen operationeel</span>
