@@ -196,46 +196,29 @@ async def get_current_user(request: Request) -> dict:
     except Exception:
         pass  # presence-tracking mag nooit de request laten falen
 
-    # BILLING ENFORCEMENT — block opgezegde/expired bedrijven van non-billing endpoints.
-    # Superadmin + impersonatie zijn altijd toegestaan (om te kunnen herstellen).
-    # `/billing/*` en `/auth/*` zijn vrijgesteld zodat de gebruiker zijn
-    # abonnement kan heractiveren en kan uitloggen.
+    # BILLING NOTIFICATION — we HARD-BLOCKEN NIET meer.
+    # Klanten mogen de app blijven gebruiken ook als hun proefperiode is
+    # verlopen of hun abonnement past_due/cancelled is. Ze zien alleen een
+    # in-app banner (TrialBanner) met een oproep om te activeren. Deze keuze
+    # is expliciet gemaakt door de eigenaar — omzet-optimalisatie via
+    # vriendelijke UX i.p.v. dwingen.
     if user.get("role") != "superadmin" and not user.get("original_user_id"):
-        path = (request.url.path or "").lower()
-        BILLING_EXEMPT = (
-            "/api/billing/",
-            "/api/auth/",
-            "/api/companies/me/branding",
-            "/api/public/",
-            "/api/health",
-        )
-        if not any(path.startswith(p) for p in BILLING_EXEMPT):
-            cid = user.get("company_id")
-            if cid:
-                c = await db.companies.find_one({"id": cid}, {"_id": 0, "billing_status": 1, "trial_ends_at": 1})
-                if c:
-                    bs = (c.get("billing_status") or "active").lower()
-                    # Check trial expiry zonder DB-update om read-side te houden.
-                    if bs == "trial" and c.get("trial_ends_at"):
-                        try:
-                            end = datetime.fromisoformat(c["trial_ends_at"].replace("Z", "+00:00"))
-                            if end < datetime.now(timezone.utc):
-                                bs = "expired"
-                        except Exception:
-                            pass
-                    if bs in ("cancelled", "expired", "past_due"):
-                        raise HTTPException(
-                            status_code=402,
-                            detail={
-                                "code": "billing_blocked",
-                                "billing_status": bs,
-                                "message": {
-                                    "cancelled": "Uw abonnement is opgezegd. Heractiveer om door te gaan.",
-                                    "expired": "Uw proefperiode is verlopen. Activeer een abonnement om door te gaan.",
-                                    "past_due": "Uw betaling staat open. Voldoe om door te gaan.",
-                                }.get(bs, "Abonnement niet actief."),
-                            },
-                        )
+        cid = user.get("company_id")
+        if cid:
+            c = await db.companies.find_one(
+                {"id": cid}, {"_id": 0, "billing_status": 1, "trial_ends_at": 1},
+            )
+            if c:
+                bs = (c.get("billing_status") or "active").lower()
+                # Update trial → expired in memory (voor logging/telemetrie).
+                if bs == "trial" and c.get("trial_ends_at"):
+                    try:
+                        end = datetime.fromisoformat(c["trial_ends_at"].replace("Z", "+00:00"))
+                        if end < datetime.now(timezone.utc):
+                            bs = "expired"
+                    except Exception:
+                        pass
+                user["_billing_status"] = bs  # beschikbaar voor endpoints die dit willen weten
     return user
 
 

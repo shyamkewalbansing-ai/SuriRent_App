@@ -49,7 +49,6 @@ import { installPendingApprovalDingListener } from '../../lib/notify-sound';
 import { useForegroundPendingNotify } from '../../lib/foreground-notify';
 import { useMorningBriefing } from '../../lib/morning-briefing';
 import MorningBriefingModal from '../../components/MorningBriefingModal';
-import BillingBlockedScreen from '../../components/BillingBlockedScreen';
 
 const BASE_TABS = [
   { id: 'overview', label: 'Overzicht', icon: LayoutDashboard },
@@ -2503,43 +2502,6 @@ function DesktopTopBar({ user, activeCompany, tab, tabs }) {
 export default function AdminDashboard() {
   const { user, logout, activeCompany } = useAuth();
   const tabs = getTabsFor(user);
-  // BILLING BLOCKED — als de backend ons een 402 stuurt, tonen we een
-  // full-screen blok scherm. State wordt gevoed door de api.js interceptor
-  // (custom event 'billing-blocked') en localStorage zodat de status
-  // persists over re-renders.
-  const [billingBlocked, setBillingBlocked] = useState(() => {
-    try {
-      const status = localStorage.getItem('billing_blocked_status');
-      if (status && user?.role !== 'superadmin') {
-        return {
-          status,
-          message: localStorage.getItem('billing_blocked_message') || '',
-        };
-      }
-    } catch { /* ignore */ }
-    return null;
-  });
-  useEffect(() => {
-    const onBlocked = (e) => {
-      if (user?.role === 'superadmin') return;
-      setBillingBlocked({
-        status: e?.detail?.billing_status || 'cancelled',
-        message: e?.detail?.message || '',
-      });
-    };
-    window.addEventListener('billing-blocked', onBlocked);
-    return () => window.removeEventListener('billing-blocked', onBlocked);
-  }, [user?.role]);
-  // Clear blok bij superadmin / impersonatie zodat zij niet vastlopen.
-  useEffect(() => {
-    if (user?.role === 'superadmin' || user?.original_user_id) {
-      try {
-        localStorage.removeItem('billing_blocked_status');
-        localStorage.removeItem('billing_blocked_message');
-      } catch { /* ignore */ }
-      setBillingBlocked(null);
-    }
-  }, [user?.role, user?.original_user_id]);
   // Mobiel landt direct op Betalingen (geen Overzicht meer) — tablet/desktop
   // blijft op Overzicht starten. We detecteren op basis van window-breedte
   // bij eerste render zodat de PWA-launch direct in de juiste tab opent.
@@ -2678,13 +2640,9 @@ export default function AdminDashboard() {
     navigate('/login');
   };
 
-  // Toon billing-blocked vol-scherm vóór ALLE andere UI. Voorkomt dat de
-  // gebruiker iets ziet/aanraakt van een omgeving waar hij geen toegang
-  // meer toe heeft. Superadmin + impersonators worden hierboven al
-  // uitgesloten.
-  if (billingBlocked && user && user.role !== 'superadmin' && !user.original_user_id) {
-    return <BillingBlockedScreen status={billingBlocked.status} message={billingBlocked.message} />;
-  }
+  // Hard-blocken bij billing-issues is verwijderd — klanten mogen de app
+  // blijven gebruiken en zien alleen de TrialBanner als notificatie.
+  // Superadmin + impersonators zien uiteraard nooit iets.
 
   return (
     <div className="min-h-screen bg-[#F7F8FA] flex">

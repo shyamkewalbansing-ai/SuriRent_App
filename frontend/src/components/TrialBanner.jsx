@@ -13,9 +13,12 @@ export default function TrialBanner() {
   }, []);
 
   if (!info || dismissed) return null;
-  if (info.status !== 'trial' && info.status !== 'expired') return null;
+  // Toon banner voor alle niet-actieve statussen — behalve 'active' zelf.
+  // Voor 'active' en onbekende statussen geen banner.
+  const NOTIFY_STATES = ['trial', 'expired', 'past_due', 'cancelled'];
+  if (!NOTIFY_STATES.includes(info.status)) return null;
 
-  const isExpired = info.status === 'expired' || (info.days_left ?? 1) <= 0;
+  const isBlocking = info.status === 'expired' || info.status === 'cancelled' || info.status === 'past_due' || (info.days_left ?? 1) <= 0;
   const days = Math.max(0, info.days_left ?? 0);
 
   const openDetails = async () => {
@@ -26,22 +29,31 @@ export default function TrialBanner() {
     setShowDetails(true);
   };
 
+  const headline = (() => {
+    switch (info.status) {
+      case 'expired': return 'Proefperiode verlopen — activeer om te blijven werken';
+      case 'past_due': return 'Betaling staat open — voldoe om abonnement actief te houden';
+      case 'cancelled': return 'Abonnement opgezegd — heractiveer wanneer u wilt';
+      default: return `Nog ${days} ${days === 1 ? 'dag' : 'dagen'} proefperiode`;
+    }
+  })();
+
+  const gradient = isBlocking
+    ? 'bg-gradient-to-r from-red-500 to-red-600 text-white'
+    : 'bg-gradient-to-r from-orange-500 to-orange-600 text-white';
+
   return (
     <>
       <div
         data-testid="trial-banner"
-        className={`relative w-full px-3 sm:px-5 py-2.5 flex items-center gap-3 ${
-          isExpired
-            ? 'bg-gradient-to-r from-red-500 to-red-600 text-white'
-            : 'bg-gradient-to-r from-orange-500 to-orange-600 text-white'
-        }`}
+        className={`relative w-full px-3 sm:px-5 py-2.5 flex items-center gap-3 ${gradient}`}
       >
         <div className="w-8 h-8 rounded-lg bg-white/20 backdrop-blur-sm flex items-center justify-center shrink-0">
-          {isExpired ? <Clock className="w-4 h-4" /> : <Sparkles className="w-4 h-4" />}
+          {isBlocking ? <Clock className="w-4 h-4" /> : <Sparkles className="w-4 h-4" />}
         </div>
         <div className="flex-1 min-w-0">
           <p className="font-extrabold text-sm sm:text-base leading-tight">
-            {isExpired ? 'Proefperiode verlopen' : `Nog ${days} ${days === 1 ? 'dag' : 'dagen'} proefperiode`}
+            {headline}
           </p>
           <p className="text-[11px] sm:text-xs text-white/90 truncate">
             {info.plan?.name} pakket · {info.currency} {Number(info.monthly_amount || 0).toLocaleString('nl-NL')}/maand · betaal per bankoverschrijving
@@ -49,14 +61,15 @@ export default function TrialBanner() {
         </div>
         <button onClick={openDetails} data-testid="trial-upgrade-btn"
           className="px-3 sm:px-4 h-9 rounded-lg bg-white text-orange-600 hover:bg-orange-50 font-extrabold text-xs sm:text-sm flex items-center gap-1.5 whitespace-nowrap">
-          {isExpired ? 'Activeer' : 'Upgrade'} <ArrowRight className="w-3.5 h-3.5" />
+          {isBlocking ? 'Activeer' : 'Upgrade'} <ArrowRight className="w-3.5 h-3.5" />
         </button>
-        {!isExpired && (
-          <button onClick={() => setDismissed(true)} data-testid="trial-dismiss"
-            className="w-7 h-7 rounded-full hover:bg-white/15 flex items-center justify-center shrink-0">
-            <X className="w-4 h-4" />
-          </button>
-        )}
+        {/* Sluitknop toegestaan ALTIJD — geen dwangvoering meer, alleen
+            een vriendelijke reminder. De banner verschijnt weer bij de
+            volgende page-load / route change. */}
+        <button onClick={() => setDismissed(true)} data-testid="trial-dismiss"
+          className="w-7 h-7 rounded-full hover:bg-white/15 flex items-center justify-center shrink-0">
+          <X className="w-4 h-4" />
+        </button>
       </div>
 
       {showDetails && (
