@@ -80,11 +80,11 @@ function TopHeader({ onLogin, onRegister }) {
       <div className="max-w-[1280px] mx-auto px-5 lg:px-10 h-20 flex items-center justify-between">
         <button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
           className="flex items-center gap-2.5 md:gap-3" data-testid="topheader-logo">
-          <span className="w-11 h-11 md:w-12 md:h-12 rounded-lg bg-[#FF5C00] p-1.5 md:p-2 shrink-0">
+          <span className="w-11 h-11 md:w-14 md:h-14 rounded-lg bg-[#FF5C00] p-1.5 md:p-2 shrink-0">
             <EditableImage path="v2.brand.logo_url" fallback="/kiosk-icons/mark-white.png"
               alt="" className="w-full h-full object-contain" />
           </span>
-          <span className="text-xl md:text-2xl font-black tracking-tight text-[#0F0F0F]">
+          <span className="text-2xl md:text-3xl font-black tracking-tight text-[#0F0F0F]">
             <EditableText path="v2.brand.name_prefix" fallback="Suri" as="span" />
             <EditableText path="v2.brand.name_suffix" fallback="Rent" as="span" className="text-[#FF5C00]" />
           </span>
