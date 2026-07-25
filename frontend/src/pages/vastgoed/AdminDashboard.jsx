@@ -48,7 +48,6 @@ import PhotoUpload from '../../components/PhotoUpload';
 import { installPendingApprovalDingListener } from '../../lib/notify-sound';
 import { useForegroundPendingNotify } from '../../lib/foreground-notify';
 import { useMorningBriefing } from '../../lib/morning-briefing';
-import MorningBriefingModal from '../../components/MorningBriefingModal';
 
 const BASE_TABS = [
   { id: 'overview', label: 'Overzicht', icon: LayoutDashboard },
@@ -2535,7 +2534,8 @@ export default function AdminDashboard() {
 
   // Dagelijkse briefing — toont 1× per dag tussen 06:00-12:00 een modal
   // met overdue overzicht + nieuwe activiteit van vandaag.
-  const { briefing, dismiss: dismissBriefing } = useMorningBriefing({ enabled: true });
+  // Dagbriefing-modal verwijderd op verzoek — hook uit voor performance.
+  useMorningBriefing({ enabled: false });
 
   // URL → tab sync. Bij paden zoals /admin/invoices, /admin/payments etc.
   // wordt de tab automatisch ingesteld. Belangrijk voor:
@@ -2684,7 +2684,6 @@ export default function AdminDashboard() {
       <MobileSheet open={drawerOpen} onClose={() => setDrawerOpen(false)}
         active={tab} onChange={handleSetTab} onLogout={doLogout}
         user={user} tabs={sheetTabs} activeCompany={activeCompany} badgeCount={badgeCount} />
-      <MorningBriefingModal briefing={briefing} onClose={dismissBriefing} />
       <SetupWizardSheet
         open={wizardOpen}
         onClose={() => setWizardOpen(false)}
