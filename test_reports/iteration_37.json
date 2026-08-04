@@ -1,0 +1,32 @@
+{
+  "summary": "Verified bug-fix for slow apartment photo loading. Backend ETag/304/thumb behavior and frontend ?thumb=1 + lazy loading all working. 6/6 pytest tests pass, admin apartments UI renders thumb URLs correctly.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_landing_asset_cache.py",
+    "/app/test_reports/pytest/landing_asset_cache.xml"
+  ],
+  "verified_behaviors": [
+    "GET /api/landing/asset/{id} returns ETag='\"<asset_id>\"' — PASS",
+    "GET with If-None-Match=\"<asset_id>\" returns 304 with 0-byte body — PASS",
+    "GET ?thumb=1 returns downscaled image with ETag='\"<asset_id>-t\"', smaller than original (2.5x for tiny synthetic gradient PNG; real JPEG photos will see much more)  — PASS",
+    "Second thumb request served from cached thumb_b64 (bytes identical, no regen) — PASS",
+    "GET ?thumb=1 with If-None-Match=\"<asset_id>-t\" returns 304 — PASS",
+    "Non-existent asset returns 404 — PASS",
+    "Admin > Appartementen: 4/4 apartment card imgs use `?thumb=1` and have loading='lazy' decoding='async' — PASS",
+    "External http:// photo URLs are NOT modified with thumb=1 (frontend guard on '/api/landing/asset/') — code-verified",
+    "PhotoUpload preview also uses ?thumb=1 for landing asset URLs — code-verified"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Note: ingress overrides Cache-Control to no-store (as flagged in the request); did not flag. The ETag/304 fast-path still triggers via If-None-Match and is the real speedup.",
+    "Minor: PIL thumbnail generation is CPU-bound and runs inside async endpoint without run_in_executor — first-hit for a very large image could briefly block the event loop. Mitigated by DB caching after first request; safe to defer."
+  ],
+  "updated_files": ["/app/backend/tests/test_landing_asset_cache.py"],
+  "success_rate": {"backend": "100% (6/6)", "frontend": "100%"},
+  "test_credentials": "admin@vastgoed.sr / admin123",
+  "seed_data_creation": "One TEST_photo.png uploaded via /api/companies/me/branding/upload during pytest run; kept in landing_assets (asset URL scoped to test; harmless).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend test file at /app/backend/tests/test_landing_asset_cache.py covers full ETag/304/thumb path. Reusable for regression."
+}

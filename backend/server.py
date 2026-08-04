@@ -2851,7 +2851,26 @@ async def upload_landing_asset(file: UploadFile = File(...),
 
 
 @api.get("/landing/asset/{asset_id}")
-async def get_landing_asset(asset_id: str):
+async def get_landing_asset(asset_id: str, request: Request, thumb: int = 0):
+    """Serve een geüploade image asset. Assets zijn UUID-gekeyed en NOOIT
+    muteerbaar → we kunnen 1-jaar immutable cache + strong ETag geven.
+    Bij `If-None-Match` van diezelfde asset_id returnen we direct 304 Not
+    Modified ZONDER MongoDB find/decode — cruciaal voor snelle list-views
+    waar dezelfde 10-30 foto's herhaaldelijk gerenderd worden.
+
+    Query `?thumb=1` → serveer een gecachete 400px thumbnail (geloutered voor
+    kaart/thumbnail contexten; ~10-50× kleiner dan de originele upload).
+    """
+    # Immutable ETag — verandert nooit voor deze UUID (+ thumb suffix).
+    etag = f'"{asset_id}{"-t" if thumb else ""}"'
+    inm = request.headers.get("if-none-match", "").strip()
+    if inm and (inm == etag or inm.strip('"') == etag.strip('"')):
+        # Client heeft al bytes — geen DB-hit nodig.
+        return Response(status_code=304, headers={
+            "ETag": etag,
+            "Cache-Control": "public, max-age=31536000, immutable",
+        })
+
     doc = await db.landing_assets.find_one({"id": asset_id}, {"_id": 0})
     if not doc:
         raise HTTPException(status_code=404, detail="Asset niet gevonden")
@@ -2859,8 +2878,60 @@ async def get_landing_asset(asset_id: str):
         data = base64.b64decode(doc["data_b64"])
     except Exception:
         raise HTTPException(status_code=500, detail="Asset corrupt")
-    return StreamingResponse(io.BytesIO(data), media_type=doc.get("content_type", "image/png"),
-                              headers={"Cache-Control": "public, max-age=3600"})
+
+    ctype = doc.get("content_type", "image/png")
+    # Thumbnail: gecached in het doc na eerste generatie. Downscale via PIL
+    # naar max 400px lange zijde, JPEG kwaliteit 78 — goed voor lijst-cards.
+    if thumb:
+        cached = doc.get("thumb_b64")
+        cached_ct = doc.get("thumb_content_type")
+        if cached and cached_ct:
+            try:
+                data = base64.b64decode(cached)
+                ctype = cached_ct
+            except Exception:
+                pass
+        else:
+            try:
+                from PIL import Image
+                img = Image.open(io.BytesIO(data))
+                if img.mode not in ("RGB", "RGBA"):
+                    img = img.convert("RGB")
+                img.thumbnail((400, 400))
+                buf = io.BytesIO()
+                # JPEG voor foto's, PNG als origineel PNG met transparantie.
+                out_ct = "image/jpeg"
+                if ctype == "image/png" and img.mode == "RGBA":
+                    img.save(buf, format="PNG", optimize=True)
+                    out_ct = "image/png"
+                else:
+                    if img.mode == "RGBA":
+                        img = img.convert("RGB")
+                    img.save(buf, format="JPEG", quality=78, optimize=True, progressive=True)
+                thumb_bytes = buf.getvalue()
+                data = thumb_bytes
+                ctype = out_ct
+                # Persist voor volgende requests — één keer generen, altijd
+                # opnieuw serveren uit cache.
+                await db.landing_assets.update_one(
+                    {"id": asset_id},
+                    {"$set": {
+                        "thumb_b64": base64.b64encode(thumb_bytes).decode("ascii"),
+                        "thumb_content_type": out_ct,
+                    }},
+                )
+            except Exception as e:
+                # PIL niet beschikbaar of image corrupt — fall back naar full-size.
+                logger.warning("Thumbnail generation failed for %s: %s", asset_id, e)
+
+    return StreamingResponse(
+        io.BytesIO(data),
+        media_type=ctype,
+        headers={
+            "ETag": etag,
+            "Cache-Control": "public, max-age=31536000, immutable",
+        },
+    )
 
 
 # =====================================================================

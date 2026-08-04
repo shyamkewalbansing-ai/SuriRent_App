@@ -1664,7 +1664,12 @@ function Apartments() {
             className="bg-white rounded-2xl border border-slate-100 shadow-[0_1px_4px_-2px_rgba(15,23,42,0.06)] overflow-hidden hover:border-slate-200 transition-colors flex flex-col">
             {a.photo_url && (
               <div className="relative w-full h-32 bg-slate-100 shrink-0">
-                <img src={a.photo_url} alt={a.number} className="w-full h-full object-cover"
+                <img
+                  src={a.photo_url.includes('/api/landing/asset/') ? `${a.photo_url}${a.photo_url.includes('?') ? '&' : '?'}thumb=1` : a.photo_url}
+                  alt={a.number}
+                  loading="lazy"
+                  decoding="async"
+                  className="w-full h-full object-cover"
                   onError={(e) => { e.currentTarget.parentElement.style.display = 'none'; }} />
                 <span className={`absolute top-2 right-2 text-[10px] font-black uppercase tracking-wider px-2 py-1 rounded-full ring-2 ring-white ${
                   a.status === 'occupied' ? 'bg-emerald-500 text-white' : 'bg-slate-700 text-white'

@@ -88,7 +88,12 @@ export default function PhotoUpload({
             drag ? 'ring-4 ring-[#FF5C00] ring-offset-2' : ''
           }`}
         >
-          <img src={value} alt="preview" className="w-full h-full object-cover"
+          <img
+            src={value && value.includes('/api/landing/asset/') ? `${value}${value.includes('?') ? '&' : '?'}thumb=1` : value}
+            alt="preview"
+            loading="lazy"
+            decoding="async"
+            className="w-full h-full object-cover"
             onError={(e) => { e.currentTarget.style.display = 'none'; }} />
           <div className="absolute inset-0 bg-slate-900/0 group-hover:bg-slate-900/40 transition flex items-center justify-center opacity-0 group-hover:opacity-100">
             <span className="inline-flex items-center gap-2 px-3 py-1.5 bg-white text-slate-900 rounded-lg font-bold text-sm">
