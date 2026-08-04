@@ -26,8 +26,8 @@ def _load_backend_url():
 
 BASE_URL = _load_backend_url()
 ADMIN_EMAIL = "admin@vastgoed.sr"
-ADMIN_PASS = "admin123"
-COMPANY_PIN = "1234"
+ADMIN_PASS = os.environ.get("TEST_ADMIN_PASSWORD", "admin123")
+COMPANY_PIN = os.environ.get("TEST_KIOSK_PIN", "1234")
 EMP_PIN = "9999"
 
 

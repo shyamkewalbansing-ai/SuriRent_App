@@ -242,7 +242,7 @@ function ApprovePaymentSheet({ payment, onCancel, onApproved }) {
             {payment.ocr_status === 'mismatch' && payment.ocr_mismatch_reasons && (
               <ul className="text-xs font-semibold text-amber-800 space-y-0.5">
                 {payment.ocr_mismatch_reasons.map((r, i) => (
-                  <li key={i}>⚠️ {r}</li>
+                  <li key={`${payment.id}-mism-${i}-${String(r).slice(0, 24)}`}>⚠️ {r}</li>
                 ))}
               </ul>
             )}

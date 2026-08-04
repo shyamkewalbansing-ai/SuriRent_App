@@ -13,8 +13,8 @@ from datetime import date, timedelta
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL").rstrip("/")
 ADMIN_EMAIL = "admin@vastgoed.sr"
-ADMIN_PASSWORD = "admin123"
-KIOSK_PIN = "1234"
+ADMIN_PASSWORD = os.environ.get("TEST_ADMIN_PASSWORD", "admin123")
+KIOSK_PIN = os.environ.get("TEST_KIOSK_PIN", "1234")
 
 TEST_TENANT_NAME = "Bharat Kewalbansing"
 

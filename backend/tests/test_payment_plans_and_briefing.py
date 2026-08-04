@@ -28,7 +28,7 @@ BASE_URL = _load_backend_url().rstrip("/")
 API = f"{BASE_URL}/api"
 
 ADMIN_EMAIL = "admin@vastgoed.sr"
-ADMIN_PASSWORD = "admin123"
+ADMIN_PASSWORD = os.environ.get("TEST_ADMIN_PASSWORD", "admin123")
 KIOSK_PIN = "1234"
 EMPLOYEE_PIN = "9999"  # Maria K.
 TENANT_NAME = "Bharat Kewalbansing"

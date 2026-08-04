@@ -39,7 +39,7 @@ assert BASE_URL, "REACT_APP_BACKEND_URL is required for these tests"
 API = f"{BASE_URL}/api"
 
 ADMIN_EMAIL = "admin@vastgoed.sr"
-ADMIN_PASSWORD = "admin123"
+ADMIN_PASSWORD = os.environ.get("TEST_ADMIN_PASSWORD", "admin123")
 COMPANY_SLUG = "surirent"
 
 

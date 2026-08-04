@@ -40,11 +40,10 @@ def auth_headers(admin_token):
 
 
 # ---------- Helper: load _device_label_from_ua from server.py ----------
-# Veiligere variant zonder exec(): we importeren de module via importlib en
-# halen de functie eruit met getattr. Importeren van server.py is iets
-# zwaarder dan exec() van een gehapt fragment, maar veiliger en
-# onderhoudbaarder — als de signature/implementatie wijzigt, blijven de
-# tests werken zonder string-parsing.
+# We importeren de module via importlib (spec_from_file_location) en halen
+# de functie eruit met getattr. Dit is de veilige, standaard Python manier
+# om een private helper te testen zonder de server bij import op te starten
+# (server.py heeft `if __name__ == "__main__"` blokken voor de runtime).
 def _load_label_fn():
     if "_srv_under_test" not in sys.modules:
         # Voorkom dat de app uvicorn opstart: spec.loader.exec_module

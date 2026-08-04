@@ -18,7 +18,7 @@ assert BASE_URL, "REACT_APP_BACKEND_URL is required"
 API = f"{BASE_URL}/api"
 
 ADMIN_EMAIL = "admin@vastgoed.sr"
-ADMIN_PASSWORD = "admin123"
+ADMIN_PASSWORD = os.environ.get("TEST_ADMIN_PASSWORD", "admin123")
 
 # happy-path tenant from review_request
 HAPPY_APT_ID = "ad90db5f-d0e1-4029-8c20-9f2d9d6e4f66"

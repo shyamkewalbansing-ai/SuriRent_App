@@ -29,7 +29,7 @@ assert BASE_URL, "REACT_APP_BACKEND_URL not set"
 API = f"{BASE_URL}/api"
 
 ADMIN_EMAIL = "admin@vastgoed.sr"
-ADMIN_PASS = "admin123"
+ADMIN_PASS = os.environ.get("TEST_ADMIN_PASSWORD", "admin123")
 SUPER_EMAIL = "super@surirent.sr"
 SUPER_PASS = "super123"
 

@@ -16,8 +16,10 @@ if not BASE_URL:
     except Exception:
         pass
 
-SUPER = {"email": "super@surirent.sr", "password": "super123"}
-ADMIN = {"email": "admin@vastgoed.sr", "password": "admin123"}
+from conftest import SUPER_EMAIL, SUPER_PASSWORD, ADMIN_EMAIL, ADMIN_PASSWORD
+
+SUPER = {"email": SUPER_EMAIL, "password": SUPER_PASSWORD}
+ADMIN = {"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD}
 
 
 def _login(creds):

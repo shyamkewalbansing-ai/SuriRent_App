@@ -1,0 +1,26 @@
+{
+  "summary": "Iter36 REGRESSION sanity pass after limited code-review fixes (env-driven test creds, exec()-comment reword, stable _rid keys in PaymentPlans customRows, composite key for OCR reasons). Backend: 6/6 pytest green (admin login, kiosk PIN, superadmin, public landing by-slug with kkf_number, NFC relink+login for Rayshree UID 7755, SOFT billing enforcement — /api/tenants still 200 with billing_status=expired). Frontend: all critical regression items verified — marketing landing shows 'SuriRent' without 'N.V' + KKF 173157 + full address, /site/surirent renders public landing, /kiosk/huurder?c=surirent shows NFC tap-zone (data-testid=tk-nfc-tap-zone) NOT a PIN pad, ?c=surirent&nfc=7755 auto-logs in as Rayshree (appt HUIS73, Kewalbansingweg 7), admin login → dashboard loads without MorningBriefing modal, sidebar has a single 'Instellingen' entry. PaymentPlans _rid keys verified in code (each row gets Date.now()-based stable id at creation; key={r._rid || `row-${i}`}) — full E2E UI for plan-create-sheet not executed because it needs an invoice-selection multi-step flow, but code is correct and safe.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iter36_regression.py",
+    "/app/test_reports/pytest/iter36.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "PaymentPlans.jsx stable _rid keys implemented correctly at both creation sites (line 212 init loop, line 338 add-row). Both include a Date.now()+index suffix so keys stay unique even if the user rapidly adds rows. Good.",
+    "Payments.jsx OCR reasons composite key (line ~244) — implementation not re-verified in this iter, but E1 confirmed the change. Non-blocking for regression.",
+    "conftest.py env-driven defaults are correctly wired; existing tests using module-level ADMIN_EMAIL/PASSWORD constants pick them up. Note the fallback values in code ARE the same as prod-dev creds (documented as preview-only) — this is a soft finding tracked in the review.",
+    "Kiosk /kiosk/huurder REQUIRES ?c=<slug> query param to render the NFC tap-zone; without it users see a company-code prompt. Not a bug, but worth documenting in the QR sticker generation (already handled via QR content per prior iterations)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter36_regression.py (NEW)"
+  ],
+  "success_rate": {"backend": "100% (6/6)", "frontend": "100% on tested regression items"},
+  "test_credentials": "admin@vastgoed.sr / admin123 (slug=surirent); super@surirent.sr / super123; kiosk PIN 1234; NFC UID 7755 linked to Rayshree tenant c44bf27c-... — all working.",
+  "seed_data_creation": "None. Test temporarily flips Dado company billing_status expired→trial via mongo; restored in finally block. NFC UID 7755 re-linked idempotently to Rayshree via PUT /api/admin/tenants/{id}/nfc-card.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "All iter36 regression items pass. New env-driven credentials fixture works (fallback defaults match memory/test_credentials.md). SOFT billing confirmed at server.py:199-222 (no HTTP 402 path). NFC login uses /api/tenant-portal/nfc-login and returns token + tenant.name='Rayshree ...'. /site/:slug route (PublicLandingBySlug) renders Dado landing correctly. MorningBriefing modal is removed from AdminDashboard. Marketing header shows 'SuriRent' without N.V; footer has KKF 173157 and 'Kewalbansingweg 7, Paramaribo Suriname — South America'. PaymentPlans customRows use stable _rid keys correctly (verified in code lines 212, 322-323, 338). Kiosk /kiosk/huurder requires ?c=<company-slug> to render tap-zone — verified /kiosk/huurder?c=surirent&nfc=7755 auto-logs in as Rayshree within ~3-4s.",
+  "rca_of_the_issue": "n/a — pure regression sanity pass; nothing broke."
+}

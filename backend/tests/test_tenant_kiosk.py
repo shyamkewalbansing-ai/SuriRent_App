@@ -20,7 +20,7 @@ assert BASE_URL, "REACT_APP_BACKEND_URL is required"
 API = f"{BASE_URL}/api"
 
 ADMIN_EMAIL = "admin@vastgoed.sr"
-ADMIN_PASSWORD = "admin123"
+ADMIN_PASSWORD = os.environ.get("TEST_ADMIN_PASSWORD", "admin123")
 TEST_PIN = "5678"
 TEST_PIN_B = "5679"  # different so we can spot which tenant is logged in
 

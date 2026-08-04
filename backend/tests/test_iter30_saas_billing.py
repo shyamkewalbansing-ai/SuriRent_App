@@ -15,8 +15,10 @@ import pytest
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://vastgoed-app.preview.emergentagent.com").rstrip("/")
 
-SUPERADMIN = {"email": "super@surirent.sr", "password": "super123"}
-ADMIN = {"email": "admin@vastgoed.sr", "password": "admin123"}
+from conftest import SUPER_EMAIL, SUPER_PASSWORD, ADMIN_EMAIL, ADMIN_PASSWORD
+
+SUPERADMIN = {"email": SUPER_EMAIL, "password": SUPER_PASSWORD}
+ADMIN = {"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD}
 
 
 @pytest.fixture(scope="module")

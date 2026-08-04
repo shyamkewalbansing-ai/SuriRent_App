@@ -195,11 +195,12 @@ function CreatePlanSheet({ onClose, onCreated }) {
     finally { setBusy(false); }
   };
 
-  // Custom rows initialiseren bij switch + bij totaal/freq verandering opnieuw genereren
+  // Custom rows initialiseren bij switch + bij totaal/freq verandering opnieuw genereren.
+  // Elke row krijgt een stabiel _rid zodat React keys niet met index werken —
+  // voorkomt input-focus verlies of foute waarden na toevoegen/verwijderen.
   useEffect(() => {
     if (!customMode) return;
     if (customRows.length === 0) {
-      // Genereer initiele rows op basis van num+start+monthly
       const rows = [];
       const start = new Date(startDate);
       const per = totalFromInvoices > 0 ? Math.round((totalFromInvoices / numInstallments) * 100) / 100 : 0;
@@ -208,7 +209,7 @@ function CreatePlanSheet({ onClose, onCreated }) {
         const d = new Date(start.getFullYear(), start.getMonth() + i, start.getDate());
         const amt = i === numInstallments - 1 ? Math.round((totalFromInvoices - running) * 100) / 100 : per;
         running += per;
-        rows.push({ due_date: d.toISOString().slice(0, 10), amount: amt });
+        rows.push({ _rid: `row-${Date.now()}-${i}`, due_date: d.toISOString().slice(0, 10), amount: amt });
       }
       setCustomRows(rows);
     }
@@ -319,7 +320,7 @@ function CreatePlanSheet({ onClose, onCreated }) {
                 <label className="block text-[11px] font-black uppercase tracking-widest text-slate-500 mb-1">Termijnen (datum + bedrag)</label>
                 <div className="space-y-1.5 max-h-56 overflow-y-auto">
                   {customRows.map((r, i) => (
-                    <div key={i} className="flex items-center gap-2" data-testid={`plan-custom-row-${i}`}>
+                    <div key={r._rid || `row-${i}`} className="flex items-center gap-2" data-testid={`plan-custom-row-${i}`}>
                       <span className="w-7 h-7 rounded-full bg-slate-100 text-slate-700 flex items-center justify-center text-xs font-black shrink-0">{i + 1}</span>
                       <input type="date" value={r.due_date}
                         onChange={(e) => { const next = [...customRows]; next[i] = { ...next[i], due_date: e.target.value }; setCustomRows(next); }}
@@ -334,7 +335,7 @@ function CreatePlanSheet({ onClose, onCreated }) {
                     </div>
                   ))}
                   <button type="button"
-                    onClick={() => setCustomRows([...customRows, { due_date: startDate, amount: 0 }])}
+                    onClick={() => setCustomRows([...customRows, { _rid: `row-${Date.now()}-${customRows.length}`, due_date: startDate, amount: 0 }])}
                     className="w-full mt-1 py-2 border-2 border-dashed border-slate-200 hover:border-orange-300 hover:bg-orange-50 rounded-lg text-xs font-bold text-slate-500">
                     + Termijn toevoegen
                   </button>

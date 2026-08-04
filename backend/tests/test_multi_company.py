@@ -20,9 +20,11 @@ import requests
 BASE = os.environ.get("REACT_APP_BACKEND_URL", "https://vastgoed-app.preview.emergentagent.com").rstrip("/")
 API = f"{BASE}/api"
 
-SUPER = {"email": "super@surirent.sr", "password": "super123"}
-ADMIN_A = {"email": "admin@vastgoed.sr", "password": "admin123"}
-ADMIN_B = {"email": "adminb@test.sr", "password": "adminb123"}
+from conftest import ADMIN_EMAIL, ADMIN_PASSWORD, ADMIN_B_EMAIL, ADMIN_B_PASSWORD, SUPER_EMAIL, SUPER_PASSWORD, KIOSK_PIN
+
+SUPER = {"email": SUPER_EMAIL, "password": SUPER_PASSWORD}
+ADMIN_A = {"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD}
+ADMIN_B = {"email": ADMIN_B_EMAIL, "password": ADMIN_B_PASSWORD}
 
 
 # ---------- helpers ----------

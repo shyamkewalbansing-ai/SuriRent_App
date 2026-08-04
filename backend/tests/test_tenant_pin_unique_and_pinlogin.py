@@ -21,12 +21,10 @@ BASE_URL = (os.environ.get("REACT_APP_BACKEND_URL") or "").rstrip("/")
 assert BASE_URL, "REACT_APP_BACKEND_URL is required"
 API = f"{BASE_URL}/api"
 
-ADMIN_A_EMAIL = "admin@vastgoed.sr"
-ADMIN_A_PASSWORD = "admin123"
-ADMIN_B_EMAIL = "adminb@test.sr"
-ADMIN_B_PASSWORD = "adminb123"
-SUPER_EMAIL = "super@surirent.sr"
-SUPER_PASSWORD = "super123"
+from conftest import ADMIN_EMAIL, ADMIN_PASSWORD, ADMIN_B_EMAIL, ADMIN_B_PASSWORD, SUPER_EMAIL, SUPER_PASSWORD
+
+ADMIN_A_EMAIL = ADMIN_EMAIL
+ADMIN_A_PASSWORD = ADMIN_PASSWORD
 
 COMPANY_A_SLUG = "surirent"
 
