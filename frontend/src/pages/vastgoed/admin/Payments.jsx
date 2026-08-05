@@ -1044,21 +1044,8 @@ export default function Payments() {
         </button>
       </div>
 
-      {/* DESKTOP KPI CARDS */}
-      <div className="hidden md:flex bg-white rounded-2xl border border-orange-100 divide-x divide-orange-100 overflow-hidden shadow-sm">
-        <KpiCard icon={Wallet} label="Vandaag"
-          value={`${currency} ${fmtAmount(todaySum, currency)}`}
-          hint={`${todayItems.length} betaling${todayItems.length !== 1 ? 'en' : ''}`}
-          tone="green" testid="kpi-today" />
-        <KpiCard icon={TrendingUp} label="Deze maand"
-          value={`${currency} ${fmtAmount(monthSum, currency)}`}
-          hint={`${monthItems.length} betaling${monthItems.length !== 1 ? 'en' : ''}`}
-          tone="blue" testid="kpi-month" />
-        <KpiCard icon={Receipt} label="Totaal ontvangen"
-          value={`${currency} ${fmtAmount(totalAmount, currency)}`}
-          hint={`gemiddeld ${fmtAmount(avgPerPayment, currency)}/betaling`}
-          tone="orange" testid="kpi-total" />
-      </div>
+      {/* KPI-kaarten op desktop bewust verwijderd op verzoek — pagina blijft
+          strak. Mobile houdt zijn "Vandaag" mini-card wel (verderop). */}
 
       {/* PENDING APPROVAL — desktop variant. Tonen vóór de approved-lijst
           zodat beheerder direct ziet wat z'n medewerkers indienen. */}
