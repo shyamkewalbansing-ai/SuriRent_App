@@ -1026,26 +1026,26 @@ export default function Payments() {
           TABLET + DESKTOP (>=768px) — ongewijzigde layout.
           ================================================================= */}
       <div className="hidden md:block space-y-4 sm:space-y-5">
-      {/* HEADER + Mobile KPI */}
-      <div className="flex items-start justify-between gap-3">
+      {/* HEADER — compact layout matching Betalingsregelingen: titel +
+          subtitle + primaire knop op dezelfde rij. Vroeger stond er een
+          3xl-4xl titel + de knop op een aparte rij, wat "gedrongen"
+          aanvoelde. Nu is het rustiger en consistent met de rest van de
+          admin-app. */}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="min-w-0">
-          <h1 className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight">Betalingen</h1>
-          <p className="text-sm text-slate-500 mt-1">
-            <span className="md:hidden">{items.length} kwitanties</span>
-            <span className="hidden md:inline">{items.length} kwitanties geregistreerd</span>
+          <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">Betalingen</h1>
+          <p className="text-sm text-slate-500 mt-0.5">
+            {items.length} kwitantie{items.length === 1 ? '' : 's'} geregistreerd — beoordeel pending en registreer nieuwe betalingen.
           </p>
         </div>
-        <div className="md:hidden bg-white rounded-2xl border border-orange-100 px-4 py-3 shadow-sm shrink-0 max-w-[60%]" data-testid="kpi-mobile-card">
-          <p className="text-[11px] font-semibold text-slate-500 mb-0.5">Vandaag</p>
-          <p className="text-base font-black text-slate-900 tracking-tight whitespace-nowrap">
-            {currency} <span className="text-slate-900">{fmtAmount(todaySum, currency)}</span>
-          </p>
-          <p className="text-[10px] text-slate-400 mt-0.5">{todayItems.length} betaling{todayItems.length !== 1 ? 'en' : ''}</p>
-        </div>
+        <button onClick={() => setCreating(true)} data-testid="payment-new-btn"
+          className="inline-flex items-center justify-center gap-2 px-5 py-3 bg-[#FF5C00] hover:bg-[#E05200] text-white font-bold rounded-2xl text-sm shadow-[0_10px_25px_-5px_rgba(255,92,0,0.5)]">
+          <Plus className="w-4 h-4" /> Nieuwe betaling
+        </button>
       </div>
 
       {/* DESKTOP KPI CARDS */}
-      <div className="hidden md:flex bg-white rounded-2xl border border-orange-100 divide-x divide-orange-100 overflow-hidden">
+      <div className="hidden md:flex bg-white rounded-2xl border border-orange-100 divide-x divide-orange-100 overflow-hidden shadow-sm">
         <KpiCard icon={Wallet} label="Vandaag"
           value={`${currency} ${fmtAmount(todaySum, currency)}`}
           hint={`${todayItems.length} betaling${todayItems.length !== 1 ? 'en' : ''}`}
@@ -1058,14 +1058,6 @@ export default function Payments() {
           value={`${currency} ${fmtAmount(totalAmount, currency)}`}
           hint={`gemiddeld ${fmtAmount(avgPerPayment, currency)}/betaling`}
           tone="orange" testid="kpi-total" />
-      </div>
-
-      {/* ACTION */}
-      <div>
-        <button onClick={() => setCreating(true)} data-testid="payment-new-btn"
-          className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 sm:py-3.5 bg-[#FF5C00] hover:bg-[#E05200] text-white font-bold rounded-2xl text-sm sm:text-base shadow-[0_10px_25px_-5px_rgba(255,92,0,0.5)]">
-          <Plus className="w-4 h-4 sm:w-5 sm:h-5" /> Nieuwe betaling
-        </button>
       </div>
 
       {/* PENDING APPROVAL — desktop variant. Tonen vóór de approved-lijst
