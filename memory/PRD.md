@@ -1,5 +1,43 @@
 # Vastgoed Kiosk — PRD
 
+## Session 2026-02-08 (deel 2) — Invoices refactor + betalingsgeschiedenis ✅
+
+### Wat is gebouwd
+- **`Invoices.jsx` opgesplitst** — Van 1665 regels in één file naar 390 regels main-orchestrator + 8 focused modules onder `/app/frontend/src/pages/vastgoed/admin/invoices/`:
+  - `helpers.js` (110) — `UNPAID`, `isUnpaid`, `groupByTenant`, `fmtAmount`, `fmtAmountWhole`, `initials`, `avatarColor`
+  - `kpi.jsx` (110) — `Tab`, `MobileFilterPill`, `KpiCard`, `FilterMenu`, `Toast`, `AlertCircleDollar`
+  - `InvoiceRow.jsx` (179) — `StatusPill`, `InvoiceRow`, `MobileInvoiceLine`
+  - `TenantRow.jsx` (420) — `TenantRow`, `MobileTenantCard`, `MobileTenantExpand`
+  - `PaidHistorySection.jsx` (184) — NIEUW herbruikbaar component
+  - `InvoiceForm.jsx` (78) — factuur-aanmaakmodal
+  - `ReminderModal.jsx` (80) — herinneringsmodal
+  - `InvoiceDetailPage.jsx` (116) — dedicated desktop detail-pagina
+- **Dead code verwijderd** — Onbereikbare `BulkWhatsAppModal` component en bijbehorende `bulkOpen` state weggehaald.
+
+### Betalingsgeschiedenis verbetering (P2)
+- Nieuwe `PaidHistorySection` component toont:
+  - Sortering nieuwste maand eerst
+  - Groepering per jaar met sub-totaal
+  - Betaaldatum (`paid_at`) inline
+  - Betaalmethode badge (contant / bank / kaart) op tablet+
+  - Ontvangstnummer op desktop, factuurnummer op XL
+  - PDF-download knop per regel
+  - "Toon alle X betaalde maanden" collapsible (default: 12 zichtbaar)
+- Zichtbaar in:
+  - Detail-pagina van álle huurders (op-tijd én achterstallig) — vervangt oude "Betaalde facturen"-sectie
+  - Uitklap van een achterstallige huurder (inline variant) — nieuwe context voor herinnerings-workflow
+  - Uitklap van een op-tijd huurder in de lijst (was al aanwezig, nu verrijkt)
+
+### Verified via screenshot smoke-test (demo-account)
+- Facturen-lijst rendert 3 huurders correct ✅
+- Roy van der Berg (partial 4000/7000) → detail toont Openstaande facturen · SRD 3.000,00 ✅
+- Marlies Sewdien (2 betaalde maanden) → detail toont Betalingsgeschiedenis met datum + PDF per regel, gegroepeerd onder "2026" ✅
+- Lint schoon in alle nieuwe modules ✅
+
+---
+
+
+
 ## Session 2026-02-08 — Bugfix: partial invoices tonen als "Volledig betaald" ✅
 
 ### Probleem (P0)
