@@ -6679,7 +6679,75 @@ async def _apply_payment_to_invoice(invoice_id: str, amount: float,
         update["status"] = "partial"
     await db.invoices.update_one({"id": invoice_id}, {"$set": update})
     inv.update(update)
+    # Sync eventueel gekoppelde betalingsregelingen (FIFO installments) met
+    # de nieuwe paid_amount. Idempotent — kan meerdere keren aangeroepen worden
+    # zonder installments dubbel te markeren.
+    try:
+        await _sync_plan_installments_with_invoice(invoice_id)
+    except Exception as e:  # noqa: BLE001
+        print(f"[invoice.apply] plan-sync failed for {invoice_id}: {e}")
     return inv
+
+
+async def _sync_plan_installments_with_invoice(invoice_id: str) -> None:
+    """Houdt de installments van betalingsregelingen die aan deze factuur zijn
+    gekoppeld in sync met `invoice.paid_amount`. Wordt na elke `paid_amount`
+    mutatie aangeroepen (huur-betaling, credit-verrekening, overflow).
+
+    Logica per plan:
+      1. Bereken hoeveel van de invoice.paid_amount aan HET PLAN toebedeeld is.
+         Als de factuur 7000 kost en het plan dekt de laatste 3000, dan telt
+         alles boven de eerste 4000 (= invoice_amount - plan_total) als
+         plan-betaling. `plan_paid = max(0, invoice.paid_amount - non_plan)`
+      2. Loop door installments FIFO (op sequence). Cumulatief tellen zolang
+         cumulatief <= plan_paid: alle pending-installments in dat bereik →
+         status="paid". `pending_payment` (kiosk-in-flight) blijft ongemoeid.
+      3. Herbereken `plan.paid_installments`. Zet `plan.status="completed"`
+         wanneer alle termijnen betaald zijn."""
+    plans = await db.payment_plans.find(
+        {"invoice_ids": invoice_id, "status": {"$ne": "completed"}},
+        {"_id": 0},
+    ).to_list(100)
+    if not plans:
+        return
+    inv = await db.invoices.find_one(
+        {"id": invoice_id}, {"_id": 0, "amount": 1, "paid_amount": 1},
+    ) or {}
+    inv_paid = float(inv.get("paid_amount") or 0)
+    inv_amt = float(inv.get("amount") or 0)
+    for plan in plans:
+        plan_total = float(plan.get("total_amount") or 0)
+        # Het deel van de factuur dat BUITEN de regeling viel (bijv. eerste
+        # 4000 van een 7000-factuur waar de laatste 3000 in een plan zit).
+        non_plan = max(0.0, inv_amt - plan_total)
+        plan_paid = max(0.0, inv_paid - non_plan)
+
+        installments = await db.payment_plan_installments.find(
+            {"plan_id": plan["id"]}, {"_id": 0},
+        ).sort("sequence", 1).to_list(500)
+        cumulative = 0.0
+        for inst in installments:
+            amt = float(inst.get("amount") or 0)
+            cumulative += amt
+            # Alleen 'pending' installments auto-markeren. 'pending_payment'
+            # (kiosk approve in-flight) laten we met rust; kiosk approve-flow
+            # zet die naar 'paid' bij goedkeuring.
+            if cumulative <= plan_paid + 0.01 and inst.get("status") == "pending":
+                await db.payment_plan_installments.update_one(
+                    {"id": inst["id"]},
+                    {"$set": {"status": "paid", "paid_at": iso(now_utc()),
+                              "paid_from_invoice_sync": True}},
+                )
+        # Herbereken plan-teller en eventueel completion
+        paid_count = await db.payment_plan_installments.count_documents(
+            {"plan_id": plan["id"], "status": "paid"},
+        )
+        total_count = len(installments) or int(plan.get("num_installments") or 0)
+        update: dict = {"paid_installments": paid_count}
+        if total_count > 0 and paid_count >= total_count:
+            update["status"] = "completed"
+            update["completed_at"] = iso(now_utc())
+        await db.payment_plans.update_one({"id": plan["id"]}, {"$set": update})
 
 
 async def _allocate_payment_to_invoices(

@@ -1,5 +1,34 @@
 # Vastgoed Kiosk — PRD
 
+## Session 2026-02-08 (deel 8) — Betalingsregeling sync bij invoice-updates ✅
+
+### Gemelde probleem
+Wanneer krediet verrekend werd tegen een factuur die aan een actieve betalingsregeling was gekoppeld, werd de invoice wel bijgewerkt (paid_amount ↑, remaining ↓) maar de betalingsregeling bleef ongewijzigd (installments allemaal 'pending', "SRD 3.000 resterend"). Symptoom: Facturen zei 1000 open, Betalingsregelingen bleef 3000 open tonen.
+
+### Root cause
+`_apply_payment_to_invoice` — de centrale helper die na ELKE betaling/krediet-verrekening `invoice.paid_amount` bijwerkt — synchroniseerde niet met de gekoppelde `payment_plan_installments`. Alleen de kiosk-approve flow markeerde expliciet één installment als paid (via `metadata.installment_seq`); alle andere flows (admin quick-pay, credit-verrekening, overflow) lieten het plan achter.
+
+### Fix
+Nieuwe helper `_sync_plan_installments_with_invoice(invoice_id)` toegevoegd in `server.py`:
+1. Zoekt alle actieve plans die `invoice_ids` bevatten met deze factuur.
+2. Berekent `plan_paid = max(0, invoice.paid_amount - (invoice.amount - plan.total_amount))` — d.w.z. hoeveel van de betaling toebedeeld is aan HET PLAN (los van niet-plan factuurdeel).
+3. Loopt installments FIFO op sequence; markeert elke pending-installment als `paid` zolang cumulatief ≤ plan_paid. `pending_payment` (kiosk in-flight) wordt overgeslagen — kiosk-approve handelt die apart af.
+4. Update `plan.paid_installments` teller; markeert plan als `completed` wanneer alle installments betaald.
+
+Aanroep toegevoegd aan het einde van `_apply_payment_to_invoice` — idempotent, kan meerdere keren aangeroepen worden zonder dubbelen. Dekt automatisch: admin quick-pay, credit-verrekening (`apply-credit`), overflow-spread, generate-month + credit.
+
+### Verified end-to-end (Roy scenario)
+- Setup: Roy heeft plan met 2 × 1500 = 3000 open + 2000 SRD krediet + aug partial (4000/7000)
+- POST `/api/invoices/{id}/apply-credit` → applied 2000 ✅
+- Facturen: aug partial 6000/7000, remaining 1000 ✅
+- Betalingsregelingen (screenshot): "SRD 1.500,00 / SRD 3.000,00" · progressbar 50% · resterend SRD 1.500 ✅ (was 3000)
+- Installments in DB: #1 (1500) = paid, #2 (1500) = pending ✅
+- Test-data opgeschoond ✅
+
+---
+
+
+
 ## Session 2026-02-08 (deel 7) — Krediet-bron popover ✅
 
 ### Wat is gebouwd
