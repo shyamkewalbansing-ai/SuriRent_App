@@ -9382,6 +9382,26 @@ async def _generate_month_invoices_for_company(
     }
 
 
+@api.post("/invoices/generate-month")
+async def generate_month_invoices(body: dict, user=Depends(get_current_user)):
+    """Genereer maandfacturen voor alle bezette appartementen in het bedrijf
+    van de ingelogde admin. Body: {period_month: 1-12, period_year: 4-digit}.
+    Idempotent — bestaande facturen voor dezelfde huurder+periode worden
+    overgeslagen. Returnt {created, skipped, credit_applied}."""
+    cid = company_id_of(user)
+    if not cid:
+        raise HTTPException(status_code=400, detail="Geen bedrijfscontext")
+    try:
+        pm = int(body.get("period_month") or 0)
+        py = int(body.get("period_year") or 0)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="period_month/period_year vereist")
+    if not (1 <= pm <= 12) or py < 2000:
+        raise HTTPException(status_code=400, detail="Ongeldige periode")
+    res = await _generate_month_invoices_for_company(cid, pm, py)
+    return res
+
+
 async def _auto_invoice_tick():
     """Eén keer per dag uitgevoerde achtergrond-taak.
     Voor elk bedrijf met `invoicing.auto_generate=true`:

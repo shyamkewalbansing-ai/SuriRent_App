@@ -1437,30 +1437,26 @@ export default function Invoices() {
           TABLET + DESKTOP (>= md) — bestaande layout ongewijzigd.
           ================================================================= */}
       <div className="hidden md:block space-y-4 sm:space-y-5">
-      {/* HEADER — mobile shows compact KPI right of title */}
-      <div className="flex items-start justify-between gap-3">
+      {/* HEADER — compact layout matching Betalingsregelingen: titel +
+          knoppen op dezelfde rij. */}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="min-w-0">
-          <h1 className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight">Facturen</h1>
-          <p className="text-sm text-slate-500 mt-1">
-            <span className="md:hidden">{items.length} {items.length === 1 ? 'factuur' : 'facturen'}</span>
-            <span className="hidden md:inline">
-              {allCount} huurder{allCount !== 1 ? 's' : ''}
-              {openCount > 0 && <> · <span className="text-red-500 font-bold">{openCount} openstaand</span></>}
-            </span>
+          <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">Facturen</h1>
+          <p className="text-sm text-slate-500 mt-0.5">
+            {allCount} huurder{allCount !== 1 ? 's' : ''}
+            {openCount > 0 && <> · <span className="text-red-500 font-bold">{openCount} met achterstand</span></>}
           </p>
         </div>
-        {/* Mobile-only compact KPI card */}
-        <div className="md:hidden bg-white rounded-2xl border border-orange-100 px-4 py-3 shadow-sm shrink-0 max-w-[60%]" data-testid="kpi-mobile-card">
-          <div className="flex items-center justify-between gap-2 mb-0.5">
-            <p className="text-[11px] font-semibold text-slate-500">Openstaand totaal</p>
-            <Info className="w-3.5 h-3.5 text-slate-300" />
-          </div>
-          <p className="text-base font-black text-slate-900 tracking-tight whitespace-nowrap">
-            {totalOpenCurrency} <span className="text-red-500">{fmtAmount(totalOpenAmount, totalOpenCurrency)}</span>
-          </p>
-          <p className="text-[10px] text-slate-400 mt-0.5">
-            {allCount} huurder{allCount !== 1 ? 's' : ''} · {totalOpenMonths} maand{totalOpenMonths !== 1 ? 'en' : ''} open
-          </p>
+        <div className="flex items-center gap-2">
+          <button onClick={generateMonth} disabled={generating} data-testid="invoice-generate-btn"
+            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-white border-2 border-orange-200 hover:border-[#FF5C00] text-[#FF5C00] font-bold rounded-xl text-sm">
+            {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
+            Genereer maand
+          </button>
+          <button onClick={() => setCreating(true)} data-testid="invoice-new-btn"
+            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-[#FF5C00] hover:bg-[#E05200] text-white font-bold rounded-xl text-sm shadow-[0_10px_25px_-5px_rgba(255,92,0,0.5)]">
+            <Plus className="w-4 h-4" /> Nieuwe factuur
+          </button>
         </div>
       </div>
 
@@ -1479,18 +1475,8 @@ export default function Invoices() {
           tone="green" testid="kpi-this-month" />
       </div>
 
-      {/* ACTION BUTTONS */}
-      <div className="grid grid-cols-2 gap-2 sm:gap-3">
-        <button onClick={generateMonth} disabled={generating} data-testid="invoice-generate-btn"
-          className="inline-flex items-center justify-center gap-2 px-4 py-3 sm:py-3.5 bg-white border-2 border-orange-200 hover:border-[#FF5C00] text-[#FF5C00] font-bold rounded-2xl text-sm sm:text-base">
-          {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4 sm:w-5 sm:h-5" />}
-          Genereer maand
-        </button>
-        <button onClick={() => setCreating(true)} data-testid="invoice-new-btn"
-          className="inline-flex items-center justify-center gap-2 px-4 py-3 sm:py-3.5 bg-[#FF5C00] hover:bg-[#E05200] text-white font-bold rounded-2xl text-sm sm:text-base shadow-[0_10px_25px_-5px_rgba(255,92,0,0.5)]">
-          <Plus className="w-4 h-4 sm:w-5 sm:h-5" /> Nieuwe factuur
-        </button>
-      </div>
+      {/* Actie-knoppen zijn verhuisd naar de header — zelfde stijl als in
+          Betalingsregelingen (titel + primaire acties op één rij). */}
 
       {/* TAB BAR */}
       <div className="bg-white rounded-2xl border border-orange-100 px-2 sm:px-3 py-2 flex items-center gap-1 sm:gap-2" data-testid="invoice-tabs">

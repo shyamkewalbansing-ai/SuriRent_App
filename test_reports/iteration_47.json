@@ -1,0 +1,21 @@
+{
+  "summary": "Verified Facturen 'Genereer maand' bug + UX fix. Backend endpoint POST /api/invoices/generate-month works (200 with {created,skipped,credit_applied}, 401 no-auth, 400 invalid period, idempotent on 2nd call). Frontend header now has title (h1 text-3xl / 30px) + subtitle on left and BOTH buttons (Genereer maand outline, Nieuwe factuur solid) on right of same row on desktop (1920x900). Click Genereer maand -> confirm -> XHR 200, NO 'Method Not Allowed'. Nieuwe factuur opens creation modal. Mobile view unchanged. Sub-tabs (Alle/Achterstand/Betaald) still work, KPI cards still render.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_generate_month.py",
+    "/app/test_reports/pytest/generate_month.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py has a DEAD/duplicate function `generate_month_invoices(body: GenerateMonthIn, ...)` at line 9225 with NO @api.post decorator, and a second `generate_month_invoices(body: dict, ...)` at line 9385 which is the actual route. The first one references model `GenerateMonthIn` and is unreachable dead code — recommend deleting lines 9224-9232 (or wiring properly with a decorator). Both share the same function name which is confusing and only works because Python keeps the last definition.",
+    "The active endpoint at line 9385 accepts `body: dict` instead of using the existing Pydantic model `GenerateMonthIn` — inconsistent with rest of codebase and skips schema-level validation."
+  ],
+  "updated_files": ["/app/backend/tests/test_generate_month.py"],
+  "success_rate": {"backend": "100% (5/5)", "frontend": "100%"},
+  "test_credentials": "admin@vastgoed.sr / admin123 (slug: surirent)",
+  "seed_data_creation": "None (endpoint is idempotent; ran against existing seeded huurders)",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Facturen tab is a data-testid=tab-invoices click on /surirent/admin (not a route /surirent/facturen). generate-month endpoint is fully functional."
+}
