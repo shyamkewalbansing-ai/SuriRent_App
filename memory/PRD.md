@@ -1,5 +1,45 @@
 # Vastgoed Kiosk — PRD
 
+## Session 2026-02-08 (deel 13) — Slug handmatig bij registratie ✅
+
+### Gewijzigd (op verzoek)
+Slug (portal-URL) werd voorheen automatisch afgeleid uit de bedrijfsnaam en bij conflict auto-gesuffixeerd. Nu moet de gebruiker de slug expliciet zelf invullen.
+
+### Backend (`server.py`)
+- **`RegisterIn`** model uitgebreid met optioneel `slug: str` (min 2, max 40).
+- **`/api/auth/register`** endpoint valideert nu:
+  - Slug is verplicht wanneer `company_name` is gegeven (400 bij ontbreken)
+  - Format check via regex `^[a-z0-9][a-z0-9-]*[a-z0-9]$` (409 bij format)
+  - Gereserveerde slugs (`admin`, `login`, etc.) worden nu 409 in plaats van auto-gesuffixeerd
+  - Al bestaande slugs geven 409 (in plaats van auto-suffix `-2`, `-3`, ...)
+- Auto-suffix loop verwijderd — gebruiker kiest zelf een unieke slug.
+
+### Frontend (`RegisterModal.jsx`)
+- Nieuw state: `slug`, `slugTouched`
+- Nieuw input veld "PORTAL-URL (SLUG) *" onder Bedrijfsnaam, met:
+  - Prefix badge `vastgoed-app.preview.emergentagent.com/` (readonly host)
+  - Auto-suggestie op basis van bedrijfsnaam zolang veld niet aangeraakt
+  - Bij focus/typen: `slugTouched=true` → gebruikersinvoer neemt over
+  - Live sanitize (lowercase + `[^a-z0-9-]` → `-` + max 40)
+  - Availability badge onder het veld: `✓ VRIJ` / `✗ BEZET` / `✗ GERESERVEERD` / `✗ FORMAT`
+- Submit blokkeert bij leeg / taken / reserved / format met NL-vriendelijke error
+- `slug` wordt meegestuurd in POST `/api/auth/register` body
+
+### Verified via curl E2E (4 tests, alle geslaagd)
+- Zonder slug → 400 "Slug (portal-URL) is verplicht" ✅
+- Met valide slug → 200, company aangemaakt ✅
+- Dubbele slug → 409 "Slug 'X' is al in gebruik" ✅
+- Gereserveerde slug ('admin') → 409 "gereserveerd" ✅
+
+### Verified via screenshot
+- Registration modal toont nu apart "Portal-URL (slug)" veld met live suggestie
+- Availability groene "✓ VRIJ" badge zichtbaar bij valide keuze
+- Host-preview correct: `vastgoed-app.preview.emergentagent.com/{slug}`
+
+---
+
+
+
 ## Session 2026-02-08 (deel 12) — Overzicht "Kas saldo" widget bugfix ✅
 
 ### Gemelde probleem

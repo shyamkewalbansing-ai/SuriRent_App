@@ -285,6 +285,11 @@ class RegisterIn(BaseModel):
     email: EmailStr
     password: str = Field(min_length=6)
     company_name: Optional[str] = None  # If set, creates a new company with this user as admin
+    # Slug (portal-URL) — moet expliciet worden opgegeven door de gebruiker.
+    # Valideerd: 2-40 chars, kleine letters + cijfers + koppelteken. Auto-uniek
+    # suffix (bijv. `-2`) wordt NIET meer toegepast — de gebruiker moet zelf
+    # een vrije slug kiezen (409 conflict wanneer bezet).
+    slug: Optional[str] = Field(default=None, min_length=2, max_length=40)
     telefoon: Optional[str] = ""
     address: Optional[str] = ""
     plan: Optional[Literal["starter", "professional"]] = "starter"
@@ -967,16 +972,33 @@ async def register(body: RegisterIn, response: Response):
 
     # Self-serve onboarding: when company_name is provided, create a new tenant.
     if (body.company_name or "").strip():
-        base_slug = _slugify(body.company_name)
-        # Gereserveerde slugs auto-bypassen door direct te suffixen (registratie
-        # mag nooit falen op een randgeval — superadmin kan later wel renamen).
-        if base_slug in RESERVED_SLUGS:
-            base_slug = f"{base_slug}-bedrijf"
-        slug = base_slug
-        i = 2
-        while await db.companies.find_one({"slug": slug}, {"_id": 1}):
-            slug = f"{base_slug}-{i}"
-            i += 1
+        # Slug moet expliciet worden opgegeven — geen auto-generatie meer op
+        # basis van bedrijfsnaam. Frontend valideert al maar backend valideert
+        # opnieuw zodat een direct-API-call niet omzeild kan worden.
+        raw_slug = (body.slug or "").strip().lower()
+        if not raw_slug:
+            raise HTTPException(
+                status_code=400,
+                detail="Slug (portal-URL) is verplicht — kies een unieke naam voor uw portal.",
+            )
+        # Normaliseer + valideer format
+        import re as _re
+        slug = _re.sub(r"[^a-z0-9-]+", "-", raw_slug).strip("-")
+        if not (2 <= len(slug) <= 40) or not _re.match(r"^[a-z0-9][a-z0-9-]*[a-z0-9]$", slug):
+            raise HTTPException(
+                status_code=400,
+                detail="Ongeldige slug — gebruik 2-40 tekens, alleen kleine letters, cijfers en koppelteken.",
+            )
+        if slug in RESERVED_SLUGS:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Slug '{slug}' is gereserveerd. Kies een andere naam.",
+            )
+        if await db.companies.find_one({"slug": slug}, {"_id": 1}):
+            raise HTTPException(
+                status_code=409,
+                detail=f"Slug '{slug}' is al in gebruik. Kies een andere naam.",
+            )
         now = now_utc()
         trial_end = now + timedelta(days=14)
         # Explicit country choice overrides phone-based detection

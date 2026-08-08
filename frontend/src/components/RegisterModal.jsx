@@ -30,6 +30,8 @@ export default function RegisterModal({ open, onClose }) {
 
   const [name, setName] = useState('');
   const [companyName, setCompanyName] = useState('');
+  const [slug, setSlug] = useState('');
+  const [slugTouched, setSlugTouched] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [telefoon, setTelefoon] = useState('');
@@ -67,16 +69,26 @@ export default function RegisterModal({ open, onClose }) {
     api.get('/billing/bank-details').then((r) => setBankDetails(r.data)).catch(() => setBankDetails(null));
   }, [open, planQuery]);
 
-  // Live slug preview + beschikbaarheidscheck
-  const portalPreview = useMemo(() => {
+  // Slug wordt handmatig ingevoerd. Wanneer de gebruiker het slug-veld nog
+  // NIET heeft aangeraakt, tonen we een suggestie op basis van de bedrijfsnaam
+  // — zodra hij het slug-veld zelf bewerkt (`slugTouched=true`) laten we die
+  // volledig met rust en gebruiken exact wat de gebruiker heeft ingetypt.
+  const slugSuggestion = useMemo(() => {
     const raw = (companyName || '').toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || '';
-    if (!raw) return { slug: '', host: '' };
-    const slug = RESERVED_SLUGS.has(raw) ? `${raw}-bedrijf` : raw;
+      .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
+    if (!raw) return '';
+    return RESERVED_SLUGS.has(raw) ? `${raw}-bedrijf` : raw;
+  }, [companyName]);
+
+  const effectiveSlug = (slugTouched ? slug : (slug || slugSuggestion))
+    .toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
+
+  const portalPreview = useMemo(() => {
+    if (!effectiveSlug) return { slug: '', host: '' };
     let host = '';
     try { host = (window.location.host || '').replace(/:.*$/, ''); } catch { /* ignore */ }
-    return { slug, host };
-  }, [companyName]);
+    return { slug: effectiveSlug, host };
+  }, [effectiveSlug]);
 
   const [slugStatus, setSlugStatus] = useState('idle');
   useEffect(() => {
@@ -97,6 +109,9 @@ export default function RegisterModal({ open, onClose }) {
   const submit = async (e) => {
     e?.preventDefault();
     if (!companyName.trim()) { setError('Vul de bedrijfsnaam in.'); return; }
+    if (!effectiveSlug) { setError('Kies een portal-URL (slug).'); return; }
+    if (slugStatus === 'taken') { setError(`Portal-URL '${effectiveSlug}' is al in gebruik. Kies een andere.`); return; }
+    if (slugStatus === 'format' || slugStatus === 'reserved') { setError('Ongeldige portal-URL — alleen letters, cijfers en koppelteken.'); return; }
     setLoading(true); setError('');
     try {
       const result = await register({
@@ -104,6 +119,7 @@ export default function RegisterModal({ open, onClose }) {
         email: email.trim(),
         password,
         company_name: companyName.trim(),
+        slug: effectiveSlug,
         telefoon: telefoon.trim(),
         address: address.trim(),
         plan,
@@ -273,18 +289,49 @@ export default function RegisterModal({ open, onClose }) {
                         required minLength={2}
                         placeholder="Demo Vastgoed N.V."
                         className="w-full h-10 text-sm px-3 rounded-lg border-2 border-slate-200 focus:border-[#FF5C00] focus:ring-2 focus:ring-[#FF5C00]/10 bg-[#F9FAFB] outline-none transition" />
-                      {portalPreview.slug && (() => {
-                        const errTone = slugStatus === 'taken' || slugStatus === 'format';
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                        Portal-URL (slug) *
+                        {!slugTouched && slugSuggestion && (
+                          <span className="ml-1.5 font-normal normal-case text-[9px] text-slate-400 tracking-normal">
+                            — voorstel: <span className="font-mono text-slate-500">{slugSuggestion}</span>
+                          </span>
+                        )}
+                      </label>
+                      <div className="flex items-stretch gap-0 rounded-lg border-2 border-slate-200 focus-within:border-[#FF5C00] focus-within:ring-2 focus-within:ring-[#FF5C00]/10 bg-[#F9FAFB] overflow-hidden">
+                        <span className="hidden sm:inline-flex items-center px-2 text-[10px] font-mono text-slate-400 bg-slate-100 border-r border-slate-200">
+                          {portalPreview.host || 'app.surirent.sr'}/
+                        </span>
+                        <input type="text" value={slugTouched ? slug : slugSuggestion}
+                          onChange={(e) => {
+                            setSlugTouched(true);
+                            setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]+/g, '-').slice(0, 40));
+                          }}
+                          onFocus={() => {
+                            // Bij eerste focus: kopieer suggestie zodat gebruiker vandaaruit kan aanpassen
+                            if (!slugTouched) { setSlug(slugSuggestion); setSlugTouched(true); }
+                          }}
+                          data-testid="register-modal-slug"
+                          required minLength={2}
+                          placeholder="uw-bedrijf-hier"
+                          className="flex-1 h-10 text-sm px-3 bg-transparent outline-none font-mono" />
+                      </div>
+                      {effectiveSlug && (() => {
+                        const errTone = slugStatus === 'taken' || slugStatus === 'format' || slugStatus === 'reserved';
                         const palette = errTone
                           ? 'bg-rose-50 border-rose-200 text-rose-700'
                           : 'bg-emerald-50 border-emerald-200 text-emerald-700';
                         return (
                           <div className={`mt-1 flex items-center gap-1.5 px-2 py-1 rounded-md border text-[10px] font-bold ${palette}`}>
                             <Globe className="w-3 h-3 shrink-0" />
-                            <span className="font-mono truncate flex-1">{portalPreview.host || 'app.surirent.sr'}/{portalPreview.slug}</span>
+                            <span className="font-mono truncate flex-1">{portalPreview.host || 'app.surirent.sr'}/{effectiveSlug}</span>
                             {slugStatus === 'checking' && <Loader2 className="w-3 h-3 animate-spin" />}
                             {slugStatus === 'available' && <span>✓ VRIJ</span>}
                             {slugStatus === 'taken' && <span>✗ BEZET</span>}
+                            {slugStatus === 'reserved' && <span>✗ GERESERVEERD</span>}
+                            {slugStatus === 'format' && <span>✗ FORMAT</span>}
                           </div>
                         );
                       })()}
