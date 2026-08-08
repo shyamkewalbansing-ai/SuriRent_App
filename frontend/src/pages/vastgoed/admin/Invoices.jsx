@@ -981,8 +981,9 @@ export default function Invoices() {
   const [tab, setTab] = useState('all');  // 'all' | 'open' | 'paid'
   const [filterSeverity, setFilterSeverity] = useState('all'); // all|critical|late|ok
   const [filterOpen, setFilterOpen] = useState(false);
-  const [expanded, setExpanded] = useState(null);  // single tenant_id of currently expanded row
+  const [expanded, setExpanded] = useState(null);  // single tenant_id of currently expanded row (LEGACY, alleen mobile)
   const [userToggled, setUserToggled] = useState(false); // gebruiker heeft handmatig een rij geopend/gesloten
+  const [detail, setDetail] = useState(null); // Volledige detail-pagina voor 1 huurder (desktop)
   const [toast, setToast] = useState(null);
   const today = new Date();
 
@@ -1106,6 +1107,32 @@ export default function Invoices() {
     setReminderChannel(channel);
     setReminding(group);
   };
+
+  // Detail-pagina voor 1 huurder — analoog aan PlanDetail in Betalingsregelingen.
+  // We hergebruiken TenantRow met `expanded={true}` en verbergen de outer
+  // toggle-chevron via een subtiele wrapper. Zo blijven alle bestaande
+  // features (per-maand chips, quick-pay, delete, herinnering) werken zonder
+  // duplicatie van markup.
+  if (detail) {
+    const g = filteredGroups.find((x) => x.tenant_id === detail.tenant_id) || detail;
+    return (
+      <div className="space-y-4 pb-24 sm:pb-6" data-testid={`invoice-detail-page-${g.tenant_id}`}>
+        <div className="flex items-center gap-2">
+          <button onClick={() => { setDetail(null); load({ silent: true }); }}
+            data-testid="invoice-detail-back"
+            className="flex items-center gap-1.5 text-slate-700 font-bold bg-white hover:bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm">
+            <ChevronRight className="w-4 h-4 rotate-180" /> Terug
+          </button>
+        </div>
+        {/* Hoofdcard hergebruikt TenantRow — expanded=true forceert het openklap-blok
+            met alle open + betaalde facturen. onToggle=noop voorkomt sluiten.
+            Klik-op-de-card doet niets meer op de detail-pagina. */}
+        <div className="[&_button:first-child]:pointer-events-none">
+          <TenantRow group={g} expanded onToggle={() => {}} onReminder={openReminder} tenants={tenants} />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div data-testid="invoices-page">
@@ -1437,8 +1464,8 @@ export default function Invoices() {
         <div className="space-y-2 sm:space-y-2.5">
           {filteredGroups.map((g) => (
             <TenantRow key={g.tenant_id} group={g}
-              expanded={expanded === g.tenant_id}
-              onToggle={() => toggleExpand(g.tenant_id)}
+              expanded={false}
+              onToggle={() => setDetail(g)}
               onReminder={openReminder}
               tenants={tenants} />
           ))}

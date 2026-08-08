@@ -1,0 +1,31 @@
+{
+  "summary": "Verified Facturen tenant-row → full-page detail UX (matches Betalingsregelingen PlanDetail pattern). Desktop 1920x900 login as admin@vastgoed.sr worked, navigated to /surirent/admin/invoices. All 6 acceptance criteria pass.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_results": {
+    "list_view_collapsed": "PASS — 3 tenant rows shown, no inline expand cluttering list",
+    "click_opens_detail_page": "PASS — data-testid=invoice-detail-page-<tenant_id> renders",
+    "terug_button_style": "PASS — class exactly matches spec: 'flex items-center gap-1.5 text-slate-700 font-bold bg-white hover:bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm', text 'Terug', chevron-left icon",
+    "expanded_content_visible": "PASS — Achterstallige huur (SRD 1.000), Openstaande huidige maand (SRD 8.500), invoice chips F2026-00035/00036, action buttons Twilio WA / E-mail / WhatsApp all rendered",
+    "terug_returns_to_list": "PASS — detail page unmounts, all 3 tenant rows repopulated",
+    "regression_new_invoice_generate_month_buttons": "PASS — both buttons present on list view",
+    "regression_mobile_inline_expand": "PASS — mobile (390px) still uses inline expand; detail page does NOT render on mobile click"
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Invoices.jsx is 1583 lines — should be split into smaller modules (TenantRow, InvoiceDetailPage, filters, KPIs) for maintainability.",
+    "Detail-page wrapper uses `[&_button:first-child]:pointer-events-none` — brittle CSS trick; a prop like `showToggle={false}` on TenantRow would be cleaner and avoid accidental breakage if TenantRow's first-child button changes."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A", "frontend": "100%"},
+  "test_credentials": "admin@vastgoed.sr / admin123 (slug: surirent)",
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Feature implemented at Invoices.jsx lines 986/1116-1135/1471. All acceptance criteria pass. If touching TenantRow, ensure the first-child pointer-events-none hack in the detail-wrapper still targets the correct outer toggle button."
+}
