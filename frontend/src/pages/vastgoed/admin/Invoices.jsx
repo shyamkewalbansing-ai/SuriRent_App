@@ -11,7 +11,10 @@ import { openWhatsApp } from '../../../lib/external-link';
 // =====================================================================
 // Helpers
 // =====================================================================
-const UNPAID = ['open', 'sent', 'pending', 'overdue'];
+// Een 'partial' factuur is deels betaald maar nog NIET volledig voldaan,
+// dus telt hij mee als openstaand in álle overzichten (KPI's, buckets,
+// herinneringen). Alleen `status === 'paid'` betekent volledig betaald.
+const UNPAID = ['open', 'sent', 'pending', 'overdue', 'partial'];
 const isUnpaid = (inv) => UNPAID.includes((inv.status || '').toLowerCase());
 
 const ORANGE = '#FF5C00';

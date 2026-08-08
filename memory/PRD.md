@@ -1,5 +1,27 @@
 # Vastgoed Kiosk — PRD
 
+## Session 2026-02-08 — Bugfix: partial invoices tonen als "Volledig betaald" ✅
+
+### Probleem (P0)
+User meldde: bij `Betalingen` staat er nog SRD 3.000 open (partial payment 4000 op factuur van 7000), maar bij `Facturen` toont de huurder als volledig betaald / niets open. DB was correct: `status: 'partial', paid_amount: 4000, amount: 7000` — pure frontend rendering bug.
+
+### Root cause
+`/app/frontend/src/pages/vastgoed/admin/Invoices.jsx` regel 14 — de `UNPAID`-lijst bevatte `['open','sent','pending','overdue']` maar niet `'partial'`. Facturen met status `partial` vielen daardoor uit `group.open`, waardoor `openCount === 0` werd, wat de UI interpreteerde als "alles betaald".
+
+### Fix
+- `UNPAID` uitgebreid met `'partial'`. Nu telt een deels betaalde factuur mee als openstaand in KPI's, buckets (overdue/current/future), herinneringen en detail-pagina.
+- `remaining_amount` (backend-berekend) wordt correct getoond in plaats van `amount` voor partial facturen — dit was al aanwezig maar bereikte de UI niet omdat de factuur niet in `open` zat.
+
+### Verified
+- Roy van der Berg (Demo Vastgoed N.V.) — factuur D2026-00106, `amount=7000`, `paid_amount=4000`:
+  - Facturen-lijst toont "Lopende maand open · SRD 3.000,00" ✅
+  - Detail-pagina toont "Totaal openstaand SRD 3.000,00" + badges LOPENDE MAAND + DEELS BETAALD ✅
+  - Bedrijfs-KPI "Totaal openstaand" telt de 3.000 correct mee ✅
+
+---
+
+
+
 ## Session 2026-02-06 (iter 38) — Admin sidebar opschoning + Instellingen-hub ✅
 
 ### Wat is gebouwd
