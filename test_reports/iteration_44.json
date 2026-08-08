@@ -1,0 +1,27 @@
+{
+  "summary": "Frontend visual parity test of PaymentDetail and DepositDetail vs reference PlanDetail. All three detail pages now use identical structure: 'Terug' pill with text + left arrow, hoofdcard with tenant name h1 + Appt subtitle + badges + right BETAALD/BORG label with amount, followed by sub-cards (Betaalgegevens/Borggegevens + optional Gekoppelde factuur + Acties). Tested login → Betalingsregelingen → PlanDetail → screenshot. Betalingen list (had to go back 2 months to find data) → PaymentDetail → verified all elements → Terug regression works. Borg → DepositDetail → verified structure → Terug returns to list. All Actie buttons present (PDF, Verstuur, Beveiligd, Verwijder for payments; PDF bewijs, Verwijder for deposits).",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/test_reports/plan_detail.png",
+    "/app/test_reports/payment_detail.png",
+    "/app/test_reports/deposit_detail.png"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Payments.jsx is 1290 lines - consider splitting PaymentDetail/PaymentForm/PendingApprovalModal into separate files for maintainability.",
+    "PaymentDetail fetches ALL invoices via GET /api/invoices just to find the linked one; consider a dedicated GET /api/invoices/{id} endpoint to avoid full-list fetch on each detail view."
+  ],
+  "updated_files": [],
+  "success_rate": { "backend": "N/A (frontend only)", "frontend": "100%" },
+  "test_credentials": "admin@vastgoed.sr / admin123 (slug: surirent)",
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "PaymentDetail and DepositDetail visually match PlanDetail with Terug pill (text 'Terug' + left arrow) + hoofdcard + sub-cards. Note: Payments list defaults to current month (August 2026, empty in seed). To open a payment detail, click prev-month chevron 2x to reach June 2026, then click a payment-row-* element. Only PaymentDetail with a linked invoice shows the 'Gekoppelde factuur' progress card; sample row tested did not have one.",
+  "rca of the issue": "N/A – no issues found."
+}

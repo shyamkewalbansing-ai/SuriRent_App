@@ -433,11 +433,27 @@ function PaymentRow({ p, onOpen }) {
 }
 
 // =====================================================================
-// PaymentDetail — full-page detail view met terug-knop (net als PlanDetail
-// in Betalingsregelingen). Vervangt de vroegere inline expand.
+// PaymentDetail — full-page detail EXACT in de stijl van PlanDetail:
+// grote "Terug"-pil, hoofdcard met naam + bedrag, sub-cards voor
+// betaalgegevens en gekoppelde factuur. Sub-card "Acties" onderaan.
 // =====================================================================
 function PaymentDetail({ payment, onBack, onEmail, onDelete, apiBase }) {
   const p = payment;
+  const [linkedInvoice, setLinkedInvoice] = useState(null);
+
+  useEffect(() => {
+    if (!p?.invoice_id) return;
+    let alive = true;
+    (async () => {
+      try {
+        const { data: allInvs } = await api.get('/invoices');
+        if (!alive) return;
+        setLinkedInvoice(allInvs.find((i) => i.id === p.invoice_id) || null);
+      } catch (e) { console.warn('[Payments] linked invoice fetch:', e); }
+    })();
+    return () => { alive = false; };
+  }, [p?.invoice_id]);
+
   const date = new Date(p.paid_at);
   const statusBadge = (() => {
     const s = p.status || 'approved';
@@ -445,57 +461,118 @@ function PaymentDetail({ payment, onBack, onEmail, onDelete, apiBase }) {
     if (s === 'rejected') return { l: 'Afgekeurd', cls: 'bg-red-100 text-red-700' };
     return { l: 'Ontvangen', cls: 'bg-emerald-100 text-emerald-700' };
   })();
+
   return (
     <div className="space-y-4 pb-24 sm:pb-6" data-testid={`payment-detail-page-${p.id}`}>
-      <div className="flex items-center gap-3">
+      {/* TERUG-PIL — zelfde stijl als in PlanDetail */}
+      <div className="flex items-center gap-2">
         <button onClick={onBack} data-testid="payment-detail-back"
-          className="w-10 h-10 rounded-xl bg-white hover:bg-slate-50 shadow-sm border border-slate-100 flex items-center justify-center transition">
-          <ChevronRight className="w-5 h-5 text-slate-600 rotate-180" />
+          className="flex items-center gap-1.5 text-slate-700 font-bold bg-white hover:bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm">
+          <ChevronRight className="w-4 h-4 rotate-180" /> Terug
         </button>
-        <div className="min-w-0">
-          <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight truncate">
-            {p.tenant_name || 'Betaling'}
-          </h1>
-          <p className="text-sm text-slate-500 mt-0.5">
-            <span className="font-mono font-bold">{p.receipt_number}</span>
-            <span> · {date.toLocaleString('nl-NL')}</span>
-          </p>
+      </div>
+
+      {/* HOOFDCARD — naam + subtitle links, bedrag + label rechts */}
+      <div className="bg-white rounded-2xl shadow-sm p-5 border border-slate-100">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="text-xl font-black text-slate-900 truncate">{p.tenant_name || 'Onbekende huurder'}</h1>
+            {p.apartment_number && (
+              <p className="text-xs text-slate-500">
+                {p.location_name ? `${p.location_name} · ` : ''}Appt. {p.apartment_number}
+              </p>
+            )}
+            {p.note && <p className="text-sm text-slate-600 mt-2">{p.note}</p>}
+            <div className="flex items-center gap-2 flex-wrap mt-3">
+              <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${statusBadge.cls}`}>{statusBadge.l}</span>
+              <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-orange-50 text-[#FF5C00]">
+                {CATEGORY_LABELS[p.category] || p.category}
+              </span>
+              <MethodPill method={p.method} />
+            </div>
+          </div>
+          <div className="text-right shrink-0">
+            <p className="text-xs font-black uppercase tracking-widest text-slate-400">Betaald</p>
+            <p className="text-2xl font-black text-slate-900">{fmtMoney(p.amount, p.currency)}</p>
+            <p className="text-[11px] text-slate-500">op {date.toLocaleDateString('nl-NL', { day: '2-digit', month: 'short', year: 'numeric' })}</p>
+          </div>
         </div>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 sm:p-6">
-        <div className="flex items-start justify-between gap-3 mb-4">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${statusBadge.cls}`}>{statusBadge.l}</span>
-            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-orange-50 text-[#FF5C00]">
-              {CATEGORY_LABELS[p.category] || p.category}
-            </span>
-            <MethodPill method={p.method} />
-          </div>
-          <div className="text-right shrink-0">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Bedrag</p>
-            <p className="text-2xl sm:text-3xl font-black text-slate-900">{fmtMoney(p.amount, p.currency)}</p>
-          </div>
+      {/* SUB-CARD: BETAALGEGEVENS */}
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+        <div className="px-4 py-3 border-b border-slate-100">
+          <h2 className="text-sm font-black text-slate-900 uppercase tracking-widest">Betaalgegevens</h2>
         </div>
-
-        <div className="space-y-1.5 text-sm border-t border-slate-100 pt-4">
+        <div className="p-4 space-y-1.5 text-sm">
           <DetailRow label="Kwitantienummer" value={<span className="font-mono font-bold text-slate-900">{p.receipt_number}</span>} />
-          {p.invoice_number && (
-            <DetailRow label="Factuur" value={<span className="font-mono font-bold text-[#FF5C00]">{p.invoice_number}</span>} />
-          )}
           <DetailRow label="Datum" value={date.toLocaleString('nl-NL')} />
-          <DetailRow label="Huurder" value={p.tenant_name || '—'} />
-          {p.apartment_number && (
-            <DetailRow label="Appartement" value={p.location_name ? `${p.location_name} · ${p.apartment_number}` : p.apartment_number} />
-          )}
-          <DetailRow label="Categorie" value={CATEGORY_LABELS[p.category] || p.category} />
           <DetailRow label="Methode" value={METHOD_LABELS[p.method] || p.method} />
           {p.period_month && <DetailRow label="Periode" value={`${MONTHS_NL[p.period_month - 1]} ${p.period_year}`} />}
           {p.approved_by && <DetailRow label="Goedgekeurd door" value={p.approved_by} />}
-          {p.note && <DetailRow label="Notitie" value={p.note} />}
         </div>
+      </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-5">
+      {/* SUB-CARD: GEKOPPELDE FACTUUR (indien aanwezig) */}
+      {p.invoice_id && (
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden" data-testid="payment-linked-invoice">
+          <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+            <h2 className="text-sm font-black text-slate-900 uppercase tracking-widest">Gekoppelde factuur</h2>
+            <span className="text-[10px] font-bold text-slate-400">1 factuur</span>
+          </div>
+          <div className="px-4 py-3">
+            {linkedInvoice ? (() => {
+              const paid = Number(linkedInvoice.paid_amount || 0);
+              const total = Number(linkedInvoice.amount || 0);
+              const rem = Number(linkedInvoice.remaining_amount ?? Math.max(0, total - paid));
+              const pct = total > 0 ? Math.round((paid / total) * 100) : 0;
+              const closed = (linkedInvoice.status || '').toLowerCase() === 'paid';
+              return (
+                <div>
+                  <div className="flex items-center gap-3">
+                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                      closed ? 'bg-emerald-100 text-emerald-600' : 'bg-orange-100 text-orange-600'
+                    }`}>
+                      <FileText className="w-4 h-4" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-bold text-slate-900 text-sm truncate">
+                        {linkedInvoice.invoice_number}
+                        <span className="ml-2 text-xs font-normal text-slate-500 capitalize">
+                          {MONTHS_NL[(linkedInvoice.period_month || 1) - 1]} {linkedInvoice.period_year}
+                        </span>
+                      </p>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        {fmtMoney(paid, linkedInvoice.currency)} van {fmtMoney(total, linkedInvoice.currency)} betaald
+                      </p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="font-black text-slate-900 text-sm">{fmtMoney(rem, linkedInvoice.currency)}</p>
+                      <p className="text-[10px] text-slate-400">{closed ? 'voldaan' : 'nog open'}</p>
+                    </div>
+                  </div>
+                  <div className="mt-2 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                    <div className={`h-full ${closed ? 'bg-emerald-500' : 'bg-gradient-to-r from-orange-400 to-orange-600'}`}
+                      style={{ width: `${pct}%` }} />
+                  </div>
+                </div>
+              );
+            })() : (
+              <p className="text-sm text-slate-500">
+                <span className="font-mono font-bold text-[#FF5C00]">{p.invoice_number}</span>
+                {' '}(details worden geladen…)
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* SUB-CARD: ACTIES */}
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+        <div className="px-4 py-3 border-b border-slate-100">
+          <h2 className="text-sm font-black text-slate-900 uppercase tracking-widest">Acties</h2>
+        </div>
+        <div className="p-4 grid grid-cols-2 sm:grid-cols-4 gap-2">
           <a href={`${apiBase}/payments/${p.id}/pdf`} target="_blank" rel="noreferrer"
             data-testid={`payment-pdf-${p.id}`}
             className="inline-flex items-center justify-center gap-2 px-2 py-2.5 bg-white border-2 border-slate-200 hover:border-slate-400 text-slate-700 font-bold rounded-xl text-xs sm:text-sm">

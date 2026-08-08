@@ -154,33 +154,43 @@ export default function Deposits() {
     const isHeld = detail.status === 'held';
     return (
       <div className="space-y-4 pb-24 sm:pb-6" data-testid={`deposit-detail-page-${detail.id}`}>
-        <div className="flex items-center gap-3">
+        {/* TERUG-PIL */}
+        <div className="flex items-center gap-2">
           <button onClick={() => { setDetail(null); load(); }} data-testid="deposit-detail-back"
-            className="w-10 h-10 rounded-xl bg-white hover:bg-slate-50 shadow-sm border border-slate-100 flex items-center justify-center transition">
-            <ChevronRight className="w-5 h-5 text-slate-600 rotate-180" />
+            className="flex items-center gap-1.5 text-slate-700 font-bold bg-white hover:bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm">
+            <ChevronRight className="w-4 h-4 rotate-180" /> Terug
           </button>
-          <div className="min-w-0">
-            <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight truncate">
-              {detail.tenant_name || 'Borg'}
-            </h1>
-            <p className="text-sm text-slate-500 mt-0.5">
-              {detail.apartment_number ? `Appt. ${detail.apartment_number}` : 'Borg-detail'}
-            </p>
+        </div>
+
+        {/* HOOFDCARD */}
+        <div className="bg-white rounded-2xl shadow-sm p-5 border border-slate-100">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h1 className="text-xl font-black text-slate-900 truncate">{detail.tenant_name || 'Borg'}</h1>
+              {detail.apartment_number && <p className="text-xs text-slate-500">Appt. {detail.apartment_number}</p>}
+              {detail.note && <p className="text-sm text-slate-600 mt-2">{detail.note}</p>}
+              <div className="flex items-center gap-2 flex-wrap mt-3">
+                <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${
+                  isHeld ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'
+                }`}>{isHeld ? 'In bewaring' : 'Gerestitueerd'}</span>
+              </div>
+            </div>
+            <div className="text-right shrink-0">
+              <p className="text-xs font-black uppercase tracking-widest text-slate-400">Borg</p>
+              <p className="text-2xl font-black text-slate-900">{fmtMoney(detail.amount, detail.currency)}</p>
+              {!isHeld && detail.refund_amount !== undefined && detail.refund_amount !== null && (
+                <p className="text-[11px] text-slate-500">terug: {fmtMoney(detail.refund_amount, detail.currency)}</p>
+              )}
+            </div>
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 sm:p-6">
-          <div className="flex items-start justify-between gap-3 mb-4">
-            <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${
-              isHeld ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'
-            }`}>{isHeld ? 'In bewaring' : 'Gerestitueerd'}</span>
-            <div className="text-right shrink-0">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Bedrag</p>
-              <p className="text-2xl sm:text-3xl font-black text-slate-900">{fmtMoney(detail.amount, detail.currency)}</p>
-            </div>
+        {/* SUB-CARD: DETAILS */}
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+          <div className="px-4 py-3 border-b border-slate-100">
+            <h2 className="text-sm font-black text-slate-900 uppercase tracking-widest">Borggegevens</h2>
           </div>
-
-          <div className="space-y-1.5 text-sm border-t border-slate-100 pt-4">
+          <div className="p-4 space-y-1.5 text-sm">
             <div className="flex justify-between gap-2">
               <span className="text-slate-500">Huurder</span>
               <span className="text-slate-900 font-semibold text-right">{detail.tenant_name || '—'}</span>
@@ -199,30 +209,30 @@ export default function Deposits() {
                 <span className="text-slate-900 font-semibold text-right">{fmtMoney(detail.refund_amount, detail.currency)}</span>
               </div>
             )}
-            {detail.note && (
-              <div className="flex justify-between gap-2">
-                <span className="text-slate-500">Notitie</span>
-                <span className="text-slate-900 font-semibold text-right">{detail.note}</span>
-              </div>
-            )}
           </div>
+        </div>
 
-          <div className="grid grid-cols-2 gap-2 mt-5">
+        {/* SUB-CARD: ACTIES */}
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+          <div className="px-4 py-3 border-b border-slate-100">
+            <h2 className="text-sm font-black text-slate-900 uppercase tracking-widest">Acties</h2>
+          </div>
+          <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-2">
             {isHeld ? (
               <button onClick={() => setRefunding(detail)} data-testid={`dep-refund-${detail.id}`}
-                className="col-span-2 sm:col-span-1 inline-flex items-center justify-center gap-2 px-3 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl text-xs sm:text-sm">
+                className="inline-flex items-center justify-center gap-2 px-3 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl text-xs sm:text-sm">
                 <Check className="w-4 h-4" /> Restitueer
               </button>
             ) : (
               <a href={`${apiBase}/deposits/${detail.id}/refund-pdf`} target="_blank" rel="noreferrer"
                 data-testid={`dep-pdf-${detail.id}`}
-                className="col-span-2 sm:col-span-1 inline-flex items-center justify-center gap-2 px-3 py-2.5 bg-white border-2 border-slate-200 hover:border-slate-400 text-slate-700 font-bold rounded-xl text-xs sm:text-sm">
+                className="inline-flex items-center justify-center gap-2 px-3 py-2.5 bg-white border-2 border-slate-200 hover:border-slate-400 text-slate-700 font-bold rounded-xl text-xs sm:text-sm">
                 <FileText className="w-4 h-4" /> PDF bewijs
               </a>
             )}
             <button onClick={async () => { await del(detail.id); setDetail(null); }}
               data-testid={`dep-delete-${detail.id}`}
-              className="col-span-2 sm:col-span-1 inline-flex items-center justify-center gap-2 px-3 py-2.5 bg-white border-2 border-red-300 hover:bg-red-500 hover:text-white text-red-600 font-bold rounded-xl text-xs sm:text-sm transition">
+              className="inline-flex items-center justify-center gap-2 px-3 py-2.5 bg-white border-2 border-red-300 hover:bg-red-500 hover:text-white text-red-600 font-bold rounded-xl text-xs sm:text-sm transition">
               <Trash2 className="w-4 h-4" /> Verwijder
             </button>
           </div>
