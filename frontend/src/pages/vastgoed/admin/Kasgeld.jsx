@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, X, Check, Loader2, Wallet, Trash2, ArrowDownCircle, ArrowUpCircle } from 'lucide-react';
+import { Plus, X, Check, Loader2, Wallet, Trash2, ArrowDownCircle, ArrowUpCircle, Receipt } from 'lucide-react';
 import { api, formatError, fmtMoney } from '../../../lib/api';
 
 function PageHeader({ title, subtitle, action }) {
@@ -112,7 +112,7 @@ export default function Kasgeld() {
 
   return (
     <div>
-      <PageHeader title="Kasgeld" subtitle="Kas in- en uitgaven met saldo per valuta"
+      <PageHeader title="Kasgeld" subtitle="Alle ontvangsten (Betalingen · Facturen · Kiosk) + handmatige kas in-/uitgaven, per valuta"
         action={
           <button onClick={() => setCreating(true)} data-testid="cash-new-btn"
             className="inline-flex items-center gap-2 px-5 py-3 bg-[#FF5C00] hover:bg-[#E05200] text-white font-bold rounded-xl shadow-[0_10px_25px_-5px_rgba(255,92,0,0.5)]">
@@ -121,18 +121,32 @@ export default function Kasgeld() {
         }
       />
       <div className="grid sm:grid-cols-3 gap-4 mb-6">
-        {['SRD', 'USD', 'EUR'].map((cur) => (
-          <div key={cur} data-testid={`balance-${cur}`}
-            className={`rounded-2xl p-5 border shadow-[0_1px_4px_-2px_rgba(15,23,42,0.06)] ${balances[cur] >= 0 ? 'bg-white border-slate-100' : 'bg-red-50 border-red-200'}`}>
-            <div className="flex items-center gap-2 mb-2">
-              <Wallet className={`w-5 h-5 ${balances[cur] >= 0 ? 'text-[#FF5C00]' : 'text-red-500'}`} />
-              <p className="text-xs font-bold uppercase tracking-widest text-slate-500">{cur} saldo</p>
+        {['SRD', 'USD', 'EUR'].map((cur) => {
+          const bal = balances[cur] || 0;
+          const cnt = items.filter((i) => (i.currency || 'SRD') === cur).length;
+          return (
+            <div key={cur} data-testid={`balance-${cur}`}
+              className={`rounded-2xl p-5 border shadow-[0_1px_4px_-2px_rgba(15,23,42,0.06)] ${bal >= 0 ? 'bg-white border-slate-100' : 'bg-red-50 border-red-200'}`}>
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <div className="flex items-center gap-2">
+                  <Wallet className={`w-5 h-5 ${bal >= 0 ? 'text-[#FF5C00]' : 'text-red-500'}`} />
+                  <p className="text-xs font-bold uppercase tracking-widest text-slate-500">{cur} saldo</p>
+                </div>
+                <span className="text-[10px] font-bold text-slate-400">{cnt} mutatie{cnt === 1 ? '' : 's'}</span>
+              </div>
+              <p className={`text-3xl font-black tracking-tight ${bal >= 0 ? 'text-slate-900' : 'text-red-600'}`}>
+                {fmtMoney(bal, cur)}
+              </p>
+              {cur === 'SRD' && (balances.USD > 0 || balances.EUR > 0) && (
+                <p className="text-[10px] text-slate-400 font-semibold mt-1.5">
+                  + {balances.USD > 0 ? fmtMoney(balances.USD, 'USD') : ''}
+                  {balances.USD > 0 && balances.EUR > 0 ? ' + ' : ''}
+                  {balances.EUR > 0 ? fmtMoney(balances.EUR, 'EUR') : ''}
+                </p>
+              )}
             </div>
-            <p className={`text-3xl font-black tracking-tight ${balances[cur] >= 0 ? 'text-slate-900' : 'text-red-600'}`}>
-              {fmtMoney(balances[cur], cur)}
-            </p>
-          </div>
-        ))}
+          );
+        })}
       </div>
       <div className="bg-white rounded-2xl border border-slate-100 shadow-[0_1px_4px_-2px_rgba(15,23,42,0.06)] overflow-hidden">
         {items.length === 0 ? (
@@ -150,27 +164,41 @@ export default function Kasgeld() {
               </tr>
             </thead>
             <tbody>
-              {items.map((c) => (
-                <tr key={c.id} data-testid={`cash-row-${c.id}`} className="border-t border-slate-100 hover:bg-slate-50/60">
-                  <td className="px-5 py-3 text-slate-500 text-xs">{new Date(c.created_at).toLocaleDateString('nl-NL')}</td>
-                  <td className="px-5 py-3 font-semibold text-slate-900">
-                    <div className="flex items-center gap-2">
-                      {c.type === 'in' ? <ArrowDownCircle className="w-4 h-4 text-emerald-500" /> : <ArrowUpCircle className="w-4 h-4 text-red-500" />}
-                      {c.description}
-                    </div>
-                  </td>
-                  <td className="px-5 py-3 hidden md:table-cell text-slate-500 capitalize">{c.category}</td>
-                  <td className={`px-5 py-3 text-right font-black ${c.type === 'in' ? 'text-emerald-600' : 'text-red-600'}`}>
-                    {c.type === 'in' ? '+' : '−'} {fmtMoney(c.amount, c.currency)}
-                  </td>
-                  <td className="px-5 py-3 text-right">
-                    <button onClick={() => del(c.id)} data-testid={`cash-delete-${c.id}`}
-                      className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-red-50 hover:bg-red-100 text-red-500">
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {items.map((c) => {
+                const isPayment = c.source === 'payment';
+                return (
+                  <tr key={c.id} data-testid={`cash-row-${c.id}`} className="border-t border-slate-100 hover:bg-slate-50/60">
+                    <td className="px-5 py-3 text-slate-500 text-xs whitespace-nowrap">{new Date(c.created_at).toLocaleDateString('nl-NL')}</td>
+                    <td className="px-5 py-3 font-semibold text-slate-900">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {c.type === 'in' ? <ArrowDownCircle className="w-4 h-4 text-emerald-500 shrink-0" /> : <ArrowUpCircle className="w-4 h-4 text-red-500 shrink-0" />}
+                        <span className="truncate">{c.description}</span>
+                        {isPayment && (
+                          <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 inline-flex items-center gap-1"
+                            data-testid={`cash-source-${c.id}`}
+                            title={`Uit ${c.method || 'betaling'} — beheerd via Betalingen`}>
+                            <Receipt className="w-2.5 h-2.5" /> {c.method || 'betaling'}
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-5 py-3 hidden md:table-cell text-slate-500 capitalize">{c.category}</td>
+                    <td className={`px-5 py-3 text-right font-black whitespace-nowrap ${c.type === 'in' ? 'text-emerald-600' : 'text-red-600'}`}>
+                      {c.type === 'in' ? '+' : '−'} {fmtMoney(c.amount, c.currency)}
+                    </td>
+                    <td className="px-5 py-3 text-right">
+                      {isPayment ? (
+                        <span className="text-[10px] text-slate-400 italic" title="Verwijder de betaling zelf via Betalingen">auto</span>
+                      ) : (
+                        <button onClick={() => del(c.id)} data-testid={`cash-delete-${c.id}`}
+                          className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-red-50 hover:bg-red-100 text-red-500">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}

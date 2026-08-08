@@ -10437,12 +10437,59 @@ class CashEntryIn(BaseModel):
 class CashEntryOut(CashEntryIn):
     id: str
     created_at: str
+    # Optional velden voor unified-feed (payments worden ook als kasgeld getoond)
+    source: Optional[Literal["kasgeld", "payment"]] = "kasgeld"
+    method: Optional[str] = None
+    payment_id: Optional[str] = None
+    payment_ref: Optional[str] = None
 
 
 @api.get("/kasgeld", response_model=List[CashEntryOut])
 async def list_cash(user=Depends(get_current_user)):
-    docs = await db.kasgeld.find(scope(user), {"_id": 0}).sort("created_at", -1).to_list(500)
-    return docs
+    """Retourneert alle kasmutaties + alle goedgekeurde binnenkomende
+    betalingen (uit /betalingen, /facturen, kiosk) als één unified feed.
+
+    Payment-bronnen zijn read-only en dragen `source='payment'` + het
+    ontvangstnummer als `payment_ref`. Handmatige kasmutaties dragen
+    `source='kasgeld'` en kunnen ook uitgaven bevatten (`type='out'`)."""
+    manual = await db.kasgeld.find(scope(user), {"_id": 0}).to_list(2000)
+    for m in manual:
+        m.setdefault("source", "kasgeld")
+
+    payments: list[dict] = []
+    async for p in db.payments.find(
+        {**scope(user), "status": "approved"},
+        {"_id": 0, "id": 1, "amount": 1, "currency": 1, "method": 1,
+         "category": 1, "receipt_number": 1, "paid_at": 1, "tenant_id": 1,
+         "period_month": 1, "period_year": 1, "note": 1},
+    ):
+        tenant_name = ""
+        if p.get("tenant_id"):
+            t = await db.tenants.find_one({"id": p["tenant_id"]}, {"_id": 0, "name": 1})
+            tenant_name = (t or {}).get("name") or ""
+        period = ""
+        if p.get("period_month") and p.get("period_year"):
+            period = f" · {p['period_month']:02d}/{p['period_year']}"
+        desc_parts = [p.get("receipt_number") or ""]
+        if tenant_name:
+            desc_parts.append(f"— {tenant_name}")
+        payments.append({
+            "id": f"pay-{p['id']}",   # namespace zodat we conflicts vermijden
+            "type": "in",
+            "amount": float(p.get("amount") or 0),
+            "currency": p.get("currency") or "SRD",
+            "description": f"{' '.join(desc_parts)}{period}".strip(),
+            "category": p.get("category") or "huur",
+            "method": p.get("method") or "",
+            "created_at": p.get("paid_at") or iso(now_utc()),
+            "source": "payment",
+            "payment_id": p["id"],
+            "payment_ref": p.get("receipt_number"),
+        })
+
+    combined = manual + payments
+    combined.sort(key=lambda x: (x.get("created_at") or ""), reverse=True)
+    return combined
 
 
 @api.post("/kasgeld", response_model=CashEntryOut)
@@ -10458,13 +10505,24 @@ async def create_cash(body: CashEntryIn, user=Depends(get_current_user)):
 
 @api.delete("/kasgeld/{cid}")
 async def delete_cash(cid: str, user=Depends(get_current_user)):
+    # Payment-sourced entries hebben id-prefix 'pay-' en zijn read-only.
+    # Verwijderen moet via de originele betaling (Betalingen-pagina).
+    if cid.startswith("pay-"):
+        raise HTTPException(
+            status_code=400,
+            detail="Deze regel komt uit een betaling en kan niet vanuit Kasgeld verwijderd worden. Verwijder de betaling zelf via Betalingen.",
+        )
     await db.kasgeld.delete_one({"id": cid, **scope(user)})
     return {"ok": True}
 
 
 @api.get("/kasgeld/balance")
 async def cash_balance(user=Depends(get_current_user)):
-    """Compute per-currency cash balance."""
+    """Per-valuta saldo. Combineert handmatige kasmutaties (in/uit) met alle
+    goedgekeurde binnenkomende betalingen — zodat het saldo overeenkomt met
+    de totale ontvangsten die in de kasgeld-lijst zichtbaar zijn."""
+    balances: dict[str, float] = {"SRD": 0.0, "USD": 0.0, "EUR": 0.0}
+    # Handmatige mutaties
     pipeline = [
         {"$match": scope(user)},
         {"$group": {
@@ -10472,12 +10530,19 @@ async def cash_balance(user=Depends(get_current_user)):
             "total": {"$sum": "$amount"},
         }},
     ]
-    balances = {"SRD": 0.0, "USD": 0.0, "EUR": 0.0}
     async for r in db.kasgeld.aggregate(pipeline):
         cur = r["_id"]["currency"]
         t = r["_id"]["type"]
         sign = 1 if t == "in" else -1
         balances[cur] = balances.get(cur, 0) + sign * r["total"]
+    # Goedgekeurde betalingen (Betalingen / Facturen / Kiosk) — allemaal 'in'
+    pay_pipeline = [
+        {"$match": {**scope(user), "status": "approved"}},
+        {"$group": {"_id": "$currency", "total": {"$sum": "$amount"}}},
+    ]
+    async for r in db.payments.aggregate(pay_pipeline):
+        cur = r["_id"] or "SRD"
+        balances[cur] = balances.get(cur, 0) + float(r.get("total") or 0)
     return balances
 
 

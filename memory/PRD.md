@@ -1,5 +1,34 @@
 # Vastgoed Kiosk — PRD
 
+## Session 2026-02-08 (deel 11) — Kasgeld unified feed met betalingen ✅
+
+### Gemeld
+- Payments (via Betalingen, Facturen, Kiosk) verschenen niet in Kasgeld — administratief scheiden van kas + ontvangsten was verwarrend
+- Alleen SRD saldo was zichtbaar; USD/EUR saldi kregen minder aandacht
+
+### Fix — backend
+- **`GET /api/kasgeld`** — Retourneert nu unified feed: handmatige kas-mutaties (`source='kasgeld'`) + alle approved payments (`source='payment'`). Payment-entries krijgen id-prefix `pay-`, kwitantienummer + huurdernaam + periode in de description, en de betaalmethode meegestuurd.
+- **`GET /api/kasgeld/balance`** — Sommeert nu ook approved payments per valuta bij het kas-saldo. SRD 34.000 in demo klopt exact met alle payments (Marlies 5500+5500 + Jan 19000 + Roy 4000).
+- **`DELETE /api/kasgeld/{id}`** — Reject payment-sourced entries met duidelijke error: "Verwijder de betaling zelf via Betalingen" (voorkomt inconsistentie).
+- **`CashEntryOut`** model uitgebreid met optionele `source`, `method`, `payment_id`, `payment_ref`.
+
+### Fix — frontend (`Kasgeld.jsx`)
+- Header-subtitle uitgebreid: "Alle ontvangsten (Betalingen · Facturen · Kiosk) + handmatige kas in-/uitgaven, per valuta"
+- Balance-cards nu met mutatie-counter per valuta
+- SRD-kaart toont extra hint als USD/EUR ook saldo hebben (bijv. "+ USD 500,00")
+- Tabel-rows tonen bij payment-entries:
+  - Blauwe method-badge (CONTANT / BANK / MOPE / SUMUP / UNI5PAY)
+  - "auto" label in acties-kolom (in plaats van delete-knop)
+
+### Verified via screenshot (demo-account)
+- 4 payments verschijnen als kasgeld-regels met kwitantienummer + huurder + periode + method-badge ✅
+- SRD saldo 34.000,00 (was 0 zonder de payments) ✅
+- Delete-knop weg voor auto-entries; alleen tooltip "Verwijder de betaling zelf via Betalingen" ✅
+
+---
+
+
+
 ## Session 2026-02-08 (deel 10) — Complete database wipe + Danger Zone UI ✅
 
 ### Preview omgeving — direct gewist
