@@ -9221,17 +9221,6 @@ async def repair_overpaid_invoices(
     }
 
 
-
-async def generate_month_invoices(body: GenerateMonthIn, user=Depends(get_current_user)):
-    """Generate invoice for every occupied apartment for the period."""
-    cid = company_id_of(user)
-    if not cid:
-        raise HTTPException(status_code=400, detail="Geen actief bedrijf geselecteerd")
-    return await _generate_month_invoices_for_company(
-        cid, body.period_month, body.period_year, scope_user=user,
-    )
-
-
 # =====================================================================
 # Automatische factuur-generatie + krediet-verrekening
 # =====================================================================
