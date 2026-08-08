@@ -1,5 +1,29 @@
 # Vastgoed Kiosk — PRD
 
+## Session 2026-02-08 (deel 12) — Overzicht "Kas saldo" widget bugfix ✅
+
+### Gemelde probleem
+"Kas saldo · Totaal beschikbaar · Live overzicht per valuta" widget op Overzicht toonde verkeerde cijfers (0 of onjuiste bedragen), niet gelijk aan wat op de Kasgeld pagina te zien is.
+
+### Root cause (2 bugs)
+1. **Verkeerd veldnaam**: De aggregation gebruikte `$kind` als filter — maar de kasgeld-collectie heeft `type` (`"in"`/`"out"`), niet `kind`. Alle regels vielen daardoor in de "out" branch en werden genegeerd/negatief geteld.
+2. **Payments niet meegeteld**: De widget queryde alleen `kasgeld` collectie, niet de payments. Sinds deel 11 zijn payments deel van de Kasgeld feed — de widget moest dus ook payments sommeren om 1:1 te matchen.
+
+### Fix
+`admin_stats` endpoint (`/api/admin/stats`) — `cash_balance_by_currency` aggregation herschreven:
+- `$kind` → `$type` gecorrigeerd
+- Extra aggregation-pass toegevoegd voor `db.payments` met `status: "approved"` — sommeert per valuta bij het kas-saldo
+- Identieke logica als `/api/kasgeld/balance` → widget en Kasgeld pagina tonen exact hetzelfde
+
+### Verified
+- `/api/admin/stats` retourneert nu `cash_balance_by_currency: {SRD: 34000.0}` ✅
+- `/api/kasgeld/balance` retourneert `{SRD: 34000.0, USD: 0.0, EUR: 0.0}` — identiek ✅
+- Overzicht-widget toont **SRD 34.000** in de gouden banking-tegel, EUR/USD 0 ✅
+
+---
+
+
+
 ## Session 2026-02-08 (deel 11) — Kasgeld unified feed met betalingen ✅
 
 ### Gemeld

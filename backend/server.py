@@ -8767,18 +8767,27 @@ async def admin_stats(user=Depends(get_current_user)):
             cur = inv.get("currency") or "SRD"
             open_current_month_amount[cur] = open_current_month_amount.get(cur, 0) + outstanding
 
-    # Bank/Kas balance per valuta (uit kasgeld collectie)
+    # Bank/Kas balance per valuta — combineert handmatige kasmutaties met
+    # alle approved payments (Betalingen / Facturen / Kiosk). Zelfde bron als
+    # de Kasgeld-pagina zodat de widget op Overzicht 1:1 klopt.
     cash_balance: dict[str, float] = {}
     async for r in db.kasgeld.aggregate([
         {"$match": sc},
         {"$group": {
             "_id": "$currency",
             "total": {"$sum": {"$cond": [
-                {"$eq": ["$kind", "in"]}, "$amount", {"$multiply": ["$amount", -1]},
+                {"$eq": ["$type", "in"]}, "$amount", {"$multiply": ["$amount", -1]},
             ]}},
         }},
     ]):
-        cash_balance[r["_id"] or "SRD"] = round(r["total"], 2)
+        cur = r["_id"] or "SRD"
+        cash_balance[cur] = cash_balance.get(cur, 0.0) + round(r["total"], 2)
+    async for r in db.payments.aggregate([
+        {"$match": {**sc, "status": "approved"}},
+        {"$group": {"_id": "$currency", "total": {"$sum": "$amount"}}},
+    ]):
+        cur = r["_id"] or "SRD"
+        cash_balance[cur] = round(cash_balance.get(cur, 0.0) + float(r.get("total") or 0), 2)
 
     return {
         "apartments_total": total_apts,
