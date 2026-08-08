@@ -375,71 +375,61 @@ function MobilePaymentCard({ p, onClick }) {
 // Payment row
 // =====================================================================
 function PaymentRow({ p, expanded, onToggle, onEmail, onDelete, apiBase }) {
-  const avatar = avatarColor(p.tenant_name);
   const tenantSub = (() => {
     if (p.location_name && p.apartment_number) return `${p.location_name} · ${p.apartment_number}`;
     if (p.apartment_number) return p.apartment_number;
     return '—';
   })();
   const date = new Date(p.paid_at);
+  const dateShort = date.toLocaleDateString('nl-NL', { day: '2-digit', month: 'short', year: 'numeric' });
+  const statusBadge = (() => {
+    const s = p.status || 'approved';
+    if (s === 'pending_approval') return { l: 'Wacht op goedkeuring', cls: 'bg-amber-100 text-amber-700' };
+    if (s === 'rejected') return { l: 'Afgekeurd', cls: 'bg-red-100 text-red-700' };
+    return { l: 'Ontvangen', cls: 'bg-emerald-100 text-emerald-700' };
+  })();
   return (
-    <div className="bg-white rounded-2xl border border-orange-100 border-l-4 border-l-emerald-400 overflow-hidden"
+    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden"
       data-testid={`payment-row-${p.id}`}>
-      <button onClick={onToggle} className="w-full text-left p-3 sm:p-3 hover:bg-orange-50/30 transition">
-        <div className="grid grid-cols-[auto_1fr_auto] md:grid-cols-[auto_minmax(0,1.6fr)_minmax(0,1.1fr)_minmax(0,0.9fr)_minmax(0,0.9fr)_minmax(0,1.1fr)_16px] items-center gap-3">
-          {/* Avatar */}
-          <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-full flex items-center justify-center font-black text-sm shrink-0"
-            style={{ background: avatar.bg, color: avatar.fg }}>
-            {initials(p.tenant_name)}
-          </div>
+      {/* KAART — zelfde visuele stijl als PlanRow in Betalingsregelingen:
+          links een 11x11 orange-ring icoon, midden naam+badges+subtitle,
+          rechts bedrag+label. Klikbaar → klapt detail open eronder. */}
+      <button onClick={onToggle}
+        className="w-full text-left hover:bg-slate-50 active:bg-slate-100 transition p-4 flex items-center gap-3">
+        <div className="w-11 h-11 rounded-xl bg-orange-50 text-[#FF5C00] flex items-center justify-center shrink-0">
+          <Receipt className="w-5 h-5" />
+        </div>
 
-          {/* Huurder + locatie · appartement */}
-          <div className="min-w-0">
-            <p className="font-bold text-slate-900 text-sm sm:text-[15px] truncate">{p.tenant_name || '—'}</p>
-            <p className="text-[11px] sm:text-xs text-slate-500 font-medium truncate">{tenantSub}</p>
-            {/* Mobiel: methode pill onder de naam */}
-            <div className="mt-1 md:hidden">
-              <MethodPill method={p.method} />
-            </div>
-          </div>
-
-          {/* Desktop: receipt number + datum + methode */}
-          <div className="hidden md:flex flex-col">
-            <p className="font-mono text-xs font-bold text-slate-700">{p.receipt_number}</p>
-            <p className="text-[11px] text-slate-500">
-              {date.toLocaleDateString('nl-NL', { day: '2-digit', month: 'short', year: 'numeric' })}
-            </p>
-          </div>
-
-          {/* Desktop: categorie */}
-          <div className="hidden md:flex">
-            <span className="inline-block text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-orange-50 text-[#FF5C00]">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="font-black text-slate-900 truncate">{p.tenant_name || 'Onbekende huurder'}</p>
+            <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${statusBadge.cls}`}>
+              {statusBadge.l}
+            </span>
+            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-orange-50 text-[#FF5C00]">
               {CATEGORY_LABELS[p.category] || p.category}
             </span>
-          </div>
-
-          {/* Desktop: methode pill */}
-          <div className="hidden md:flex">
             <MethodPill method={p.method} />
           </div>
-
-          {/* Bedrag */}
-          <div className="text-right shrink-0 whitespace-nowrap">
-            <p className="text-base sm:text-lg font-black tracking-tight text-slate-900"
-              data-testid={`payment-amount-${p.id}`}>
-              {p.currency} {fmtAmountWhole(p.amount)}
-            </p>
-            {p.period_month && (
-              <p className="text-[10px] text-slate-400 mt-0.5 capitalize">
-                {MONTHS_NL[p.period_month - 1].slice(0, 3)} {p.period_year}
-              </p>
-            )}
-          </div>
-
-          {expanded
-            ? <ChevronDown className="w-4 h-4 text-slate-400" />
-            : <ChevronRight className="w-4 h-4 text-slate-400" />}
+          <p className="text-xs text-slate-500 mt-0.5 truncate">
+            <span className="font-mono font-bold text-slate-700">{p.receipt_number}</span>
+            <span> · {tenantSub} · {dateShort}</span>
+          </p>
         </div>
+
+        <div className="text-right shrink-0">
+          <p className="text-base font-black text-slate-900" data-testid={`payment-amount-${p.id}`}>
+            {p.currency} {fmtAmountWhole(p.amount)}
+          </p>
+          {p.period_month && (
+            <p className="text-[10px] text-slate-400 capitalize">
+              {MONTHS_NL[p.period_month - 1].slice(0, 3)} {p.period_year}
+            </p>
+          )}
+        </div>
+        {expanded
+          ? <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
+          : <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />}
       </button>
 
       {expanded && (
@@ -1083,16 +1073,8 @@ export default function Payments() {
           className="w-full h-12 pl-11 pr-4 rounded-2xl bg-white border border-orange-100 text-sm focus:border-[#FF5C00] outline-none" />
       </div>
 
-      {/* COLUMN HEADERS — desktop only */}
-      <div className="hidden md:grid grid-cols-[auto_minmax(0,1.6fr)_minmax(0,1.1fr)_minmax(0,0.9fr)_minmax(0,0.9fr)_minmax(0,1.1fr)_16px] gap-3 px-3 text-[10px] font-black uppercase tracking-widest text-slate-400 items-center">
-        <span style={{ width: '40px' }} />
-        <span>Huurder</span>
-        <span>Kwitantie</span>
-        <span>Categorie</span>
-        <span>Methode</span>
-        <span className="text-right">Bedrag</span>
-        <span />
-      </div>
+      {/* Geen column-header meer — we gebruiken de card-lijst layout van
+          Betalingsregelingen waar elke kaart z'n eigen labels/badges bevat. */}
 
       {/* ROWS */}
       {loading ? (
