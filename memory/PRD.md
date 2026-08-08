@@ -1,5 +1,44 @@
 # Vastgoed Kiosk — PRD
 
+## Session 2026-02-08 (deel 6) — Verreken-tegoed vervolgstap ✅
+
+### Wat is gebouwd
+- **`POST /api/invoices/{invoice_id}/apply-credit`** — Nieuw endpoint dat beschikbaar krediet (vooruitbetalingen + overflow-krediet) direct verrekent met de opgegeven factuur. Delegeert naar bestaande `_apply_tenant_credit_to_invoice`. Retourneert `{applied, invoice: {status,paid_amount,remaining_amount}, remaining_credit: {SRD: X, ...}}`.
+- **Frontend "Verreken tegoed" knop** — Naast "Registreer betaling" in de InvoiceDetailPage, alleen zichtbaar wanneer de huurder krediet én een open factuur heeft. Klik → API-call, toast met "SRD X tegoed verrekend met FACTUURNR", auto-refresh van de detail-pagina.
+
+### Verified end-to-end (Roy van der Berg scenario)
+- Setup: Roy heeft 2000 SRD krediet + open aug factuur (partial 4000/7000, 3000 remaining) ✅
+- Klik "Verreken SRD 2.000,00 tegoed" → aug wordt partial 6000/7000 (remaining 1000), krediet 0 ✅
+- Header krediet-badge verdwijnt automatisch, "Totaal openstaand" gaat van 3.000 naar 1.000 ✅
+- Groene toast: "SRD 2.000,00 tegoed verrekend met D2026-00106" ✅
+- Curl E2E test: `applied: 2000.0`, `remaining_credit: {}` ✅
+- Test-data volledig opgeschoond ✅
+
+---
+
+
+
+## Session 2026-02-08 (deel 5) — Krediet-badge naast huurder-naam ✅
+
+### Wat is gebouwd
+- **`GET /api/tenants/credits`** — Nieuw bulk-endpoint retourneert `{ tenant_id: { SRD: 2000, USD: 0, ... } }` in één call (aggregeert `credit_remaining` per valuta over alle approved payments van de company). Voorkomt N-per-huurder queries op de Facturen-pagina.
+- **`CreditBadge.jsx`** — Compact groen "tegoed"-pilletje met varkentje icoon (`PiggyBank`). Rendert `null` wanneer er geen krediet is; toont per valuta wanneer meerdere valuta's tegoed staan. Twee varianten: `default` (desktop) en `compact` (mobile).
+- **Wired op 3 plaatsen**:
+  - Desktop `TenantRow` — naast huurder-naam in de lijst.
+  - Mobile `MobileTenantCard` — inline naast naam (compact variant).
+  - `InvoiceDetailPage` header — naast huurder-naam bovenaan de detail.
+- **`Invoices.jsx`** — Fetcht credits parallel met invoices+tenants; passeert `credits[tenant_id]` als prop naar de subcomponenten.
+
+### Verified via smoke-screenshots (demo-account met test-krediet)
+- Facturen-lijst toont "SRD 5.000 tegoed" (Jan Pieterse), "SRD 2.000 tegoed" (Marlies Sewdien), "SRD 2.000 tegoed" (Roy van der Berg) naast namen ✅
+- Marlies detail-pagina toont "SRD 2.000 tegoed" badge naast titel + volledige betalingsgeschiedenis ✅
+- Test-krediet volledig opgeschoond na verificatie ✅
+- Lint schoon ✅
+
+---
+
+
+
 ## Session 2026-02-08 (deel 4) — Overbetaling fix (overflow + krediet) ✅
 
 ### Gemelde probleem

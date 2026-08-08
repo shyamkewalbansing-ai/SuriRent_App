@@ -1,16 +1,17 @@
 import { useState } from 'react';
-import { ChevronRight, Mail, Banknote } from 'lucide-react';
-import { fmtMoney } from '../../../../lib/api';
+import { ChevronRight, Mail, Banknote, PiggyBank, Loader2 } from 'lucide-react';
+import { api, formatError, fmtMoney } from '../../../../lib/api';
 import { InvoiceRow } from './InvoiceRow';
 import PaidHistorySection from './PaidHistorySection';
 import QuickPayModal from './QuickPayModal';
+import CreditBadge from './CreditBadge';
 
 // =====================================================================
 // InvoiceDetailPage — echte losse detail-pagina voor 1 huurder in
 // PlanDetail-stijl (hoofdcard + sub-cards). Toont openstaand + volledige
 // betalingsgeschiedenis (via PaidHistorySection).
 // =====================================================================
-export default function InvoiceDetailPage({ group, onBack, onReminder, onPaid }) {
+export default function InvoiceDetailPage({ group, credits, onBack, onReminder, onPaid }) {
   const g = group;
   const overdue = (g.overdue || []).filter((i) => (i.status || '') !== 'paid');
   const current = (g.current || []).filter((i) => (i.status || '') !== 'paid');
@@ -18,10 +19,41 @@ export default function InvoiceDetailPage({ group, onBack, onReminder, onPaid })
   const paid = (g.all || []).filter((i) => (i.status || '') === 'paid');
   const sev = g.severity;
   const [quickPayInv, setQuickPayInv] = useState(null);
+  const [applyingCredit, setApplyingCredit] = useState(false);
 
   // De "primaire" openstaande factuur (meest urgent):
   // - eerst de oudste achterstallige, dan de huidige maand, dan future.
   const primaryOpen = overdue[0] || current[0] || future[0] || null;
+
+  // Beschikbaar krediet in de factuur-valuta (default SRD). We tonen de
+  // "Verreken tegoed"-knop alleen als er zowel krediet ÁLS een open factuur is.
+  const currency = g.currency || primaryOpen?.currency || 'SRD';
+  const availableCredit = Number((credits && credits[currency]) || 0);
+  const canApplyCredit = availableCredit > 0 && (overdue.length + current.length) > 0;
+
+  const applyCredit = async () => {
+    // Verreken FIFO tegen de meest urgente open factuur (backend handelt
+    // meerdere krediet-betalingen automatisch af).
+    const target = overdue[0] || current[0];
+    if (!target || applyingCredit) return;
+    setApplyingCredit(true);
+    try {
+      const { data } = await api.post(`/invoices/${target.id}/apply-credit`);
+      if (onPaid) {
+        onPaid({
+          receipt_number: 'krediet-verrekening',
+          amount: data.applied,
+          currency,
+          _credit_applied: true,
+          _message: `${fmtMoney(data.applied, currency)} tegoed verrekend met ${target.invoice_number}`,
+        });
+      }
+    } catch (e) {
+      alert(formatError(e) || 'Kon tegoed niet verrekenen');
+    } finally {
+      setApplyingCredit(false);
+    }
+  };
 
   const badgeCls = sev === 'critical' ? 'bg-red-100 text-red-700'
     : sev === 'late' ? 'bg-orange-100 text-orange-700'
@@ -51,7 +83,10 @@ export default function InvoiceDetailPage({ group, onBack, onReminder, onPaid })
       <div className="bg-white rounded-2xl shadow-sm p-5 border border-slate-100">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <h1 className="text-xl font-black text-slate-900 truncate">{g.tenant_name}</h1>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-xl font-black text-slate-900 truncate">{g.tenant_name}</h1>
+              <CreditBadge credits={credits} testid={`detail-credit-${g.tenant_id}`} />
+            </div>
             {g.apartment_number && (
               <p className="text-xs text-slate-500">Appt. {g.apartment_number}</p>
             )}
@@ -79,15 +114,28 @@ export default function InvoiceDetailPage({ group, onBack, onReminder, onPaid })
       {/* SUB-CARD: OPEN FACTUREN */}
       {(overdue.length + current.length + future.length) > 0 && (
         <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-          <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between gap-2">
+          <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between gap-2 flex-wrap">
             <h2 className="text-sm font-black text-slate-900 uppercase tracking-widest">Openstaande facturen</h2>
-            {primaryOpen && (
-              <button type="button" onClick={() => setQuickPayInv(primaryOpen)}
-                data-testid="quickpay-primary-btn"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-lg text-xs shadow-[0_6px_16px_-4px_rgba(16,185,129,0.5)] active:scale-95 transition">
-                <Banknote className="w-3.5 h-3.5" /> Registreer betaling
-              </button>
-            )}
+            <div className="flex items-center gap-1.5">
+              {canApplyCredit && (
+                <button type="button" onClick={applyCredit} disabled={applyingCredit}
+                  data-testid="apply-credit-btn"
+                  title={`Verreken ${fmtMoney(availableCredit, currency)} tegoed met openstaande facturen`}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border-2 border-emerald-300 hover:bg-emerald-50 text-emerald-700 font-bold rounded-lg text-xs disabled:opacity-50 active:scale-95 transition">
+                  {applyingCredit
+                    ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    : <PiggyBank className="w-3.5 h-3.5" />}
+                  Verreken {fmtMoney(availableCredit, currency)} tegoed
+                </button>
+              )}
+              {primaryOpen && (
+                <button type="button" onClick={() => setQuickPayInv(primaryOpen)}
+                  data-testid="quickpay-primary-btn"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-lg text-xs shadow-[0_6px_16px_-4px_rgba(16,185,129,0.5)] active:scale-95 transition">
+                  <Banknote className="w-3.5 h-3.5" /> Registreer betaling
+                </button>
+              )}
+            </div>
           </div>
           <div className="p-4 space-y-2">
             {[...overdue, ...current, ...future].map((inv) => {

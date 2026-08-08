@@ -22,6 +22,7 @@ import InvoiceDetailPage from './invoices/InvoiceDetailPage';
 export default function Invoices() {
   const [items, setItems] = useState([]);
   const [tenants, setTenants] = useState([]);
+  const [credits, setCredits] = useState({}); // { tenant_id: { SRD: 2000, ... } }
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -40,8 +41,12 @@ export default function Invoices() {
   const load = useCallback(async ({ silent = false } = {}) => {
     if (!silent) setLoading(true);
     try {
-      const [i, t] = await Promise.all([api.get('/invoices'), api.get('/tenants')]);
-      setItems(i.data); setTenants(t.data);
+      const [i, t, c] = await Promise.all([
+        api.get('/invoices'),
+        api.get('/tenants'),
+        api.get('/tenants/credits').catch(() => ({ data: {} })),
+      ]);
+      setItems(i.data); setTenants(t.data); setCredits(c.data || {});
     } finally { if (!silent) setLoading(false); }
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -151,10 +156,14 @@ export default function Invoices() {
       <>
         <InvoiceDetailPage
           group={g}
+          credits={credits[g.tenant_id]}
           onBack={() => { setDetail(null); load({ silent: true }); }}
           onReminder={openReminder}
           onPaid={(payment) => {
-            setToast({ type: 'ok', text: `Kwitantie ${payment.receipt_number} — ${payment.currency} ${Number(payment.amount).toLocaleString('nl-NL', { minimumFractionDigits: 2 })}` });
+            const msg = payment?._credit_applied
+              ? payment._message
+              : `Kwitantie ${payment.receipt_number} — ${payment.currency} ${Number(payment.amount).toLocaleString('nl-NL', { minimumFractionDigits: 2 })}`;
+            setToast({ type: 'ok', text: msg });
             load({ silent: true });
           }}
         />
@@ -253,7 +262,7 @@ export default function Invoices() {
               const paidInvoices = (g.all || []).filter((i) => (i.status || '') === 'paid');
               return (
                 <div key={g.tenant_id} data-testid={`mi-row-${g.tenant_id}`}>
-                  <MobileTenantCard group={g} onClick={() => toggleExpand(g.tenant_id)} />
+                  <MobileTenantCard group={g} credits={credits[g.tenant_id]} onClick={() => toggleExpand(g.tenant_id)} />
                   {expanded === g.tenant_id && g.openCount > 0 && (
                     <MobileTenantExpand g={g} tenants={tenants} onReminder={openReminder} />
                   )}
@@ -366,6 +375,7 @@ export default function Invoices() {
           <div className="space-y-2 sm:space-y-2.5">
             {filteredGroups.map((g) => (
               <TenantRow key={g.tenant_id} group={g}
+                credits={credits[g.tenant_id]}
                 expanded={false}
                 onToggle={() => setDetail(g)}
                 onReminder={openReminder}

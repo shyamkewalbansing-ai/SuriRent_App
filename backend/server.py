@@ -6339,6 +6339,28 @@ async def list_tenants(user=Depends(get_current_user)):
     return [await _enrich_tenant(d) for d in docs]
 
 
+@api.get("/tenants/credits")
+async def list_tenant_credits(user=Depends(get_current_user)):
+    """Retourneert een map tenant_id → beschikbaar krediet (vooruitbetaald,
+    nog niet verrekend met een factuur) per valuta. Wordt gebruikt door de
+    Facturen-pagina om per huurder een "SRD X tegoed" badge te tonen. Één
+    call ipv N-per-huurder queries — schaalbaar tot honderden huurders."""
+    q = dict(scope(user))
+    q["credit_remaining"] = {"$gt": 0}
+    q["status"] = "approved"
+    out: dict[str, dict[str, float]] = {}
+    async for p in db.payments.find(
+        q, {"_id": 0, "tenant_id": 1, "credit_remaining": 1, "currency": 1},
+    ):
+        tid = p.get("tenant_id")
+        cur = p.get("currency") or "SRD"
+        if not tid:
+            continue
+        bucket = out.setdefault(tid, {})
+        bucket[cur] = round(bucket.get(cur, 0.0) + float(p.get("credit_remaining") or 0), 2)
+    return out
+
+
 @api.post("/tenants", response_model=TenantOut)
 async def create_tenant(body: TenantIn, user=Depends(get_current_user)):
     cid = company_id_of(user)
@@ -9392,6 +9414,61 @@ async def generate_month_invoices(body: dict, user=Depends(get_current_user)):
         raise HTTPException(status_code=400, detail="Ongeldige periode")
     res = await _generate_month_invoices_for_company(cid, pm, py)
     return res
+
+
+@api.post("/invoices/{invoice_id}/apply-credit")
+async def apply_credit_to_invoice(invoice_id: str, user=Depends(get_current_user)):
+    """Verrekent beschikbaar krediet (vooruitbetalingen + overflow-krediet) van
+    de huurder direct met deze factuur. Handig wanneer de admin in het
+    Facturen-overzicht ziet dat een huurder tegoed heeft staan én een factuur
+    open heeft — één klik verrekent beide zonder een nieuwe betaling te maken.
+
+    Retourneert `{applied: float, invoice: {status,paid_amount,remaining_amount},
+    remaining_credit: {SRD: X, ...}}`. Als er geen krediet is of factuur al
+    volledig betaald: `applied = 0`."""
+    cid = company_id_of(user)
+    if not cid:
+        raise HTTPException(status_code=400, detail="Geen bedrijfscontext")
+    inv = await db.invoices.find_one(
+        {"id": invoice_id, "company_id": cid}, {"_id": 0},
+    )
+    if not inv:
+        raise HTTPException(status_code=404, detail="Factuur niet gevonden")
+    tenant_id = inv.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=400, detail="Factuur heeft geen huurder")
+
+    applied = await _apply_tenant_credit_to_invoice(tenant_id, invoice_id, cid)
+
+    # Haal bijgewerkte factuur op voor de response
+    updated = await db.invoices.find_one(
+        {"id": invoice_id}, {"_id": 0, "status": 1, "paid_amount": 1, "amount": 1},
+    ) or {}
+    paid_amt = float(updated.get("paid_amount") or 0)
+    amt = float(updated.get("amount") or 0)
+
+    # Resterend krediet berekenen zodat de UI de badge direct kan bijwerken
+    remaining_credit: dict[str, float] = {}
+    async for p in db.payments.find(
+        {"tenant_id": tenant_id, "company_id": cid,
+         "credit_remaining": {"$gt": 0}, "status": "approved"},
+        {"_id": 0, "credit_remaining": 1, "currency": 1},
+    ):
+        cur = p.get("currency") or "SRD"
+        remaining_credit[cur] = round(
+            remaining_credit.get(cur, 0.0) + float(p.get("credit_remaining") or 0), 2,
+        )
+
+    return {
+        "applied": round(applied, 2),
+        "invoice": {
+            "id": invoice_id,
+            "status": updated.get("status"),
+            "paid_amount": paid_amt,
+            "remaining_amount": round(max(0.0, amt - paid_amt), 2),
+        },
+        "remaining_credit": remaining_credit,
+    }
 
 
 async def _auto_invoice_tick():
