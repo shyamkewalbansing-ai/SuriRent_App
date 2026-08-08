@@ -26,6 +26,42 @@ export default function PaymentPlans() {
 
   useEffect(() => { load(); }, [load]);
 
+  // Open direct de detail-pagina wanneer we hier komen via een klik op de
+  // REGELING-badge in Facturen. Twee triggers:
+  //   1. URL query param `?planId=xxx` — wordt op mount uitgelezen. Werkt
+  //      betrouwbaar ongeacht mount/unmount timing.
+  //   2. `open-plan-detail` event — wanneer de pagina AL gemount is.
+  useEffect(() => {
+    let cancelled = false;
+    const openPlan = async (planId) => {
+      if (!planId || cancelled) return;
+      try {
+        const { data } = await api.get(`/payment-plans/${planId}`);
+        if (!cancelled) setDetail(data);
+      } catch { /* stil falen — user blijft op de lijst */ }
+    };
+    // 1) Lees planId uit URL (éénmalig bij mount), verwijder daarna zodat
+    // een refresh geen dubbele opening geeft.
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const pid = params.get('planId');
+      if (pid) {
+        openPlan(pid);
+        params.delete('planId');
+        const newSearch = params.toString();
+        const newUrl = `${window.location.pathname}${newSearch ? `?${newSearch}` : ''}`;
+        window.history.replaceState({}, '', newUrl);
+      }
+    } catch { /* noop */ }
+    // 2) Live event handler
+    const handler = (e) => openPlan(e?.detail?.planId);
+    window.addEventListener('open-plan-detail', handler);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('open-plan-detail', handler);
+    };
+  }, []);
+
   if (detail) {
     return <PlanDetail planId={detail.id} onBack={() => { setDetail(null); load(); }} />;
   }

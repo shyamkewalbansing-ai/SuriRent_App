@@ -1,5 +1,29 @@
 # Vastgoed Kiosk — PRD
 
+## Session 2026-02-08 (deel 9) — REGELING badge → directe detail-pagina ✅
+
+### Wat is gebouwd
+- **Klikbare REGELING X/Y badge** in de InvoiceRow (Facturen detail-pagina) navigeert nu direct naar de Betalingsregeling-detail met alle termijnen zichtbaar — in plaats van naar de Betalingsregelingen-lijst.
+- **Mechanisme**:
+  1. Klik dispatch `go-tab` event → AdminDashboard navigeert naar `/admin/payment_plans`.
+  2. Na 100ms wordt `?planId=xxx` query-param aan de URL toegevoegd via `history.replaceState`.
+  3. Óók dispatch een `open-plan-detail` event (voor het geval PaymentPlans al gemount was).
+- **PaymentPlans component uitgebreid**:
+  - Mount-effect leest `?planId=xxx` uit URL, fetcht plan via `GET /api/payment-plans/{id}`, en opent direct `PlanDetail`.
+  - Live event handler op `open-plan-detail` voor al-gemounte gevallen.
+  - Query-param wordt na consumptie verwijderd via `history.replaceState` (voorkomt herhaalde opening bij hard-refresh).
+
+### Verified via smoke-screenshot
+- Klik op "REGELING 0/2" badge in Roy's factuur-detail → direct naar plan-detail-pagina ✅
+- URL: `?planId=6acacd49-...` ✅
+- Detail toont: header "Roy van der Berg" + progressbar + gekoppelde factuur + beide termijnen met "Markeer betaald" knoppen ✅
+- Terug-knop werkt normaal ✅
+- Test-data opgeschoond ✅
+
+---
+
+
+
 ## Session 2026-02-08 (deel 8) — Betalingsregeling sync bij invoice-updates ✅
 
 ### Gemelde probleem

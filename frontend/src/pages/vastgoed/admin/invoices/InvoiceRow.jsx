@@ -121,7 +121,23 @@ export function InvoiceRow({ inv, bucket, severity }) {
             <button key={pl.id} type="button"
               onClick={(e) => {
                 e.stopPropagation();
+                // Trigger de navigatie eerst — AdminDashboard reageert op
+                // 'go-tab' en roept navigate() aan (die kan onze eigen URL
+                // veranderingen overschrijven).
                 try { window.dispatchEvent(new CustomEvent('go-tab', { detail: 'payment_plans' })); } catch { /* noop */ }
+                // Even wachten totdat die navigate klaar is, dan de query
+                // param toevoegen en een popstate dispatchen zodat PaymentPlans'
+                // mount-effect de planId leest. Óók een event dispatchen zodat
+                // een al-gemounte PaymentPlans (bijv. door hot-reload) direct
+                // reageert.
+                setTimeout(() => {
+                  try {
+                    const url = new URL(window.location.href);
+                    url.searchParams.set('planId', pl.id);
+                    window.history.replaceState({}, '', url.toString());
+                  } catch { /* noop */ }
+                  try { window.dispatchEvent(new CustomEvent('open-plan-detail', { detail: { planId: pl.id } })); } catch { /* noop */ }
+                }, 100);
               }}
               data-testid={`invoice-plan-badge-${inv.id}-${pl.id}`}
               title="Bekijk betalingsregeling"
