@@ -6726,6 +6726,54 @@ async def _create_payment_doc(body: PaymentIn, company_id: Optional[str] = None,
             matched_invoice = await db.invoices.find_one(
                 inv_q, {"_id": 0}, sort=[("period_year", 1), ("period_month", 1)]
             )
+        # AUTO-CREATE invoice als er geen enkele bestaande factuur is voor
+        # deze huurder + huur-betaling. Situatie: admin heeft net een nieuwe
+        # huurder aangemaakt en de eerste betaling komt via de kiosk binnen
+        # voordat de maandelijkse auto-invoice-tick heeft gelopen. Zonder
+        # deze auto-create zou de Facturen-pagina leeg blijven en geen
+        # audit-trail hebben. We maken alleen een factuur wanneer er een
+        # duidelijke periode is (expliciet in body of afgeleid van paid_at).
+        if matched_invoice is None and apt_id:
+            # Bepaal de periode: expliciet uit body → anders uit huidige datum.
+            _now = now_utc()
+            period_m = body.period_month or _now.month
+            period_y = body.period_year or _now.year
+            # Voorkom race: check nog een keer of de factuur intussen is
+            # aangemaakt (bijv. door dubbele kiosk-tap).
+            existing_period = await db.invoices.find_one(
+                {**inv_q, "period_month": period_m, "period_year": period_y},
+                {"_id": 0},
+            )
+            if existing_period:
+                matched_invoice = existing_period
+            else:
+                apt_doc = await db.apartments.find_one(
+                    {"id": apt_id}, {"_id": 0, "rent_amount": 1, "currency": 1},
+                )
+                if apt_doc and float(apt_doc.get("rent_amount") or 0) > 0:
+                    try:
+                        seq = await _next_seq(f"invoice_{period_y}")
+                        new_inv = {
+                            "id": new_id(),
+                            "company_id": company_id or tenant.get("company_id"),
+                            "invoice_number": f"F{period_y}-{seq:05d}",
+                            "tenant_id": body.tenant_id,
+                            "apartment_id": apt_id,
+                            "amount": float(apt_doc.get("rent_amount") or 0),
+                            "currency": apt_doc.get("currency") or body.currency or "SRD",
+                            "period_month": period_m,
+                            "period_year": period_y,
+                            "status": "open",
+                            "paid_amount": 0.0,
+                            "created_at": iso(now_utc()),
+                            "auto_created_from_payment": True,
+                        }
+                        await db.invoices.insert_one(new_inv)
+                        new_inv.pop("_id", None)
+                        matched_invoice = new_inv
+                    except Exception as _e:  # noqa: BLE001
+                        # Best-effort — betaling gaat sowieso door. Log alleen.
+                        print(f"[auto-invoice on payment] create failed: {_e}")
     doc = {
         "id": new_id(),
         "company_id": company_id or tenant.get("company_id"),
