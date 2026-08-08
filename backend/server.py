@@ -1864,6 +1864,107 @@ async def superadmin_list_plans(user=Depends(require_role("superadmin"))):
     return docs
 
 
+@api.post("/superadmin/wipe-all-companies")
+async def superadmin_wipe_all_companies(
+    body: dict, user=Depends(require_role("superadmin")),
+):
+    """DESTRUCTIEVE actie — verwijdert ALLE bedrijven en hun data behalve
+    het Demo-bedrijf (slug='demo'). Superadmin login blijft altijd behouden.
+
+    Vereist body: `{"confirm": "WIPE ALL COMPANIES"}` — exact deze string.
+    Retourneert een overzicht van wat is verwijderd per collectie."""
+    if (body or {}).get("confirm") != "WIPE ALL COMPANIES":
+        raise HTTPException(
+            status_code=400,
+            detail="Bevestigingsstring vereist: {\"confirm\": \"WIPE ALL COMPANIES\"}",
+        )
+
+    # 1) Bepaal welke company_ids we HOUDEN (alleen demo)
+    demo_companies = await db.companies.find(
+        {"$or": [{"slug": "demo"}, {"is_demo": True}]},
+        {"_id": 0, "id": 1},
+    ).to_list(100)
+    demo_ids = [c["id"] for c in demo_companies]
+
+    # 2) Scoped collections — alles verwijderen waar company_id NIET in demo_ids
+    scoped_collections = [
+        "ai_sessions", "apartments", "audit_log", "bank_statements",
+        "cash_book", "company_settings", "contracts", "customer_display",
+        "deposits", "device_qr_tokens", "employees", "invoices", "kasgeld",
+        "kiosk_pins", "landing_leads", "locations", "maintenance",
+        "payment_plan_installments", "payment_plans", "payments", "push_subs",
+        "saas_payment_requests", "salaries", "subscription_invoices",
+        "subscription_payments", "tenants",
+    ]
+    deleted: dict[str, int] = {}
+    for col_name in scoped_collections:
+        # payment_plan_installments heeft geen directe company_id, dus filter
+        # via plan_id later. Skip hier — we handelen die apart af.
+        if col_name == "payment_plan_installments":
+            continue
+        result = await db[col_name].delete_many(
+            {"company_id": {"$nin": demo_ids}} if demo_ids
+            else {},
+        )
+        deleted[col_name] = result.deleted_count
+
+    # 3) payment_plan_installments — filter via plan_id (want geen company_id
+    # veld op sommige oude documenten).
+    demo_plan_ids = [
+        p["id"] async for p in db.payment_plans.find(
+            {"company_id": {"$in": demo_ids}} if demo_ids else {},
+            {"_id": 0, "id": 1},
+        )
+    ]
+    result = await db.payment_plan_installments.delete_many(
+        {"plan_id": {"$nin": demo_plan_ids}} if demo_plan_ids else {},
+    )
+    deleted["payment_plan_installments"] = result.deleted_count
+
+    # 4) Users — behoud superadmins ALTIJD + admins van demo-bedrijf
+    result = await db.users.delete_many({
+        "role": {"$ne": "superadmin"},
+        "company_id": {"$nin": demo_ids} if demo_ids else {"$exists": True},
+    })
+    deleted["users"] = result.deleted_count
+
+    # 5) Companies zelf — behoud alleen demo
+    result = await db.companies.delete_many(
+        {"id": {"$nin": demo_ids}} if demo_ids else {},
+    )
+    deleted["companies"] = result.deleted_count
+
+    # 6) Landing-assets/content/leads/qr — koppelt aan company via company_id.
+    # Al meegenomen als 'scoped' voor sommige, hier de niet-standaard:
+    for col_name in ("landing_assets", "landing_content", "company_landings", "qr_plate_cache"):
+        # Check of collectie company_id gebruikt
+        sample = await db[col_name].find_one({}, {"_id": 0})
+        if sample and "company_id" in sample:
+            result = await db[col_name].delete_many(
+                {"company_id": {"$nin": demo_ids}} if demo_ids else {},
+            )
+            deleted[col_name] = result.deleted_count
+
+    # 7) qr_sessions + device_qr_tokens (kunnen ook 'stateless' zijn)
+    # device_qr_tokens is al scoped hierboven. qr_sessions bevat login-QR
+    # tijdelijke sessies — kunnen veilig allemaal weg. Wis actieve sessies
+    # die verwijzen naar niet-demo companies.
+    q = await db.qr_sessions.delete_many(
+        {"company_id": {"$nin": demo_ids}} if demo_ids else {},
+    )
+    deleted["qr_sessions"] = q.deleted_count
+
+    remaining_companies = await db.companies.count_documents({})
+    remaining_users = await db.users.count_documents({})
+    return {
+        "ok": True,
+        "deleted": deleted,
+        "kept_company_ids": demo_ids,
+        "remaining_companies": remaining_companies,
+        "remaining_users": remaining_users,
+    }
+
+
 @api.post("/superadmin/plans")
 async def superadmin_create_plan(body: PlanCreate, user=Depends(require_role("superadmin"))):
     plan_id = (body.id or "").strip().lower()

@@ -5,7 +5,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import {
   Crown, TrendingUp, Building2, Clock, AlertCircle, Wifi, WifiOff,
-  ScanLine, Receipt, RefreshCw, Loader2, ArrowRight, Banknote, CheckCircle2,
+  ScanLine, Receipt, RefreshCw, Loader2, ArrowRight, Banknote, CheckCircle2, Trash2,
 } from 'lucide-react';
 import { api, formatError } from '../../../lib/api';
 
@@ -259,6 +259,118 @@ export default function SaasOverview() {
           )}
         </div>
       </section>
+
+      {/* Danger Zone — volledige database reset (behoud alleen Demo + superadmins) */}
+      <DangerZone onDone={load} />
     </div>
+  );
+}
+
+// =====================================================================
+// DangerZone — knop om ALLE bedrijven + hun data te wissen. Vereist een
+// dubbele bevestiging: eerst een knop om het paneel open te klappen, dan
+// exact intypen van "WIPE ALL COMPANIES" om te bevestigen.
+// =====================================================================
+function DangerZone({ onDone }) {
+  const [open, setOpen] = useState(false);
+  const [confirm, setConfirm] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState(null);
+  const [err, setErr] = useState('');
+
+  const canSubmit = confirm.trim() === 'WIPE ALL COMPANIES';
+
+  const submit = async () => {
+    if (!canSubmit) return;
+    setLoading(true); setErr(''); setResult(null);
+    try {
+      const { data } = await api.post('/superadmin/wipe-all-companies', {
+        confirm: 'WIPE ALL COMPANIES',
+      });
+      setResult(data);
+      setConfirm('');
+      if (onDone) onDone();
+    } catch (e) {
+      setErr(formatError(e) || 'Kon niet wissen');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <section className="mt-8" data-testid="danger-zone">
+      <div className="rounded-2xl border-2 border-red-200 bg-red-50/50 overflow-hidden">
+        <div className="px-5 py-4 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <div className="w-9 h-9 rounded-xl bg-red-100 flex items-center justify-center">
+              <Trash2 className="w-4 h-4 text-red-600" />
+            </div>
+            <div>
+              <h2 className="text-sm font-black text-red-700 uppercase tracking-widest">Danger Zone</h2>
+              <p className="text-[11px] text-red-600/80 font-semibold">Onomkeerbare acties — pas op.</p>
+            </div>
+          </div>
+          {!open && (
+            <button onClick={() => setOpen(true)} data-testid="danger-open-btn"
+              className="h-9 px-3 rounded-lg bg-white border border-red-200 hover:border-red-400 text-red-700 font-bold text-xs">
+              Toon opties
+            </button>
+          )}
+        </div>
+
+        {open && (
+          <div className="px-5 pb-5 border-t border-red-200 pt-4">
+            <div className="bg-white rounded-xl p-4 border border-red-200">
+              <h3 className="font-black text-slate-900 text-sm">Alle bedrijven + data wissen</h3>
+              <p className="text-xs text-slate-600 mt-1">
+                Verwijdert <b>alle</b> bedrijven, huurders, facturen, betalingen, plans en admins.
+                Behoudt: <b>superadmin logins</b> en het <b>&ldquo;Demo Vastgoed N.V.&rdquo;</b> demo-bedrijf.
+              </p>
+              <div className="mt-3">
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                  Typ ter bevestiging: <span className="text-red-600 font-mono">WIPE ALL COMPANIES</span>
+                </label>
+                <input type="text" value={confirm} onChange={(e) => setConfirm(e.target.value)}
+                  data-testid="danger-confirm-input"
+                  placeholder="WIPE ALL COMPANIES"
+                  className="w-full mt-1 h-11 px-3 rounded-lg border-2 border-slate-200 focus:border-red-500 outline-none text-sm font-mono" />
+              </div>
+
+              {err && (
+                <div className="mt-3 p-2.5 rounded-lg bg-red-50 border border-red-200 text-xs text-red-700 font-semibold" data-testid="danger-error">
+                  {err}
+                </div>
+              )}
+              {result && (
+                <div className="mt-3 p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-xs text-emerald-800" data-testid="danger-result">
+                  <p className="font-black mb-1">✓ Wipe voltooid</p>
+                  <p>Behouden: {result.remaining_companies} bedrijf · {result.remaining_users} users (superadmin + demo).</p>
+                  <p className="mt-1 text-[11px] opacity-80">
+                    Verwijderd: {Object.entries(result.deleted || {})
+                      .filter(([, v]) => v > 0)
+                      .map(([k, v]) => `${v} ${k}`)
+                      .join(', ')}
+                  </p>
+                </div>
+              )}
+
+              <div className="mt-4 flex gap-2 justify-end">
+                <button onClick={() => { setOpen(false); setConfirm(''); setErr(''); }}
+                  data-testid="danger-cancel-btn"
+                  className="h-10 px-4 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm">
+                  Annuleren
+                </button>
+                <button onClick={submit} disabled={!canSubmit || loading}
+                  data-testid="danger-wipe-btn"
+                  className="h-10 px-4 rounded-lg bg-red-600 hover:bg-red-700 disabled:bg-slate-300 text-white font-bold text-sm inline-flex items-center gap-2">
+                  {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                  Definitief wissen
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </section>
   );
 }

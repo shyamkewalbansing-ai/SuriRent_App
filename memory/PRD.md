@@ -1,5 +1,39 @@
 # Vastgoed Kiosk — PRD
 
+## Session 2026-02-08 (deel 10) — Complete database wipe + Danger Zone UI ✅
+
+### Preview omgeving — direct gewist
+Op verzoek van gebruiker: alle geregistreerde bedrijven verwijderd uit preview DB, behouden alleen Demo Vastgoed N.V. + superadmin login.
+
+**Verwijderd (preview)**: 20 bedrijven · 22 users · 380 payments · 37 invoices · 17 payment_plans · 268 installments · 209 device_qr_tokens · 41 audit_log · 14 subscription_invoices · en 100+ overige scoped records.
+
+**Behouden**: `super@surirent.sr` (superadmin, wachtwoord gereset naar `super1234`) + `demo@surirent.sr` + Demo Vastgoed N.V.
+
+### Productie — via nieuwe superadmin endpoint + UI
+Voor productie: nieuwe endpoint + UI-knop toegevoegd zodat gebruiker het na deployment zelf kan triggeren.
+
+- **`POST /api/superadmin/wipe-all-companies`** — vereist body `{"confirm": "WIPE ALL COMPANIES"}` (exacte string). Verwijdert alle bedrijven behalve die met `slug='demo'` of `is_demo=true`, plus alle scoped data (25 collections). Behoudt altijd superadmin users. Retourneert per collectie hoeveel is verwijderd.
+- **UI in SaaS Overzicht** — nieuwe "Danger Zone" sectie onderaan met dubbele bevestiging:
+  1. Klik "Toon opties" om paneel open te klappen
+  2. Type letterlijk `WIPE ALL COMPANIES` in het bevestigings-veld
+  3. Klik "Definitief wissen" (button disabled tot correct getypt)
+  4. Toast met samenvatting van verwijderde records + huidige totalen
+
+### Deploy-flow voor productie
+1. User klikt "Redeploy" in Emergent (deployer_agent)
+2. Log in op productie als `super@surirent.sr` (met bestaand productie-wachtwoord)
+3. SaaS Overzicht → onderaan → "Toon opties" → typ `WIPE ALL COMPANIES` → "Definitief wissen"
+4. Productie DB is nu clean (alleen demo + superadmin over)
+
+### Files
+- Nieuw endpoint: `/app/backend/server.py` regel ~1867 (`superadmin_wipe_all_companies`)
+- Nieuwe UI-sectie: `/app/frontend/src/pages/vastgoed/admin/SaasOverview.jsx` (`DangerZone` component)
+- Superadmin wachtwoord in preview gereset: `super@surirent.sr` / `super1234` (zie `/app/memory/test_credentials.md`)
+
+---
+
+
+
 ## Session 2026-02-08 (deel 9) — REGELING badge → directe detail-pagina ✅
 
 ### Wat is gebouwd
