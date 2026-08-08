@@ -1,0 +1,32 @@
+{
+  "summary": "Frontend-only test of new InvoiceDetailPage (PlanDetail-style standalone detail). Login as admin succeeded. Facturen list renders collapsed. Clicking a tenant row (Yashveer Kewalbansing) opens invoice-detail-page-<tenant_id> with proper structure: Terug pill, hoofdcard (h1 tenant name + Appt subtitle + status/open-count badges + right-side 'Totaal openstaand' label with colored amount), sub-card 'Openstaande facturen', sub-card 'Betaalde facturen', sub-card 'Acties' with WhatsApp/E-mail/SMS buttons. Reminder buttons open reminder-modal for the same tenant. Terug returns to list. Regression: no stale tenant-row-<id> markup found inside detail view; list still shows Nieuwe factuur + Genereer maand.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Invoices.jsx is now 1676 lines — consider splitting InvoiceDetailPage, TenantRow, ReminderModal, InvoiceModal into separate files for maintainability (>700 line guideline).",
+    "InvoiceDetailPage reads from filteredGroups; if the current filter/tab hides the tenant after status change, detail falls back to stale `detail` object. Consider fetching fresh group data or clearing filter when opening detail.",
+    "WhatsApp button uses <Mail/> icon (line 1212) — should probably use MessageCircle for visual clarity."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a", "frontend": "100%"},
+  "test_credentials": "admin@vastgoed.sr / admin123 (slug: surirent)",
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "InvoiceDetailPage is fully functional and matches PlanDetail layout. Testids: invoice-detail-page-<tenant_id>, invoice-detail-back, reminder-btn-whatsapp/email/sms-<tenant_id>, invoice-paid-row-<id>. Tenant row click handler is at line 1561 (onToggle -> setDetail(g)).",
+  "verified_criteria": [
+    "Detail page renders with data-testid=invoice-detail-page-<tenant_id>",
+    "Terug button visible and returns to list",
+    "Hoofdcard shows h1 tenant name (Yashveer Kewalbansing), 'Totaal openstaand' label + amount",
+    "Sub-cards: Openstaande facturen, Betaalde facturen, Acties",
+    "WhatsApp/E-mail/SMS reminder buttons open reminder-modal",
+    "No stale tenant-row-<id> markup inside detail view (count=0)",
+    "List regression: Nieuwe factuur + Genereer maand still visible"
+  ]
+}
