@@ -9291,10 +9291,13 @@ async def _apply_tenant_credit_to_invoice(
     cur = inv.get("currency") or "SRD"
 
     total_applied = 0.0
-    # FIFO: oudste vooruitbetalingen eerst
+    # FIFO: oudste krediet-betalingen eerst. Zowel expliciete "vooruitbetaling"
+    # payments áls overflow-krediet (payment.credit_remaining > 0 op een
+    # gewone huur-betaling die meer was dan het toenmalig openstaande bedrag)
+    # tellen mee. Filteren op `credit_remaining > 0` — de categorie doet er
+    # niet toe zodra er ongebruikt krediet staat.
     async for credit in db.payments.find(
         {"tenant_id": tenant_id, "currency": cur,
-         "category": "vooruitbetaling",
          "credit_remaining": {"$gt": 0},
          "status": "approved"},
         {"_id": 0, "id": 1, "credit_remaining": 1, "method": 1, "receipt_number": 1},

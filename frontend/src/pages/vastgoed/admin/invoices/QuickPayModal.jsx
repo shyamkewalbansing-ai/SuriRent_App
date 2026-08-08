@@ -15,12 +15,22 @@ const METHODS = [
   { v: 'uni5pay', l: 'Uni5Pay', icon: CreditCard, color: 'purple' },
 ];
 
-export default function QuickPayModal({ invoice, tenantName, onClose, onSuccess }) {
+export default function QuickPayModal({ invoice, tenantName, otherOpenInvoices = [], onClose, onSuccess }) {
   const remaining = useMemo(() => {
     const paid = Number(invoice.paid_amount || 0);
     const total = Number(invoice.amount || 0);
     return Math.max(0, total - paid);
   }, [invoice]);
+
+  // Som van andere openstaande maanden (achterstand + huidig, geen future).
+  // Wordt gebruikt om te bepalen of overbetaling naar andere maanden gaat
+  // óf naar krediet (vooruitbetaling).
+  const otherOpenTotal = useMemo(
+    () => otherOpenInvoices.reduce(
+      (s, i) => s + Number(i.remaining_amount != null ? i.remaining_amount : i.amount || 0), 0,
+    ),
+    [otherOpenInvoices],
+  );
 
   const [amount, setAmount] = useState(remaining > 0 ? String(remaining) : String(invoice.amount || 0));
   const [method, setMethod] = useState('contant');
@@ -31,12 +41,22 @@ export default function QuickPayModal({ invoice, tenantName, onClose, onSuccess 
 
   const parsedAmount = Number(String(amount).replace(',', '.'));
   const isValid = parsedAmount > 0 && !Number.isNaN(parsedAmount);
-  const overpaying = parsedAmount > remaining + 0.001;
+  // Overschot t.o.v. deze factuur; daarna hoeveel naar andere maanden gaat
+  // en hoeveel eventueel als krediet blijft staan (echte vooruitbetaling).
+  const surplus = Math.max(0, parsedAmount - remaining);
+  const goesToOtherMonths = Math.min(surplus, otherOpenTotal);
+  const goesToCredit = Math.max(0, surplus - otherOpenTotal);
+  const hasSurplus = surplus > 0.001;
 
   const submit = async () => {
     if (!isValid) return;
     setLoading(true); setError('');
     try {
+      // We geven bewust GEEN `invoice_ids` mee. De backend matcht op
+      // period_month/period_year → primaire factuur, en spreidt eventuele
+      // overflow FIFO over álle andere openstaande facturen van deze huurder.
+      // Restant daarna wordt bewaard als krediet (credit_remaining) en
+      // automatisch verrekend bij de volgende maand-generatie.
       const { data } = await api.post('/payments', {
         tenant_id: invoice.tenant_id,
         apartment_id: invoice.apartment_id || null,
@@ -46,7 +66,6 @@ export default function QuickPayModal({ invoice, tenantName, onClose, onSuccess 
         category: 'huur',
         period_month: invoice.period_month,
         period_year: invoice.period_year,
-        invoice_ids: [invoice.id],
         note: note || '',
       });
       setReceipt(data);
@@ -152,12 +171,38 @@ export default function QuickPayModal({ invoice, tenantName, onClose, onSuccess 
               className="text-[11px] font-bold text-[#FF5C00] hover:underline">
               Volledig openstaand ({fmtMoney(remaining, invoice.currency)})
             </button>
-            {overpaying && (
-              <span className="text-[11px] font-bold text-amber-700" data-testid="quickpay-overpay-warn">
-                Overschot wordt vooruitbetaling
-              </span>
+            {otherOpenTotal > 0 && (
+              <button type="button" onClick={() => setAmount(String(remaining + otherOpenTotal))}
+                data-testid="quickpay-set-all-open"
+                className="text-[11px] font-bold text-emerald-700 hover:underline">
+                Alles openstaand ({fmtMoney(remaining + otherOpenTotal, invoice.currency)})
+              </button>
             )}
           </div>
+          {/* Voorspelt hoe de betaling wordt gealloceerd. Backend spreidt
+              overflow FIFO over andere openstaande facturen; wat daarna nog
+              overblijft wordt krediet en verrekent automatisch met de
+              volgende maand. */}
+          {hasSurplus && (
+            <div className="mt-2 space-y-1" data-testid="quickpay-alloc-preview">
+              {goesToOtherMonths > 0 && (
+                <div className="flex items-start gap-1.5 text-[11px] font-bold text-emerald-700" data-testid="quickpay-alloc-other">
+                  <Check className="w-3 h-3 mt-0.5 shrink-0" />
+                  <span>
+                    {fmtMoney(goesToOtherMonths, invoice.currency)} wordt afgerekend op {otherOpenInvoices.length} andere openstaande maand{otherOpenInvoices.length === 1 ? '' : 'en'}
+                  </span>
+                </div>
+              )}
+              {goesToCredit > 0 && (
+                <div className="flex items-start gap-1.5 text-[11px] font-bold text-amber-700" data-testid="quickpay-alloc-credit">
+                  <Check className="w-3 h-3 mt-0.5 shrink-0" />
+                  <span>
+                    {fmtMoney(goesToCredit, invoice.currency)} wordt vooruitbetaling — automatisch verrekend met de volgende maand
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Methode */}

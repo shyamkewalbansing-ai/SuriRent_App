@@ -1,5 +1,33 @@
 # Vastgoed Kiosk — PRD
 
+## Session 2026-02-08 (deel 4) — Overbetaling fix (overflow + krediet) ✅
+
+### Gemelde probleem
+Bij Snelle Betaling: 7000 SRD betalen op een factuur van 6000 SRD zou eerst andere openstaande maanden moeten afrekenen, niet direct als "vooruitbetaling" gelabeld worden. En zelfs wanneer het echt vooruitbetaling is, werd het krediet niet automatisch verrekend bij de volgende maand.
+
+### Root cause (twee bugs)
+1. **Frontend**: `QuickPayModal` stuurde `invoice_ids: [invoice.id]` mee → backend beperkte overflow-allocatie tot alleen díe ene factuur (zie `_create_payment_doc` regels 6842-6858). Dus overflow → altijd credit_remaining, nooit spread.
+2. **Backend**: `_apply_tenant_credit_to_invoice` filterde alleen op `category: "vooruitbetaling"`. Overflow-krediet houdt originele `category: "huur"` + `credit_origin: "overflow"` → werd NOOIT verrekend bij nieuwe factuur-generatie.
+
+### Fix
+- **`QuickPayModal.jsx`** — Verwijderd `invoice_ids` uit POST-body. Backend matcht nu via `period_month`/`period_year` en spreidt overflow FIFO over alle andere openstaande facturen van dezelfde huurder.
+- **`_apply_tenant_credit_to_invoice` (`server.py` regel 9295)** — Filter aangepast van `category: "vooruitbetaling"` naar puur `credit_remaining > 0`. Overflow-krediet én expliciete vooruitbetalingen worden nu beide verrekend.
+- **UX verbetering** — Modal toont nu een live "allocatie-voorbeeld":
+  - Groen: "SRD X wordt afgerekend op N andere openstaande maanden"
+  - Amber: "SRD Y wordt vooruitbetaling — automatisch verrekend met de volgende maand"
+  - Extra quick-fill knop "Alles openstaand" (som van remaining + andere open)
+
+### End-to-end verified (Demo-account, curl E2E)
+- Jan Pieterse juli (6000) + aug (6000) → pay 7000 op juli → juli: paid, aug: partial 5000 remaining ✅
+- Roy van der Berg aug (3000 remaining) → pay 5000 → aug: paid, 2000 credit_remaining stored ✅
+  Genereer sept 2026 → nieuwe factuur 7000, krediet 2000 auto-verrekend → sept: partial 5000 remaining ✅
+  Payment `credit_remaining: 0.0` + `credit_applied_at` gezet, response `credit_applied: 2000.0` ✅
+- Frontend screenshots tonen correcte splitsing bij 8000 en 15000 SRD scenarios ✅
+
+---
+
+
+
 ## Session 2026-02-08 (deel 3) — QuickPay sneltoets vanuit Facturen ✅
 
 ### Wat is gebouwd

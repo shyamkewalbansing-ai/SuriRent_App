@@ -146,6 +146,7 @@ export default function InvoiceDetailPage({ group, onBack, onReminder, onPaid })
         <QuickPayModal
           invoice={quickPayInv}
           tenantName={g.tenant_name}
+          otherOpenInvoices={[...overdue, ...current].filter((i) => i.id !== quickPayInv.id)}
           onClose={() => setQuickPayInv(null)}
           onSuccess={(payment) => {
             setQuickPayInv(null);
