@@ -1,5 +1,43 @@
 # Vastgoed Kiosk — PRD
 
+## Session 2026-02-08 (deel 14) — Welkomstpakket PDF + auto e-mail bij registratie ✅
+
+### Wat is gebouwd
+Nieuw endpoint + UI-flow zodat gebruikers direct na registratie hun inloggegevens veilig kunnen opslaan/downloaden en per e-mail ontvangen.
+
+### Backend (`server.py`)
+- **`POST /api/onboarding/welcome-pack`** — Body: `{email, password, slug, company_name, send_email}`. Genereert een A4 PDF (reportlab) met:
+  - Oranje header "Welkom bij SuriRent · Uw omgeving voor {company_name} is klaar"
+  - **Inloggegevens** blok: e-mail, wachtwoord, portal slug
+  - **Belangrijke URL's** blok: Admin dashboard, Login, Kiosk, Huurder kiosk, Huurder portal, Customer Display, Publieke landingspagina (elk als absolute link)
+  - Footer met veilig-bewaar disclaimer
+- Wanneer `send_email=true`: verstuurt via `send_platform_email` een HTML-mail met dezelfde info + PDF als bijlage. Failure is stil (best-effort).
+- Retourneert PDF stream (application/pdf, download-attachment header).
+
+### Frontend (`RegisterModal.jsx`)
+- Nieuwe state: `savedEmail`, `savedPassword`, `emailStatus` (`idle/sending/sent/error`), `pdfDownloaded`.
+- Bij succesvolle registratie worden email + password kort in **memory** bewaard (niet in localStorage) — verplicht voor PDF-generatie.
+- Nieuwe kaart in de success-view: "Inloggegevens & URL's — Bewaar of print uw welkomstpakket":
+  - Status-badge rechtsboven: "E-mail versturen…" → "E-mail verzonden ✓" → "E-mail mislukt"
+  - **Auto-mail** wordt getriggerd zodra success-view rendert (useEffect)
+  - Grote knop "Download PDF met inlog" — genereert client-side download
+  - Retry-knop bij mail-error
+- Bevestiging onder de kaart: "Inloggegevens verstuurd naar {email}"
+
+### Verified via curl E2E
+- POST `/api/onboarding/welcome-pack` (send_email=false) → HTTP 200, PDF stream 2.956 bytes ✅
+- PDF-tekst extractie: alle 7 URL's aanwezig, correcte email + wachtwoord + slug ✅
+- URL-set klopt met de bestaande QR-generator paden (Admin/Login/Kiosk/TenantKiosk/TenantPortal/CustomerDisplay/Landing)
+- Lint schoon ✅
+
+### Let op (productie)
+- Zichtbaar in preview. Voor productie is een **redeploy** nodig zodat nieuwe registraties de PDF-knop krijgen.
+- SMTP moet geconfigureerd zijn in productie voor de auto-mail. Zonder SMTP faalt de mail stil maar de PDF-download blijft altijd werken.
+
+---
+
+
+
 ## Session 2026-02-08 (deel 13) — Slug handmatig bij registratie ✅
 
 ### Gewijzigd (op verzoek)

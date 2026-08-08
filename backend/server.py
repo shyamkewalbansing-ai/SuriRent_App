@@ -3779,6 +3779,142 @@ def _company_base_url(request: Request) -> str:
     return f"{proto}://{app_domain}" if app_domain else ""
 
 
+@api.post("/onboarding/welcome-pack")
+async def onboarding_welcome_pack(body: dict, request: Request):
+    """Genereert een PDF welkomstpakket met inlog + alle portal-URL's, en
+    verstuurt hetzelfde per e-mail wanneer `send_email=true`. Wordt aangeroepen
+    door de RegisterSuccess-view direct na registratie zodat de gebruiker
+    zijn inloggegevens veilig kan opslaan en/of ontvangen.
+
+    Body:
+      - email (verplicht) — het admin-account
+      - password (verplicht) — plaintext, wordt niet opgeslagen
+      - slug (verplicht) — company slug voor URL-opbouw
+      - company_name (optioneel) — voor branding op de PDF
+      - send_email (default true) — verstuur ook per e-mail
+    Retourneert de PDF stream (Content-Type: application/pdf).
+    """
+    import io as _io
+    from fastapi.responses import StreamingResponse
+    email_addr = (body.get("email") or "").strip()
+    password = body.get("password") or ""
+    slug = (body.get("slug") or "").strip().lower()
+    company_name = (body.get("company_name") or "").strip() or slug
+    send_mail = body.get("send_email", True)
+    if not email_addr or not password or not slug:
+        raise HTTPException(status_code=400, detail="email, password en slug zijn vereist")
+
+    base = _company_base_url(request) or _public_url("")
+    # Alle publieke URL's die de admin nodig heeft. Zelfde bron als de QR-code
+    # generator (`_QR_KIND_PATHS`) — één centrale lijst voorkomt drift.
+    urls = {
+        "Admin dashboard": f"{base}/{slug}/admin",
+        "Login": f"{base}/{slug}/login",
+        "Kiosk (POS / balie)": f"{base}/{slug}/kiosk",
+        "Huurder kiosk (self-service)": f"{base}/{slug}/tenant-kiosk",
+        "Huurder portal (thuis)": f"{base}/{slug}/tenant-portal",
+        "Klant display (Customer Display)": f"{base}/{slug}/customer-display",
+        "Publieke landingspagina": f"{base}/site/{slug}",
+    }
+
+    # --- PDF genereren ---
+    from reportlab.lib.pagesizes import A4
+    from reportlab.pdfgen import canvas as _canvas
+    from reportlab.lib import colors
+    from reportlab.lib.units import mm
+
+    buf = _io.BytesIO()
+    pdf = _canvas.Canvas(buf, pagesize=A4)
+    w, h = A4
+    orange = colors.HexColor("#FF5C00")
+    slate900 = colors.HexColor("#0F172A")
+    slate500 = colors.HexColor("#64748B")
+
+    # Header band
+    pdf.setFillColor(orange)
+    pdf.rect(0, h - 28 * mm, w, 28 * mm, fill=1, stroke=0)
+    pdf.setFillColor(colors.white)
+    pdf.setFont("Helvetica-Bold", 22)
+    pdf.drawString(20 * mm, h - 15 * mm, "Welkom bij SuriRent")
+    pdf.setFont("Helvetica", 11)
+    pdf.drawString(20 * mm, h - 22 * mm, f"Uw omgeving voor {company_name} is klaar.")
+
+    y = h - 42 * mm
+    pdf.setFillColor(slate900)
+    pdf.setFont("Helvetica-Bold", 13)
+    pdf.drawString(20 * mm, y, "Uw inloggegevens")
+    y -= 8 * mm
+    pdf.setFont("Helvetica", 10)
+    pdf.setFillColor(slate500); pdf.drawString(20 * mm, y, "Gebruikersnaam (e-mail)")
+    pdf.setFillColor(slate900); pdf.setFont("Helvetica-Bold", 12)
+    pdf.drawString(75 * mm, y, email_addr)
+    y -= 7 * mm
+    pdf.setFont("Helvetica", 10); pdf.setFillColor(slate500)
+    pdf.drawString(20 * mm, y, "Wachtwoord")
+    pdf.setFillColor(slate900); pdf.setFont("Courier-Bold", 12)
+    pdf.drawString(75 * mm, y, password)
+    y -= 7 * mm
+    pdf.setFont("Helvetica", 10); pdf.setFillColor(slate500)
+    pdf.drawString(20 * mm, y, "Portal slug")
+    pdf.setFillColor(slate900); pdf.setFont("Courier-Bold", 12)
+    pdf.drawString(75 * mm, y, slug)
+
+    y -= 15 * mm
+    pdf.setFont("Helvetica-Bold", 13); pdf.setFillColor(slate900)
+    pdf.drawString(20 * mm, y, "Belangrijke URL's")
+    y -= 8 * mm
+    for label, url in urls.items():
+        pdf.setFont("Helvetica-Bold", 10); pdf.setFillColor(slate900)
+        pdf.drawString(20 * mm, y, label)
+        y -= 5 * mm
+        pdf.setFont("Courier", 9); pdf.setFillColor(orange)
+        pdf.drawString(22 * mm, y, url)
+        y -= 8 * mm
+        if y < 30 * mm:  # nieuwe pagina indien nodig
+            pdf.showPage(); y = h - 20 * mm
+
+    # Footer
+    pdf.setFont("Helvetica-Oblique", 8); pdf.setFillColor(slate500)
+    pdf.drawString(20 * mm, 15 * mm,
+                   "Bewaar dit document veilig. U kunt uw wachtwoord altijd wijzigen via Instellingen → Beveiliging.")
+    pdf.save()
+    buf.seek(0)
+    pdf_bytes = buf.getvalue()
+
+    # --- E-mail versturen (optioneel, best-effort via platform SMTP) ---
+    if send_mail:
+        try:
+            from email_service import send_platform_email, wrap_template
+            body_html = wrap_template(
+                title=f"Welkom bij SuriRent — {company_name}",
+                content=(
+                    f"<p>Uw account is aangemaakt. Hieronder uw inloggegevens en portal-links.</p>"
+                    f"<div style='background:#F8FAFC;padding:16px;border-radius:12px;margin:16px 0'>"
+                    f"<p><b>Gebruikersnaam:</b> {email_addr}<br/>"
+                    f"<b>Wachtwoord:</b> <code style='background:#FFE4CC;padding:2px 6px;border-radius:4px'>{password}</code></p>"
+                    f"</div>"
+                    f"<h3>Uw URL's</h3><ul>"
+                    + "".join(f"<li><b>{k}</b>: <a href='{v}'>{v}</a></li>" for k, v in urls.items())
+                    + "</ul>"
+                    f"<p style='color:#64748B;font-size:12px'>Bewaar dit bericht veilig. De PDF-versie is als bijlage bijgevoegd.</p>"
+                ),
+            )
+            await send_platform_email(
+                to=email_addr,
+                subject=f"Welkom bij SuriRent — inloggegevens voor {company_name}",
+                body_html=body_html,
+                attachments=[(f"surirent-welkom-{slug}.pdf", pdf_bytes, "application/pdf")],
+            )
+        except Exception as e:  # noqa: BLE001
+            print(f"[welcome-pack] email send failed for {email_addr}: {e}")
+
+    return StreamingResponse(
+        _io.BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=surirent-welkom-{slug}.pdf"},
+    )
+
+
 @api.get("/companies/me/qr.png")
 async def get_my_qr_png(kind: str = "kiosk", size: int = 320, request: Request = None,
                        user=Depends(get_current_user)):

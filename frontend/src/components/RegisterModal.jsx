@@ -4,10 +4,10 @@
 // centraal als een modale dialog. Sluiten via X knop, ESC, of klik
 // op de blur-overlay.
 // =====================================================================
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   X, Loader2, Eye, EyeOff, Sparkles, ArrowRight, Globe,
-  ShieldCheck, Zap, Star, Check,
+  ShieldCheck, Zap, Star, Check, Download, Mail,
 } from 'lucide-react';
 import { api, formatError } from '../lib/api';
 import { useAuth } from '../lib/auth';
@@ -45,6 +45,12 @@ export default function RegisterModal({ open, onClose }) {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
   const [registeredSlug, setRegisteredSlug] = useState('');
+  // Onthoud email + password nadat registratie is gelukt, zodat we een
+  // welkomstpakket-PDF kunnen genereren en (best-effort) per mail versturen.
+  const [savedPassword, setSavedPassword] = useState('');
+  const [savedEmail, setSavedEmail] = useState('');
+  const [emailStatus, setEmailStatus] = useState('idle'); // 'idle' | 'sending' | 'sent' | 'error'
+  const [pdfDownloaded, setPdfDownloaded] = useState(false);
 
   const modalRef = useRef(null);
 
@@ -127,6 +133,10 @@ export default function RegisterModal({ open, onClose }) {
       });
       const newSlug = result?.company?.slug || '';
       if (newSlug) setRegisteredSlug(newSlug);
+      // Bewaar credentials in memory (niet in localStorage!) — nodig om het
+      // welkomstpakket te kunnen genereren + mailen. Wordt gewist bij close.
+      setSavedEmail(email.trim());
+      setSavedPassword(password);
       setSuccess(true);
     } catch (err) {
       setError(formatError(err, 'Registratie mislukt'));
@@ -139,6 +149,50 @@ export default function RegisterModal({ open, onClose }) {
     } else {
       window.location.assign('/admin');
     }
+  };
+
+  // Helper: haal het welkomstpakket-PDF op (en verstuur optioneel per mail).
+  const fetchWelcomePack = useCallback(async ({ sendEmail: sendMail = false, download = false }) => {
+    if (!savedEmail || !savedPassword || !registeredSlug) return null;
+    const url = `${process.env.REACT_APP_BACKEND_URL}/api/onboarding/welcome-pack`;
+    const res = await fetch(url, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: savedEmail,
+        password: savedPassword,
+        slug: registeredSlug,
+        company_name: companyName,
+        send_email: sendMail,
+      }),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const blob = await res.blob();
+    if (download) {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `surirent-welkom-${registeredSlug}.pdf`;
+      document.body.appendChild(a); a.click(); a.remove();
+      setPdfDownloaded(true);
+    }
+    return blob;
+  }, [savedEmail, savedPassword, registeredSlug, companyName]);
+
+  // Auto-verstuur de welkomst-mail zodra de success-view zichtbaar is.
+  // Best-effort — faalt stil zodat de gebruiker altijd nog de PDF-knop heeft.
+  useEffect(() => {
+    if (!success || emailStatus !== 'idle') return;
+    if (!savedEmail || !savedPassword || !registeredSlug) return;
+    setEmailStatus('sending');
+    fetchWelcomePack({ sendEmail: true, download: false })
+      .then(() => setEmailStatus('sent'))
+      .catch(() => setEmailStatus('error'));
+  }, [success, emailStatus, savedEmail, savedPassword, registeredSlug, fetchWelcomePack]);
+
+  const downloadWelcomePdf = async () => {
+    try { await fetchWelcomePack({ sendEmail: false, download: true }); }
+    catch { /* niet fataal — user kan altijd nog nogmaals klikken */ }
   };
 
   if (!open) return null;
@@ -215,6 +269,49 @@ export default function RegisterModal({ open, onClose }) {
                 </div>
               </div>
             )}
+
+            {/* Welkomstpakket — PDF download + auto-mail bevestiging */}
+            <div className="rounded-2xl border-2 border-slate-200 p-4 mb-5" data-testid="welcome-pack-card">
+              <div className="flex items-start justify-between gap-3 mb-3">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-extrabold uppercase tracking-widest text-slate-500">Inloggegevens &amp; URL&apos;s</p>
+                  <p className="text-sm font-bold text-slate-900 mt-0.5">Bewaar of print uw welkomstpakket</p>
+                  <p className="text-[11px] text-slate-500 mt-0.5">Bevat inlog + alle portal-URL&apos;s (admin, kiosk, huurder, landing).</p>
+                </div>
+                <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-md whitespace-nowrap ${
+                  emailStatus === 'sent' ? 'bg-emerald-100 text-emerald-700'
+                    : emailStatus === 'sending' ? 'bg-blue-100 text-blue-700'
+                    : emailStatus === 'error' ? 'bg-amber-100 text-amber-700'
+                    : 'bg-slate-100 text-slate-600'
+                }`}
+                  data-testid="welcome-pack-email-status">
+                  {emailStatus === 'sent' && <><Check className="w-3 h-3 inline mr-0.5" /> E-mail verzonden</>}
+                  {emailStatus === 'sending' && <><Loader2 className="w-3 h-3 inline mr-0.5 animate-spin" /> E-mail versturen…</>}
+                  {emailStatus === 'error' && <>E-mail mislukt</>}
+                  {emailStatus === 'idle' && <>Nog niet verstuurd</>}
+                </span>
+              </div>
+              <div className="flex gap-2">
+                <button type="button" onClick={downloadWelcomePdf}
+                  data-testid="welcome-pack-download"
+                  className="flex-1 h-11 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-sm inline-flex items-center justify-center gap-2 transition active:scale-95">
+                  <Download className="w-4 h-4" />
+                  {pdfDownloaded ? 'Nogmaals downloaden' : 'Download PDF met inlog'}
+                </button>
+                {emailStatus === 'error' && (
+                  <button type="button" onClick={() => { setEmailStatus('idle'); }}
+                    data-testid="welcome-pack-retry-email"
+                    className="h-11 px-3 rounded-xl bg-white border-2 border-amber-300 hover:bg-amber-50 text-amber-700 font-bold text-xs inline-flex items-center justify-center gap-1.5">
+                    <Mail className="w-3.5 h-3.5" /> Opnieuw mailen
+                  </button>
+                )}
+              </div>
+              {emailStatus === 'sent' && (
+                <p className="text-[11px] text-emerald-700 font-semibold mt-2 flex items-center gap-1">
+                  <Check className="w-3 h-3" /> Inloggegevens verstuurd naar <b className="font-mono">{savedEmail}</b>
+                </p>
+              )}
+            </div>
 
             <button onClick={goToPortal} data-testid="register-success-continue"
               className="w-full h-14 bg-[#FF5C00] hover:bg-[#E05200] text-white rounded-xl text-lg font-extrabold transition shadow-lg shadow-orange-500/20">
