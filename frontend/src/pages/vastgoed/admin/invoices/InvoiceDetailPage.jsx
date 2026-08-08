@@ -1,20 +1,27 @@
-import { ChevronRight, Mail } from 'lucide-react';
+import { useState } from 'react';
+import { ChevronRight, Mail, Banknote } from 'lucide-react';
 import { fmtMoney } from '../../../../lib/api';
 import { InvoiceRow } from './InvoiceRow';
 import PaidHistorySection from './PaidHistorySection';
+import QuickPayModal from './QuickPayModal';
 
 // =====================================================================
 // InvoiceDetailPage — echte losse detail-pagina voor 1 huurder in
 // PlanDetail-stijl (hoofdcard + sub-cards). Toont openstaand + volledige
 // betalingsgeschiedenis (via PaidHistorySection).
 // =====================================================================
-export default function InvoiceDetailPage({ group, onBack, onReminder }) {
+export default function InvoiceDetailPage({ group, onBack, onReminder, onPaid }) {
   const g = group;
   const overdue = (g.overdue || []).filter((i) => (i.status || '') !== 'paid');
   const current = (g.current || []).filter((i) => (i.status || '') !== 'paid');
   const future = (g.upcoming || []).filter((i) => (i.status || '') !== 'paid');
   const paid = (g.all || []).filter((i) => (i.status || '') === 'paid');
   const sev = g.severity;
+  const [quickPayInv, setQuickPayInv] = useState(null);
+
+  // De "primaire" openstaande factuur (meest urgent):
+  // - eerst de oudste achterstallige, dan de huidige maand, dan future.
+  const primaryOpen = overdue[0] || current[0] || future[0] || null;
 
   const badgeCls = sev === 'critical' ? 'bg-red-100 text-red-700'
     : sev === 'late' ? 'bg-orange-100 text-orange-700'
@@ -72,13 +79,35 @@ export default function InvoiceDetailPage({ group, onBack, onReminder }) {
       {/* SUB-CARD: OPEN FACTUREN */}
       {(overdue.length + current.length + future.length) > 0 && (
         <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-          <div className="px-4 py-3 border-b border-slate-100">
+          <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between gap-2">
             <h2 className="text-sm font-black text-slate-900 uppercase tracking-widest">Openstaande facturen</h2>
+            {primaryOpen && (
+              <button type="button" onClick={() => setQuickPayInv(primaryOpen)}
+                data-testid="quickpay-primary-btn"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-lg text-xs shadow-[0_6px_16px_-4px_rgba(16,185,129,0.5)] active:scale-95 transition">
+                <Banknote className="w-3.5 h-3.5" /> Registreer betaling
+              </button>
+            )}
           </div>
           <div className="p-4 space-y-2">
-            {overdue.map((inv) => <InvoiceRow key={inv.id} inv={inv} bucket="overdue" severity={sev} />)}
-            {current.map((inv) => <InvoiceRow key={inv.id} inv={inv} bucket="current" severity={sev} />)}
-            {future.map((inv) => <InvoiceRow key={inv.id} inv={inv} bucket="future" severity={sev} />)}
+            {[...overdue, ...current, ...future].map((inv) => {
+              const bucket = overdue.includes(inv) ? 'overdue' : current.includes(inv) ? 'current' : 'future';
+              return (
+                <div key={inv.id} className="flex items-center gap-2">
+                  <div className="flex-1 min-w-0">
+                    <InvoiceRow inv={inv} bucket={bucket} severity={sev} />
+                  </div>
+                  {bucket !== 'future' && (
+                    <button type="button" onClick={() => setQuickPayInv(inv)}
+                      data-testid={`quickpay-btn-${inv.id}`}
+                      title="Snelle betaling registreren"
+                      className="shrink-0 hidden md:inline-flex items-center gap-1 px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 font-bold rounded-lg text-[11px]">
+                      <Banknote className="w-3 h-3" /> Betaal
+                    </button>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
@@ -111,6 +140,19 @@ export default function InvoiceDetailPage({ group, onBack, onReminder }) {
           </button>
         </div>
       </div>
+
+      {/* QuickPay modal — direct-betaal flow zonder navigatie naar Betalingen */}
+      {quickPayInv && (
+        <QuickPayModal
+          invoice={quickPayInv}
+          tenantName={g.tenant_name}
+          onClose={() => setQuickPayInv(null)}
+          onSuccess={(payment) => {
+            setQuickPayInv(null);
+            if (onPaid) onPaid(payment);
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -1,5 +1,30 @@
 # Vastgoed Kiosk — PRD
 
+## Session 2026-02-08 (deel 3) — QuickPay sneltoets vanuit Facturen ✅
+
+### Wat is gebouwd
+- **`QuickPayModal.jsx`** — Directe betalings-modal die vanuit de Facturen detail-pagina opent. Prefilled met openstaand bedrag, 5 betaalmethoden (contant/bank/MoPe/SumUp/Uni5Pay), optionele notitie, waarschuwing bij overbetaling ("Overschot wordt vooruitbetaling"). POST direct naar `/api/payments` met `invoice_ids=[inv.id]`.
+- **Succes-scherm ingebouwd** — Toont kwitantienummer prominent + directe PDF-download knop. Geen redirect nodig, alles blijft binnen de factuurcontext.
+- **Twee triggers in InvoiceDetailPage**:
+  - Groene "Registreer betaling" primaire knop rechtsboven in "Openstaande facturen" (kiest automatisch meest urgente factuur: overdue → current → future).
+  - Kleinere "Betaal" knop per open-factuur-regel (desktop) voor precieze selectie.
+- **Auto-refresh + toast** — Bij succes: toast met kwitantienummer + bedrag, en `load({ silent: true })` haalt de factuurstatus opnieuw op zodat partial/paid direct doorwerkt.
+
+### Verified via smoke-screenshots (demo-account, Roy van der Berg 4000/7000 SRD)
+- Detail toont "Registreer betaling" header knop + per-invoice "Betaal" knop ✅
+- Modal opent met correcte summary (Totaal 7.000, Betaald 4.000, Nog te betalen 3.000) ✅
+- Bedrag prefilled 3000, methoden zichtbaar, notitie-veld werkt ✅
+- Lint schoon in alle bestanden ✅
+
+### Files toegevoegd / gewijzigd
+- Nieuw: `/app/frontend/src/pages/vastgoed/admin/invoices/QuickPayModal.jsx`
+- Gewijzigd: `InvoiceDetailPage.jsx` (imports + primary btn + per-row btn + modal render + onPaid callback)
+- Gewijzigd: `Invoices.jsx` (onPaid → toast + silent reload)
+
+---
+
+
+
 ## Session 2026-02-08 (deel 2) — Invoices refactor + betalingsgeschiedenis ✅
 
 ### Wat is gebouwd

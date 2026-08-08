@@ -153,6 +153,10 @@ export default function Invoices() {
           group={g}
           onBack={() => { setDetail(null); load({ silent: true }); }}
           onReminder={openReminder}
+          onPaid={(payment) => {
+            setToast({ type: 'ok', text: `Kwitantie ${payment.receipt_number} — ${payment.currency} ${Number(payment.amount).toLocaleString('nl-NL', { minimumFractionDigits: 2 })}` });
+            load({ silent: true });
+          }}
         />
         {reminding && (
           <ReminderModal group={reminding} initialChannel={reminderChannel}
