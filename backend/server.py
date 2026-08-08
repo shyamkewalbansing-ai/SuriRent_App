@@ -8972,6 +8972,7 @@ class InvoiceOut(BaseModel):
     paid_method: Optional[str] = None
     plans: List[InvoicePlanRef] = []
     bucket: Optional[str] = None  # 'overdue' | 'current' | 'future' (alleen voor open facturen relevant)
+    auto_created_from_payment: Optional[bool] = None  # audit-trail: factuur is aangemaakt door kiosk-betaling voordat maand-generatie plaatsvond
 
 
 async def _enrich_invoice(i: dict) -> dict:
