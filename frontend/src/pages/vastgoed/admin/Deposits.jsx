@@ -137,6 +137,7 @@ export default function Deposits() {
   const [tenants, setTenants] = useState([]);
   const [creating, setCreating] = useState(false);
   const [refunding, setRefunding] = useState(null);
+  const [detail, setDetail] = useState(null);
   const load = useCallback(async () => {
     const [d, t] = await Promise.all([api.get('/deposits'), api.get('/tenants')]);
     setItems(d.data); setTenants(t.data);
@@ -147,6 +148,92 @@ export default function Deposits() {
     await api.delete(`/deposits/${id}`); load();
   };
   const apiBase = `${process.env.REACT_APP_BACKEND_URL}/api`;
+
+  // Detail-pagina met terug-knop, analoog aan PlanDetail in Betalingsregelingen.
+  if (detail) {
+    const isHeld = detail.status === 'held';
+    return (
+      <div className="space-y-4 pb-24 sm:pb-6" data-testid={`deposit-detail-page-${detail.id}`}>
+        <div className="flex items-center gap-3">
+          <button onClick={() => { setDetail(null); load(); }} data-testid="deposit-detail-back"
+            className="w-10 h-10 rounded-xl bg-white hover:bg-slate-50 shadow-sm border border-slate-100 flex items-center justify-center transition">
+            <ChevronRight className="w-5 h-5 text-slate-600 rotate-180" />
+          </button>
+          <div className="min-w-0">
+            <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight truncate">
+              {detail.tenant_name || 'Borg'}
+            </h1>
+            <p className="text-sm text-slate-500 mt-0.5">
+              {detail.apartment_number ? `Appt. ${detail.apartment_number}` : 'Borg-detail'}
+            </p>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 sm:p-6">
+          <div className="flex items-start justify-between gap-3 mb-4">
+            <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${
+              isHeld ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'
+            }`}>{isHeld ? 'In bewaring' : 'Gerestitueerd'}</span>
+            <div className="text-right shrink-0">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Bedrag</p>
+              <p className="text-2xl sm:text-3xl font-black text-slate-900">{fmtMoney(detail.amount, detail.currency)}</p>
+            </div>
+          </div>
+
+          <div className="space-y-1.5 text-sm border-t border-slate-100 pt-4">
+            <div className="flex justify-between gap-2">
+              <span className="text-slate-500">Huurder</span>
+              <span className="text-slate-900 font-semibold text-right">{detail.tenant_name || '—'}</span>
+            </div>
+            <div className="flex justify-between gap-2">
+              <span className="text-slate-500">Appartement</span>
+              <span className="text-slate-900 font-semibold text-right">{detail.apartment_number || '—'}</span>
+            </div>
+            <div className="flex justify-between gap-2">
+              <span className="text-slate-500">Valuta</span>
+              <span className="text-slate-900 font-semibold text-right">{detail.currency}</span>
+            </div>
+            {!isHeld && detail.refund_amount !== undefined && detail.refund_amount !== null && (
+              <div className="flex justify-between gap-2">
+                <span className="text-slate-500">Terugbetaald</span>
+                <span className="text-slate-900 font-semibold text-right">{fmtMoney(detail.refund_amount, detail.currency)}</span>
+              </div>
+            )}
+            {detail.note && (
+              <div className="flex justify-between gap-2">
+                <span className="text-slate-500">Notitie</span>
+                <span className="text-slate-900 font-semibold text-right">{detail.note}</span>
+              </div>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 gap-2 mt-5">
+            {isHeld ? (
+              <button onClick={() => setRefunding(detail)} data-testid={`dep-refund-${detail.id}`}
+                className="col-span-2 sm:col-span-1 inline-flex items-center justify-center gap-2 px-3 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl text-xs sm:text-sm">
+                <Check className="w-4 h-4" /> Restitueer
+              </button>
+            ) : (
+              <a href={`${apiBase}/deposits/${detail.id}/refund-pdf`} target="_blank" rel="noreferrer"
+                data-testid={`dep-pdf-${detail.id}`}
+                className="col-span-2 sm:col-span-1 inline-flex items-center justify-center gap-2 px-3 py-2.5 bg-white border-2 border-slate-200 hover:border-slate-400 text-slate-700 font-bold rounded-xl text-xs sm:text-sm">
+                <FileText className="w-4 h-4" /> PDF bewijs
+              </a>
+            )}
+            <button onClick={async () => { await del(detail.id); setDetail(null); }}
+              data-testid={`dep-delete-${detail.id}`}
+              className="col-span-2 sm:col-span-1 inline-flex items-center justify-center gap-2 px-3 py-2.5 bg-white border-2 border-red-300 hover:bg-red-500 hover:text-white text-red-600 font-bold rounded-xl text-xs sm:text-sm transition">
+              <Trash2 className="w-4 h-4" /> Verwijder
+            </button>
+          </div>
+        </div>
+
+        {refunding && <RefundForm deposit={refunding}
+          onCancel={() => setRefunding(null)}
+          onSaved={() => { setRefunding(null); setDetail(null); load(); }} />}
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -172,8 +259,10 @@ export default function Deposits() {
               const statusCls = isHeld ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700';
               const statusLabel = isHeld ? 'In bewaring' : 'Gerestitueerd';
               return (
-                <div key={d.id} data-testid={`dep-row-${d.id}`}
-                  className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 flex items-center gap-3">
+                <button key={d.id} data-testid={`dep-row-${d.id}`}
+                  onClick={() => setDetail(d)}
+                  type="button"
+                  className="w-full text-left bg-white rounded-2xl shadow-sm border border-slate-100 p-4 flex items-center gap-3 hover:bg-slate-50 active:bg-slate-100 transition">
                   <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${iconTint}`}>
                     <ShieldCheck className="w-5 h-5" />
                   </div>
@@ -186,7 +275,7 @@ export default function Deposits() {
                     </div>
                     <p className="text-xs text-slate-500 mt-0.5 truncate">
                       {d.apartment_number ? `Appt. ${d.apartment_number}` : 'Geen appartement'}
-                      {!isHeld && d.refund_amount !== undefined && (
+                      {!isHeld && d.refund_amount !== undefined && d.refund_amount !== null && (
                         <span> · terugbetaald: {fmtMoney(d.refund_amount, d.currency)}</span>
                       )}
                     </p>
@@ -195,28 +284,8 @@ export default function Deposits() {
                     <p className="text-base font-black text-slate-900">{fmtMoney(d.amount, d.currency)}</p>
                     <p className="text-[10px] text-slate-400">borg</p>
                   </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    {isHeld ? (
-                      <button onClick={() => setRefunding(d)} data-testid={`dep-refund-${d.id}`}
-                        className="inline-flex items-center gap-1 px-3 h-9 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-black uppercase tracking-widest whitespace-nowrap">
-                        Restitueer
-                      </button>
-                    ) : (
-                      <a href={`${apiBase}/deposits/${d.id}/refund-pdf`} target="_blank" rel="noreferrer"
-                        data-testid={`dep-pdf-${d.id}`}
-                        title="PDF bewijs"
-                        className="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600">
-                        <FileText className="w-4 h-4" />
-                      </a>
-                    )}
-                    <button onClick={() => del(d.id)} data-testid={`dep-delete-${d.id}`}
-                      title="Verwijderen"
-                      className="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-red-50 hover:bg-red-500 hover:text-white text-red-500 transition">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                  <ChevronRight className="w-4 h-4 text-slate-300 shrink-0 hidden md:block" />
-                </div>
+                  <ChevronRight className="w-4 h-4 text-slate-300 shrink-0" />
+                </button>
               );
             })}
           </div>

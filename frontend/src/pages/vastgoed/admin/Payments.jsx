@@ -374,7 +374,7 @@ function MobilePaymentCard({ p, onClick }) {
 // =====================================================================
 // Payment row
 // =====================================================================
-function PaymentRow({ p, expanded, onToggle, onEmail, onDelete, apiBase }) {
+function PaymentRow({ p, onOpen }) {
   const tenantSub = (() => {
     if (p.location_name && p.apartment_number) return `${p.location_name} · ${p.apartment_number}`;
     if (p.apartment_number) return p.apartment_number;
@@ -391,10 +391,9 @@ function PaymentRow({ p, expanded, onToggle, onEmail, onDelete, apiBase }) {
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden"
       data-testid={`payment-row-${p.id}`}>
-      {/* KAART — zelfde visuele stijl als PlanRow in Betalingsregelingen:
-          links een 11x11 orange-ring icoon, midden naam+badges+subtitle,
-          rechts bedrag+label. Klikbaar → klapt detail open eronder. */}
-      <button onClick={onToggle}
+      {/* Card is een grote klikbare rij die de detail-pagina opent —
+          zelfde patroon als PlanRow → PlanDetail in Betalingsregelingen. */}
+      <button onClick={() => onOpen(p)}
         className="w-full text-left hover:bg-slate-50 active:bg-slate-100 transition p-4 flex items-center gap-3">
         <div className="w-11 h-11 rounded-xl bg-orange-50 text-[#FF5C00] flex items-center justify-center shrink-0">
           <Receipt className="w-5 h-5" />
@@ -427,64 +426,98 @@ function PaymentRow({ p, expanded, onToggle, onEmail, onDelete, apiBase }) {
             </p>
           )}
         </div>
-        {expanded
-          ? <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
-          : <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />}
+        <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
       </button>
+    </div>
+  );
+}
 
-      {expanded && (
-        <div className="px-3 sm:px-4 pb-4 -mt-1" data-testid={`payment-detail-${p.id}`}>
-          <div className="bg-emerald-50/60 rounded-2xl p-4">
-            <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-4">
-              <div className="space-y-1.5 text-sm">
-                <DetailRow label="Kwitantienummer" value={<span className="font-mono font-bold text-slate-900">{p.receipt_number}</span>} />
-                {p.invoice_number && (
-                  <DetailRow label="Factuur" value={
-                    <span className="font-mono font-bold text-[#FF5C00]">{p.invoice_number}</span>
-                  } />
-                )}
-                <DetailRow label="Datum" value={date.toLocaleString('nl-NL')} />
-                <DetailRow label="Categorie" value={CATEGORY_LABELS[p.category] || p.category} />
-                <DetailRow label="Methode" value={METHOD_LABELS[p.method] || p.method} />
-                {p.period_month && <DetailRow label="Periode" value={`${MONTHS_NL[p.period_month - 1]} ${p.period_year}`} />}
-                {p.approved_by && <DetailRow label="Goedgekeurd door" value={p.approved_by} />}
-                {p.note && <DetailRow label="Notitie" value={p.note} />}
-              </div>
-              <div className="md:border-l md:border-emerald-200 md:pl-4 md:min-w-[160px] flex md:flex-col justify-between md:justify-center items-end md:items-end">
-                <p className="text-xs font-bold text-slate-500">Betaald bedrag</p>
-                <p className="text-xl sm:text-2xl font-black tracking-tight text-slate-900">
-                  {fmtMoney(p.amount, p.currency)}
-                </p>
-              </div>
-            </div>
+// =====================================================================
+// PaymentDetail — full-page detail view met terug-knop (net als PlanDetail
+// in Betalingsregelingen). Vervangt de vroegere inline expand.
+// =====================================================================
+function PaymentDetail({ payment, onBack, onEmail, onDelete, apiBase }) {
+  const p = payment;
+  const date = new Date(p.paid_at);
+  const statusBadge = (() => {
+    const s = p.status || 'approved';
+    if (s === 'pending_approval') return { l: 'Wacht op goedkeuring', cls: 'bg-amber-100 text-amber-700' };
+    if (s === 'rejected') return { l: 'Afgekeurd', cls: 'bg-red-100 text-red-700' };
+    return { l: 'Ontvangen', cls: 'bg-emerald-100 text-emerald-700' };
+  })();
+  return (
+    <div className="space-y-4 pb-24 sm:pb-6" data-testid={`payment-detail-page-${p.id}`}>
+      <div className="flex items-center gap-3">
+        <button onClick={onBack} data-testid="payment-detail-back"
+          className="w-10 h-10 rounded-xl bg-white hover:bg-slate-50 shadow-sm border border-slate-100 flex items-center justify-center transition">
+          <ChevronRight className="w-5 h-5 text-slate-600 rotate-180" />
+        </button>
+        <div className="min-w-0">
+          <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight truncate">
+            {p.tenant_name || 'Betaling'}
+          </h1>
+          <p className="text-sm text-slate-500 mt-0.5">
+            <span className="font-mono font-bold">{p.receipt_number}</span>
+            <span> · {date.toLocaleString('nl-NL')}</span>
+          </p>
+        </div>
+      </div>
 
-            <div className="grid grid-cols-4 gap-2 mt-4">
-              <a href={`${apiBase}/payments/${p.id}/pdf`} target="_blank" rel="noreferrer"
-                data-testid={`payment-pdf-${p.id}`}
-                onClick={(e) => e.stopPropagation()}
-                className="inline-flex items-center justify-center gap-2 px-2 py-2.5 bg-white border-2 border-slate-200 hover:border-slate-400 text-slate-700 font-bold rounded-xl text-xs sm:text-sm">
-                <FileText className="w-4 h-4" /> PDF
-              </a>
-              <button onClick={(e) => { e.stopPropagation(); onEmail(p); }}
-                data-testid={`payment-email-${p.id}`}
-                className="inline-flex items-center justify-center gap-2 px-2 py-2.5 bg-white border-2 border-blue-300 hover:bg-blue-50 text-blue-700 font-bold rounded-xl text-xs sm:text-sm">
-                <Mail className="w-4 h-4" /> Verstuur
-              </button>
-              <a href={`${apiBase}/payments/${p.id}/secure-pdf`} target="_blank" rel="noreferrer"
-                data-testid={`payment-secure-pdf-${p.id}`}
-                onClick={(e) => e.stopPropagation()}
-                className="inline-flex items-center justify-center gap-2 px-2 py-2.5 bg-white border-2 border-orange-300 hover:bg-orange-50 text-[#FF5C00] font-bold rounded-xl text-xs sm:text-sm">
-                <ShieldCheck className="w-4 h-4" /> <span className="hidden sm:inline">Beveiligd</span><span className="sm:hidden">QR</span>
-              </a>
-              <button onClick={(e) => { e.stopPropagation(); onDelete(p); }}
-                data-testid={`payment-delete-${p.id}`}
-                className="inline-flex items-center justify-center gap-2 px-2 py-2.5 bg-white border-2 border-red-300 hover:bg-red-500 hover:text-white text-red-600 font-bold rounded-xl text-xs sm:text-sm transition">
-                <Trash2 className="w-4 h-4" /> <span className="hidden sm:inline">Verwijder</span><span className="sm:hidden">Wis</span>
-              </button>
-            </div>
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 sm:p-6">
+        <div className="flex items-start justify-between gap-3 mb-4">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${statusBadge.cls}`}>{statusBadge.l}</span>
+            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-orange-50 text-[#FF5C00]">
+              {CATEGORY_LABELS[p.category] || p.category}
+            </span>
+            <MethodPill method={p.method} />
+          </div>
+          <div className="text-right shrink-0">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Bedrag</p>
+            <p className="text-2xl sm:text-3xl font-black text-slate-900">{fmtMoney(p.amount, p.currency)}</p>
           </div>
         </div>
-      )}
+
+        <div className="space-y-1.5 text-sm border-t border-slate-100 pt-4">
+          <DetailRow label="Kwitantienummer" value={<span className="font-mono font-bold text-slate-900">{p.receipt_number}</span>} />
+          {p.invoice_number && (
+            <DetailRow label="Factuur" value={<span className="font-mono font-bold text-[#FF5C00]">{p.invoice_number}</span>} />
+          )}
+          <DetailRow label="Datum" value={date.toLocaleString('nl-NL')} />
+          <DetailRow label="Huurder" value={p.tenant_name || '—'} />
+          {p.apartment_number && (
+            <DetailRow label="Appartement" value={p.location_name ? `${p.location_name} · ${p.apartment_number}` : p.apartment_number} />
+          )}
+          <DetailRow label="Categorie" value={CATEGORY_LABELS[p.category] || p.category} />
+          <DetailRow label="Methode" value={METHOD_LABELS[p.method] || p.method} />
+          {p.period_month && <DetailRow label="Periode" value={`${MONTHS_NL[p.period_month - 1]} ${p.period_year}`} />}
+          {p.approved_by && <DetailRow label="Goedgekeurd door" value={p.approved_by} />}
+          {p.note && <DetailRow label="Notitie" value={p.note} />}
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-5">
+          <a href={`${apiBase}/payments/${p.id}/pdf`} target="_blank" rel="noreferrer"
+            data-testid={`payment-pdf-${p.id}`}
+            className="inline-flex items-center justify-center gap-2 px-2 py-2.5 bg-white border-2 border-slate-200 hover:border-slate-400 text-slate-700 font-bold rounded-xl text-xs sm:text-sm">
+            <FileText className="w-4 h-4" /> PDF
+          </a>
+          <button onClick={() => onEmail(p)}
+            data-testid={`payment-email-${p.id}`}
+            className="inline-flex items-center justify-center gap-2 px-2 py-2.5 bg-white border-2 border-blue-300 hover:bg-blue-50 text-blue-700 font-bold rounded-xl text-xs sm:text-sm">
+            <Mail className="w-4 h-4" /> Verstuur
+          </button>
+          <a href={`${apiBase}/payments/${p.id}/secure-pdf`} target="_blank" rel="noreferrer"
+            data-testid={`payment-secure-pdf-${p.id}`}
+            className="inline-flex items-center justify-center gap-2 px-2 py-2.5 bg-white border-2 border-orange-300 hover:bg-orange-50 text-[#FF5C00] font-bold rounded-xl text-xs sm:text-sm">
+            <ShieldCheck className="w-4 h-4" /> Beveiligd
+          </a>
+          <button onClick={() => { onDelete(p); onBack(); }}
+            data-testid={`payment-delete-${p.id}`}
+            className="inline-flex items-center justify-center gap-2 px-2 py-2.5 bg-white border-2 border-red-300 hover:bg-red-500 hover:text-white text-red-600 font-bold rounded-xl text-xs sm:text-sm transition">
+            <Trash2 className="w-4 h-4" /> Verwijder
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -706,7 +739,9 @@ export default function Payments() {
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [search, setSearch] = useState('');
   const [tab] = useState('month'); // altijd op Maand; vandaag-tab/methodes verwijderd
-  const [expanded, setExpanded] = useState(null);
+  const [detailPayment, setDetailPayment] = useState(null);
+  const [expanded, setExpanded] = useState(null); // Alleen voor MOBILE inline-expand
+  const toggleExpandMobile = (id) => setExpanded((cur) => (cur === id ? null : id));
   const today = useMemo(() => new Date(), []);
 
   const load = useCallback(async ({ silent = false } = {}) => {
@@ -852,11 +887,26 @@ export default function Payments() {
     });
   }, [sorted, tab, search, todayItems, monthItems]);
 
-  const toggleExpand = (id) => setExpanded((cur) => (cur === id ? null : id));
+  const toggleExpand = toggleExpandMobile;
 
   // Rijen starten altijd DICHT — de gebruiker klapt zelf open wanneer nodig.
   // (De eerdere "auto-open newest" gedraging is verwijderd op verzoek zodat
   //  de lijst rustig oogt en alle rijen consistent zijn.)
+
+  // Detail-page routing: bij klik op een betaling openen we een aparte
+  // pagina (analoog aan PlanDetail in Betalingsregelingen). Terug-knop
+  // sluit en herlaadt.
+  if (detailPayment) {
+    return (
+      <PaymentDetail
+        payment={detailPayment}
+        onBack={() => { setDetailPayment(null); load({ silent: true }); }}
+        onEmail={(item) => setEmailing(item)}
+        onDelete={(item) => setDeleting(item)}
+        apiBase={apiBase}
+      />
+    );
+  }
 
   return (
     <div data-testid="payments-page">
@@ -1068,12 +1118,7 @@ export default function Payments() {
       ) : (
         <div className="space-y-2 sm:space-y-2.5">
           {filteredItems.map((p) => (
-            <PaymentRow key={p.id} p={p}
-              expanded={expanded === p.id}
-              onToggle={() => toggleExpand(p.id)}
-              onEmail={(item) => setEmailing(item)}
-              onDelete={(item) => setDeleting(item)}
-              apiBase={apiBase} />
+            <PaymentRow key={p.id} p={p} onOpen={setDetailPayment} />
           ))}
         </div>
       )}

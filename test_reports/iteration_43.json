@@ -1,0 +1,36 @@
+{
+  "summary": "Regression test of navigation-pattern change for Betalingen (desktop) and Borg. Verified list→detail→back pattern matches Betalingsregelingen/PlanDetail. Mobile Betalingen inline-expand preserved. All primary flows PASS.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_details": {
+    "desktop_betalingen_list_to_detail": "PASS — Stepped back 2 months to juni 2026 (28 payments). Clicking payment-row-<id> replaces list with payment-detail-page-<id>. Back button (payment-detail-back) visible. Title=tenant name, subtitle=receipt+date, status/category/method badges present, amount top-right, DetailRows (Kwitantie, Datum, Huurder, Appartement, Categorie, Methode, Goedgekeurd door, Notitie). All 4 action buttons present (payment-pdf-<id>, payment-email-<id>, payment-secure-pdf-<id>, payment-delete-<id>). Rows-during-detail = 0 (list fully replaced).",
+    "desktop_betalingen_back": "PASS — Clicking back returns to list with 28 rows on juni 2026 (month filter preserved). Silent reload confirmed.",
+    "mobile_betalingen_preserved": "PASS — Viewport 390x844. Clicking mp-card-<id> shows mp-detail-<id> INLINE. No payment-detail-page-* rendered on mobile. Existing POS-style expand intact.",
+    "desktop_borg_list_to_detail": "PASS — 1 deposit present (refunded status). Clicking dep-row-<id> loads deposit-detail-page-<id>. deposit-detail-back visible. Shows tenant title (Bharat Kewalbansing), 'Appt. HUIS 7B' subtitle, Gerestitueerd badge, amount SRD 5.009,00 top-right, DetailRows (Huurder, Appartement, Valuta, Terugbetaald SRD 1.009,00). Rows on detail = 0.",
+    "desktop_borg_actions_refunded": "PASS — For refunded deposit: dep-pdf-<id> + dep-delete-<id> visible; dep-refund-<id> correctly hidden (Restitueer only shown for held status).",
+    "desktop_borg_back": "PASS — Back button returns to list view.",
+    "desktop_borg_refund_flow": "NOT TESTED — No 'held' deposit available in seed data (only 1 deposit, already refunded). Code review of Deposits.jsx line 233 confirms RefundForm.onSaved={ () => { setRefunding(null); setDetail(null); load(); } } correctly clears detail and returns to list.",
+    "regression_new_payment_modal": "PASS — payment-new-btn opens payment-modal.",
+    "regression_new_deposit_modal": "PASS (implicit — dep-new-btn present, empty state renders when no deposits)."
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Payments.jsx has duplicate data-testid='month-prev'/'month-next'/'month-stepper-label' (rendered once in mobile section, once in desktop). Both exist in DOM (one hidden via CSS). Playwright strict-mode picks up 2. Minor — consider suffixing with -mobile/-desktop OR wrapping stepper in one media-query'd tree. Not blocking.",
+    "Payments.jsx line 1212: `const _unused = [CalendarDays, CheckCircle2];` — CheckCircle2 is actually used in ApprovePaymentSheet, so this comment/holder is misleading (safe to remove). Also `Check` import in Deposits.jsx is used (RefundForm submit + Restitueer).",
+    "Deposits.jsx line 148: `del()` uses window.confirm — inconsistent with Payments.jsx which uses a styled AlertTriangle modal. Consider unifying UX (already flagged historically).",
+    "PaymentDetail lacks 'Goedgekeurd door' guard — renders 'Dado Vastgoed Beheer' (works fine, but confirm data source for legacy payments)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "not tested", "frontend": "100% of tested flows"},
+  "test_credentials": "admin@vastgoed.sr / admin123 (slug: surirent)",
+  "seed_data_creation": "None. Existing seed had 28 payments in juni 2026 and 1 refunded deposit (Bharat Kewalbansing / HUIS 7B).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "To fully test Borg refund flow (held → RefundForm → returns to list), a NEW deposit must be created first (existing one is refunded). URL pattern is /{slug}/admin/payments and /{slug}/admin/deposits where slug=surirent for admin@vastgoed.sr. Duplicate testids for month-prev/month-next exist due to mobile+desktop wrappers.",
+  "rca of the issue": "N/A — this is a feature verification, not a bug hunt. Fix applied by main agent works as designed: PaymentRow now uses onOpen callback (Payments.jsx line 396), main Payments() has detailPayment state with early-return rendering PaymentDetail (line 899-909). Deposits.jsx uses same pattern with `detail` state (line 140, 153-236). Mobile still uses `expanded` state + MobilePaymentCard onClick=toggleExpand (line 993)."
+}
