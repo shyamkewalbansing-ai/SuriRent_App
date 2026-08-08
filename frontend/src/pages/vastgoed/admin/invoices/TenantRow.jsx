@@ -9,7 +9,7 @@ import CreditBadge from './CreditBadge';
 // =====================================================================
 // MOBIELE POS-card — compacte rij per huurder voor telefoon-weergave
 // =====================================================================
-export function MobileTenantCard({ group, credits, onClick }) {
+export function MobileTenantCard({ group, credits, onClick, onCreditClick }) {
   const sev = group.severity;
   const sub = group.location_name && group.apartment_number
     ? `${group.location_name} · ${group.apartment_number}`
@@ -33,7 +33,7 @@ export function MobileTenantCard({ group, credits, onClick }) {
               style={{ fontSize: 'clamp(15px, 4.2vw, 18px)' }}>
               {group.tenant_name}
             </p>
-            <CreditBadge credits={credits} variant="compact" testid={`mi-credit-${group.tenant_id}`} />
+            <CreditBadge credits={credits} variant="compact" onClick={onCreditClick} testid={`mi-credit-${group.tenant_id}`} />
           </div>
           <p className="text-slate-500 font-semibold truncate mt-0.5"
             style={{ fontSize: 'clamp(11px, 3vw, 13px)' }}>
@@ -66,7 +66,7 @@ export function MobileTenantCard({ group, credits, onClick }) {
 // =====================================================================
 // Desktop tenant row + open/paid uitklap. Wordt in de lijstweergave gebruikt.
 // =====================================================================
-export function TenantRow({ group, credits, expanded, onToggle, onReminder, tenants }) {
+export function TenantRow({ group, credits, expanded, onToggle, onReminder, onCreditClick, tenants }) {
   const sev = group.severity;
   const amtCls = sev === 'critical' ? 'text-red-600'
     : sev === 'late' ? 'text-orange-600'
@@ -96,7 +96,7 @@ export function TenantRow({ group, credits, expanded, onToggle, onReminder, tena
           <div className="min-w-0">
             <div className="flex items-center gap-1.5 min-w-0">
               <p className="font-bold text-slate-900 text-sm sm:text-[15px] truncate">{group.tenant_name}</p>
-              <CreditBadge credits={credits} testid={`tenant-credit-${group.tenant_id}`} />
+              <CreditBadge credits={credits} onClick={onCreditClick} testid={`tenant-credit-${group.tenant_id}`} />
             </div>
             <p className="text-[11px] sm:text-xs text-slate-500 font-medium truncate" data-testid={`tenant-apt-${group.tenant_id}`}>
               {group.location_name && group.apartment_number

@@ -11,7 +11,7 @@ import CreditBadge from './CreditBadge';
 // PlanDetail-stijl (hoofdcard + sub-cards). Toont openstaand + volledige
 // betalingsgeschiedenis (via PaidHistorySection).
 // =====================================================================
-export default function InvoiceDetailPage({ group, credits, onBack, onReminder, onPaid }) {
+export default function InvoiceDetailPage({ group, credits, onBack, onReminder, onPaid, onCreditClick }) {
   const g = group;
   const overdue = (g.overdue || []).filter((i) => (i.status || '') !== 'paid');
   const current = (g.current || []).filter((i) => (i.status || '') !== 'paid');
@@ -85,7 +85,7 @@ export default function InvoiceDetailPage({ group, credits, onBack, onReminder, 
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <h1 className="text-xl font-black text-slate-900 truncate">{g.tenant_name}</h1>
-              <CreditBadge credits={credits} testid={`detail-credit-${g.tenant_id}`} />
+              <CreditBadge credits={credits} onClick={onCreditClick} testid={`detail-credit-${g.tenant_id}`} />
             </div>
             {g.apartment_number && (
               <p className="text-xs text-slate-500">Appt. {g.apartment_number}</p>

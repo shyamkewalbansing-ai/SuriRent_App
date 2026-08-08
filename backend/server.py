@@ -6361,6 +6361,28 @@ async def list_tenant_credits(user=Depends(get_current_user)):
     return out
 
 
+@api.get("/tenants/{tenant_id}/credit-sources")
+async def get_tenant_credit_sources(tenant_id: str, user=Depends(get_current_user)):
+    """Retourneert alle betalingen die momenteel krediet-saldo bevatten voor
+    deze huurder, gesorteerd nieuwste eerst. Wordt gebruikt door een popover
+    op de "SRD X tegoed" badge zodat de admin kan zien waarom een huurder
+    tegoed heeft (uit welke betaling, welke datum, welke methode, en of het
+    een expliciete vooruitbetaling was of overflow van een grotere betaling)."""
+    q = dict(scope(user))
+    q["tenant_id"] = tenant_id
+    q["credit_remaining"] = {"$gt": 0}
+    q["status"] = "approved"
+    docs: list[dict] = []
+    async for p in db.payments.find(
+        q,
+        {"_id": 0, "id": 1, "receipt_number": 1, "paid_at": 1, "amount": 1,
+         "credit_remaining": 1, "credit_origin": 1, "category": 1,
+         "method": 1, "currency": 1, "note": 1},
+    ).sort("paid_at", -1):
+        docs.append(p)
+    return {"sources": docs}
+
+
 @api.post("/tenants", response_model=TenantOut)
 async def create_tenant(body: TenantIn, user=Depends(get_current_user)):
     cid = company_id_of(user)

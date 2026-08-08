@@ -13,6 +13,7 @@ import PaidHistorySection from './invoices/PaidHistorySection';
 import InvoiceForm from './invoices/InvoiceForm';
 import ReminderModal from './invoices/ReminderModal';
 import InvoiceDetailPage from './invoices/InvoiceDetailPage';
+import CreditSourcesPopover from './invoices/CreditSourcesPopover';
 
 // =====================================================================
 // Facturen — hoofdpagina. Toont KPI's, filter/tabs, mobiele en desktop
@@ -35,6 +36,7 @@ export default function Invoices() {
   const [expanded, setExpanded] = useState(null);   // mobile expand (single tenant_id)
   const [userToggled, setUserToggled] = useState(false);
   const [detail, setDetail] = useState(null);       // desktop dedicated detail page
+  const [creditSourcesFor, setCreditSourcesFor] = useState(null); // {tenant_id, tenant_name} — popover trigger
   const [toast, setToast] = useState(null);
   const today = new Date();
 
@@ -149,6 +151,10 @@ export default function Invoices() {
     setReminding(group);
   };
 
+  const openCreditSources = (group) => {
+    setCreditSourcesFor({ tenant_id: group.tenant_id, tenant_name: group.tenant_name });
+  };
+
   // ---------------- DETAIL-PAGINA (desktop) ----------------
   if (detail) {
     const g = filteredGroups.find((x) => x.tenant_id === detail.tenant_id) || detail;
@@ -159,6 +165,7 @@ export default function Invoices() {
           credits={credits[g.tenant_id]}
           onBack={() => { setDetail(null); load({ silent: true }); }}
           onReminder={openReminder}
+          onCreditClick={() => openCreditSources(g)}
           onPaid={(payment) => {
             const msg = payment?._credit_applied
               ? payment._message
@@ -174,6 +181,12 @@ export default function Invoices() {
               setReminding(null);
               setToast({ type: 'ok', text: `Herinnering via ${ch === 'email' ? 'e-mail' : ch === 'whatsapp' ? 'WhatsApp' : 'SMS'} verzonden` });
             }} />
+        )}
+        {creditSourcesFor && (
+          <CreditSourcesPopover
+            tenantId={creditSourcesFor.tenant_id}
+            tenantName={creditSourcesFor.tenant_name}
+            onClose={() => setCreditSourcesFor(null)} />
         )}
         {toast && <Toast toast={toast} onDone={() => setToast(null)} />}
       </>
@@ -262,7 +275,7 @@ export default function Invoices() {
               const paidInvoices = (g.all || []).filter((i) => (i.status || '') === 'paid');
               return (
                 <div key={g.tenant_id} data-testid={`mi-row-${g.tenant_id}`}>
-                  <MobileTenantCard group={g} credits={credits[g.tenant_id]} onClick={() => toggleExpand(g.tenant_id)} />
+                  <MobileTenantCard group={g} credits={credits[g.tenant_id]} onClick={() => toggleExpand(g.tenant_id)} onCreditClick={() => openCreditSources(g)} />
                   {expanded === g.tenant_id && g.openCount > 0 && (
                     <MobileTenantExpand g={g} tenants={tenants} onReminder={openReminder} />
                   )}
@@ -379,6 +392,7 @@ export default function Invoices() {
                 expanded={false}
                 onToggle={() => setDetail(g)}
                 onReminder={openReminder}
+                onCreditClick={() => openCreditSources(g)}
                 tenants={tenants} />
             ))}
           </div>
@@ -395,6 +409,14 @@ export default function Invoices() {
             setReminding(null);
             setToast({ type: 'ok', text: `Herinnering via ${ch === 'email' ? 'e-mail' : ch === 'whatsapp' ? 'WhatsApp' : 'SMS'} verzonden` });
           }} />
+      )}
+
+      {/* CREDIT SOURCES POPOVER — trigger vanaf badge in lijst */}
+      {creditSourcesFor && (
+        <CreditSourcesPopover
+          tenantId={creditSourcesFor.tenant_id}
+          tenantName={creditSourcesFor.tenant_name}
+          onClose={() => setCreditSourcesFor(null)} />
       )}
 
       {/* TOAST */}

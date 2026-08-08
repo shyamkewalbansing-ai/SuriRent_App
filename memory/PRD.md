@@ -1,5 +1,24 @@
 # Vastgoed Kiosk — PRD
 
+## Session 2026-02-08 (deel 7) — Krediet-bron popover ✅
+
+### Wat is gebouwd
+- **`GET /api/tenants/{id}/credit-sources`** — Nieuw endpoint retourneert alle payments van een huurder waar `credit_remaining > 0` staat (sortering nieuwste-eerst). Bevat: id, receipt_number, paid_at, amount, credit_remaining, credit_origin (`vooruitbetaling`/`overflow`), method, note.
+- **`CreditSourcesPopover.jsx`** — Modal (portal-vrij, klik-buiten sluit) toont per bron een kaart met kwitantie-nr, betaaldatum, oorsprong-badge (amber "Overschot van huur-betaling" of groen "Expliciete vooruitbetaling"), methode-badge, origineel bedrag + nog beschikbaar. Footer met info-tekst over verrekening.
+- **`CreditBadge`** uitgebreid met optionele `onClick` — Rendert dan als `<span role="button" tabIndex=0>` (valide binnen parent `<button>`), met `stopPropagation` zodat klik niet doorlekt naar tenant-row. Hover/scale animaties + tooltip "klik voor bron".
+- **Wired op 3 plaatsen**: `TenantRow` (desktop lijst), `MobileTenantCard` (mobile lijst), `InvoiceDetailPage` (header). Alle badge-klik events routeren naar één centrale `creditSourcesFor` state in `Invoices.jsx` die de popover rendert.
+
+### Verified via smoke-screenshot (Roy van der Berg met SRD 4000 overflow-krediet)
+- Klik op tegoed-badge in lijst → popover opent ✅
+- Popover toont: KW2026-00444 · Betaald op 8 augustus 2026 · **OVERSCHOT VAN HUUR-BETALING** · CONTANT · Origineel SRD 5.000,00 · Nog beschikbaar SRD 4.000,00 ✅
+- Info-footer over automatische verrekening + "Verreken tegoed"-knop uitleg ✅
+- Curl E2E test: `GET /api/tenants/{id}/credit-sources` retourneert correcte lijst ✅
+- Test-data volledig opgeschoond ✅
+
+---
+
+
+
 ## Session 2026-02-08 (deel 6) — Verreken-tegoed vervolgstap ✅
 
 ### Wat is gebouwd
