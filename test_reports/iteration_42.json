@@ -1,0 +1,64 @@
+{
+  "summary": "Verified BUG FIX (Payments no-auto-expand) and 2 FEATURES (Facturen + Borg migrated to PlanRow card visual). All 6 requirements from the review request pass on desktop 1920x900 and mobile 390x844.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_results": {
+    "payments_bug_fix": {
+      "month_tested": "juni 2026",
+      "total_rows": 28,
+      "auto_expanded_on_load": 0,
+      "expected_auto_expanded": 0,
+      "click_expands": true,
+      "click_again_collapses": true,
+      "status": "PASS"
+    },
+    "facturen_planrow_migration": {
+      "outer_class": "bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden transition",
+      "no_border_l_4": true,
+      "no_border_orange_100": true,
+      "no_circular_initials_avatar": true,
+      "icon_container_11x11_rounded_xl": true,
+      "icon_tint_example": "bg-orange-50 text-[#FF5C00]",
+      "filetext_svg_present": true,
+      "expand_shows_invoice_sublist": true,
+      "invoice_pdf_links_present": true,
+      "status": "PASS"
+    },
+    "borg_card_layout_migration": {
+      "outer_class": "bg-white rounded-2xl shadow-sm border border-slate-100 p-4 flex items-center gap-3",
+      "layout_matches_planrow": true,
+      "icon_container_11x11_rounded_xl": true,
+      "shieldcheck_svg_present": true,
+      "table_removed": true,
+      "restitueer_and_pdf_buttons_render_conditionally": true,
+      "delete_button_present": true,
+      "status": "PASS"
+    },
+    "mobile_regression": {
+      "payments_mobile_ok": true,
+      "facturen_mobile_ok": true,
+      "borg_mobile_ok": true,
+      "borg_mobile_rows_visible": 1,
+      "status": "PASS"
+    }
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Deposits.jsx: RefundForm bind is fine, but the empty-state icon uses text-slate-300 (no ShieldCheck tint) which matches the description. Minor: refund_amount is checked via != undefined but backend may return null — 0-guard would be safer. Not blocking.",
+    "Payments.jsx: comment block on lines 857-859 confirms the intentional removal of the auto-open useEffect and lastNewestRef. Clean.",
+    "Invoices.jsx: TenantRow still contains an intentional auto-expand of the FIRST row via useEffect (lines ~1099-1103) — this is by design per user (original behavior preserved, only the CARD VISUAL changed). Not a bug."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (not tested)", "frontend": "100%"},
+  "test_credentials": "admin@vastgoed.sr / admin123 (slug: surirent)",
+  "seed_data_creation": "None — sufficient existing data (28 payments in juni 2026, 3 tenant invoice groups, 1 refunded deposit).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Trial banner is present but not blocking clicks when using page.evaluate() for JS-dispatched clicks. Payments page: current month (Aug 2026) is empty — must step back 2 months to Jun 2026 to find rows. Facturen: 3 tenant groups exist. Borg: 1 refunded deposit exists in current data.",
+  "rca of the issue": "N/A — verification of already-fixed changes. All three fixes/features are implemented correctly."
+}

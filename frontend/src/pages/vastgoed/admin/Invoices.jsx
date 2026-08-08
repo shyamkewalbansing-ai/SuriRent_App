@@ -449,39 +449,32 @@ function InvoiceRow({ inv, bucket, severity }) {
 
 function TenantRow({ group, expanded, onToggle, onReminder, tenants }) {
   const sev = group.severity;
-  const left = sev === 'critical' ? 'border-l-red-500'
-    : sev === 'late' ? 'border-l-orange-500'
-    : group.currentCount > 0 ? 'border-l-amber-400'
-    : group.upcomingCount > 0 ? 'border-l-blue-400'
-    : 'border-l-emerald-500';
   const amtCls = sev === 'critical' ? 'text-red-600'
     : sev === 'late' ? 'text-orange-600'
     : group.currentCount > 0 ? 'text-amber-600'
     : group.upcomingCount > 0 ? 'text-blue-600'
     : 'text-slate-900';
-  const avatar = avatarColor(group.tenant_name);
-  // Hoofdregel toont "Totaal openstaand" = achterstand + huidige maand
-  // (vooruit-gefactureerd telt NIET mee). "Laatste" = meest recente open
-  // factuur exclusief vooruit (dus mei i.p.v. juni). Wanneer er GEEN open
-  // facturen zijn (huurder is helemaal bij), tonen we de meest recente
-  // betaalde factuur als referentie ("laatst betaald: mei 2026").
+  // Icon-kleur tint per severiteit — geeft visueel signaal zonder de
+  // border-l-4 "strip" die niet past bij de PlanRow-stijl.
+  const iconTint = sev === 'critical' ? 'bg-red-50 text-red-600'
+    : sev === 'late' ? 'bg-orange-50 text-[#FF5C00]'
+    : group.currentCount > 0 ? 'bg-amber-50 text-amber-700'
+    : group.upcomingCount > 0 ? 'bg-blue-50 text-blue-600'
+    : 'bg-emerald-50 text-emerald-700';
   const last = group.lastDue || group.lastOverdue || group.lastOpen
     || (group.all && group.all[group.all.length - 1]);
   const displayTotal = group.totalDue;
   const displayCount = group.dueCount;
-  // Voor de paid-modus: lijst van betaalde facturen sorted desc
   const paidInvoices = (group.all || []).filter((i) => (i.status || '') === 'paid');
 
   return (
-    <div className={`bg-white rounded-2xl border border-orange-100 border-l-4 ${left} overflow-hidden transition`}
+    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden transition"
       data-testid={`tenant-row-${group.tenant_id}`}>
-      <button onClick={onToggle} className="w-full text-left p-3 sm:p-3 hover:bg-orange-50/30 transition">
-        {/* ROW — compacter desktop grid: avatar | huurder | open maanden chips | laatste periode | bedrag | chevron */}
+      <button onClick={onToggle} className="w-full text-left p-4 hover:bg-slate-50 active:bg-slate-100 transition">
         <div className="grid grid-cols-[auto_1fr_auto] md:grid-cols-[auto_minmax(0,1.8fr)_minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1.1fr)_16px] items-center gap-3">
-          {/* Avatar */}
-          <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-full flex items-center justify-center font-black text-sm shrink-0"
-            style={{ background: avatar.bg, color: avatar.fg }}>
-            {initials(group.tenant_name)}
+          {/* Icon-container matching PlanRow style */}
+          <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${iconTint}`}>
+            <FileText className="w-5 h-5" />
           </div>
 
           {/* Huurder name + locatie · appartement */}

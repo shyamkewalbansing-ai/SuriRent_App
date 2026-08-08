@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Plus, X, Check, Loader2, Search, FileText, Mail, ShieldCheck, ChevronRight, ChevronLeft,
   ChevronDown, CalendarDays, Banknote, CheckCircle2, Clock,
@@ -707,9 +707,6 @@ export default function Payments() {
   const [search, setSearch] = useState('');
   const [tab] = useState('month'); // altijd op Maand; vandaag-tab/methodes verwijderd
   const [expanded, setExpanded] = useState(null);
-  // Track de meest recent gezien betaling-id zodat we de "nieuwste" rij
-  // automatisch kunnen open klappen wanneer er een binnenkomt via auto-refresh.
-  const lastNewestRef = useRef(null);
   const today = useMemo(() => new Date(), []);
 
   const load = useCallback(async ({ silent = false } = {}) => {
@@ -857,29 +854,9 @@ export default function Payments() {
 
   const toggleExpand = (id) => setExpanded((cur) => (cur === id ? null : id));
 
-  // Auto-open gedrag voor Betalingen:
-  //  • Bij eerste render: de bovenste (nieuwste) betaling staat open.
-  //  • Wanneer een NIEUWE betaling binnenkomt via auto-refresh, sluiten we de
-  //    eerder open rij en zetten de nieuwe betaling open. Zo ziet de
-  //    beheerder direct welke kassa-betaling/admin-betaling zojuist is
-  //    geregistreerd.
-  //  • Een door de gebruiker handmatig open/gesloten rij wordt gerespecteerd
-  //    totdat er een nieuwe betaling binnenkomt — dan klapt die nieuwe open.
-  useEffect(() => {
-    if (sorted.length === 0) return;
-    const newestId = sorted[0].id;
-    if (lastNewestRef.current === null) {
-      // First load — open de nieuwste betaling.
-      lastNewestRef.current = newestId;
-      setExpanded(newestId);
-      return;
-    }
-    if (newestId !== lastNewestRef.current) {
-      // Een nieuwe betaling is binnengekomen → klap deze open.
-      lastNewestRef.current = newestId;
-      setExpanded(newestId);
-    }
-  }, [sorted]);
+  // Rijen starten altijd DICHT — de gebruiker klapt zelf open wanneer nodig.
+  // (De eerdere "auto-open newest" gedraging is verwijderd op verzoek zodat
+  //  de lijst rustig oogt en alle rijen consistent zijn.)
 
   return (
     <div data-testid="payments-page">

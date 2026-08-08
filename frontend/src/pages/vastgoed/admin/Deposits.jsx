@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, X, Check, Loader2, ShieldCheck, FileText, Trash2 } from 'lucide-react';
+import { Plus, X, Check, Loader2, ShieldCheck, FileText, Trash2, ChevronRight } from 'lucide-react';
 import { api, formatError, fmtMoney } from '../../../lib/api';
 
 function PageHeader({ title, subtitle, action }) {
@@ -158,56 +158,68 @@ export default function Deposits() {
           </button>
         }
       />
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-[0_1px_4px_-2px_rgba(15,23,42,0.06)] overflow-hidden">
+      <div>
         {items.length === 0 ? (
-          <div className="p-10 text-center"><ShieldCheck className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-            <p className="text-slate-500 font-semibold">Geen borgen.</p></div>
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-10 text-center" data-testid="deposits-empty">
+            <ShieldCheck className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+            <p className="text-slate-500 font-semibold">Geen borgen.</p>
+          </div>
         ) : (
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50/70 text-left">
-              <tr className="text-[10px] font-black uppercase tracking-widest text-slate-500">
-                <th className="px-5 py-3">Huurder</th>
-                <th className="px-5 py-3 hidden md:table-cell">Appartement</th>
-                <th className="px-5 py-3 text-right">Bedrag</th>
-                <th className="px-5 py-3 hidden md:table-cell text-right">Terugbetaald</th>
-                <th className="px-5 py-3">Status</th>
-                <th className="px-5 py-3 text-right">Acties</th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((d) => (
-                <tr key={d.id} data-testid={`dep-row-${d.id}`} className="border-t border-slate-100 hover:bg-slate-50/60">
-                  <td className="px-5 py-3 font-bold text-slate-900">{d.tenant_name}</td>
-                  <td className="px-5 py-3 hidden md:table-cell text-slate-600">{d.apartment_number ? `Appt. ${d.apartment_number}` : '—'}</td>
-                  <td className="px-5 py-3 text-right font-black text-slate-900">{fmtMoney(d.amount, d.currency)}</td>
-                  <td className="px-5 py-3 hidden md:table-cell text-right text-slate-600">{d.status === 'refunded' ? fmtMoney(d.refund_amount, d.currency) : '—'}</td>
-                  <td className="px-5 py-3">
-                    <span className={`text-xs px-2.5 py-1 rounded-full font-bold ${d.status === 'held' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
-                      {d.status === 'held' ? 'In bewaring' : 'Gerestitueerd'}
-                    </span>
-                  </td>
-                  <td className="px-5 py-3 text-right space-x-1">
-                    {d.status === 'held' ? (
+          <div className="space-y-2">
+            {items.map((d) => {
+              const isHeld = d.status === 'held';
+              const iconTint = isHeld ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700';
+              const statusCls = isHeld ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700';
+              const statusLabel = isHeld ? 'In bewaring' : 'Gerestitueerd';
+              return (
+                <div key={d.id} data-testid={`dep-row-${d.id}`}
+                  className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 flex items-center gap-3">
+                  <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${iconTint}`}>
+                    <ShieldCheck className="w-5 h-5" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="font-black text-slate-900 truncate">{d.tenant_name}</p>
+                      <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${statusCls}`}>
+                        {statusLabel}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-0.5 truncate">
+                      {d.apartment_number ? `Appt. ${d.apartment_number}` : 'Geen appartement'}
+                      {!isHeld && d.refund_amount !== undefined && (
+                        <span> · terugbetaald: {fmtMoney(d.refund_amount, d.currency)}</span>
+                      )}
+                    </p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="text-base font-black text-slate-900">{fmtMoney(d.amount, d.currency)}</p>
+                    <p className="text-[10px] text-slate-400">borg</p>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {isHeld ? (
                       <button onClick={() => setRefunding(d)} data-testid={`dep-refund-${d.id}`}
-                        className="inline-flex items-center gap-1 px-3 h-8 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-bold">
+                        className="inline-flex items-center gap-1 px-3 h-9 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-black uppercase tracking-widest whitespace-nowrap">
                         Restitueer
                       </button>
                     ) : (
                       <a href={`${apiBase}/deposits/${d.id}/refund-pdf`} target="_blank" rel="noreferrer"
                         data-testid={`dep-pdf-${d.id}`}
-                        className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600">
-                        <FileText className="w-3.5 h-3.5" />
+                        title="PDF bewijs"
+                        className="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600">
+                        <FileText className="w-4 h-4" />
                       </a>
                     )}
                     <button onClick={() => del(d.id)} data-testid={`dep-delete-${d.id}`}
-                      className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-red-50 hover:bg-red-100 text-red-500">
-                      <Trash2 className="w-3.5 h-3.5" />
+                      title="Verwijderen"
+                      className="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-red-50 hover:bg-red-500 hover:text-white text-red-500 transition">
+                      <Trash2 className="w-4 h-4" />
                     </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-slate-300 shrink-0 hidden md:block" />
+                </div>
+              );
+            })}
+          </div>
         )}
       </div>
       {creating && <DepositForm tenants={tenants}
