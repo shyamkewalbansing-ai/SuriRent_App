@@ -14,6 +14,7 @@ import { useAuth } from '../lib/auth';
 import { RESERVED_SLUGS } from '../lib/branded-nav';
 import { useIsMobile } from '../lib/use-is-mobile';
 import { MobileRegisterWizard } from './MobileAuthShell';
+import PasswordStrength from './PasswordStrength';
 
 function Bank({ label, value, mono }) {
   return (
@@ -476,6 +477,7 @@ export default function RegisterModal({ open, onClose }) {
                           {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                         </button>
                       </div>
+                      <PasswordStrength password={password} />
                     </div>
 
                     <div>

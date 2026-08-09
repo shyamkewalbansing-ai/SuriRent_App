@@ -1,93 +1,109 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, X, Check, Loader2, Wallet, Trash2, ArrowDownCircle, ArrowUpCircle, Receipt } from 'lucide-react';
+import {
+  Plus, Loader2, Wallet, Trash2, ArrowDownCircle, ArrowUpCircle, Receipt,
+} from 'lucide-react';
 import { api, formatError, fmtMoney } from '../../../lib/api';
 
-function PageHeader({ title, subtitle, action }) {
-  return (
-    <div className="flex flex-wrap items-end justify-between gap-3 mb-6">
-      <div>
-        <h1 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">{title}</h1>
-        {subtitle && <p className="text-sm text-slate-500 mt-1">{subtitle}</p>}
-      </div>
-      {action}
-    </div>
-  );
-}
-
-function CashForm({ onCancel, onSaved }) {
-  const [data, setData] = useState({ type: 'in', amount: 0, currency: 'SRD', description: '', category: 'overig' });
+// =====================================================================
+// InlineCashForm — compacte one-row balk. Alles op één regel (desktop
+// + mobiel) met horizontale scroll indien nodig. Type-toggle links,
+// bedrag/valuta/omschrijving/categorie in het midden, save rechts.
+// =====================================================================
+function InlineCashForm({ onSaved }) {
+  const [data, setData] = useState({
+    type: 'in', amount: '', currency: 'SRD',
+    description: '', category: 'overig',
+  });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  const canSave = Number(data.amount) > 0 && data.description.trim().length > 0;
+
   const save = async () => {
+    if (!canSave || loading) return;
     setLoading(true); setError('');
     try {
-      const { data: r } = await api.post('/kasgeld', { ...data, amount: parseFloat(data.amount) || 0 });
+      const { data: r } = await api.post('/kasgeld', {
+        ...data, amount: parseFloat(data.amount) || 0,
+      });
       onSaved(r);
+      setData((d) => ({ ...d, amount: '', description: '', category: 'overig' }));
     } catch (e) { setError(formatError(e)); }
     finally { setLoading(false); }
   };
+
+  const onKey = (e) => { if (e.key === 'Enter' && canSave) save(); };
+  const isIn = data.type === 'in';
+
   return (
-    <div className="fixed inset-0 z-50 bg-white/30 backdrop-blur-md flex items-center justify-center p-4 modal-sheet-auto" data-testid="cash-modal">
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-6 sm:p-8 animate-slide-up">
-        <div className="flex items-center justify-between mb-5">
-          <h3 className="text-xl font-black text-slate-900">Nieuwe kasmutatie</h3>
-          <button onClick={onCancel} className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center"><X className="w-4 h-4" /></button>
+    <div className="mb-4 sm:mb-6" data-testid="cash-inline-form">
+      {error && (
+        <div className="mb-2 p-2 bg-red-50 border border-red-200 text-red-600 rounded-lg text-xs font-semibold" data-testid="cash-form-error">
+          {error}
         </div>
-        {error && <div className="mb-4 p-2.5 bg-red-50 border border-red-200 text-red-600 rounded-xl text-sm">{error}</div>}
-        <div className="space-y-3">
-          <div className="grid grid-cols-2 gap-2">
-            <button onClick={() => setData({ ...data, type: 'in' })} data-testid="cash-type-in"
-              className={`h-14 rounded-xl flex items-center justify-center gap-2 font-bold transition-all ${
-                data.type === 'in' ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-700'
+      )}
+      <div className="bg-white rounded-xl border border-slate-100 shadow-[0_1px_4px_-2px_rgba(15,23,42,0.06)] p-1.5 overflow-x-auto">
+        <div className="flex items-center gap-1.5 min-w-[720px]">
+          {/* Type toggle — segmented */}
+          <div className="flex items-center rounded-lg bg-slate-100 p-0.5 shrink-0">
+            <button type="button" onClick={() => setData({ ...data, type: 'in' })}
+              data-testid="cash-type-in"
+              title="Inkomen"
+              className={`h-9 w-9 rounded-md inline-flex items-center justify-center transition ${
+                isIn ? 'bg-emerald-500 text-white shadow' : 'text-slate-500 hover:text-slate-700'
               }`}>
-              <ArrowDownCircle className="w-5 h-5" /> Inkomen
+              <ArrowDownCircle className="w-4 h-4" strokeWidth={2.5} />
             </button>
-            <button onClick={() => setData({ ...data, type: 'out' })} data-testid="cash-type-out"
-              className={`h-14 rounded-xl flex items-center justify-center gap-2 font-bold transition-all ${
-                data.type === 'out' ? 'bg-red-500 text-white' : 'bg-slate-100 text-slate-700'
+            <button type="button" onClick={() => setData({ ...data, type: 'out' })}
+              data-testid="cash-type-out"
+              title="Uitgave"
+              className={`h-9 w-9 rounded-md inline-flex items-center justify-center transition ${
+                !isIn ? 'bg-red-500 text-white shadow' : 'text-slate-500 hover:text-slate-700'
               }`}>
-              <ArrowUpCircle className="w-5 h-5" /> Uitgave
+              <ArrowUpCircle className="w-4 h-4" strokeWidth={2.5} />
             </button>
           </div>
-          <div className="grid grid-cols-3 gap-3">
-            <div className="col-span-2">
-              <label className="text-xs font-bold uppercase tracking-widest text-slate-500">Bedrag *</label>
-              <input type="number" step="0.01" value={data.amount} onChange={(e) => setData({ ...data, amount: e.target.value })}
-                data-testid="cash-amount" required
-                className="w-full mt-1 h-12 px-4 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] outline-none" />
-            </div>
-            <div>
-              <label className="text-xs font-bold uppercase tracking-widest text-slate-500">Valuta</label>
-              <select value={data.currency} onChange={(e) => setData({ ...data, currency: e.target.value })} data-testid="cash-currency"
-                className="w-full mt-1 h-12 px-3 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] outline-none bg-white">
-                <option value="SRD">SRD</option><option value="USD">USD</option><option value="EUR">EUR</option>
-              </select>
-            </div>
-          </div>
-          <div>
-            <label className="text-xs font-bold uppercase tracking-widest text-slate-500">Omschrijving *</label>
-            <input value={data.description} onChange={(e) => setData({ ...data, description: e.target.value })}
-              data-testid="cash-description" required
-              className="w-full mt-1 h-12 px-4 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] outline-none" />
-          </div>
-          <div>
-            <label className="text-xs font-bold uppercase tracking-widest text-slate-500">Categorie</label>
-            <select value={data.category} onChange={(e) => setData({ ...data, category: e.target.value })} data-testid="cash-category"
-              className="w-full mt-1 h-12 px-3 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] outline-none bg-white">
-              <option value="huur">Huur ontvangst</option>
-              <option value="onderhoud">Onderhoud</option>
-              <option value="salaris">Salaris</option>
-              <option value="storting">Bank storting</option>
-              <option value="opname">Bank opname</option>
-              <option value="overig">Overig</option>
-            </select>
-          </div>
-        </div>
-        <div className="flex gap-3 mt-6">
-          <button onClick={onCancel} className="flex-1 h-12 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold">Annuleren</button>
-          <button onClick={save} disabled={loading || !data.amount || !data.description} data-testid="cash-save"
-            className="flex-1 h-12 rounded-xl bg-[#FF5C00] hover:bg-[#E05200] text-white font-bold flex items-center justify-center gap-2 disabled:opacity-50">
-            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+
+          {/* Bedrag */}
+          <input type="number" step="0.01" inputMode="decimal" value={data.amount}
+            onChange={(e) => setData({ ...data, amount: e.target.value })}
+            onKeyDown={onKey}
+            data-testid="cash-amount"
+            placeholder="0.00"
+            className="h-9 w-24 px-2 rounded-lg border border-slate-200 focus:border-[#FF5C00] outline-none text-sm font-black text-slate-900 shrink-0" />
+
+          {/* Valuta */}
+          <select value={data.currency} onChange={(e) => setData({ ...data, currency: e.target.value })}
+            data-testid="cash-currency"
+            className="h-9 w-[70px] px-1.5 rounded-lg border border-slate-200 focus:border-[#FF5C00] outline-none bg-white font-bold text-xs shrink-0">
+            <option value="SRD">SRD</option><option value="USD">USD</option><option value="EUR">EUR</option>
+          </select>
+
+          {/* Omschrijving — flex-groeit */}
+          <input value={data.description}
+            onChange={(e) => setData({ ...data, description: e.target.value })}
+            onKeyDown={onKey}
+            data-testid="cash-description"
+            placeholder="Omschrijving *"
+            className="h-9 flex-1 min-w-[140px] px-2.5 rounded-lg border border-slate-200 focus:border-[#FF5C00] outline-none text-sm" />
+
+          {/* Categorie */}
+          <select value={data.category} onChange={(e) => setData({ ...data, category: e.target.value })}
+            data-testid="cash-category"
+            className="h-9 w-[130px] px-1.5 rounded-lg border border-slate-200 focus:border-[#FF5C00] outline-none bg-white text-xs font-semibold shrink-0">
+            <option value="huur">Huur ontvangst</option>
+            <option value="onderhoud">Onderhoud</option>
+            <option value="salaris">Salaris</option>
+            <option value="storting">Bank storting</option>
+            <option value="opname">Bank opname</option>
+            <option value="overig">Overig</option>
+          </select>
+
+          {/* Save */}
+          <button onClick={save} disabled={!canSave || loading} data-testid="cash-save"
+            title="Boek mutatie"
+            className="h-9 px-3 rounded-lg bg-[#FF5C00] hover:bg-[#E05200] disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-black inline-flex items-center justify-center gap-1.5 active:scale-95 transition shrink-0 text-xs">
+            {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" strokeWidth={3} />}
             Boek
           </button>
         </div>
@@ -96,10 +112,55 @@ function CashForm({ onCancel, onSaved }) {
   );
 }
 
+// =====================================================================
+// MobileCashCard — POS-stijl card per mutatie (bedoeld voor smalle schermen)
+// =====================================================================
+function MobileCashCard({ c, onDelete }) {
+  const isPayment = c.source === 'payment';
+  const isIn = c.type === 'in';
+  return (
+    <div className="bg-white rounded-2xl border border-slate-100 p-3.5 shadow-[0_1px_4px_-2px_rgba(15,23,42,0.06)] flex items-center gap-3"
+      data-testid={`mi-cash-${c.id}`}>
+      <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${
+        isIn ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'
+      }`}>
+        {isIn ? <ArrowDownCircle className="w-5 h-5" /> : <ArrowUpCircle className="w-5 h-5" />}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
+          <p className="font-bold text-slate-900 text-sm leading-tight truncate">{c.description}</p>
+          {isPayment && (
+            <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 inline-flex items-center gap-0.5 shrink-0">
+              <Receipt className="w-2 h-2" /> {c.method || 'betaling'}
+            </span>
+          )}
+        </div>
+        <p className="text-[10px] text-slate-400 font-semibold capitalize">
+          {new Date(c.created_at).toLocaleDateString('nl-NL')} · {c.category}
+        </p>
+      </div>
+      <div className="text-right shrink-0">
+        <p className={`text-sm font-black whitespace-nowrap ${isIn ? 'text-emerald-600' : 'text-red-600'}`}>
+          {isIn ? '+' : '−'} {fmtMoney(c.amount, c.currency)}
+        </p>
+        {isPayment ? (
+          <p className="text-[9px] text-slate-400 italic mt-0.5">auto</p>
+        ) : (
+          <button onClick={() => onDelete(c.id)}
+            data-testid={`mi-cash-del-${c.id}`}
+            className="mt-1 inline-flex items-center justify-center w-7 h-7 rounded-lg bg-red-50 hover:bg-red-100 text-red-500">
+            <Trash2 className="w-3 h-3" />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function Kasgeld() {
   const [items, setItems] = useState([]);
   const [balances, setBalances] = useState({ SRD: 0, USD: 0, EUR: 0 });
-  const [creating, setCreating] = useState(false);
+  const [filter, setFilter] = useState('all'); // all | manual | payment
   const load = useCallback(async () => {
     const [c, b] = await Promise.all([api.get('/kasgeld'), api.get('/kasgeld/balance')]);
     setItems(c.data); setBalances(b.data);
@@ -107,64 +168,110 @@ export default function Kasgeld() {
   useEffect(() => { load(); }, [load]);
   const del = async (id) => {
     if (!window.confirm('Mutatie verwijderen?')) return;
-    await api.delete(`/kasgeld/${id}`); load();
+    try { await api.delete(`/kasgeld/${id}`); load(); }
+    catch (e) { alert(formatError(e)); }
+  };
+
+  // Bron-filter — items met source==='payment' zijn geautomatiseerd, rest is handmatig
+  const filtered = items.filter((c) => {
+    if (filter === 'all') return true;
+    if (filter === 'payment') return c.source === 'payment';
+    return c.source !== 'payment';
+  });
+  const counts = {
+    all: items.length,
+    manual: items.filter((c) => c.source !== 'payment').length,
+    payment: items.filter((c) => c.source === 'payment').length,
   };
 
   return (
     <div>
-      <PageHeader title="Kasgeld" subtitle="Alle ontvangsten (Betalingen · Facturen · Kiosk) + handmatige kas in-/uitgaven, per valuta"
-        action={
-          <button onClick={() => setCreating(true)} data-testid="cash-new-btn"
-            className="inline-flex items-center gap-2 px-5 py-3 bg-[#FF5C00] hover:bg-[#E05200] text-white font-bold rounded-xl shadow-[0_10px_25px_-5px_rgba(255,92,0,0.5)]">
-            <Plus className="w-4 h-4" /> Nieuwe mutatie
-          </button>
-        }
-      />
-      <div className="grid sm:grid-cols-3 gap-4 mb-6">
+      {/* Titel (zonder subtitel — expliciete gebruikers-wens) */}
+      <div className="mb-5 sm:mb-6">
+        <h1 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">Kasgeld</h1>
+      </div>
+
+      {/* Saldo cards — 3 kolommen op desktop, horizontaal scrollend op mobile */}
+      <div className="grid grid-cols-3 gap-2 sm:gap-4 mb-4 sm:mb-6">
         {['SRD', 'USD', 'EUR'].map((cur) => {
           const bal = balances[cur] || 0;
           const cnt = items.filter((i) => (i.currency || 'SRD') === cur).length;
+          const isNeg = bal < 0;
           return (
             <div key={cur} data-testid={`balance-${cur}`}
-              className={`rounded-2xl p-5 border shadow-[0_1px_4px_-2px_rgba(15,23,42,0.06)] ${bal >= 0 ? 'bg-white border-slate-100' : 'bg-red-50 border-red-200'}`}>
-              <div className="flex items-center justify-between gap-2 mb-2">
-                <div className="flex items-center gap-2">
-                  <Wallet className={`w-5 h-5 ${bal >= 0 ? 'text-[#FF5C00]' : 'text-red-500'}`} />
-                  <p className="text-xs font-bold uppercase tracking-widest text-slate-500">{cur} saldo</p>
+              className={`rounded-2xl p-3 sm:p-5 border shadow-[0_1px_4px_-2px_rgba(15,23,42,0.06)] ${
+                isNeg ? 'bg-red-50 border-red-200' : 'bg-white border-slate-100'
+              }`}>
+              <div className="flex items-center justify-between gap-1 mb-1 sm:mb-2">
+                <div className="flex items-center gap-1 sm:gap-2">
+                  <Wallet className={`w-4 h-4 sm:w-5 sm:h-5 ${isNeg ? 'text-red-500' : 'text-[#FF5C00]'}`} />
+                  <p className="text-[10px] sm:text-xs font-bold uppercase tracking-widest text-slate-500">{cur}</p>
                 </div>
-                <span className="text-[10px] font-bold text-slate-400">{cnt} mutatie{cnt === 1 ? '' : 's'}</span>
+                <span className="text-[9px] sm:text-[10px] font-bold text-slate-400">{cnt}</span>
               </div>
-              <p className={`text-3xl font-black tracking-tight ${bal >= 0 ? 'text-slate-900' : 'text-red-600'}`}>
+              <p className={`text-base sm:text-3xl font-black tracking-tight leading-tight ${isNeg ? 'text-red-600' : 'text-slate-900'}`}>
                 {fmtMoney(bal, cur)}
               </p>
-              {cur === 'SRD' && (balances.USD > 0 || balances.EUR > 0) && (
-                <p className="text-[10px] text-slate-400 font-semibold mt-1.5">
-                  + {balances.USD > 0 ? fmtMoney(balances.USD, 'USD') : ''}
-                  {balances.USD > 0 && balances.EUR > 0 ? ' + ' : ''}
-                  {balances.EUR > 0 ? fmtMoney(balances.EUR, 'EUR') : ''}
-                </p>
-              )}
             </div>
           );
         })}
       </div>
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-[0_1px_4px_-2px_rgba(15,23,42,0.06)] overflow-hidden">
-        {items.length === 0 ? (
+
+      {/* Inline invoer — vervangt de oude modal, altijd zichtbaar */}
+      <InlineCashForm onSaved={() => load()} />
+
+      {/* Filter per bron — Alles / Alleen handmatig / Alleen betalingen */}
+      <div className="flex items-center gap-1.5 mb-3 overflow-x-auto pb-1" data-testid="cash-source-filter">
+        {[
+          { k: 'all', label: 'Alles' },
+          { k: 'manual', label: 'Alleen handmatig' },
+          { k: 'payment', label: 'Alleen betalingen' },
+        ].map((f) => (
+          <button key={f.k} onClick={() => setFilter(f.k)}
+            data-testid={`cash-filter-${f.k}`}
+            className={`h-8 px-3 rounded-lg text-xs font-black uppercase tracking-wider transition inline-flex items-center gap-1.5 shrink-0 ${
+              filter === f.k
+                ? 'bg-slate-900 text-white shadow'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}>
+            {f.label}
+            <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${filter === f.k ? 'bg-white/20 text-white' : 'bg-white text-slate-500'}`}>
+              {counts[f.k]}
+            </span>
+          </button>
+        ))}
+      </div>
+
+      {/* Mobile card-lijst */}
+      <div className="md:hidden space-y-2" data-testid="cash-list-mobile">
+        {filtered.length === 0 ? (
+          <div className="bg-white rounded-2xl border border-slate-100 p-10 text-center">
+            <Wallet className="w-9 h-9 text-slate-300 mx-auto mb-2" />
+            <p className="text-sm text-slate-500 font-semibold">Geen mutaties voor dit filter.</p>
+          </div>
+        ) : (
+          filtered.map((c) => <MobileCashCard key={c.id} c={c} onDelete={del} />)
+        )}
+      </div>
+
+      {/* Desktop tabel */}
+      <div className="hidden md:block bg-white rounded-2xl border border-slate-100 shadow-[0_1px_4px_-2px_rgba(15,23,42,0.06)] overflow-hidden">
+        {filtered.length === 0 ? (
           <div className="p-10 text-center"><Wallet className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-            <p className="text-slate-500 font-semibold">Geen mutaties.</p></div>
+            <p className="text-slate-500 font-semibold">Geen mutaties voor dit filter.</p></div>
         ) : (
           <table className="w-full text-sm">
             <thead className="bg-slate-50/70 text-left">
               <tr className="text-[10px] font-black uppercase tracking-widest text-slate-500">
                 <th className="px-5 py-3">Datum</th>
                 <th className="px-5 py-3">Omschrijving</th>
-                <th className="px-5 py-3 hidden md:table-cell">Categorie</th>
+                <th className="px-5 py-3">Categorie</th>
                 <th className="px-5 py-3 text-right">Bedrag</th>
                 <th className="px-5 py-3 text-right">Acties</th>
               </tr>
             </thead>
             <tbody>
-              {items.map((c) => {
+              {filtered.map((c) => {
                 const isPayment = c.source === 'payment';
                 return (
                   <tr key={c.id} data-testid={`cash-row-${c.id}`} className="border-t border-slate-100 hover:bg-slate-50/60">
@@ -182,7 +289,7 @@ export default function Kasgeld() {
                         )}
                       </div>
                     </td>
-                    <td className="px-5 py-3 hidden md:table-cell text-slate-500 capitalize">{c.category}</td>
+                    <td className="px-5 py-3 text-slate-500 capitalize">{c.category}</td>
                     <td className={`px-5 py-3 text-right font-black whitespace-nowrap ${c.type === 'in' ? 'text-emerald-600' : 'text-red-600'}`}>
                       {c.type === 'in' ? '+' : '−'} {fmtMoney(c.amount, c.currency)}
                     </td>
@@ -203,7 +310,6 @@ export default function Kasgeld() {
           </table>
         )}
       </div>
-      {creating && <CashForm onCancel={() => setCreating(false)} onSaved={() => { setCreating(false); load(); }} />}
     </div>
   );
 }

@@ -1,5 +1,52 @@
 # Vastgoed Kiosk — PRD
 
+## Session 2026-02-09 — Kasgeld one-row form + bron-filter + wachtwoord sterkte ✅
+
+### Wat is gebouwd
+- **Nieuwe mutatie compact op één rij** — Formulier is nu een compacte horizontale balk (`h-9`) met: type-toggle (segmented in/out iconen) + bedrag + valuta + omschrijving (flex-groeit) + categorie + "Boek" knop. Op desktop past alles ruim; op mobiel horizontale scroll (`overflow-x-auto` + `min-w-[720px]`) omdat 6 velden simpelweg niet passen in 390 px zonder scroll.
+- **Kasgeld bron-filter** — 3 pill-knoppen boven de lijst: `Alles`, `Alleen handmatig`, `Alleen betalingen` met live count-badges. State `filter` in `Kasgeld()`, filtert `items` op `source === 'payment'`. Standaard `all`.
+- **Wachtwoord sterkte meter** — Nieuwe `PasswordStrength` component (`/app/frontend/src/components/PasswordStrength.jsx`) met scorePassword 0..4 (lengte, mix, cijfer, symbool). 5-segmenten bar + label ("Zeer zwak" → "Zeer sterk") + 4-punts checklist (min 8 tekens, hoofd+kleine letter, cijfer, speciaal teken). Ondersteunt `variant="light"` (RegisterModal) en `variant="dark"` (MobileRegisterWizard, oranje achtergrond).
+
+### Files
+- `/app/frontend/src/pages/vastgoed/admin/Kasgeld.jsx` — form compact + filter state/UI + `filtered` in beide lijsten
+- `/app/frontend/src/components/PasswordStrength.jsx` — nieuw
+- `/app/frontend/src/components/RegisterModal.jsx` — importeert en toont onder passwordveld
+- `/app/frontend/src/components/MobileAuthShell.jsx` — idem in wizard-stap 2 (dark variant)
+
+### Verified via screenshot
+- Kasgeld desktop: form 1 rij, filter pillen zichtbaar (Alles 3, Handmatig 0, Betalingen 3), "Alleen betalingen" filter werkt live ✅
+- Register modal desktop: bij typen `Abc12!` toont bar "REDELIJK" + checklist met live vinkjes/kruisjes ✅
+- Lint schoon (0 issues op alle 4 files) ✅
+
+---
+
+
+
+## Session 2026-02-08 (deel 15) — Kasgeld UX redesign (inline form + mobile) ✅
+
+### Gewijzigd (op verzoek)
+- **Subtitle verwijderd** — "Alle ontvangsten (Betalingen · Facturen · Kiosk) + handmatige kas in-/uitgaven, per valuta" is weg. Alleen "Kasgeld" als titel.
+- **Nieuwe mutatie is nu inline** — Modal met "Nieuwe mutatie" knop is verwijderd. Permanent zichtbaar formulier onder de saldo-kaarten met alle velden (type-toggle, bedrag+valuta, omschrijving, categorie) en één "Boek nu" knop die direct POST + de lijst live ververst. Enter-toets triggert ook boeken.
+- **Mobile card-lijst** — Nieuwe `MobileCashCard` component (`md:hidden`) toont per mutatie: iconen-avatar (groen/rood), omschrijving + method-badge, datum · categorie, bedrag rechts + delete/auto-label. Desktop tabel blijft (`hidden md:block`).
+- **Compactere saldo-kaarten** — 3 kolommen op zowel mobiel als desktop (was `sm:grid-cols-3`), kleinere font en padding op mobile voor betere ruimtebenutting.
+
+### Files
+- Volledig herschreven: `/app/frontend/src/pages/vastgoed/admin/Kasgeld.jsx` — van 210 naar ~275 regels met nieuwe inline-form + mobile-card, oude modal-component verwijderd.
+
+### Verified via screenshot (demo-account, desktop 1920×900)
+- Titel "Kasgeld" zonder subtitle ✅
+- 3 saldo-kaarten compact naast elkaar (SRD/USD/EUR) ✅
+- Inline "Nieuwe mutatie" card met Inkomen/Uitgave toggle, Bedrag+Valuta+Omschrijving+Categorie velden, "Boek nu" primaire knop (disabled tot valide input) ✅
+- Tabel met historische mutaties + auto-label voor payments ✅
+- Lint schoon ✅
+
+### Let op (productie)
+- Zichtbaar in preview. Voor productie is een **redeploy** nodig.
+
+---
+
+
+
 ## Session 2026-02-08 (deel 14) — Welkomstpakket PDF + auto e-mail bij registratie ✅
 
 ### Wat is gebouwd

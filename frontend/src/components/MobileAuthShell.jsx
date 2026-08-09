@@ -21,6 +21,7 @@ import { api, formatError } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { RESERVED_SLUGS } from '../lib/branded-nav';
 import { publicMarketingUrl } from '../lib/env';
+import PasswordStrength from './PasswordStrength';
 
 // ────────────────────────────────────────────────────────────────────
 // Shared shell — oranje canvas + safe-area + decorative blurs.
@@ -466,6 +467,9 @@ export function MobileRegisterWizard({ onClose, primary = '#FF5C00' }) {
                 className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
                 {showPw ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
               </button>
+            </div>
+            <div className="px-2">
+              <PasswordStrength password={password} variant="dark" />
             </div>
           </div>
         )}
