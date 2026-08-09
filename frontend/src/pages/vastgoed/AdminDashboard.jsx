@@ -2333,92 +2333,88 @@ function Tenants() {
   const [creating, setCreating] = useState(false);
   const [pinFor, setPinFor] = useState(null);
   const [q, setQ] = useState('');
+  const [filter, setFilter] = useState('all'); // all | with_apt | without_apt
   const load = useCallback(async () => {
     const [t, a] = await Promise.all([api.get('/tenants'), api.get('/apartments')]);
     setItems(t.data); setApts(a.data);
   }, []);
   useEffect(() => { load(); }, [load]);
-  // Stille polling — lijst wordt in place vervangen, geen scroll-reset.
   useAutoRefresh(load, { interval: 15000, enabled: !creating && !editing && !pinFor });
   const del = async (id) => {
     if (!window.confirm('Huurder verwijderen?')) return;
     await api.delete(`/tenants/${id}`);
     load();
   };
-  const filtered = items.filter((t) => !q || t.name.toLowerCase().includes(q.toLowerCase()));
+  const bySearch = items.filter((t) => !q || (t.name || '').toLowerCase().includes(q.toLowerCase()));
+  const filtered = bySearch.filter((t) => {
+    if (filter === 'all') return true;
+    if (filter === 'with_apt') return !!t.apartment_number;
+    return !t.apartment_number;
+  });
+  const counts = {
+    all: bySearch.length,
+    with_apt: bySearch.filter((t) => !!t.apartment_number).length,
+    without_apt: bySearch.filter((t) => !t.apartment_number).length,
+  };
   return (
-    <div>
-      <PageHeader title="Huurders" subtitle={`${items.length} huurders geregistreerd`}
-        action={
-          <button onClick={() => setCreating(true)} data-testid="tenant-new-btn"
-            className="inline-flex items-center gap-2 px-5 py-3 bg-[#FF5C00] hover:bg-[#E05200] text-white font-bold rounded-xl shadow-[0_10px_25px_-5px_rgba(255,92,0,0.5)]">
-            <Plus className="w-4 h-4" /> Nieuwe huurder
-          </button>
-        }
-      />
-      <div className="mb-4 relative max-w-md">
+    <div className="space-y-4 pb-24 sm:pb-6" data-testid="tenants-page">
+      {/* Header — inline titel + subtitel + oranje "Nieuwe huurder" knop.
+          Zelfde patroon als Betalingsregelingen zodat de app consistent voelt. */}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-black text-slate-900">Huurders</h1>
+          <p className="text-sm text-slate-500 mt-0.5">{items.length} huurders geregistreerd.</p>
+        </div>
+        <button onClick={() => setCreating(true)} data-testid="tenant-new-btn"
+          className="inline-flex items-center justify-center gap-2 px-5 py-3 bg-[#FF5C00] hover:bg-[#E05200] text-white font-bold rounded-2xl text-sm shadow-[0_10px_25px_-5px_rgba(255,92,0,0.5)]">
+          <Plus className="w-4 h-4" /> Nieuwe huurder
+        </button>
+      </div>
+
+      {/* Zoek + bron-filter pillen */}
+      <div className="relative max-w-md">
         <Search className="w-4 h-4 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2" />
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Zoek op naam" data-testid="tenant-search"
-          className="w-full h-12 pl-11 pr-4 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] outline-none bg-white" />
+          className="w-full h-11 pl-11 pr-4 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] outline-none bg-white text-sm" />
       </div>
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-[0_1px_4px_-2px_rgba(15,23,42,0.06)] overflow-hidden">
-        {filtered.length === 0 ? (
-          <div className="p-10 text-center">
-            <Users className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-            <p className="text-slate-500 font-semibold">Geen huurders gevonden.</p>
-          </div>
-        ) : (
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50/70 text-left">
-              <tr className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                <th className="px-5 py-3">Naam</th>
-                <th className="px-5 py-3 hidden md:table-cell">Contact</th>
-                <th className="px-5 py-3">Appartement</th>
-                <th className="px-5 py-3 hidden md:table-cell">Maandhuur</th>
-                <th className="px-5 py-3 text-right">Acties</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((t) => (
-                <tr key={t.id} data-testid={`tenant-row-${t.id}`} className="border-t border-slate-100 hover:bg-slate-50/60">
-                  <td className="px-5 py-4 font-bold text-slate-900">{t.name}</td>
-                  <td className="px-5 py-4 hidden md:table-cell text-slate-500">
-                    <p>{t.phone || '—'}</p>
-                    <p className="text-xs">{t.email || ''}</p>
-                  </td>
-                  <td className="px-5 py-4">
-                    {t.apartment_number ? (
-                      <span className="inline-block px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700 text-xs font-bold">Appt. {t.apartment_number}</span>
-                    ) : <span className="text-slate-400">—</span>}
-                  </td>
-                  <td className="px-5 py-4 hidden md:table-cell text-slate-900 font-bold">
-                    {t.rent_amount ? fmtMoney(t.rent_amount, t.currency) : '—'}
-                  </td>
-                  <td className="px-5 py-4 text-right space-x-1">
-                    <button onClick={() => setPinFor(t)} data-testid={`tenant-pin-${t.id}`}
-                      className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-orange-50 hover:bg-orange-100 text-[#FF5C00]" title="Portal PIN instellen">
-                      <KeySquare className="w-3.5 h-3.5" />
-                    </button>
-                    <button onClick={() => openAuthedPdf(`/tenants/${t.id}/portal-poster.pdf`, { filename: `huurportaal-${t.name || t.id}.pdf` })}
-                      data-testid={`tenant-poster-${t.id}`}
-                      className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700" title="Print A6 huurportaal-poster">
-                      <Printer className="w-3.5 h-3.5" />
-                    </button>
-                    <button onClick={() => setEditing(t)} data-testid={`tenant-edit-${t.id}`}
-                      className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600">
-                      <Pencil className="w-3.5 h-3.5" />
-                    </button>
-                    <button onClick={() => del(t.id)} data-testid={`tenant-delete-${t.id}`}
-                      className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-red-50 hover:bg-red-100 text-red-500">
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+      <div className="flex items-center gap-2 flex-wrap" data-testid="tenant-filter-bar">
+        {[
+          { v: 'all', l: 'Alles', c: counts.all },
+          { v: 'with_apt', l: 'Met appartement', c: counts.with_apt },
+          { v: 'without_apt', l: 'Zonder appartement', c: counts.without_apt },
+        ].map((f) => (
+          <button key={f.v} onClick={() => setFilter(f.v)}
+            data-testid={`tenant-filter-${f.v}`}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+              filter === f.v
+                ? 'bg-[#FF5C00] text-white'
+                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+            }`}>
+            {f.l}
+            <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${
+              filter === f.v ? 'bg-white/20 text-white' : 'bg-white text-slate-500'
+            }`}>{f.c}</span>
+          </button>
+        ))}
       </div>
+
+      {filtered.length === 0 ? (
+        <div className="bg-white rounded-2xl p-10 text-center shadow-sm" data-testid="tenants-empty">
+          <Users className="w-12 h-12 mx-auto text-slate-300 mb-2" />
+          <p className="text-slate-500 font-semibold">Geen huurders gevonden.</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {filtered.map((t) => (
+            <TenantRow key={t.id} t={t}
+              onEdit={() => setEditing(t)}
+              onPin={() => setPinFor(t)}
+              onPoster={() => openAuthedPdf(`/tenants/${t.id}/portal-poster.pdf`, { filename: `huurportaal-${t.name || t.id}.pdf` })}
+              onDelete={() => del(t.id)} />
+          ))}
+        </div>
+      )}
+
       {(editing || creating) && (
         <TenantForm initial={editing} apartments={apts}
           onCancel={() => { setEditing(null); setCreating(false); }}
@@ -2426,6 +2422,62 @@ function Tenants() {
       )}
       {pinFor && <TenantPinModal tenant={pinFor}
         onCancel={() => setPinFor(null)} onSaved={() => setPinFor(null)} />}
+    </div>
+  );
+}
+
+// =====================================================================
+// TenantRow — klikbare card in de stijl van PlanRow (Betalingsregelingen).
+// Klik op de kaart opent de bewerker; klikken op een actie-icoon roept
+// de bijbehorende handler aan zonder de edit-modal te openen.
+// =====================================================================
+function TenantRow({ t, onEdit, onPin, onPoster, onDelete }) {
+  const initials = (t.name || '?').split(' ').map((s) => s[0]).slice(0, 2).join('').toUpperCase();
+  const stop = (fn) => (e) => { e.stopPropagation(); fn(); };
+  return (
+    <div onClick={onEdit} data-testid={`tenant-row-${t.id}`}
+      role="button" tabIndex={0}
+      onKeyDown={(e) => { if (e.key === 'Enter') onEdit(); }}
+      className="w-full text-left bg-white hover:bg-slate-50 active:bg-slate-100 rounded-2xl shadow-sm p-4 flex items-center gap-3 border border-slate-100 cursor-pointer transition">
+      <div className="w-11 h-11 rounded-xl bg-orange-50 text-[#FF5C00] flex items-center justify-center shrink-0 font-black text-sm">
+        {initials}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <p className="font-black text-slate-900 truncate">{t.name}</p>
+          {t.apartment_number ? (
+            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-emerald-100 text-emerald-700">
+              Appt. {t.apartment_number}
+            </span>
+          ) : (
+            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-slate-200 text-slate-600">
+              Geen appartement
+            </span>
+          )}
+        </div>
+        <p className="text-xs text-slate-500 mt-0.5 truncate">
+          {t.phone || '—'}{t.email ? ` · ${t.email}` : ''}
+        </p>
+      </div>
+      <div className="text-right shrink-0 flex flex-col items-end gap-1.5">
+        <p className="text-base font-black text-slate-900 whitespace-nowrap">
+          {t.rent_amount ? fmtMoney(t.rent_amount, t.currency) : '—'}
+        </p>
+        <div className="flex items-center gap-1">
+          <button onClick={stop(onPin)} data-testid={`tenant-pin-${t.id}`}
+            className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-orange-50 hover:bg-orange-100 text-[#FF5C00]" title="Portal PIN instellen">
+            <KeySquare className="w-3.5 h-3.5" />
+          </button>
+          <button onClick={stop(onPoster)} data-testid={`tenant-poster-${t.id}`}
+            className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700" title="Print A6 huurportaal-poster">
+            <Printer className="w-3.5 h-3.5" />
+          </button>
+          <button onClick={stop(onDelete)} data-testid={`tenant-delete-${t.id}`}
+            className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-red-50 hover:bg-red-100 text-red-500" title="Verwijderen">
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
