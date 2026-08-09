@@ -1,13 +1,15 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
-  Plus, Loader2, Wallet, Trash2, ArrowDownCircle, ArrowUpCircle, Receipt,
+  Plus, Loader2, Wallet, Trash2, ArrowDownCircle, ArrowUpCircle, Receipt, X,
 } from 'lucide-react';
 import { api, formatError, fmtMoney } from '../../../lib/api';
 
 // =====================================================================
-// InlineCashForm — compacte one-row balk. Alles op één regel (desktop
-// + mobiel) met horizontale scroll indien nodig. Type-toggle links,
-// bedrag/valuta/omschrijving/categorie in het midden, save rechts.
+// InlineCashForm (desktop) — één compacte rij: type-toggle · bedrag ·
+// valuta · omschrijving · categorie · Boek. Op mobiel wordt hij verstopt
+// (`hidden md:block`) en vervangen door de NewCashSheet bottom-sheet die
+// via de "Nieuwe mutatie" knop bovenaan de pagina wordt geopend — zelfde
+// interactiepatroon als Betalingsregelingen.
 // =====================================================================
 function InlineCashForm({ onSaved }) {
   const [data, setData] = useState({
@@ -36,118 +38,47 @@ function InlineCashForm({ onSaved }) {
   const isIn = data.type === 'in';
 
   return (
-    <div className="mb-4 sm:mb-6" data-testid="cash-inline-form">
+    <div className="hidden md:block mb-6" data-testid="cash-inline-form">
       {error && (
         <div className="mb-2 p-2 bg-red-50 border border-red-200 text-red-600 rounded-lg text-xs font-semibold" data-testid="cash-form-error">
           {error}
         </div>
       )}
-
-      {/* ── MOBIEL layout ── compact 4-rij grid, geen horizontale scroll ── */}
-      <div className="md:hidden bg-white rounded-2xl border border-slate-100 shadow-[0_1px_4px_-2px_rgba(15,23,42,0.06)] p-3 space-y-2">
-        {/* Type toggle — 2 kolommen full-width, groter aanraakvlak */}
-        <div className="grid grid-cols-2 gap-2">
-          <button type="button" onClick={() => setData({ ...data, type: 'in' })}
-            data-testid="cash-type-in"
-            className={`h-11 rounded-xl inline-flex items-center justify-center gap-2 font-black text-sm transition active:scale-95 ${
-              isIn ? 'bg-emerald-500 text-white shadow-[0_4px_12px_-3px_rgba(16,185,129,0.5)]' : 'bg-slate-100 text-slate-700'
-            }`}>
-            <ArrowDownCircle className="w-4 h-4" strokeWidth={2.5} /> Inkomen
-          </button>
-          <button type="button" onClick={() => setData({ ...data, type: 'out' })}
-            data-testid="cash-type-out"
-            className={`h-11 rounded-xl inline-flex items-center justify-center gap-2 font-black text-sm transition active:scale-95 ${
-              !isIn ? 'bg-red-500 text-white shadow-[0_4px_12px_-3px_rgba(239,68,68,0.5)]' : 'bg-slate-100 text-slate-700'
-            }`}>
-            <ArrowUpCircle className="w-4 h-4" strokeWidth={2.5} /> Uitgave
-          </button>
-        </div>
-
-        {/* Bedrag + valuta */}
-        <div className="grid grid-cols-3 gap-2">
-          <input type="number" step="0.01" inputMode="decimal" value={data.amount}
-            onChange={(e) => setData({ ...data, amount: e.target.value })}
-            onKeyDown={onKey}
-            data-testid="cash-amount"
-            placeholder="0.00"
-            className="col-span-2 h-11 px-3 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] outline-none text-base font-black text-slate-900" />
-          <select value={data.currency} onChange={(e) => setData({ ...data, currency: e.target.value })}
-            data-testid="cash-currency"
-            className="h-11 px-2 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] outline-none bg-white font-bold text-sm">
-            <option value="SRD">SRD</option><option value="USD">USD</option><option value="EUR">EUR</option>
-          </select>
-        </div>
-
-        {/* Omschrijving — volledige breedte */}
-        <input value={data.description}
-          onChange={(e) => setData({ ...data, description: e.target.value })}
-          onKeyDown={onKey}
-          data-testid="cash-description"
-          placeholder="Omschrijving *"
-          className="w-full h-11 px-3 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] outline-none text-sm" />
-
-        {/* Categorie + Boek */}
-        <div className="grid grid-cols-3 gap-2">
-          <select value={data.category} onChange={(e) => setData({ ...data, category: e.target.value })}
-            data-testid="cash-category"
-            className="col-span-2 h-11 px-2 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] outline-none bg-white text-sm font-semibold">
-            <option value="huur">Huur ontvangst</option>
-            <option value="onderhoud">Onderhoud</option>
-            <option value="salaris">Salaris</option>
-            <option value="storting">Bank storting</option>
-            <option value="opname">Bank opname</option>
-            <option value="overig">Overig</option>
-          </select>
-          <button onClick={save} disabled={!canSave || loading} data-testid="cash-save"
-            className="h-11 rounded-xl bg-[#FF5C00] hover:bg-[#E05200] disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-black inline-flex items-center justify-center gap-1 active:scale-95 transition text-sm shadow-[0_4px_12px_-3px_rgba(255,92,0,0.5)]">
-            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Plus className="w-4 h-4" strokeWidth={3} /> Boek</>}
-          </button>
-        </div>
-      </div>
-
-      {/* ── DESKTOP layout ── één rij, alles kompact naast elkaar ── */}
-      <div className="hidden md:block bg-white rounded-xl border border-slate-100 shadow-[0_1px_4px_-2px_rgba(15,23,42,0.06)] p-1.5">
+      <div className="bg-white rounded-xl border border-slate-100 shadow-[0_1px_4px_-2px_rgba(15,23,42,0.06)] p-1.5">
         <div className="flex items-center gap-1.5">
-          {/* Type toggle — segmented */}
           <div className="flex items-center rounded-lg bg-slate-100 p-0.5 shrink-0">
             <button type="button" onClick={() => setData({ ...data, type: 'in' })}
-              data-testid="cash-type-in-desktop"
-              title="Inkomen"
+              data-testid="cash-type-in-desktop" title="Inkomen"
               className={`h-9 w-9 rounded-md inline-flex items-center justify-center transition ${
                 isIn ? 'bg-emerald-500 text-white shadow' : 'text-slate-500 hover:text-slate-700'
               }`}>
               <ArrowDownCircle className="w-4 h-4" strokeWidth={2.5} />
             </button>
             <button type="button" onClick={() => setData({ ...data, type: 'out' })}
-              data-testid="cash-type-out-desktop"
-              title="Uitgave"
+              data-testid="cash-type-out-desktop" title="Uitgave"
               className={`h-9 w-9 rounded-md inline-flex items-center justify-center transition ${
                 !isIn ? 'bg-red-500 text-white shadow' : 'text-slate-500 hover:text-slate-700'
               }`}>
               <ArrowUpCircle className="w-4 h-4" strokeWidth={2.5} />
             </button>
           </div>
-
           <input type="number" step="0.01" inputMode="decimal" value={data.amount}
             onChange={(e) => setData({ ...data, amount: e.target.value })}
             onKeyDown={onKey}
             data-testid="cash-amount-desktop"
             placeholder="0.00"
             className="h-9 w-24 px-2 rounded-lg border border-slate-200 focus:border-[#FF5C00] outline-none text-sm font-black text-slate-900 shrink-0" />
-
           <select value={data.currency} onChange={(e) => setData({ ...data, currency: e.target.value })}
             data-testid="cash-currency-desktop"
             className="h-9 w-[70px] px-1.5 rounded-lg border border-slate-200 focus:border-[#FF5C00] outline-none bg-white font-bold text-xs shrink-0">
             <option value="SRD">SRD</option><option value="USD">USD</option><option value="EUR">EUR</option>
           </select>
-
           <input value={data.description}
             onChange={(e) => setData({ ...data, description: e.target.value })}
             onKeyDown={onKey}
             data-testid="cash-description-desktop"
             placeholder="Omschrijving *"
             className="h-9 flex-1 min-w-[140px] px-2.5 rounded-lg border border-slate-200 focus:border-[#FF5C00] outline-none text-sm" />
-
           <select value={data.category} onChange={(e) => setData({ ...data, category: e.target.value })}
             data-testid="cash-category-desktop"
             className="h-9 w-[130px] px-1.5 rounded-lg border border-slate-200 focus:border-[#FF5C00] outline-none bg-white text-xs font-semibold shrink-0">
@@ -158,12 +89,143 @@ function InlineCashForm({ onSaved }) {
             <option value="opname">Bank opname</option>
             <option value="overig">Overig</option>
           </select>
-
           <button onClick={save} disabled={!canSave || loading} data-testid="cash-save-desktop"
             title="Boek mutatie"
             className="h-9 px-3 rounded-lg bg-[#FF5C00] hover:bg-[#E05200] disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-black inline-flex items-center justify-center gap-1.5 active:scale-95 transition shrink-0 text-xs">
             {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" strokeWidth={3} />}
             Boek
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// =====================================================================
+// NewCashSheet — bottom-sheet modal (mobiel) / centered dialog (desktop
+// fallback). Zelfde interactiepatroon en styling als CreatePlanSheet in
+// Betalingsregelingen zodat de app consistent voelt.
+// =====================================================================
+function NewCashSheet({ onClose, onSaved }) {
+  const [data, setData] = useState({
+    type: 'in', amount: '', currency: 'SRD',
+    description: '', category: 'overig',
+  });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const canSave = Number(data.amount) > 0 && data.description.trim().length > 0;
+  const isIn = data.type === 'in';
+
+  // ESC om te sluiten + body scroll lock
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [onClose]);
+
+  const save = async () => {
+    if (!canSave || loading) return;
+    setLoading(true); setError('');
+    try {
+      const { data: r } = await api.post('/kasgeld', {
+        ...data, amount: parseFloat(data.amount) || 0,
+      });
+      onSaved(r);
+      onClose();
+    } catch (e) { setError(formatError(e)); setLoading(false); }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-[100] bg-black/50 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4"
+      data-testid="cash-new-sheet" onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()}
+        className="w-full sm:max-w-md bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl max-h-[92vh] overflow-y-auto"
+        style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 24px), 24px)' }}>
+        <div className="p-5 sm:p-6">
+          <div className="w-12 h-1.5 bg-slate-300 rounded-full mx-auto mb-4 sm:hidden" />
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-black text-slate-900">Nieuwe mutatie</h2>
+            <button onClick={onClose} data-testid="cash-sheet-close"
+              className="text-slate-400 hover:text-slate-700"><X className="w-5 h-5" /></button>
+          </div>
+
+          {error && (
+            <div className="mb-3 p-2.5 bg-red-50 border border-red-200 text-red-600 rounded-xl text-sm" data-testid="cash-sheet-error">
+              {error}
+            </div>
+          )}
+
+          {/* Type toggle */}
+          <label className="block text-[11px] font-black uppercase tracking-widest text-slate-500 mb-1.5">Type</label>
+          <div className="grid grid-cols-2 gap-2 mb-3">
+            <button type="button" onClick={() => setData({ ...data, type: 'in' })}
+              data-testid="cash-type-in"
+              className={`h-12 rounded-xl inline-flex items-center justify-center gap-2 font-black text-sm transition active:scale-95 ${
+                isIn ? 'bg-emerald-500 text-white shadow-[0_6px_16px_-4px_rgba(16,185,129,0.5)]' : 'bg-slate-100 text-slate-700'
+              }`}>
+              <ArrowDownCircle className="w-4 h-4" /> Inkomen
+            </button>
+            <button type="button" onClick={() => setData({ ...data, type: 'out' })}
+              data-testid="cash-type-out"
+              className={`h-12 rounded-xl inline-flex items-center justify-center gap-2 font-black text-sm transition active:scale-95 ${
+                !isIn ? 'bg-red-500 text-white shadow-[0_6px_16px_-4px_rgba(239,68,68,0.5)]' : 'bg-slate-100 text-slate-700'
+              }`}>
+              <ArrowUpCircle className="w-4 h-4" /> Uitgave
+            </button>
+          </div>
+
+          {/* Bedrag + valuta */}
+          <div className="grid grid-cols-3 gap-2 mb-3">
+            <div className="col-span-2">
+              <label className="block text-[11px] font-black uppercase tracking-widest text-slate-500 mb-1.5">Bedrag *</label>
+              <input type="number" step="0.01" inputMode="decimal" value={data.amount}
+                onChange={(e) => setData({ ...data, amount: e.target.value })}
+                data-testid="cash-amount" autoFocus
+                placeholder="0.00"
+                className="w-full h-12 px-3 rounded-xl bg-slate-50 border border-slate-200 focus:ring-2 focus:ring-[#FF5C00] focus:border-[#FF5C00] outline-none text-lg font-black text-slate-900" />
+            </div>
+            <div>
+              <label className="block text-[11px] font-black uppercase tracking-widest text-slate-500 mb-1.5">Valuta</label>
+              <select value={data.currency} onChange={(e) => setData({ ...data, currency: e.target.value })}
+                data-testid="cash-currency"
+                className="w-full h-12 px-2 rounded-xl bg-slate-50 border border-slate-200 focus:ring-2 focus:ring-[#FF5C00] focus:border-[#FF5C00] outline-none bg-white font-bold text-sm">
+                <option value="SRD">SRD</option><option value="USD">USD</option><option value="EUR">EUR</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Omschrijving */}
+          <label className="block text-[11px] font-black uppercase tracking-widest text-slate-500 mb-1.5">Omschrijving *</label>
+          <input value={data.description}
+            onChange={(e) => setData({ ...data, description: e.target.value })}
+            data-testid="cash-description"
+            placeholder="Waarvoor is deze mutatie?"
+            className="w-full h-12 px-3 mb-3 rounded-xl bg-slate-50 border border-slate-200 focus:ring-2 focus:ring-[#FF5C00] focus:border-[#FF5C00] outline-none text-sm" />
+
+          {/* Categorie */}
+          <label className="block text-[11px] font-black uppercase tracking-widest text-slate-500 mb-1.5">Categorie</label>
+          <select value={data.category} onChange={(e) => setData({ ...data, category: e.target.value })}
+            data-testid="cash-category"
+            className="w-full h-12 px-3 mb-5 rounded-xl bg-slate-50 border border-slate-200 focus:ring-2 focus:ring-[#FF5C00] focus:border-[#FF5C00] outline-none bg-white text-sm font-semibold">
+            <option value="huur">Huur ontvangst</option>
+            <option value="onderhoud">Onderhoud</option>
+            <option value="salaris">Salaris</option>
+            <option value="storting">Bank storting</option>
+            <option value="opname">Bank opname</option>
+            <option value="overig">Overig</option>
+          </select>
+
+          <button onClick={save} disabled={!canSave || loading} data-testid="cash-save"
+            className="w-full h-12 rounded-2xl bg-[#FF5C00] hover:bg-[#E05200] disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-black inline-flex items-center justify-center gap-2 shadow-[0_10px_25px_-5px_rgba(255,92,0,0.5)] active:scale-[0.98] transition">
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" strokeWidth={3} />}
+            Boek mutatie
           </button>
         </div>
       </div>
@@ -220,6 +282,7 @@ export default function Kasgeld() {
   const [items, setItems] = useState([]);
   const [balances, setBalances] = useState({ SRD: 0, USD: 0, EUR: 0 });
   const [filter, setFilter] = useState('all'); // all | manual | payment
+  const [sheetOpen, setSheetOpen] = useState(false);
   const load = useCallback(async () => {
     const [c, b] = await Promise.all([api.get('/kasgeld'), api.get('/kasgeld/balance')]);
     setItems(c.data); setBalances(b.data);
@@ -245,9 +308,14 @@ export default function Kasgeld() {
 
   return (
     <div>
-      {/* Titel (zonder subtitel — expliciete gebruikers-wens) */}
-      <div className="mb-5 sm:mb-6">
+      {/* Header — titel links, oranje "Nieuwe mutatie" knop rechts (mobiel).
+          Zelfde pattern als Betalingsregelingen zodat het consistent voelt. */}
+      <div className="flex items-center justify-between gap-3 mb-5 sm:mb-6">
         <h1 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">Kasgeld</h1>
+        <button onClick={() => setSheetOpen(true)} data-testid="cash-new-btn"
+          className="md:hidden inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-[#FF5C00] hover:bg-[#E05200] text-white font-bold rounded-2xl text-sm shadow-[0_10px_25px_-5px_rgba(255,92,0,0.5)] active:scale-95 transition">
+          <Plus className="w-4 h-4" strokeWidth={3} /> Nieuwe mutatie
+        </button>
       </div>
 
       {/* Saldo cards — 3 kolommen op desktop, horizontaal scrollend op mobile */}
@@ -369,6 +437,12 @@ export default function Kasgeld() {
           </table>
         )}
       </div>
+
+      {/* Bottom-sheet modal (mobiel) — geopend via de "Nieuwe mutatie" knop
+          in de header. Op desktop is er de inline form, dus daar niet nodig. */}
+      {sheetOpen && (
+        <NewCashSheet onClose={() => setSheetOpen(false)} onSaved={() => load()} />
+      )}
     </div>
   );
 }
