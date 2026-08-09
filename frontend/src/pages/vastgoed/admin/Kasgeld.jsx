@@ -42,12 +42,76 @@ function InlineCashForm({ onSaved }) {
           {error}
         </div>
       )}
-      <div className="bg-white rounded-xl border border-slate-100 shadow-[0_1px_4px_-2px_rgba(15,23,42,0.06)] p-1.5 overflow-x-auto">
-        <div className="flex items-center gap-1.5 min-w-[720px]">
+
+      {/* ── MOBIEL layout ── compact 4-rij grid, geen horizontale scroll ── */}
+      <div className="md:hidden bg-white rounded-2xl border border-slate-100 shadow-[0_1px_4px_-2px_rgba(15,23,42,0.06)] p-3 space-y-2">
+        {/* Type toggle — 2 kolommen full-width, groter aanraakvlak */}
+        <div className="grid grid-cols-2 gap-2">
+          <button type="button" onClick={() => setData({ ...data, type: 'in' })}
+            data-testid="cash-type-in"
+            className={`h-11 rounded-xl inline-flex items-center justify-center gap-2 font-black text-sm transition active:scale-95 ${
+              isIn ? 'bg-emerald-500 text-white shadow-[0_4px_12px_-3px_rgba(16,185,129,0.5)]' : 'bg-slate-100 text-slate-700'
+            }`}>
+            <ArrowDownCircle className="w-4 h-4" strokeWidth={2.5} /> Inkomen
+          </button>
+          <button type="button" onClick={() => setData({ ...data, type: 'out' })}
+            data-testid="cash-type-out"
+            className={`h-11 rounded-xl inline-flex items-center justify-center gap-2 font-black text-sm transition active:scale-95 ${
+              !isIn ? 'bg-red-500 text-white shadow-[0_4px_12px_-3px_rgba(239,68,68,0.5)]' : 'bg-slate-100 text-slate-700'
+            }`}>
+            <ArrowUpCircle className="w-4 h-4" strokeWidth={2.5} /> Uitgave
+          </button>
+        </div>
+
+        {/* Bedrag + valuta */}
+        <div className="grid grid-cols-3 gap-2">
+          <input type="number" step="0.01" inputMode="decimal" value={data.amount}
+            onChange={(e) => setData({ ...data, amount: e.target.value })}
+            onKeyDown={onKey}
+            data-testid="cash-amount"
+            placeholder="0.00"
+            className="col-span-2 h-11 px-3 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] outline-none text-base font-black text-slate-900" />
+          <select value={data.currency} onChange={(e) => setData({ ...data, currency: e.target.value })}
+            data-testid="cash-currency"
+            className="h-11 px-2 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] outline-none bg-white font-bold text-sm">
+            <option value="SRD">SRD</option><option value="USD">USD</option><option value="EUR">EUR</option>
+          </select>
+        </div>
+
+        {/* Omschrijving — volledige breedte */}
+        <input value={data.description}
+          onChange={(e) => setData({ ...data, description: e.target.value })}
+          onKeyDown={onKey}
+          data-testid="cash-description"
+          placeholder="Omschrijving *"
+          className="w-full h-11 px-3 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] outline-none text-sm" />
+
+        {/* Categorie + Boek */}
+        <div className="grid grid-cols-3 gap-2">
+          <select value={data.category} onChange={(e) => setData({ ...data, category: e.target.value })}
+            data-testid="cash-category"
+            className="col-span-2 h-11 px-2 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] outline-none bg-white text-sm font-semibold">
+            <option value="huur">Huur ontvangst</option>
+            <option value="onderhoud">Onderhoud</option>
+            <option value="salaris">Salaris</option>
+            <option value="storting">Bank storting</option>
+            <option value="opname">Bank opname</option>
+            <option value="overig">Overig</option>
+          </select>
+          <button onClick={save} disabled={!canSave || loading} data-testid="cash-save"
+            className="h-11 rounded-xl bg-[#FF5C00] hover:bg-[#E05200] disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-black inline-flex items-center justify-center gap-1 active:scale-95 transition text-sm shadow-[0_4px_12px_-3px_rgba(255,92,0,0.5)]">
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Plus className="w-4 h-4" strokeWidth={3} /> Boek</>}
+          </button>
+        </div>
+      </div>
+
+      {/* ── DESKTOP layout ── één rij, alles kompact naast elkaar ── */}
+      <div className="hidden md:block bg-white rounded-xl border border-slate-100 shadow-[0_1px_4px_-2px_rgba(15,23,42,0.06)] p-1.5">
+        <div className="flex items-center gap-1.5">
           {/* Type toggle — segmented */}
           <div className="flex items-center rounded-lg bg-slate-100 p-0.5 shrink-0">
             <button type="button" onClick={() => setData({ ...data, type: 'in' })}
-              data-testid="cash-type-in"
+              data-testid="cash-type-in-desktop"
               title="Inkomen"
               className={`h-9 w-9 rounded-md inline-flex items-center justify-center transition ${
                 isIn ? 'bg-emerald-500 text-white shadow' : 'text-slate-500 hover:text-slate-700'
@@ -55,7 +119,7 @@ function InlineCashForm({ onSaved }) {
               <ArrowDownCircle className="w-4 h-4" strokeWidth={2.5} />
             </button>
             <button type="button" onClick={() => setData({ ...data, type: 'out' })}
-              data-testid="cash-type-out"
+              data-testid="cash-type-out-desktop"
               title="Uitgave"
               className={`h-9 w-9 rounded-md inline-flex items-center justify-center transition ${
                 !isIn ? 'bg-red-500 text-white shadow' : 'text-slate-500 hover:text-slate-700'
@@ -64,32 +128,28 @@ function InlineCashForm({ onSaved }) {
             </button>
           </div>
 
-          {/* Bedrag */}
           <input type="number" step="0.01" inputMode="decimal" value={data.amount}
             onChange={(e) => setData({ ...data, amount: e.target.value })}
             onKeyDown={onKey}
-            data-testid="cash-amount"
+            data-testid="cash-amount-desktop"
             placeholder="0.00"
             className="h-9 w-24 px-2 rounded-lg border border-slate-200 focus:border-[#FF5C00] outline-none text-sm font-black text-slate-900 shrink-0" />
 
-          {/* Valuta */}
           <select value={data.currency} onChange={(e) => setData({ ...data, currency: e.target.value })}
-            data-testid="cash-currency"
+            data-testid="cash-currency-desktop"
             className="h-9 w-[70px] px-1.5 rounded-lg border border-slate-200 focus:border-[#FF5C00] outline-none bg-white font-bold text-xs shrink-0">
             <option value="SRD">SRD</option><option value="USD">USD</option><option value="EUR">EUR</option>
           </select>
 
-          {/* Omschrijving — flex-groeit */}
           <input value={data.description}
             onChange={(e) => setData({ ...data, description: e.target.value })}
             onKeyDown={onKey}
-            data-testid="cash-description"
+            data-testid="cash-description-desktop"
             placeholder="Omschrijving *"
             className="h-9 flex-1 min-w-[140px] px-2.5 rounded-lg border border-slate-200 focus:border-[#FF5C00] outline-none text-sm" />
 
-          {/* Categorie */}
           <select value={data.category} onChange={(e) => setData({ ...data, category: e.target.value })}
-            data-testid="cash-category"
+            data-testid="cash-category-desktop"
             className="h-9 w-[130px] px-1.5 rounded-lg border border-slate-200 focus:border-[#FF5C00] outline-none bg-white text-xs font-semibold shrink-0">
             <option value="huur">Huur ontvangst</option>
             <option value="onderhoud">Onderhoud</option>
@@ -99,8 +159,7 @@ function InlineCashForm({ onSaved }) {
             <option value="overig">Overig</option>
           </select>
 
-          {/* Save */}
-          <button onClick={save} disabled={!canSave || loading} data-testid="cash-save"
+          <button onClick={save} disabled={!canSave || loading} data-testid="cash-save-desktop"
             title="Boek mutatie"
             className="h-9 px-3 rounded-lg bg-[#FF5C00] hover:bg-[#E05200] disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-black inline-flex items-center justify-center gap-1.5 active:scale-95 transition shrink-0 text-xs">
             {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" strokeWidth={3} />}
