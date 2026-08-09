@@ -4,18 +4,6 @@ import { api, formatError, fmtMoney } from '../../../lib/api';
 import { EmailDialog, SendDialog } from '../../../components/EmailDialog';
 import { useAutoRefresh } from '../../../lib/auto-refresh';
 
-function PageHeader({ title, subtitle, action }) {
-  return (
-    <div className="flex flex-wrap items-end justify-between gap-3 mb-6">
-      <div>
-        <h1 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">{title}</h1>
-        {subtitle && <p className="text-sm text-slate-500 mt-1">{subtitle}</p>}
-      </div>
-      {action}
-    </div>
-  );
-}
-
 function ContractForm({ tenants, apartments, onCancel, onSaved }) {
   const [data, setData] = useState({
     tenant_id: '', apartment_id: '', start_date: new Date().toISOString().split('T')[0],
@@ -124,13 +112,13 @@ export default function Contracts() {
   const [apartments, setApartments] = useState([]);
   const [creating, setCreating] = useState(false);
   const [emailing, setEmailing] = useState(null);
+  const [filter, setFilter] = useState('all'); // all | signed | draft
 
   const load = useCallback(async () => {
     const [c, t, a] = await Promise.all([api.get('/contracts'), api.get('/tenants'), api.get('/apartments')]);
     setItems(c.data); setTenants(t.data); setApartments(a.data);
   }, []);
   useEffect(() => { load(); }, [load]);
-  // Stille polling (geen aparte loading-state nodig — items worden in place vervangen).
   useAutoRefresh(load, { interval: 15000, enabled: !creating && !emailing });
 
   const del = async (id) => {
@@ -150,79 +138,70 @@ export default function Contracts() {
     }
   };
 
+  const filtered = items.filter((c) => {
+    if (filter === 'signed') return !!c.signed_at;
+    if (filter === 'draft') return !c.signed_at;
+    return true;
+  });
+  const counts = {
+    all: items.length,
+    signed: items.filter((c) => !!c.signed_at).length,
+    draft: items.filter((c) => !c.signed_at).length,
+  };
+
   return (
-    <div>
-      <PageHeader
-        title="Contracten"
-        subtitle={`${items.length} contracten, ${items.filter((c) => c.signed_at).length} ondertekend`}
-        action={
-          <button onClick={() => setCreating(true)} data-testid="contract-new-btn"
-            className="inline-flex items-center gap-2 px-5 py-3 bg-[#FF5C00] hover:bg-[#E05200] text-white font-bold rounded-xl shadow-[0_10px_25px_-5px_rgba(255,92,0,0.5)]">
-            <Plus className="w-4 h-4" /> Nieuw contract
-          </button>
-        }
-      />
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-[0_1px_4px_-2px_rgba(15,23,42,0.06)] overflow-hidden">
-        {items.length === 0 ? (
-          <div className="p-10 text-center">
-            <FileText className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-            <p className="text-slate-500 font-semibold">Geen contracten.</p>
-          </div>
-        ) : (
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50/70 text-left">
-              <tr className="text-[10px] font-black uppercase tracking-widest text-slate-500">
-                <th className="px-5 py-3">Nummer</th>
-                <th className="px-5 py-3">Huurder</th>
-                <th className="px-5 py-3 hidden md:table-cell">Appartement</th>
-                <th className="px-5 py-3 hidden md:table-cell">Periode</th>
-                <th className="px-5 py-3">Status</th>
-                <th className="px-5 py-3 text-right">Acties</th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((c) => (
-                <tr key={c.id} data-testid={`contract-row-${c.id}`} className="border-t border-slate-100 hover:bg-slate-50/60">
-                  <td className="px-5 py-3 font-mono text-xs font-bold text-slate-900">{c.contract_number}</td>
-                  <td className="px-5 py-3 font-semibold text-slate-900">{c.tenant_name}</td>
-                  <td className="px-5 py-3 hidden md:table-cell text-slate-600">Appt. {c.apartment_number || '—'}</td>
-                  <td className="px-5 py-3 hidden md:table-cell text-slate-500 text-xs">
-                    {c.start_date}{c.end_date ? ` → ${c.end_date}` : ''}
-                  </td>
-                  <td className="px-5 py-3">
-                    <span className={`inline-block px-2.5 py-1 rounded-full text-xs font-bold ${
-                      c.signed_at ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
-                    }`}>
-                      {c.signed_at ? 'Ondertekend' : 'Concept'}
-                    </span>
-                  </td>
-                  <td className="px-5 py-3 text-right space-x-1">
-                    <a href={`${apiBase}/contracts/${c.id}/pdf`} target="_blank" rel="noreferrer"
-                      data-testid={`contract-pdf-${c.id}`}
-                      className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600" title="PDF">
-                      <FileText className="w-3.5 h-3.5" />
-                    </a>
-                    <button onClick={() => setEmailing(c)} data-testid={`contract-email-${c.id}`}
-                      className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700" title="Verstuur via e-mail">
-                      <Mail className="w-3.5 h-3.5" />
-                    </button>
-                    {!c.signed_at && (
-                      <button onClick={() => copyLink(c.sign_token)} data-testid={`contract-link-${c.id}`}
-                        className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-orange-50 hover:bg-orange-100 text-[#FF5C00]" title="Ondertekenlink kopiëren">
-                        <Copy className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                    <button onClick={() => del(c.id)} data-testid={`contract-delete-${c.id}`}
-                      className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-red-50 hover:bg-red-100 text-red-500">
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+    <div className="space-y-4 pb-24 sm:pb-6" data-testid="contracts-page">
+      {/* Header — inline titel + subtitel + oranje "Nieuw contract" knop.
+          Zelfde patroon als Betalingsregelingen zodat de app consistent voelt. */}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-black text-slate-900">Contracten</h1>
+          <p className="text-sm text-slate-500 mt-0.5">{counts.all} contracten · {counts.signed} ondertekend.</p>
+        </div>
+        <button onClick={() => setCreating(true)} data-testid="contract-new-btn"
+          className="inline-flex items-center justify-center gap-2 px-5 py-3 bg-[#FF5C00] hover:bg-[#E05200] text-white font-bold rounded-2xl text-sm shadow-[0_10px_25px_-5px_rgba(255,92,0,0.5)]">
+          <Plus className="w-4 h-4" /> Nieuw contract
+        </button>
       </div>
+
+      {/* Filter pillen */}
+      <div className="flex items-center gap-2 flex-wrap" data-testid="contract-filter-bar">
+        {[
+          { v: 'all', l: 'Alles', c: counts.all },
+          { v: 'signed', l: 'Ondertekend', c: counts.signed },
+          { v: 'draft', l: 'Concept', c: counts.draft },
+        ].map((f) => (
+          <button key={f.v} onClick={() => setFilter(f.v)}
+            data-testid={`contract-filter-${f.v}`}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+              filter === f.v
+                ? 'bg-[#FF5C00] text-white'
+                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+            }`}>
+            {f.l}
+            <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${
+              filter === f.v ? 'bg-white/20 text-white' : 'bg-white text-slate-500'
+            }`}>{f.c}</span>
+          </button>
+        ))}
+      </div>
+
+      {filtered.length === 0 ? (
+        <div className="bg-white rounded-2xl p-10 text-center shadow-sm" data-testid="contracts-empty">
+          <FileText className="w-12 h-12 mx-auto text-slate-300 mb-2" />
+          <p className="text-slate-500 font-semibold">Geen contracten gevonden.</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {filtered.map((c) => (
+            <ContractRow key={c.id} c={c} apiBase={apiBase}
+              onEmail={() => setEmailing(c)}
+              onCopyLink={() => copyLink(c.sign_token)}
+              onDelete={() => del(c.id)} />
+          ))}
+        </div>
+      )}
+
       {creating && <ContractForm tenants={tenants} apartments={apartments}
         onCancel={() => setCreating(false)} onSaved={() => { setCreating(false); load(); }} />}
       {emailing && (
@@ -236,6 +215,61 @@ export default function Contracts() {
           tenantName={emailing.tenant_name}
           onClose={() => setEmailing(null)} />
       )}
+    </div>
+  );
+}
+
+// =====================================================================
+// ContractRow — klikbare card in de stijl van PlanRow (Betalingsregelingen).
+// Icoon-avatar links, contract-nummer + huurder + status, actie-iconen rechts.
+// =====================================================================
+function ContractRow({ c, apiBase, onEmail, onCopyLink, onDelete }) {
+  const stop = (fn) => (e) => { e.stopPropagation(); fn(); };
+  const isSigned = !!c.signed_at;
+  return (
+    <div data-testid={`contract-row-${c.id}`}
+      className="w-full bg-white hover:bg-slate-50 rounded-2xl shadow-sm p-4 flex items-center gap-3 border border-slate-100 transition">
+      <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${
+        isSigned ? 'bg-emerald-50 text-emerald-600' : 'bg-orange-50 text-[#FF5C00]'
+      }`}>
+        <FileText className="w-5 h-5" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <p className="font-black text-slate-900 truncate">{c.tenant_name || 'Onbekende huurder'}</p>
+          <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${
+            isSigned ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
+          }`}>
+            {isSigned ? 'Ondertekend' : 'Concept'}
+          </span>
+        </div>
+        <p className="text-xs text-slate-500 mt-0.5 font-mono truncate">
+          {c.contract_number} · Appt. {c.apartment_number || '—'}
+          {c.start_date ? ` · ${c.start_date}` : ''}{c.end_date ? ` → ${c.end_date}` : ''}
+        </p>
+      </div>
+      <div className="shrink-0 flex items-center gap-1">
+        <a href={`${apiBase}/contracts/${c.id}/pdf`} target="_blank" rel="noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          data-testid={`contract-pdf-${c.id}`}
+          className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600" title="PDF openen">
+          <FileText className="w-3.5 h-3.5" />
+        </a>
+        <button onClick={stop(onEmail)} data-testid={`contract-email-${c.id}`}
+          className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700" title="Verstuur via e-mail">
+          <Mail className="w-3.5 h-3.5" />
+        </button>
+        {!isSigned && (
+          <button onClick={stop(onCopyLink)} data-testid={`contract-link-${c.id}`}
+            className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-orange-50 hover:bg-orange-100 text-[#FF5C00]" title="Ondertekenlink kopiëren">
+            <Copy className="w-3.5 h-3.5" />
+          </button>
+        )}
+        <button onClick={stop(onDelete)} data-testid={`contract-delete-${c.id}`}
+          className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-red-50 hover:bg-red-100 text-red-500" title="Verwijderen">
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
+      </div>
     </div>
   );
 }
