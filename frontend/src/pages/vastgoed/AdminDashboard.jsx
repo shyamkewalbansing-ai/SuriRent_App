@@ -1459,7 +1459,7 @@ function NfcCardField({ apartmentId, currentValue }) {
 
 // ============== Apartments ==============
 function ApartmentForm({ initial, onCancel, onSaved }) {
-  const [data, setData] = useState(initial || { number: '', address: '', rent_amount: 0, currency: 'SRD', description: '', location_id: '', photo_url: '' });
+  const [data, setData] = useState(initial || { number: '', address: '', rent_amount: 0, currency: 'SRD', location_id: '', photo_url: '' });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [locations, setLocations] = useState([]);
@@ -1543,12 +1543,6 @@ function ApartmentForm({ initial, onCancel, onSaved }) {
             <NfcCardField apartmentId={initial.id}
               currentValue={initial.nfc_card_id || ''} />
           )}
-          <div>
-            <label className="text-xs font-bold uppercase tracking-widest text-slate-500">Beschrijving</label>
-            <textarea value={data.description} onChange={(e) => setData({ ...data, description: e.target.value })}
-              data-testid="apt-description" rows={2}
-              className="w-full mt-1 px-4 py-3 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] outline-none resize-none" />
-          </div>
           <PhotoUpload
             value={data.photo_url}
             onChange={(url) => setData({ ...data, photo_url: url })}
