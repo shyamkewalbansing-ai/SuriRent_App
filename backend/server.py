@@ -10030,6 +10030,9 @@ async def _seed_demo_data(cid: str):
         m = cur_m - offset if cur_m - offset > 0 else cur_m - offset + 12
         y = cur_y if cur_m - offset > 0 else cur_y - 1
         inv_id = str(uuid.uuid4())
+        # Betaal-tijd: 2 dagen vóór 30d-offset. Voor huidige maand (offset=0)
+        # nemen we max(1, ...) zodat de betaling nooit in de toekomst ligt.
+        days_back = max(1, offset * 30 - 2)
         invoices_to_insert.append({
             "id": inv_id, "company_id": cid,
             "tenant_id": marlies["id"], "apartment_id": marlies["apartment_id"],
@@ -10038,7 +10041,7 @@ async def _seed_demo_data(cid: str):
             "amount": 5500, "amount_due": 5500, "paid_amount": 5500,
             "currency": "SRD", "status": "paid", "kind": "huur",
             "due_date": (now - timedelta(days=offset * 30)).date().isoformat(),
-            "paid_at": (now - timedelta(days=offset * 30 - 2)).isoformat(),
+            "paid_at": (now - timedelta(days=days_back)).isoformat(),
             "is_demo": True, "created_at": iso_now,
         })
         payments_to_insert.append({
@@ -10050,8 +10053,8 @@ async def _seed_demo_data(cid: str):
             "period_month": m, "period_year": y,
             "invoice_id": inv_id, "receipt_number": f"D-KW-{inv_counter:05d}",
             "status": "approved",
-            "paid_at": (now - timedelta(days=offset * 30 - 2)).isoformat(),
-            "created_at": (now - timedelta(days=offset * 30 - 2)).isoformat(),
+            "paid_at": (now - timedelta(days=days_back)).isoformat(),
+            "created_at": (now - timedelta(days=days_back)).isoformat(),
             "is_demo": True,
         })
     # Roy — partial op huidige maand
@@ -10608,6 +10611,9 @@ class CashEntryIn(BaseModel):
 class CashEntryOut(CashEntryIn):
     id: str
     created_at: str
+    # Zichtbare boekdatum (kan afwijken van created_at wanneer de gebruiker
+    # terug-geboekt heeft). Voor payment-rijen valt dit samen met paid_at.
+    entry_date: Optional[str] = None
     # Optional velden voor unified-feed (payments worden ook als kasgeld getoond)
     source: Optional[Literal["kasgeld", "payment"]] = "kasgeld"
     method: Optional[str] = None
@@ -10626,13 +10632,20 @@ async def list_cash(user=Depends(get_current_user)):
     manual = await db.kasgeld.find(scope(user), {"_id": 0}).to_list(2000)
     for m in manual:
         m.setdefault("source", "kasgeld")
+        # Backfill: oude rijen hebben geen entry_date → gebruik created_at
+        m.setdefault("entry_date", m.get("created_at"))
+        # Sorteersleutel = insert-tijd (created_at). Voor manual rijen is
+        # dit al de echte insert-tijd sinds we entry_date & created_at
+        # scheiden. Voor backfill (oude rijen zonder entry_date) is dit
+        # gewoon hun oude created_at.
+        m["_sort_at"] = m.get("created_at") or ""
 
     payments: list[dict] = []
     async for p in db.payments.find(
         {**scope(user), "status": "approved"},
         {"_id": 0, "id": 1, "amount": 1, "currency": 1, "method": 1,
-         "category": 1, "receipt_number": 1, "paid_at": 1, "tenant_id": 1,
-         "period_month": 1, "period_year": 1, "note": 1},
+         "category": 1, "receipt_number": 1, "paid_at": 1, "created_at": 1,
+         "tenant_id": 1, "period_month": 1, "period_year": 1, "note": 1},
     ):
         tenant_name = ""
         if p.get("tenant_id"):
@@ -10644,6 +10657,10 @@ async def list_cash(user=Depends(get_current_user)):
         desc_parts = [p.get("receipt_number") or ""]
         if tenant_name:
             desc_parts.append(f"— {tenant_name}")
+        paid_iso = p.get("paid_at") or iso(now_utc())
+        # Sort-key = echte insert-tijd van de payment (kan verschillen van
+        # paid_at wanneer een payment historisch is gedateerd, bijv. seed).
+        insert_iso = p.get("created_at") or paid_iso
         payments.append({
             "id": f"pay-{p['id']}",   # namespace zodat we conflicts vermijden
             "type": "in",
@@ -10652,14 +10669,22 @@ async def list_cash(user=Depends(get_current_user)):
             "description": f"{' '.join(desc_parts)}{period}".strip(),
             "category": p.get("category") or "huur",
             "method": p.get("method") or "",
-            "created_at": p.get("paid_at") or iso(now_utc()),
+            "created_at": paid_iso,   # zichtbare betaaldatum (blijft paid_at)
+            "entry_date": paid_iso,
             "source": "payment",
             "payment_id": p["id"],
             "payment_ref": p.get("receipt_number"),
+            "_sort_at": insert_iso,   # interne sortering
         })
 
     combined = manual + payments
-    combined.sort(key=lambda x: (x.get("created_at") or ""), reverse=True)
+    # Sortering op echte insert-tijd → net-toegevoegde items altijd bovenaan,
+    # ook wanneer de gebruiker een oudere entry_date koos of het een historische
+    # payment betreft.
+    combined.sort(key=lambda x: (x.get("_sort_at") or ""), reverse=True)
+    # Verwijder interne sortering-key uit output — niet exposen aan clients.
+    for item in combined:
+        item.pop("_sort_at", None)
     return combined
 
 
@@ -10668,23 +10693,30 @@ async def create_cash(body: CashEntryIn, user=Depends(get_current_user)):
     cid = company_id_of(user)
     if not cid:
         raise HTTPException(status_code=400, detail="Geen actief bedrijf geselecteerd")
-    # Parse entry_date (opt) — accepteer "YYYY-MM-DD" of ISO datetime. Gebruik
-    # midden van de dag (12:00 UTC) om timezone-drift van rand-tijden (23:00
-    # lokaal → volgende dag UTC) te vermijden bij pure datum-input.
+    # Twee losse datums:
+    #  • created_at  = server insert time (nooit overschreven, gebruikt voor
+    #    sortering zodat een nieuwe boeking altijd bovenaan verschijnt ook
+    #    wanneer de gebruiker een oudere entry_date koos).
+    #  • entry_date  = zichtbare "boekdatum" die de gebruiker koos.
     payload = body.model_dump()
     raw = (payload.pop("entry_date", None) or "").strip()
-    created_iso = iso(now_utc())
+    now_iso = iso(now_utc())
+    entry_iso = now_iso
     if raw:
         try:
             if "T" in raw:
                 dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
             else:
+                # Midden van de dag om timezone-drift op rand-tijden te vermijden
                 dt = datetime.fromisoformat(f"{raw}T12:00:00+00:00")
-            created_iso = iso(dt)
+            entry_iso = iso(dt)
         except Exception:
-            # Ongeldige datum → val terug op nu
-            pass
-    doc = {"id": new_id(), "company_id": cid, **payload, "created_at": created_iso}
+            entry_iso = now_iso
+    doc = {
+        "id": new_id(), "company_id": cid, **payload,
+        "created_at": now_iso,   # insert-tijd — voor sortering (nieuwste boven)
+        "entry_date": entry_iso, # zichtbare boekdatum
+    }
     await db.kasgeld.insert_one(doc)
     doc.pop("_id", None)
     return doc

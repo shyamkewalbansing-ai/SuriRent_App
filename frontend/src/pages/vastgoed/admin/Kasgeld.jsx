@@ -272,7 +272,7 @@ function MobileCashCard({ c, onDelete }) {
           )}
         </div>
         <p className="text-[10px] text-slate-400 font-semibold capitalize">
-          {new Date(c.created_at).toLocaleDateString('nl-NL')} · {c.category}
+          {new Date(c.entry_date || c.created_at).toLocaleDateString('nl-NL')} · {c.category}
         </p>
       </div>
       <div className="text-right shrink-0">
@@ -417,7 +417,7 @@ export default function Kasgeld() {
                 const isPayment = c.source === 'payment';
                 return (
                   <tr key={c.id} data-testid={`cash-row-${c.id}`} className="border-t border-slate-100 hover:bg-slate-50/60">
-                    <td className="px-5 py-3 text-slate-500 text-xs whitespace-nowrap">{new Date(c.created_at).toLocaleDateString('nl-NL')}</td>
+                    <td className="px-5 py-3 text-slate-500 text-xs whitespace-nowrap">{new Date(c.entry_date || c.created_at).toLocaleDateString('nl-NL')}</td>
                     <td className="px-5 py-3 font-semibold text-slate-900">
                       <div className="flex items-center gap-2 flex-wrap">
                         {c.type === 'in' ? <ArrowDownCircle className="w-4 h-4 text-emerald-500 shrink-0" /> : <ArrowUpCircle className="w-4 h-4 text-red-500 shrink-0" />}
