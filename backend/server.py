@@ -10599,6 +10599,10 @@ class CashEntryIn(BaseModel):
     currency: Literal["SRD", "USD", "EUR"] = "SRD"
     description: str
     category: Optional[str] = "overig"
+    # Optionele boekdatum — laat gebruiker een specifieke datum kiezen
+    # (bijv. terug-boeken voor boekhouding). Verwacht "YYYY-MM-DD" of
+    # volledige ISO. Als leeg → server tijd (now_utc).
+    entry_date: Optional[str] = None
 
 
 class CashEntryOut(CashEntryIn):
@@ -10664,7 +10668,23 @@ async def create_cash(body: CashEntryIn, user=Depends(get_current_user)):
     cid = company_id_of(user)
     if not cid:
         raise HTTPException(status_code=400, detail="Geen actief bedrijf geselecteerd")
-    doc = {"id": new_id(), "company_id": cid, **body.model_dump(), "created_at": iso(now_utc())}
+    # Parse entry_date (opt) — accepteer "YYYY-MM-DD" of ISO datetime. Gebruik
+    # midden van de dag (12:00 UTC) om timezone-drift van rand-tijden (23:00
+    # lokaal → volgende dag UTC) te vermijden bij pure datum-input.
+    payload = body.model_dump()
+    raw = (payload.pop("entry_date", None) or "").strip()
+    created_iso = iso(now_utc())
+    if raw:
+        try:
+            if "T" in raw:
+                dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+            else:
+                dt = datetime.fromisoformat(f"{raw}T12:00:00+00:00")
+            created_iso = iso(dt)
+        except Exception:
+            # Ongeldige datum → val terug op nu
+            pass
+    doc = {"id": new_id(), "company_id": cid, **payload, "created_at": created_iso}
     await db.kasgeld.insert_one(doc)
     doc.pop("_id", None)
     return doc

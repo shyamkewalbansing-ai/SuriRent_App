@@ -12,9 +12,11 @@ import { api, formatError, fmtMoney } from '../../../lib/api';
 // interactiepatroon als Betalingsregelingen.
 // =====================================================================
 function InlineCashForm({ onSaved }) {
+  // Standaard datum = vandaag lokaal. Gebruikers kunnen terug-boeken.
+  const todayISO = new Date().toISOString().slice(0, 10);
   const [data, setData] = useState({
     type: 'in', amount: '', currency: 'SRD',
-    description: '', category: 'overig',
+    description: '', category: 'overig', entry_date: todayISO,
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -73,6 +75,11 @@ function InlineCashForm({ onSaved }) {
             className="h-9 w-[70px] px-1.5 rounded-lg border border-slate-200 focus:border-[#FF5C00] outline-none bg-white font-bold text-xs shrink-0">
             <option value="SRD">SRD</option><option value="USD">USD</option><option value="EUR">EUR</option>
           </select>
+          <input type="date" value={data.entry_date}
+            onChange={(e) => setData({ ...data, entry_date: e.target.value })}
+            data-testid="cash-date-desktop"
+            title="Boekdatum"
+            className="h-9 w-[140px] px-2 rounded-lg border border-slate-200 focus:border-[#FF5C00] outline-none text-xs font-semibold text-slate-700 shrink-0" />
           <input value={data.description}
             onChange={(e) => setData({ ...data, description: e.target.value })}
             onKeyDown={onKey}
@@ -107,9 +114,10 @@ function InlineCashForm({ onSaved }) {
 // Betalingsregelingen zodat de app consistent voelt.
 // =====================================================================
 function NewCashSheet({ onClose, onSaved }) {
+  const todayISO = new Date().toISOString().slice(0, 10);
   const [data, setData] = useState({
     type: 'in', amount: '', currency: 'SRD',
-    description: '', category: 'overig',
+    description: '', category: 'overig', entry_date: todayISO,
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -200,6 +208,13 @@ function NewCashSheet({ onClose, onSaved }) {
               </select>
             </div>
           </div>
+
+          {/* Boekdatum */}
+          <label className="block text-[11px] font-black uppercase tracking-widest text-slate-500 mb-1.5">Boekdatum</label>
+          <input type="date" value={data.entry_date}
+            onChange={(e) => setData({ ...data, entry_date: e.target.value })}
+            data-testid="cash-date"
+            className="w-full h-12 px-3 mb-3 rounded-xl bg-slate-50 border border-slate-200 focus:ring-2 focus:ring-[#FF5C00] focus:border-[#FF5C00] outline-none text-sm font-semibold text-slate-700" />
 
           {/* Omschrijving */}
           <label className="block text-[11px] font-black uppercase tracking-widest text-slate-500 mb-1.5">Omschrijving *</label>
