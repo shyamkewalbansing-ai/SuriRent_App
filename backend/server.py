@@ -6661,6 +6661,45 @@ async def create_tenant(body: TenantIn, user=Depends(get_current_user)):
             {"id": doc["apartment_id"], **scope(user)},
             {"$set": {"tenant_id": doc["id"], "status": "occupied"}},
         )
+        # Auto-create concept contract zodra er een appartement gekoppeld is.
+        # Zo hoeft de beheerder niet apart naar Contracten om er één te maken.
+        # Idempotent: alleen aanmaken als er nog geen contract bestaat voor
+        # deze (tenant, apartment) combinatie.
+        try:
+            apt = await db.apartments.find_one(
+                {"id": doc["apartment_id"], **scope(user)}, {"_id": 0}
+            )
+            existing = await db.contracts.find_one(
+                {"tenant_id": doc["id"], "apartment_id": doc["apartment_id"], **scope(user)},
+                {"_id": 0, "id": 1},
+            )
+            if not existing and apt:
+                year = now_utc().year
+                seq = await _next_seq(f"contract_{year}")
+                company = await db.companies.find_one({"id": cid}, {"_id": 0, "name": 1})
+                await db.contracts.insert_one({
+                    "id": new_id(),
+                    "company_id": cid,
+                    "contract_number": f"HC{year}-{seq:04d}",
+                    "tenant_id": doc["id"],
+                    "apartment_id": doc["apartment_id"],
+                    "start_date": iso(now_utc())[:10],
+                    "end_date": "",
+                    "payment_day": 1,
+                    "deposit_amount": float(apt.get("rent_amount") or 0),
+                    "landlord": (company or {}).get("name") or "",
+                    "terms": "",
+                    "status": "draft",
+                    "sign_token": secrets.token_urlsafe(24),
+                    "signed_at": None,
+                    "signed_by": None,
+                    "signed_ip": None,
+                    "created_at": iso(now_utc()),
+                    "auto_created_from_tenant": True,
+                })
+        except Exception as _e:  # noqa: BLE001
+            # Best-effort — huurder is al aangemaakt. Log alleen.
+            print(f"[auto-contract on tenant] create failed: {_e}")
     return await _enrich_tenant(doc)
 
 
@@ -9164,17 +9203,21 @@ class ContractIn(BaseModel):
 
 class ContractOut(BaseModel):
     id: str
-    contract_number: str
+    # Onderstaande velden zijn defensief Optional gemaakt zodat oudere
+    # seed-contracten (uit een vorige schema-versie) alsnog serialiseren
+    # en de /contracts endpoint niet 500't. Nieuwe contracten vullen ze
+    # netjes in via _create_contract.
+    contract_number: Optional[str] = ""
     tenant_id: str
     tenant_name: Optional[str] = None
     apartment_id: str
     apartment_number: Optional[str] = None
     start_date: str
     end_date: Optional[str] = ""
-    payment_day: int
-    deposit_amount: float
-    landlord: str
-    terms: str
+    payment_day: Optional[int] = 1
+    deposit_amount: float = 0.0
+    landlord: Optional[str] = ""
+    terms: Optional[str] = ""
     status: str
     sign_token: Optional[str] = None
     signed_at: Optional[str] = None
