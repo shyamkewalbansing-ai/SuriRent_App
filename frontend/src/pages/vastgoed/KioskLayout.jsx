@@ -2505,33 +2505,23 @@ export default function KioskLayout() {
 
   return (
     <div className="kiosk-fullscreen bg-orange-500" data-testid="kiosk-root">
-      {/* NFC TAP HINT — alleen op het apartement-picker scherm. Geeft de
-          medewerker visueel feedback dat het systeem op NFC-kaarten luistert,
-          en toont scan-resultaten. */}
-      {step === 'select' && (
+      {/* NFC SCAN TOAST — alleen op het apartement-picker scherm, en alleen
+          zichtbaar wanneer er daadwerkelijk een scan-resultaat is (success of
+          error). De statische "tap hint" is weggehaald op verzoek. */}
+      {step === 'select' && nfcToast && (
         <div className="absolute top-3 left-1/2 -translate-x-1/2 z-30 pointer-events-none">
-          {!nfcToast ? (
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/15 backdrop-blur-md border border-white/30 text-white/90"
-              style={{ fontSize: 'clamp(10px, 0.9vmin + 9px, 13px)' }}>
-              <Hash className="w-3.5 h-3.5" strokeWidth={2.4} />
-              <span className="font-bold uppercase tracking-widest">
-                NFC-kaart tappen (USB / Android / iPhone-tag)
-              </span>
-            </div>
-          ) : (
-            <div data-testid="kiosk-nfc-toast"
-              className={`inline-flex items-center gap-2 px-4 py-2 rounded-full shadow-2xl font-black ${
-                nfcToast.kind === 'ok'
-                  ? 'bg-emerald-500 text-white'
-                  : 'bg-red-500 text-white'
-              }`}
-              style={{ fontSize: 'clamp(12px, 1.1vmin + 9px, 16px)' }}>
-              {nfcToast.kind === 'ok'
-                ? <CheckCircle className="w-4 h-4" strokeWidth={2.6} />
-                : <AlertCircle className="w-4 h-4" strokeWidth={2.6} />}
-              <span>{nfcToast.msg}</span>
-            </div>
-          )}
+          <div data-testid="kiosk-nfc-toast"
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-full shadow-2xl font-black ${
+              nfcToast.kind === 'ok'
+                ? 'bg-emerald-500 text-white'
+                : 'bg-red-500 text-white'
+            }`}
+            style={{ fontSize: 'clamp(12px, 1.1vmin + 9px, 16px)' }}>
+            {nfcToast.kind === 'ok'
+              ? <CheckCircle className="w-4 h-4" strokeWidth={2.6} />
+              : <AlertCircle className="w-4 h-4" strokeWidth={2.6} />}
+            <span>{nfcToast.msg}</span>
+          </div>
         </div>
       )}
       <AnimatePresence mode="wait">
