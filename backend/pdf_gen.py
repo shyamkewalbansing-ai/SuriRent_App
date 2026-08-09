@@ -626,69 +626,307 @@ def receipt_pdf(payment: dict) -> bytes:
 
 # ============== Contract PDF ==============
 def contract_pdf(contract: dict, tenant: dict, apartment: dict) -> bytes:
+    """Officiële HUUROVEREENKOMST — Surinaams recht.
+
+    Volgt de door de opdrachtgever vastgestelde structuur met 10 artikelen.
+    Missende gegevens (geboortedatum, ID-nummers) worden als invulregel
+    weergegeven zodat de PDF met pen kan worden aangevuld en dubbel worden
+    ondertekend.
+    """
     s = _styles()
     el = []
-    accent = _accent_color(contract)
-    # Bedrijfs-info aanwezig op contract dict (geinjecteerd door server.py)
     _brand_header(el, contract)
-    _brand_title(el, "Huurovereenkomst", contract.get("contract_number", ""))
 
-    # Partijen
-    _two_col_block(el, [
-        ("Verhuurder", contract.get("landlord") or contract.get("company_name") or ""),
-        ("Huurder", tenant.get("name", "")),
-        ("Telefoon", tenant.get("phone", "")),
-        ("E-mail", tenant.get("email", "")),
-    ], gap_after=10, accent=accent)
+    # === Titel ===
+    title_style = ParagraphStyle(
+        name="ContractTitle", parent=s["Normal"],
+        fontName="Helvetica-Bold", fontSize=18, textColor=DARK,
+        leading=22, alignment=1, spaceBefore=6, spaceAfter=14,
+    )
+    el.append(Paragraph("HUUROVEREENKOMST", title_style))
 
-    # Object
-    _two_col_block(el, [
-        ("Appartement", apartment.get("number", "")),
-        ("Adres", apartment.get("address", "")),
-        ("Beschrijving", apartment.get("description") or "—"),
-    ], gap_after=10, accent=accent)
+    # === Body & artikel stijlen ===
+    body = ParagraphStyle(
+        name="ContractBody", parent=s["Normal"],
+        fontName="Helvetica", fontSize=10, textColor=DARK,
+        leading=14, spaceAfter=6, alignment=0,
+    )
+    art = ParagraphStyle(
+        name="ContractArticle", parent=s["Normal"],
+        fontName="Helvetica-Bold", fontSize=11, textColor=DARK,
+        leading=14, spaceBefore=10, spaceAfter=4,
+    )
+    small = ParagraphStyle(
+        name="ContractSmall", parent=s["Normal"],
+        fontName="Helvetica", fontSize=9, textColor=MUTED, leading=12,
+    )
 
-    # Voorwaarden
+    # Placeholder voor missende gegevens — user vult met pen aan bij ondertekenen
+    UNSET = "____________________"
+
+    landlord_name = contract.get("landlord") or contract.get("company_name") or UNSET
+    landlord_dob = contract.get("landlord_dob") or UNSET
+    landlord_id = contract.get("landlord_id") or UNSET
+
+    tenant_name = tenant.get("name") or UNSET
+    tenant_dob = tenant.get("birth_date") or tenant.get("dob") or UNSET
+    tenant_id = tenant.get("id_number") or tenant.get("id_no") or UNSET
+
+    apt_number = apartment.get("number") or UNSET
+    apt_address = apartment.get("address") or contract.get("company_address") or UNSET
     cur = apartment.get("currency", "SRD")
-    _two_col_block(el, [
-        ("Maandhuur", _fmt_money(apartment.get("rent_amount", 0), cur)),
-        ("Borg", _fmt_money(contract.get("deposit_amount", 0), cur)),
-        ("Startdatum", contract.get("start_date", "")),
-        ("Einddatum", contract.get("end_date") or "Onbepaalde tijd"),
-        ("Betaaldag", f"{contract.get('payment_day', 1)}e van de maand"),
-    ], gap_after=14, accent=accent)
+    rent_amount = _fmt_money(apartment.get("rent_amount", 0), cur)
+    start_date = contract.get("start_date") or UNSET
 
-    # Algemene bepalingen
-    el.append(Paragraph("ALGEMENE BEPALINGEN", s["SectionHead"]))
+    # === Ondergetekenden ===
+    el.append(Paragraph("<b>Ondergetekenden</b>", body))
     el.append(Paragraph(
-        contract.get("terms",
-            "1. Huurder verklaart het gehuurde in goede staat te ontvangen.<br/>"
-            "2. Huurder betaalt de maandhuur uiterlijk op de overeengekomen betaaldag.<br/>"
-            "3. Verhuurder verzorgt het noodzakelijk onderhoud aan het pand.<br/>"
-            "4. Schade door huurder of derden komt voor rekening van huurder.<br/>"
-            "5. Bij opzegging geldt een termijn van één maand."
-        ),
-        s["Body"]
+        f"De heer/mevrouw <b>{landlord_name}</b>,<br/>"
+        f"Geboren op: {landlord_dob},<br/>"
+        f"ID-nummer: {landlord_id},<br/>"
+        "hierna te noemen: &quot;<b>Verhuurder</b>&quot;,",
+        body,
+    ))
+    el.append(Paragraph("en", body))
+    el.append(Paragraph(
+        f"<b>{tenant_name}</b>,<br/>"
+        f"geboren op: {tenant_dob},<br/>"
+        f"ID-nummer: {tenant_id},<br/>"
+        "hierna te noemen: &quot;<b>Huurder</b>&quot;,",
+        body,
+    ))
+    el.append(Paragraph(
+        "verklaren met elkaar de volgende huurovereenkomst te zijn aangegaan.",
+        body,
     ))
 
-    # Signature
+    # === Artikel 1 ===
+    el.append(Paragraph("Artikel 1 – Het gehuurde", art))
+    el.append(Paragraph(
+        f"De verhuurder verhuurt aan de huurder het appartement gelegen aan:<br/>"
+        f"<b>{apt_address}</b>.<br/>"
+        f"Het betreft specifiek:<br/><b>{apt_number}</b><br/><br/>"
+        "Het gehuurde mag uitsluitend worden gebruikt als woonruimte door de huurder.",
+        body,
+    ))
+
+    # === Artikel 2 ===
+    el.append(Paragraph("Artikel 2 – Huurprijs en ingangsdatum", art))
+    el.append(Paragraph(
+        f"De maandelijkse huurprijs bedraagt <b>{rent_amount}</b>,-.<br/>"
+        f"De huurovereenkomst gaat in op <b>[{start_date}]</b>.<br/>"
+        "De huur dient maandelijks te worden betaald en dient uiterlijk op de "
+        "<b>10e dag</b> van iedere kalendermaand te zijn voldaan.",
+        body,
+    ))
+
+    # === Artikel 3 ===
+    el.append(Paragraph("Artikel 3 – Betalingsvoorwaarden, herinneringen en boete", art))
+    el.append(Paragraph(
+        "Indien de huur niet uiterlijk op de 10e van de maand is betaald, geldt de "
+        "volgende procedure:",
+        body,
+    ))
+    el.append(Paragraph(
+        "&nbsp;&nbsp;• Vanaf de <b>11e</b> van de maand ontvangt de huurder de eerste betalingsherinnering.<br/>"
+        "&nbsp;&nbsp;• Eén week daarna ontvangt de huurder de tweede betalingsherinnering.<br/>"
+        "&nbsp;&nbsp;• Eén week daarna ontvangt de huurder de derde betalingsherinnering.",
+        body,
+    ))
+    el.append(Paragraph(
+        "Indien de huur na de derde betalingsherinnering nog steeds niet volledig is "
+        "betaald, is de huurder een eenmalige boete van <b>SRD 500,-</b> verschuldigd "
+        "voor die betreffende huurmaand, onverminderd de verplichting tot betaling van "
+        "de achterstallige huur.",
+        body,
+    ))
+
+    # === Artikel 4 ===
+    el.append(Paragraph("Artikel 4 – Betalingsachterstand en ontbinding", art))
+    el.append(Paragraph(
+        "Indien de huurder een huurachterstand van <b>twee (2) maanden</b> heeft, "
+        "zullen partijen indien mogelijk in overleg treden om een betalingsregeling "
+        "te treffen.",
+        body,
+    ))
+    el.append(Paragraph(
+        "Indien de huurachterstand <b>drie (3) maanden of meer</b> bedraagt en de "
+        "huurder ondanks schriftelijke herinneringen en aanmaningen niet aan zijn "
+        "betalingsverplichtingen voldoet, is de verhuurder gerechtigd de ontbinding "
+        "van deze huurovereenkomst en de ontruiming van het gehuurde te vorderen "
+        "overeenkomstig het Surinaamse recht.",
+        body,
+    ))
+    el.append(Paragraph(
+        "Indien de huurder vrijwillig instemt met beëindiging van de huurovereenkomst "
+        "wegens de betalingsachterstand, krijgt de huurder maximaal <b>één (1) maand</b> "
+        "de tijd om het appartement te verlaten en een andere woonruimte te vinden.",
+        body,
+    ))
+    el.append(Paragraph(
+        "Bij het verlaten van het gehuurde dient het appartement leeg, bezemschoon en "
+        "in goede staat te worden opgeleverd, behoudens normale slijtage.",
+        body,
+    ))
+
+    # === Artikel 5 ===
+    el.append(Paragraph("Artikel 5 – Onderhoud en reparaties", art))
+    el.append(Paragraph("<b>Voor rekening van de verhuurder:</b>", body))
+    el.append(Paragraph(
+        "&nbsp;&nbsp;• Reparaties aan de elektrische installatie.<br/>"
+        "&nbsp;&nbsp;• Het verhelpen van verstoppingen in de afvoer of riolering, tenzij deze door onjuist gebruik van de huurder zijn ontstaan.<br/>"
+        "&nbsp;&nbsp;• Groot onderhoud aan het appartement.",
+        body,
+    ))
+    el.append(Paragraph("<b>Voor rekening van de huurder:</b>", body))
+    el.append(Paragraph(
+        "&nbsp;&nbsp;• Het vervangen van lampen.<br/>"
+        "&nbsp;&nbsp;• Het vervangen of repareren van de wc-bril.<br/>"
+        "&nbsp;&nbsp;• Alle kleine dagelijkse onderhoudswerkzaamheden.<br/>"
+        "&nbsp;&nbsp;• Schade ontstaan door onzorgvuldig, onjuist of nalatig gebruik van het gehuurde.",
+        body,
+    ))
+
+    # === Artikel 6 ===
+    el.append(Paragraph("Artikel 6 – Waarborgsom", art))
+    el.append(Paragraph(
+        "Na beëindiging van de huurovereenkomst wordt de waarborgsom, na verrekening "
+        "van eventuele openstaande huur, schade of andere verschuldigde bedragen, "
+        "binnen <b>dertig (30) dagen</b> terugbetaald.",
+        body,
+    ))
+
+    # === Artikel 7 ===
+    el.append(Paragraph("Artikel 7 – Gebruik van het gehuurde", art))
+    el.append(Paragraph("De huurder zal het appartement als een goed huurder gebruiken.", body))
+    el.append(Paragraph(
+        "Het is zonder voorafgaande schriftelijke toestemming van de verhuurder niet toegestaan:",
+        body,
+    ))
+    el.append(Paragraph(
+        "&nbsp;&nbsp;• het appartement geheel of gedeeltelijk onder te verhuren;<br/>"
+        "&nbsp;&nbsp;• het appartement aan derden in gebruik te geven;<br/>"
+        "&nbsp;&nbsp;• wijzigingen aan het appartement aan te brengen die niet eenvoudig ongedaan kunnen worden gemaakt.",
+        body,
+    ))
+
+    # === Artikel 8 ===
+    el.append(Paragraph("Artikel 8 – Oplevering", art))
+    el.append(Paragraph(
+        "Bij aanvang en beëindiging van de huurovereenkomst kunnen partijen gezamenlijk "
+        "een inspectie van het appartement uitvoeren.",
+        body,
+    ))
+    el.append(Paragraph(
+        "Bij beëindiging dient het appartement leeg, schoon en in goede staat te worden "
+        "opgeleverd, behoudens normale slijtage.",
+        body,
+    ))
+
+    # === Artikel 9 ===
+    el.append(Paragraph("Artikel 9 – Opzegging en verhuizing", art))
+    el.append(Paragraph(
+        "De huurder is verplicht om de verhuurder minimaal <b>één (1) maand</b> vóór de "
+        "geplande verhuisdatum schriftelijk op de hoogte te stellen van de beëindiging "
+        "van de huurovereenkomst.",
+        body,
+    ))
+    el.append(Paragraph(
+        "Indien de huurder zonder de vereiste voorafgaande schriftelijke kennisgeving "
+        "verhuist of de woning voortijdig verlaat, is de huurder een contractuele boete "
+        "van <b>SRD 3.000</b> verschuldigd.",
+        body,
+    ))
+    el.append(Paragraph(
+        "Deze boete laat de verplichting van de huurder onverlet om eventuele achterstallige "
+        "huur, schade aan het gehuurde, openstaande kosten voor water, elektriciteit, "
+        "internet en overige verschuldigde bedragen volledig te betalen.",
+        body,
+    ))
+    el.append(Paragraph(
+        "De verhuurder is gerechtigd de openstaande bedragen en de overeengekomen boete te "
+        "verrekenen met de waarborgsom, voor zover dit wettelijk is toegestaan. Indien de "
+        "waarborgsom onvoldoende is, blijft de huurder verplicht het resterende bedrag te "
+        "voldoen.",
+        body,
+    ))
+
+    # === Artikel 10 ===
+    el.append(Paragraph("Artikel 10 – Slotbepalingen", art))
+    el.append(Paragraph("Op deze overeenkomst is het Surinaamse recht van toepassing.", body))
+    el.append(Paragraph(
+        "Wijzigingen of aanvullingen op deze overeenkomst zijn uitsluitend geldig indien "
+        "deze schriftelijk door beide partijen zijn overeengekomen.",
+        body,
+    ))
+    el.append(Paragraph(
+        "Partijen verklaren deze overeenkomst te hebben gelezen, de inhoud te begrijpen en "
+        "hiermee akkoord te gaan.",
+        body,
+    ))
+
+    el.append(Spacer(1, 10))
+    el.append(Paragraph(
+        "Aldus in tweevoud opgemaakt en ondertekend te <b>Paramaribo, Suriname</b>.",
+        body,
+    ))
+    # Datum-regel (dd/mm/yyyy invulplekken)
+    now_year = datetime.utcnow().year
+    el.append(Paragraph(
+        f"Datum: ____ / ____ / {now_year}",
+        body,
+    ))
+    el.append(Spacer(1, 18))
+
+    # === Handtekening blok — twee koloms ===
+    sig_style = ParagraphStyle(
+        name="ContractSigLabel", parent=s["Normal"],
+        fontName="Helvetica-Bold", fontSize=10, textColor=DARK,
+        leading=12, spaceAfter=4,
+    )
+    sig_line_style = ParagraphStyle(
+        name="ContractSigLine", parent=s["Normal"],
+        fontName="Helvetica", fontSize=9, textColor=MUTED,
+        leading=12, spaceAfter=2,
+    )
+    sig_table_data = [[
+        [
+            Paragraph("Verhuurder", sig_style),
+            Paragraph(f"Naam: <b>{landlord_name}</b>", sig_line_style),
+            Spacer(1, 30),
+            Paragraph("Handtekening: ________________________", sig_line_style),
+        ],
+        [
+            Paragraph("Huurder", sig_style),
+            Paragraph(f"Naam: <b>{tenant_name}</b>", sig_line_style),
+            Spacer(1, 30),
+            Paragraph("Handtekening: ________________________", sig_line_style),
+        ],
+    ]]
+    sig_table = Table(sig_table_data, colWidths=[85 * mm, 85 * mm])
+    sig_table.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 0),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 10),
+        ("TOPPADDING", (0, 0), (-1, -1), 0),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+    ]))
+    el.append(sig_table)
+
+    # Optionele digitale ondertekening — als de kiosk een signatuur heeft
+    # vastgelegd tonen we dat + datum onderaan als bewijs.
     signed = contract.get("signed_at")
-    received = ""
     if signed:
+        el.append(Spacer(1, 14))
         try:
             dt = datetime.fromisoformat(signed.replace("Z", "+00:00"))
-            received = f"{contract.get('signed_by', tenant.get('name', ''))} · {dt.strftime('%d-%m-%Y %H:%M')}"
+            when = dt.strftime("%d-%m-%Y %H:%M")
         except Exception:
-            received = contract.get("signed_by", tenant.get("name", ""))
-    else:
-        received = tenant.get("name", "")
-    _signature_block(
-        el,
-        received_by=received,
-        approved_by=contract.get("company_name") or "",
-        company_name=contract.get("company_name") or "",
-        signature_data=contract.get("signature_data") or "",
-    )
+            when = signed
+        el.append(Paragraph(
+            f"<i>Digitaal ondertekend door: {contract.get('signed_by') or tenant_name} · {when}</i>",
+            small,
+        ))
 
     _verification_footer(
         el,

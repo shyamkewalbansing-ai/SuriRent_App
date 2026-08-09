@@ -9308,7 +9308,7 @@ async def contract_pdf_admin(contract_id: str):
     a = await db.apartments.find_one({"id": c["apartment_id"]}, {"_id": 0}) or {}
     c = {**c, **(await _company_brand_info(c.get("company_id")))}
     pdf = contract_pdf(c, t, a)
-    return _pdf_response(pdf, f"contract-{c['contract_number']}.pdf")
+    return _pdf_response(pdf, f"contract-{c.get('contract_number') or contract_id}.pdf")
 
 
 # Public signing flow
