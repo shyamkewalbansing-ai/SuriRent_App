@@ -71,6 +71,8 @@ const SUPER_TABS = [
   { id: 'saas_pending', label: 'OCR-goedkeuring', icon: ScanLine },
   { id: 'saas_invoices', label: 'SaaS Facturen', icon: Receipt },
   { id: 'saas_payments', label: 'SaaS Betalingen', icon: Banknote },
+  { id: 'saas_payment_plans', label: 'SaaS Betalingsregelingen', icon: Calendar },
+  { id: 'saas_kasgeld', label: 'SaaS Kasgeld', icon: Wallet },
   { id: 'plans', label: 'Pakketten', icon: Package },
   { id: 'landing_editor', label: 'Landing Editor', icon: Paintbrush },
   { id: 'saas_settings', label: 'SaaS Instellingen', icon: KeySquare },
@@ -91,7 +93,7 @@ const SIDEBAR_GROUPS = {
   // dagelijkse acties (OCR + facturen/betalingen), instellingen.
   saas: { label: 'SaaS Beheer', ids: [
     'saas_overview', 'companies', 'saas_pending', 'saas_invoices', 'saas_payments',
-    'plans', 'landing_editor', 'saas_settings',
+    'saas_payment_plans', 'saas_kasgeld', 'plans', 'landing_editor', 'saas_settings',
   ] },
 };
 function groupTabs(tabs) {
@@ -2706,6 +2708,8 @@ export default function AdminDashboard() {
           {tab === 'saas_pending' && <Subscriptions viewMode="pending" />}
           {tab === 'saas_invoices' && <Subscriptions viewMode="invoices" />}
           {tab === 'saas_payments' && <Subscriptions viewMode="payments" />}
+          {tab === 'saas_payment_plans' && <Subscriptions viewMode="payment_plans" />}
+          {tab === 'saas_kasgeld' && <Subscriptions viewMode="kasgeld" />}
           {tab === 'plans' && <PlansAdmin />}
           {tab === 'saas_settings' && <SaasSettings />}
           {tab === 'landing_editor' && <LandingEditor />}

@@ -381,10 +381,14 @@ export default function Subscriptions({ viewMode = 'all' } = {}) {
   const [invoices, setInvoices] = useState([]);
   const [payments, setPayments] = useState([]);
   const [pending, setPending] = useState([]);   // OCR-mismatch wachtend op handmatige goedkeuring
-  const initialTab = ['companies', 'invoices', 'payments', 'pending'].includes(viewMode) ? viewMode : 'companies';
+  const initialTab = ['companies', 'invoices', 'payments', 'pending', 'payment_plans', 'kasgeld'].includes(viewMode) ? viewMode : 'companies';
   const [tab, setTab] = useState(initialTab);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
+  // Aparte filter-state voor de subviews. Elk tabblad heeft eigen filters.
+  const [invFilter, setInvFilter] = useState('all'); // all | open | paid | overdue
+  const [payFilter, setPayFilter] = useState('all'); // all | contant | bank | ocr
+  const [kasFilter, setKasFilter] = useState('all'); // all | in (payments) | out (refunds/adjust)
   const [selected, setSelected] = useState(null);
   const [showPay, setShowPay] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -475,6 +479,8 @@ export default function Subscriptions({ viewMode = 'all' } = {}) {
                 : viewMode === 'pending' ? 'OCR-goedkeuring'
                 : viewMode === 'invoices' ? 'SaaS Facturen'
                 : viewMode === 'payments' ? 'SaaS Betalingen'
+                : viewMode === 'payment_plans' ? 'SaaS Betalingsregelingen'
+                : viewMode === 'kasgeld' ? 'SaaS Kasgeld'
                 : 'SaaS Beheer'}
             </h1>
           </div>
@@ -483,6 +489,8 @@ export default function Subscriptions({ viewMode = 'all' } = {}) {
               : viewMode === 'pending' ? 'Handmatig goedkeuren van OCR-mismatches bij SaaS-betalingen.'
               : viewMode === 'invoices' ? 'Facturen die SuriRent N.V. uitstuurt aan klanten.'
               : viewMode === 'payments' ? 'Ontvangen betalingen van klanten — handmatig of via OCR.'
+              : viewMode === 'payment_plans' ? 'Bedrijven die hun SaaS abonnement in termijnen betalen.'
+              : viewMode === 'kasgeld' ? 'Volledig kasboek van alle ontvangen SaaS-betalingen — cash flow overzicht.'
               : 'Alle bedrijven, abonnementen, facturen en betalingen op één plek.'}
           </p>
         </div>
@@ -592,40 +600,16 @@ export default function Subscriptions({ viewMode = 'all' } = {}) {
       )}
 
       {tab === 'invoices' && (
-        <div className="space-y-2">
-          {invoices.map((inv) => (
-            <div key={inv.id} data-testid={`sub-invoice-${inv.id}`}
-              className="bg-white rounded-2xl border border-slate-100 p-4 flex items-center gap-3">
-              <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${
-                inv.status === 'paid' ? 'bg-emerald-50 text-emerald-600' : 'bg-orange-50 text-orange-600'
-              }`}>
-                {inv.status === 'paid' ? <CheckCircle className="w-5 h-5" /> : <Clock className="w-5 h-5" />}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <p className="font-extrabold text-slate-900 truncate">{inv.company_name}</p>
-                  <span className={`text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full ${
-                    inv.status === 'paid' ? 'bg-emerald-50 text-emerald-700' : 'bg-orange-50 text-orange-700'
-                  }`}>{inv.status === 'paid' ? 'Betaald' : 'Open'}</span>
-                </div>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  {fmtDate(inv.created_at)} · {inv.plan} · {fmtDate(inv.period_start)} → {fmtDate(inv.period_end)}
-                </p>
-              </div>
-              <div className="text-right shrink-0">
-                <p className="font-extrabold text-slate-900">{fmt(inv.amount, inv.currency)}</p>
-                {inv.status !== 'paid' && (
-                  <button onClick={() => markPaid(inv)} data-testid={`mark-paid-${inv.id}`}
-                    className="text-xs font-bold text-orange-600 hover:text-orange-700 mt-1">Markeer betaald</button>
-                )}
-              </div>
-            </div>
-          ))}
-          {invoices.length === 0 && (
-            <div className="bg-white rounded-2xl border-2 border-dashed border-slate-200 p-10 text-center text-slate-400">
-              Nog geen SaaS-facturen aangemaakt. Markeer een trial als actief om de eerste factuur te genereren.
-            </div>
-          )}
+        <div className="space-y-3">
+          <FilterPills value={invFilter} onChange={setInvFilter}
+            options={[
+              { v: 'all', l: 'Alles', c: invoices.length },
+              { v: 'open', l: 'Open', c: invoices.filter((x) => x.status !== 'paid' && !isOverdue(x)).length },
+              { v: 'paid', l: 'Betaald', c: invoices.filter((x) => x.status === 'paid').length },
+              { v: 'overdue', l: 'Vervallen', c: invoices.filter(isOverdue).length },
+            ]}
+            testidPrefix="saas-inv-filter" />
+          <SaasInvoiceList invoices={filterInvoices(invoices, invFilter)} onMarkPaid={markPaid} />
         </div>
       )}
 
@@ -703,32 +687,25 @@ export default function Subscriptions({ viewMode = 'all' } = {}) {
       )}
 
       {tab === 'payments' && (
-        <div className="space-y-2">
-          {payments.map((p) => (
-            <div key={p.id} data-testid={`sub-payment-${p.id}`}
-              className="bg-white rounded-2xl border border-slate-100 p-4 flex items-center gap-3">
-              <div className="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
-                <Banknote className="w-5 h-5" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <p className="font-extrabold text-slate-900 truncate">{p.company_name}</p>
-                  <span className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">{p.method}</span>
-                </div>
-                <p className="text-xs text-slate-500 mt-0.5 truncate">
-                  {fmtDate(p.paid_at)}{p.reference ? ` · ${p.reference}` : ''}{p.note ? ` · ${p.note}` : ''}
-                </p>
-                {p.created_by && <p className="text-[10px] text-slate-400 mt-0.5">Geregistreerd door {p.created_by}</p>}
-              </div>
-              <p className="font-extrabold text-slate-900 text-right shrink-0">{fmt(p.amount, p.currency)}</p>
-            </div>
-          ))}
-          {payments.length === 0 && (
-            <div className="bg-white rounded-2xl border-2 border-dashed border-slate-200 p-10 text-center text-slate-400">
-              Nog geen betalingen geregistreerd. Klik op "Betaling registreren" om de eerste in te voeren.
-            </div>
-          )}
+        <div className="space-y-3">
+          <FilterPills value={payFilter} onChange={setPayFilter}
+            options={[
+              { v: 'all', l: 'Alles', c: payments.length },
+              { v: 'contant', l: 'Contant', c: payments.filter((p) => (p.method || '').toLowerCase().includes('contant')).length },
+              { v: 'bank', l: 'Bank', c: payments.filter((p) => (p.method || '').toLowerCase().includes('bank') || (p.method || '').toLowerCase().includes('overboek')).length },
+              { v: 'ocr', l: 'OCR', c: payments.filter((p) => p.source === 'ocr' || (p.method || '').toLowerCase().includes('ocr')).length },
+            ]}
+            testidPrefix="saas-pay-filter" />
+          <SaasPaymentList payments={filterPayments(payments, payFilter)} />
         </div>
+      )}
+
+      {tab === 'payment_plans' && (
+        <SaasPaymentPlansView invoices={invoices} companies={companies} />
+      )}
+
+      {tab === 'kasgeld' && (
+        <SaasKasgeldView payments={payments} filter={kasFilter} onFilter={setKasFilter} />
       )}
 
       {selected && (
@@ -776,3 +753,230 @@ export default function Subscriptions({ viewMode = 'all' } = {}) {
     </div>
   );
 }
+
+// =====================================================================
+// Helper: is factuur vervallen? (open + due_date verstreken)
+// =====================================================================
+function isOverdue(inv) {
+  if (inv.status === 'paid') return false;
+  const due = inv.due_date || inv.period_end;
+  if (!due) return false;
+  try { return new Date(due) < new Date(); } catch { return false; }
+}
+function filterInvoices(list, f) {
+  if (f === 'paid') return list.filter((x) => x.status === 'paid');
+  if (f === 'overdue') return list.filter(isOverdue);
+  if (f === 'open') return list.filter((x) => x.status !== 'paid' && !isOverdue(x));
+  return list;
+}
+function filterPayments(list, f) {
+  if (f === 'all') return list;
+  const term = { contant: 'contant', bank: 'bank', ocr: 'ocr' }[f];
+  return list.filter((p) => (p.method || '').toLowerCase().includes(term) || (f === 'bank' && (p.method || '').toLowerCase().includes('overboek')) || (f === 'ocr' && p.source === 'ocr'));
+}
+
+function FilterPills({ value, onChange, options, testidPrefix }) {
+  return (
+    <div className="flex items-center gap-2 flex-wrap" data-testid={`${testidPrefix}-bar`}>
+      {options.map((o) => (
+        <button key={o.v} onClick={() => onChange(o.v)}
+          data-testid={`${testidPrefix}-${o.v}`}
+          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+            value === o.v ? 'bg-[#FF5C00] text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+          }`}>
+          {o.l}
+          <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${
+            value === o.v ? 'bg-white/20 text-white' : 'bg-white text-slate-500'
+          }`}>{o.c}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function SaasInvoiceList({ invoices, onMarkPaid }) {
+  if (invoices.length === 0) {
+    return (
+      <div className="bg-white rounded-2xl p-10 text-center shadow-sm">
+        <Receipt className="w-12 h-12 mx-auto text-slate-300 mb-2" />
+        <p className="text-slate-500 font-semibold">Geen facturen in deze filter.</p>
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-2">
+      {invoices.map((inv) => {
+        const overdue = isOverdue(inv);
+        const paid = inv.status === 'paid';
+        return (
+          <div key={inv.id} data-testid={`sub-invoice-${inv.id}`}
+            className="w-full bg-white hover:bg-slate-50 rounded-2xl shadow-sm p-4 flex items-center gap-3 border border-slate-100 transition">
+            <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${
+              paid ? 'bg-emerald-50 text-emerald-600'
+                : overdue ? 'bg-red-50 text-red-600'
+                : 'bg-orange-50 text-[#FF5C00]'
+            }`}>
+              {paid ? <CheckCircle className="w-5 h-5" /> : <Receipt className="w-5 h-5" />}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <p className="font-black text-slate-900 truncate">{inv.company_name}</p>
+                <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${
+                  paid ? 'bg-emerald-100 text-emerald-700'
+                    : overdue ? 'bg-red-100 text-red-700'
+                    : 'bg-amber-100 text-amber-700'
+                }`}>{paid ? 'Betaald' : overdue ? 'Vervallen' : 'Open'}</span>
+              </div>
+              <p className="text-xs text-slate-500 mt-0.5 font-mono truncate">
+                {(inv.invoice_number || inv.id?.slice(-6) || '').toUpperCase()} · {inv.plan} · {fmtDate(inv.period_start)} → {fmtDate(inv.period_end)}
+              </p>
+            </div>
+            <div className="text-right shrink-0 flex flex-col items-end gap-1.5">
+              <p className="text-base font-black text-slate-900 whitespace-nowrap">{fmt(inv.amount, inv.currency)}</p>
+              {!paid && (
+                <button onClick={() => onMarkPaid(inv)} data-testid={`mark-paid-${inv.id}`}
+                  className="text-[10px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2 py-1 rounded">
+                  Markeer betaald
+                </button>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function SaasPaymentList({ payments }) {
+  if (payments.length === 0) {
+    return (
+      <div className="bg-white rounded-2xl p-10 text-center shadow-sm">
+        <Banknote className="w-12 h-12 mx-auto text-slate-300 mb-2" />
+        <p className="text-slate-500 font-semibold">Geen betalingen in deze filter.</p>
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-2">
+      {payments.map((p) => {
+        const initials = (p.company_name || '?').split(' ').map((s) => s[0]).slice(0, 2).join('').toUpperCase();
+        return (
+          <div key={p.id} data-testid={`sub-payment-${p.id}`}
+            className="w-full bg-white hover:bg-slate-50 rounded-2xl shadow-sm p-4 flex items-center gap-3 border border-slate-100 transition">
+            <div className="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0 font-black text-sm">
+              {initials}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <p className="font-black text-slate-900 truncate">{p.company_name}</p>
+                <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-slate-200 text-slate-700">
+                  {p.method || '—'}
+                </span>
+                {p.source === 'ocr' && (
+                  <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-blue-100 text-blue-700">OCR</span>
+                )}
+              </div>
+              <p className="text-xs text-slate-500 mt-0.5 truncate">
+                {fmtDate(p.paid_at)}{p.reference ? ` · ${p.reference}` : ''}{p.note ? ` · ${p.note}` : ''}
+              </p>
+            </div>
+            <p className="text-base font-black text-slate-900 text-right shrink-0 whitespace-nowrap">
+              {fmt(p.amount, p.currency)}
+            </p>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function SaasPaymentPlansView({ invoices }) {
+  const byCompany = {};
+  for (const inv of invoices) {
+    const cid = inv.company_id;
+    if (!byCompany[cid]) byCompany[cid] = { company_name: inv.company_name, invoices: [], total: 0, paid: 0 };
+    byCompany[cid].invoices.push(inv);
+    byCompany[cid].total += Number(inv.amount || 0);
+    if (inv.status === 'paid') byCompany[cid].paid += Number(inv.amount || 0);
+  }
+  const plans = Object.entries(byCompany)
+    .filter(([, x]) => x.invoices.length >= 2)
+    .map(([cid, x]) => ({ cid, ...x, open: x.invoices.filter((i) => i.status !== 'paid').length }));
+
+  if (plans.length === 0) {
+    return (
+      <div className="bg-white rounded-2xl p-10 text-center shadow-sm">
+        <Calendar className="w-12 h-12 mx-auto text-slate-300 mb-2" />
+        <p className="text-slate-500 font-semibold">Nog geen actieve betalingsregelingen.</p>
+        <p className="text-xs text-slate-400 mt-1">Zodra een bedrijf zijn abonnement in termijnen betaalt verschijnt hier de regeling.</p>
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-2">
+      {plans.map((p) => {
+        const progress = p.total > 0 ? Math.round((p.paid / p.total) * 100) : 0;
+        return (
+          <div key={p.cid} data-testid={`saas-plan-${p.cid}`}
+            className="w-full bg-white rounded-2xl shadow-sm p-4 border border-slate-100">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-11 h-11 rounded-xl bg-orange-50 text-[#FF5C00] flex items-center justify-center shrink-0">
+                <Calendar className="w-5 h-5" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-black text-slate-900 truncate">{p.company_name}</p>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  {p.invoices.length} termijnen · {p.open} open · {fmt(p.paid, 'SRD')} betaald van {fmt(p.total, 'SRD')}
+                </p>
+              </div>
+              <span className="text-lg font-black text-emerald-600">{progress}%</span>
+            </div>
+            <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
+              <div className="h-full bg-emerald-500 transition-all" style={{ width: `${progress}%` }} />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function SaasKasgeldView({ payments, filter, onFilter }) {
+  const filtered = filter === 'all' ? payments
+    : filter === 'ocr' ? payments.filter((p) => p.source === 'ocr')
+    : filter === 'contant' ? payments.filter((p) => (p.method || '').toLowerCase().includes('contant'))
+    : payments;
+  const totals = {};
+  for (const p of filtered) {
+    const c = p.currency || 'SRD';
+    totals[c] = (totals[c] || 0) + Number(p.amount || 0);
+  }
+  const counts = {
+    all: payments.length,
+    contant: payments.filter((p) => (p.method || '').toLowerCase().includes('contant')).length,
+    ocr: payments.filter((p) => p.source === 'ocr').length,
+  };
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+        {['SRD', 'USD', 'EUR'].map((c) => (
+          <div key={c} className="bg-gradient-to-br from-emerald-50 to-emerald-100 rounded-2xl p-4" data-testid={`saas-kas-saldo-${c}`}>
+            <p className="text-[10px] font-black uppercase tracking-widest text-emerald-700 mb-1">Saldo {c}</p>
+            <p className="text-2xl font-black text-emerald-800">{fmt(totals[c] || 0, c)}</p>
+          </div>
+        ))}
+      </div>
+
+      <FilterPills value={filter} onChange={onFilter}
+        options={[
+          { v: 'all', l: 'Alles', c: counts.all },
+          { v: 'contant', l: 'Contant', c: counts.contant },
+          { v: 'ocr', l: 'OCR', c: counts.ocr },
+        ]}
+        testidPrefix="saas-kas-filter" />
+
+      <SaasPaymentList payments={filtered} />
+    </div>
+  );
+}
+
