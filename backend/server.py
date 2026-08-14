@@ -11466,6 +11466,146 @@ async def get_domain_target(user=Depends(get_current_user)):
     return {"host": host, "ip": ip, "configured": bool(host and ip), "error": error}
 
 
+# ============== Live DNS + SSL status voor custom domain ==============
+@api.get("/settings/domain/status")
+async def get_domain_status(user=Depends(get_current_user)):
+    """Real-time status van het custom domein van deze tenant.
+
+    Checkt achter elkaar:
+      1. Custom domein is ingesteld?
+      2. DNS resolveert naar een IP?
+      3. Dat IP matcht het target (APP_PUBLIC_HOST resolved IP)?
+      4. HTTPS werkt zonder SSL fout (echt certificaat uitgegeven door bv.
+         Let's Encrypt of Cloudflare voor deze exacte hostname)?
+
+    Retourneert een status-code die de frontend als badge toont.
+    """
+    import socket
+    import ssl as _ssl
+    cid = company_id_of(user)
+    if not cid:
+        raise HTTPException(status_code=400, detail="Geen actief bedrijf")
+
+    # Custom domein ophalen uit settings
+    settings = await db.company_settings.find_one({"company_id": cid}, {"_id": 0}) or {}
+    dom = settings.get("domain") or {}
+    custom = (dom.get("custom_domain") or "").strip().lower()
+    enabled = bool(dom.get("enabled"))
+
+    # Target ophalen (dezelfde bron als /target endpoint)
+    target_host = (os.environ.get("APP_PUBLIC_HOST")
+                   or (os.environ.get("APP_PUBLIC_URL") or "")
+                   .replace("https://", "").replace("http://", "").rstrip("/"))
+    target_ip = ""
+    if target_host:
+        try:
+            target_ip = socket.gethostbyname(target_host)
+        except socket.gaierror:
+            target_ip = ""
+
+    result = {
+        "custom_domain": custom,
+        "enabled": enabled,
+        "target_host": target_host,
+        "target_ip": target_ip,
+        "resolved_ip": "",
+        "dns_ok": False,
+        "ssl_ok": False,
+        "https_status_code": None,
+        "status": "not_configured",
+        "message": "",
+    }
+
+    if not custom:
+        result["status"] = "not_configured"
+        result["message"] = "Geen custom domein ingesteld. Vul een domein in en sla op."
+        return result
+
+    if not enabled:
+        result["status"] = "disabled"
+        result["message"] = f"Custom domein {custom} is uitgeschakeld — zet 'Ingeschakeld' aan om te activeren."
+        return result
+
+    # === Stap 1: DNS resolve ===
+    try:
+        result["resolved_ip"] = socket.gethostbyname(custom)
+    except socket.gaierror:
+        result["status"] = "dns_missing"
+        result["message"] = (f"DNS voor {custom} is niet gevonden. "
+                             "Controleer dat je CNAME/A-record correct is ingesteld bij je domeinregistrar.")
+        return result
+
+    # === Stap 2: IP klopt met target? ===
+    # Cloudflare-fronted domeinen kunnen resolven naar verschillende IPs uit
+    # dezelfde /16 subnet — we accepteren ook als het IP tot dezelfde /16
+    # behoort (bv. 172.66.x.x is altijd Cloudflare).
+    dns_ok = False
+    if target_ip and result["resolved_ip"]:
+        if result["resolved_ip"] == target_ip:
+            dns_ok = True
+        else:
+            # Zelfde /16 (bv. 172.66.2.113 vs 162.159.142.117 zijn beide CF)
+            try:
+                a = result["resolved_ip"].split(".")[:2]
+                b = target_ip.split(".")[:2]
+                # Cloudflare gebruikt 172.66.x.x en 162.159.x.x — beide zijn OK
+                cf_ranges = [("172", "66"), ("162", "159"), ("104", "16"),
+                             ("104", "17"), ("104", "18"), ("104", "19"),
+                             ("104", "20"), ("104", "21")]
+                if tuple(a) in cf_ranges and tuple(b) in cf_ranges:
+                    dns_ok = True
+            except Exception:
+                pass
+    result["dns_ok"] = dns_ok
+    if not dns_ok:
+        result["status"] = "dns_wrong"
+        result["message"] = (f"{custom} resolveert naar {result['resolved_ip']} maar "
+                             f"verwacht {target_ip} ({target_host}). Update je DNS record.")
+        return result
+
+    # === Stap 3: HTTPS/SSL check ===
+    # Doe een HEAD request naar https://{custom} en check dat er een echt
+    # certificaat is voor deze hostname (SNI match). We accepteren ook 4xx
+    # status codes — die zijn "SSL werkt, backend routing pending".
+    try:
+        ctx = _ssl.create_default_context()
+        with socket.create_connection((custom, 443), timeout=5) as sock:
+            with ctx.wrap_socket(sock, server_hostname=custom) as ssock:
+                cert = ssock.getpeercert()
+                # Cert bevat SAN of CN — als de connectie überhaupt lukt met
+                # server_hostname=custom, is SNI match al bewezen door OpenSSL
+                result["ssl_ok"] = bool(cert)
+    except (_ssl.SSLError, _ssl.CertificateError, socket.error, socket.timeout, socket.gaierror, OSError) as e:
+        result["ssl_ok"] = False
+        result["status"] = "dns_ok_ssl_pending"
+        result["message"] = ("DNS wijst correct — maar SSL certificaat is nog niet uitgegeven. "
+                             f"Vraag Emergent Support om {custom} als custom alias te koppelen. "
+                             "Dit kan 5–15 minuten duren na koppeling.")
+        result["ssl_error"] = str(e)[:200]
+        return result
+
+    # === Stap 4: HTTPS response check (optioneel — best effort) ===
+    try:
+        import httpx
+        async with httpx.AsyncClient(verify=True, timeout=5, follow_redirects=False) as client:
+            r = await client.head(f"https://{custom}/")
+            result["https_status_code"] = r.status_code
+    except Exception:
+        # SSL werkt maar routing niet — nog altijd "live" want cert is er
+        pass
+
+    # Alles OK
+    result["status"] = "live"
+    result["message"] = f"✓ {custom} is live en veilig bereikbaar via HTTPS."
+    # Persist verified state
+    await db.company_settings.update_one(
+        {"company_id": cid},
+        {"$set": {"domain.dns_verified": True, "domain.ssl_verified": True,
+                  "domain.last_verified_at": iso(now_utc())}},
+    )
+    return result
+
+
 # ============== Email send endpoints (Fase B) ==============
 class EmailSendIn(BaseModel):
     to: Optional[str] = None  # override; otherwise we use tenant.email

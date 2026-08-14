@@ -224,12 +224,38 @@ export function DomainForm({ initial }) {
   }, []);
   const exampleTarget = target.host || 'app.surirent.sr';
   const exampleIp = target.ip || '<IP van je productie server>';
+
+  // Live DNS + SSL status — refresh elke 30s zodat gebruiker realtime
+  // ziet wanneer SSL certificaat is uitgegeven na Emergent Support koppeling.
+  const [status, setStatus] = useState(null);
+  const [statusLoading, setStatusLoading] = useState(false);
+  const refreshStatus = useCallback(async () => {
+    if (!d.custom_domain) { setStatus(null); return; }
+    setStatusLoading(true);
+    try {
+      const r = await api.get('/settings/domain/status');
+      setStatus(r.data);
+    } catch { /* stil */ }
+    finally { setStatusLoading(false); }
+  }, [d.custom_domain]);
+  useEffect(() => {
+    refreshStatus();
+    const t = setInterval(refreshStatus, 30_000);
+    return () => clearInterval(t);
+  }, [refreshStatus]);
+
   return (
     <SectionShell msg={s.msg} err={s.err}>
       <SwitchField label="Ingeschakeld" testid="domain-enabled"
         value={d.enabled} onChange={(v) => s.onField('enabled', v)}
         desc="Wanneer aan, herkent het platform inkomende requests op jouw domein." />
       <TextField label="Custom domein" testid="domain-custom" value={d.custom_domain} onChange={(v) => s.onField('custom_domain', v.trim().toLowerCase())} placeholder="vastgoed.mijnbedrijf.com" helper="Zonder https:// en zonder pad." />
+
+      {/* Live status widget — vervangt de losse verificatie-badge */}
+      {d.custom_domain && (
+        <DomainStatusWidget status={status} loading={statusLoading} onRefresh={refreshStatus} />
+      )}
+
       <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 text-xs text-slate-700 space-y-2">
         <p className="font-bold flex items-center gap-2 text-slate-900"><Shield className="w-4 h-4 text-[#FF5C00]" /> DNS configuratie</p>
         {!target.configured && target.error && (
@@ -252,12 +278,83 @@ Waarde: ${exampleIp}
 TTL:    3600`}
         </pre>
         <p className="text-slate-500">Na DNS-propagatie (max 24u): klik <b>Test verbinding</b> om te verifiëren. Zodra DNS is geverifieerd: neem contact op met <b>Emergent Support</b> om dit domein als custom alias aan je deployment te koppelen — SSL wordt automatisch geregeld.</p>
-        {d.dns_verified && (
-          <p className="text-emerald-700 font-bold flex items-center gap-1.5"><Check className="w-3.5 h-3.5" /> DNS geverifieerd</p>
-        )}
       </div>
       <ActionRow onSave={s.save} onTest={s.test} saving={s.saving} testing={s.testing} canTest={d.enabled && !!d.custom_domain} />
     </SectionShell>
+  );
+}
+
+// =====================================================================
+// DomainStatusWidget — live 4-staps status kaart. Toont waar in de flow
+// de gebruiker is (DNS → Emergent linking → SSL → Live) met kleuren en
+// duidelijke volgende-stap aanwijzing.
+// =====================================================================
+function DomainStatusWidget({ status, loading, onRefresh }) {
+  if (!status) {
+    return (
+      <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-500 flex items-center gap-2">
+        <Loader2 className="w-3.5 h-3.5 animate-spin" /> Status ophalen…
+      </div>
+    );
+  }
+  const STATE_META = {
+    not_configured: { color: 'slate', label: 'Niet ingesteld', icon: '○', desc: 'Vul een domein in en sla op.' },
+    disabled: { color: 'slate', label: 'Uitgeschakeld', icon: '⏸', desc: 'Zet Ingeschakeld aan om te activeren.' },
+    dns_missing: { color: 'red', label: 'DNS ontbreekt', icon: '✕', desc: 'DNS record is nog niet gepropageerd of niet ingesteld.' },
+    dns_wrong: { color: 'red', label: 'DNS wijst verkeerd', icon: '✕', desc: 'CNAME/A-record wijst niet naar de juiste target.' },
+    dns_ok_ssl_pending: { color: 'amber', label: 'SSL in behandeling', icon: '⏳', desc: 'DNS ✓ — vraag Emergent Support om het domein te koppelen.' },
+    live: { color: 'emerald', label: 'Live', icon: '✓', desc: 'Domein is bereikbaar via HTTPS.' },
+  };
+  const m = STATE_META[status.status] || STATE_META.not_configured;
+  const colorMap = {
+    slate: 'bg-slate-50 border-slate-200 text-slate-700',
+    red: 'bg-red-50 border-red-200 text-red-800',
+    amber: 'bg-amber-50 border-amber-200 text-amber-800',
+    emerald: 'bg-emerald-50 border-emerald-200 text-emerald-800',
+  };
+  const dotMap = {
+    slate: 'bg-slate-400', red: 'bg-red-500', amber: 'bg-amber-500', emerald: 'bg-emerald-500',
+  };
+  return (
+    <div className={`border rounded-xl p-4 ${colorMap[m.color]}`} data-testid="domain-status-widget">
+      <div className="flex items-start justify-between gap-3 mb-3">
+        <div className="flex items-center gap-2">
+          <span className={`w-2.5 h-2.5 rounded-full ${dotMap[m.color]} ${m.color === 'amber' || m.color === 'emerald' ? 'animate-pulse' : ''}`} />
+          <span className="text-xs font-black uppercase tracking-widest">Status: {m.label}</span>
+        </div>
+        <button onClick={onRefresh} disabled={loading}
+          data-testid="domain-status-refresh"
+          className="text-[10px] font-bold hover:opacity-70 inline-flex items-center gap-1">
+          {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : '↻'} Vernieuwen
+        </button>
+      </div>
+      <p className="text-xs mb-3">{status.message}</p>
+
+      {/* 4-stappen progress */}
+      <div className="grid grid-cols-4 gap-2 mb-3" data-testid="domain-status-steps">
+        <StatusStep label="Domein" ok={!!status.custom_domain} />
+        <StatusStep label="DNS" ok={status.dns_ok} />
+        <StatusStep label="SSL" ok={status.ssl_ok} />
+        <StatusStep label="Live" ok={status.status === 'live'} />
+      </div>
+
+      {/* Details */}
+      <div className="text-[10px] space-y-0.5 opacity-80">
+        {status.custom_domain && <p>Domein: <code className="font-mono">{status.custom_domain}</code></p>}
+        {status.target_host && <p>Target: <code className="font-mono">{status.target_host}</code>{status.target_ip ? ` (${status.target_ip})` : ''}</p>}
+        {status.resolved_ip && <p>Resolveert naar: <code className="font-mono">{status.resolved_ip}</code></p>}
+        {status.https_status_code && <p>HTTPS response: <b>{status.https_status_code}</b></p>}
+      </div>
+    </div>
+  );
+}
+
+function StatusStep({ label, ok }) {
+  return (
+    <div className={`text-center p-2 rounded-lg text-[10px] font-bold ${ok ? 'bg-emerald-100 text-emerald-700' : 'bg-white text-slate-400 border border-slate-200'}`}>
+      <div className="text-base mb-0.5">{ok ? '✓' : '○'}</div>
+      {label}
+    </div>
   );
 }
 
