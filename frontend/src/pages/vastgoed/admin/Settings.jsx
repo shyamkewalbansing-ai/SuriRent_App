@@ -211,9 +211,19 @@ export function ShellyForm({ initial }) {
 export function DomainForm({ initial }) {
   const s = useSection('domain', initial);
   const d = s.data;
-  // We expose the production target via Settings backend response in a future
-  // iteration; for now we hint a placeholder so the admin knows what to point to.
-  const exampleTarget = 'app.surirent.sr';
+  // Haal het echte productie target-host + IP op van de backend zodat de
+  // DNS instructie exacte waarden toont (i.p.v. placeholders). Deze
+  // env-vars worden op de productie server geconfigureerd door Emergent.
+  const [target, setTarget] = useState({ host: '', ip: '', configured: false, error: '' });
+  useEffect(() => {
+    let alive = true;
+    api.get('/settings/domain/target')
+      .then((r) => { if (alive) setTarget(r.data || {}); })
+      .catch(() => { /* stil — fallback naar placeholder */ });
+    return () => { alive = false; };
+  }, []);
+  const exampleTarget = target.host || 'app.surirent.sr';
+  const exampleIp = target.ip || '<IP van je productie server>';
   return (
     <SectionShell msg={s.msg} err={s.err}>
       <SwitchField label="Ingeschakeld" testid="domain-enabled"
@@ -222,6 +232,11 @@ export function DomainForm({ initial }) {
       <TextField label="Custom domein" testid="domain-custom" value={d.custom_domain} onChange={(v) => s.onField('custom_domain', v.trim().toLowerCase())} placeholder="vastgoed.mijnbedrijf.com" helper="Zonder https:// en zonder pad." />
       <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 text-xs text-slate-700 space-y-2">
         <p className="font-bold flex items-center gap-2 text-slate-900"><Shield className="w-4 h-4 text-[#FF5C00]" /> DNS configuratie</p>
+        {!target.configured && target.error && (
+          <p className="text-amber-700 bg-amber-50 border border-amber-200 rounded p-2">
+            <b>Let op:</b> {target.error} — De onderstaande waarden zijn placeholders totdat dit door Emergent support is ingesteld.
+          </p>
+        )}
         <p>Maak bij je domeinregistrar één van deze records aan:</p>
         <pre className="bg-white border border-slate-200 rounded-lg p-2 font-mono text-[11px] overflow-x-auto">
 {`Type:   CNAME
@@ -233,10 +248,10 @@ OF (als CNAME niet kan op root):
 
 Type:   A
 Naam:   ${d.custom_domain || '@'}
-Waarde: <IP van je productie server>
+Waarde: ${exampleIp}
 TTL:    3600`}
         </pre>
-        <p className="text-slate-500">Na DNS-propagatie (max 24u): klik <b>Test verbinding</b> om te verifiëren, en voeg het domein als alias toe in CloudPanel met Let's Encrypt SSL.</p>
+        <p className="text-slate-500">Na DNS-propagatie (max 24u): klik <b>Test verbinding</b> om te verifiëren, en voeg het domein als alias toe in CloudPanel met Let&apos;s Encrypt SSL.</p>
         {d.dns_verified && (
           <p className="text-emerald-700 font-bold flex items-center gap-1.5"><Check className="w-3.5 h-3.5" /> DNS geverifieerd</p>
         )}

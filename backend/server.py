@@ -11410,7 +11410,7 @@ async def test_settings_section(section: str, user=Depends(get_current_user)):
                       .replace("https://", "").replace("http://", "").rstrip("/"))
         if not app_target:
             return {"section": section, "ok": False,
-                    "detail": "Server is niet geconfigureerd voor custom domeinen: zet APP_PUBLIC_HOST in backend/.env (bv. app.surirent.sr)."}
+                    "detail": "Server is niet geconfigureerd voor custom domeinen. Contact Emergent support om APP_PUBLIC_HOST als productie env-variabele te zetten (bv. surirent.sr)."}
         try:
             host_ip = socket.gethostbyname(custom)
         except socket.gaierror as e:
@@ -11440,6 +11440,29 @@ async def test_settings_section(section: str, user=Depends(get_current_user)):
         "ok": False,
         "detail": "Test endpoint nog niet geïmplementeerd voor deze sectie. Wordt in een volgende fase toegevoegd.",
     }
+
+
+# ============== Domain target info (voor DNS instructies) ==============
+@api.get("/settings/domain/target")
+async def get_domain_target(user=Depends(get_current_user)):
+    """Geeft aan het frontend door welke host en IP-adres een custom domein
+    moet aanwijzen. Gebruikt door Instellingen → Eigen domein om real-time
+    DNS instructies te tonen i.p.v. `<IP van je productie server>` placeholder.
+    """
+    import socket
+    host = (os.environ.get("APP_PUBLIC_HOST")
+            or (os.environ.get("APP_PUBLIC_URL") or "")
+            .replace("https://", "").replace("http://", "").rstrip("/"))
+    ip = ""
+    error = ""
+    if not host:
+        error = "APP_PUBLIC_HOST niet geconfigureerd op de server."
+    else:
+        try:
+            ip = socket.gethostbyname(host)
+        except socket.gaierror as e:
+            error = f"Kan {host} niet resolven: {e}"
+    return {"host": host, "ip": ip, "configured": bool(host and ip), "error": error}
 
 
 # ============== Email send endpoints (Fase B) ==============
