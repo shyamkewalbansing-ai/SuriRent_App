@@ -358,6 +358,9 @@ class TenantIn(BaseModel):
     email: Optional[str] = ""
     apartment_id: Optional[str] = None
     internet_amount: float = 0.0  # Vast bedrag per maand voor internet (SRD)
+    # Persoonsgegevens — komen automatisch in het huurcontract PDF
+    birth_date: Optional[str] = ""   # YYYY-MM-DD
+    id_number: Optional[str] = ""    # bv. FM008370
 
 
 class TenantOut(TenantIn):
@@ -3429,9 +3432,9 @@ def _hex_color(v: Optional[str]) -> str:
         return "#FF5C00"
 
 
-def _company_branding_response(c: dict) -> dict:
+def _company_branding_response(c: dict, *, include_private: bool = False) -> dict:
     b = (c.get("branding") or {}) if c else {}
-    return {
+    out = {
         "id": c.get("id"),
         "slug": c.get("slug"),
         "name": c.get("name"),
@@ -3448,6 +3451,13 @@ def _company_branding_response(c: dict) -> dict:
         "mope_account": c.get("mope_account") or "",
         "uni5pay_account": c.get("uni5pay_account") or "",
     }
+    # Verhuurder-persoonsgegevens zijn PRIVATE — alleen voor eigen admin
+    # bewerkscherm, nooit voor publieke slug-lookups.
+    if include_private:
+        out["landlord_name"] = c.get("landlord_name") or ""
+        out["landlord_birth_date"] = c.get("landlord_birth_date") or ""
+        out["landlord_id_number"] = c.get("landlord_id_number") or ""
+    return out
 
 
 @api.get("/public/companies/{slug}/branding")
@@ -3535,7 +3545,7 @@ async def get_my_branding(user=Depends(get_current_user)):
     c = await db.companies.find_one({"id": cid}, {"_id": 0})
     if not c:
         raise HTTPException(status_code=404, detail="Bedrijf niet gevonden")
-    return _company_branding_response(c)
+    return _company_branding_response(c, include_private=True)
 
 
 class BrandingIn(BaseModel):
@@ -3560,7 +3570,7 @@ async def put_my_branding(body: BrandingIn, user=Depends(require_role("admin")))
     }
     await db.companies.update_one({"id": cid}, {"$set": update})
     c = await db.companies.find_one({"id": cid}, {"_id": 0})
-    return _company_branding_response(c)
+    return _company_branding_response(c, include_private=True)
 
 
 class CompanyProfileIn(BaseModel):
@@ -3573,6 +3583,10 @@ class CompanyProfileIn(BaseModel):
     bank_account_nl: Optional[str] = None
     mope_account: Optional[str] = None
     uni5pay_account: Optional[str] = None
+    # Verhuurder-persoonsgegevens t.b.v. huurcontracten
+    landlord_name: Optional[str] = None       # Volledige naam van de verhuurder
+    landlord_birth_date: Optional[str] = None # YYYY-MM-DD
+    landlord_id_number: Optional[str] = None  # bv. FM008370
 
 
 @api.put("/companies/me/profile")
@@ -3607,6 +3621,12 @@ async def put_my_company_profile(
         update["mope_account"] = body.mope_account.strip()[:200]
     if body.uni5pay_account is not None:
         update["uni5pay_account"] = body.uni5pay_account.strip()[:200]
+    if body.landlord_name is not None:
+        update["landlord_name"] = body.landlord_name.strip()[:200]
+    if body.landlord_birth_date is not None:
+        update["landlord_birth_date"] = body.landlord_birth_date.strip()[:20]
+    if body.landlord_id_number is not None:
+        update["landlord_id_number"] = body.landlord_id_number.strip()[:60]
     if not update:
         raise HTTPException(status_code=400, detail="Geen velden om bij te werken")
     update["updated_at"] = iso(now_utc())
@@ -3620,7 +3640,7 @@ async def put_my_company_profile(
         except Exception:
             pass
     c = await db.companies.find_one({"id": cid}, {"_id": 0})
-    return _company_branding_response(c)
+    return _company_branding_response(c, include_private=True)
 
 
 @api.get("/companies/me/setup-status")
@@ -6757,7 +6777,8 @@ async def _company_brand_info(company_id: Optional[str]) -> dict:
     co = await db.companies.find_one(
         {"id": company_id},
         {"_id": 0, "name": 1, "contact_email": 1, "contact_phone": 1,
-         "address": 1, "branding": 1},
+         "address": 1, "branding": 1,
+         "landlord_name": 1, "landlord_birth_date": 1, "landlord_id_number": 1},
     ) or {}
     settings = await db.company_settings.find_one(
         {"company_id": company_id}, {"_id": 0, "signature_data": 1},
@@ -6783,6 +6804,11 @@ async def _company_brand_info(company_id: Optional[str]) -> dict:
         "company_logo_bytes": logo_bytes,
         "company_primary_color": (co.get("branding") or {}).get("primary_color") or "#FF5C00",
         "signature_data": settings.get("signature_data") or "",
+        # Verhuurder-persoonsgegevens t.b.v. huurcontracten. Fallback op
+        # de bedrijfsnaam wanneer geen aparte verhuurder-naam is ingesteld.
+        "landlord": co.get("landlord_name") or co.get("name") or "",
+        "landlord_dob": co.get("landlord_birth_date") or "",
+        "landlord_id": co.get("landlord_id_number") or "",
     }
 
 
@@ -9309,6 +9335,51 @@ async def contract_pdf_admin(contract_id: str):
     c = {**c, **(await _company_brand_info(c.get("company_id")))}
     pdf = contract_pdf(c, t, a)
     return _pdf_response(pdf, f"contract-{c.get('contract_number') or contract_id}.pdf")
+
+
+class ContractPreviewIn(BaseModel):
+    """Ongebonden preview van een concept-contract. Geen DB write."""
+    tenant_id: str
+    apartment_id: str
+    start_date: Optional[str] = ""
+    end_date: Optional[str] = ""
+    payment_day: Optional[int] = 1
+    deposit_amount: Optional[float] = 0.0
+    landlord: Optional[str] = ""
+    terms: Optional[str] = ""
+
+
+@api.post("/contracts/preview.pdf")
+async def contract_pdf_preview(body: ContractPreviewIn, user=Depends(get_current_user)):
+    """Genereer een PDF preview van een nieuw contract op basis van het
+    (nog niet opgeslagen) formulier — zodat de gebruiker in real-time kan
+    zien hoe het contract eruit ziet."""
+    cid = company_id_of(user)
+    if not cid:
+        raise HTTPException(status_code=400, detail="Geen actief bedrijf")
+    t = await db.tenants.find_one({"id": body.tenant_id, **scope(user)}, {"_id": 0})
+    if not t:
+        raise HTTPException(status_code=404, detail="Huurder niet gevonden")
+    a = await db.apartments.find_one({"id": body.apartment_id, **scope(user)}, {"_id": 0})
+    if not a:
+        raise HTTPException(status_code=404, detail="Appartement niet gevonden")
+    c = {
+        "id": "preview",
+        "contract_number": "PREVIEW",
+        "tenant_id": body.tenant_id,
+        "apartment_id": body.apartment_id,
+        "start_date": body.start_date or "",
+        "end_date": body.end_date or "",
+        "payment_day": body.payment_day or 1,
+        "deposit_amount": float(body.deposit_amount or 0),
+        "landlord": body.landlord or "",
+        "terms": body.terms or "",
+        "status": "draft",
+        "created_at": iso(now_utc()),
+    }
+    c = {**c, **(await _company_brand_info(cid))}
+    pdf = contract_pdf(c, t, a)
+    return _pdf_response(pdf, "contract-preview.pdf")
 
 
 # Public signing flow

@@ -2116,7 +2116,7 @@ function TenantNfcField({ tenantId, value, onChange }) {
 function TenantForm({ initial, apartments, onCancel, onSaved }) {
   const [data, setData] = useState(initial || {
     name: '', phone: '', email: '', apartment_id: '', internet_amount: 0,
-    nfc_card_id: '',
+    nfc_card_id: '', birth_date: '', id_number: '',
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -2133,6 +2133,8 @@ function TenantForm({ initial, apartments, onCancel, onSaved }) {
         email: data.email || '',
         apartment_id: data.apartment_id || null,
         internet_amount: parseFloat(data.internet_amount) || 0,
+        birth_date: data.birth_date || '',
+        id_number: data.id_number || '',
       };
       let saved;
       if (initial?.id) {
@@ -2210,6 +2212,26 @@ function TenantForm({ initial, apartments, onCancel, onSaved }) {
               data-testid="tenant-internet"
               className="w-full mt-1 h-12 px-4 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] outline-none" />
             <p className="text-[11px] text-slate-400 mt-1">Vast maandelijks bedrag dat in de kiosk als regelpost "Internet" verschijnt. 0 = niet tonen.</p>
+          </div>
+          {/* Persoonsgegevens t.b.v. huurcontract PDF */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-bold uppercase tracking-widest text-slate-500">Geboortedatum</label>
+              <input type="date"
+                value={data.birth_date || ''}
+                onChange={(e) => setData({ ...data, birth_date: e.target.value })}
+                data-testid="tenant-birth-date"
+                className="w-full mt-1 h-12 px-4 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] outline-none" />
+            </div>
+            <div>
+              <label className="text-xs font-bold uppercase tracking-widest text-slate-500">ID-nummer</label>
+              <input type="text"
+                value={data.id_number || ''}
+                onChange={(e) => setData({ ...data, id_number: e.target.value.toUpperCase() })}
+                data-testid="tenant-id-number"
+                placeholder="bv. FM008370"
+                className="w-full mt-1 h-12 px-4 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] outline-none uppercase" />
+            </div>
           </div>
           {/* NFC kaart koppelen — controlled input. Wordt bij de hoofd-
               Opslaan meegeslagen. Voor nieuwe huurders: eerst tenant

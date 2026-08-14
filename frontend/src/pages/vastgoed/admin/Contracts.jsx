@@ -33,6 +33,37 @@ function ContractForm({ tenants, apartments, onCancel, onSaved }) {
     finally { setLoading(false); }
   };
 
+  // Live PDF-preview — POST naar preview endpoint (geen DB write), converteer
+  // response naar blob URL en open in nieuw tabblad. Werkt met de axios
+  // instance die de auth-token al meestuurt.
+  const [previewing, setPreviewing] = useState(false);
+  const openPreview = async () => {
+    if (!data.tenant_id || !data.apartment_id) return;
+    setPreviewing(true); setError('');
+    try {
+      const res = await api.post('/contracts/preview.pdf', {
+        tenant_id: data.tenant_id,
+        apartment_id: data.apartment_id,
+        start_date: data.start_date,
+        end_date: data.end_date,
+        payment_day: parseInt(data.payment_day) || 1,
+        deposit_amount: parseFloat(data.deposit_amount) || 0,
+        terms: data.terms || '',
+      }, { responseType: 'blob' });
+      const url = URL.createObjectURL(res.data);
+      const w = window.open(url, '_blank');
+      // Fallback voor popup-blockers: gebruik een tijdelijke anchor
+      if (!w) {
+        const a = document.createElement('a');
+        a.href = url; a.target = '_blank'; a.rel = 'noreferrer';
+        document.body.appendChild(a); a.click(); a.remove();
+      }
+      // Cleanup blob url na 60s
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (e) { setError(formatError(e)); }
+    finally { setPreviewing(false); }
+  };
+
   return (
     <div className="fixed inset-0 z-50 bg-white/30 backdrop-blur-md flex items-center justify-center p-4 modal-sheet-auto" data-testid="contract-modal">
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-xl p-6 sm:p-8 animate-slide-up max-h-[90vh] overflow-auto">
@@ -95,6 +126,13 @@ function ContractForm({ tenants, apartments, onCancel, onSaved }) {
         </div>
         <div className="flex gap-3 mt-6">
           <button onClick={onCancel} className="flex-1 h-12 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold">Annuleren</button>
+          <button onClick={openPreview}
+            disabled={previewing || !data.tenant_id || !data.apartment_id}
+            data-testid="contract-preview"
+            className="flex-1 h-12 rounded-xl bg-slate-900 hover:bg-black text-white font-bold flex items-center justify-center gap-2 disabled:opacity-50">
+            {previewing ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
+            Preview PDF
+          </button>
           <button onClick={save} disabled={loading || !data.tenant_id || !data.apartment_id} data-testid="contract-save"
             className="flex-1 h-12 rounded-xl bg-[#FF5C00] hover:bg-[#E05200] text-white font-bold flex items-center justify-center gap-2 disabled:opacity-50">
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}

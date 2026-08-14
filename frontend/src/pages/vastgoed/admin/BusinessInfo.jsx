@@ -36,6 +36,9 @@ export default function BusinessInfo() {
         bank_account_nl: b.bank_account_nl || '',
         mope_account: b.mope_account || '',
         uni5pay_account: b.uni5pay_account || '',
+        landlord_name: b.landlord_name || '',
+        landlord_birth_date: b.landlord_birth_date || '',
+        landlord_id_number: b.landlord_id_number || '',
       });
       setB((prev) => ({ ...prev, ...data }));
       setMsg('Opgeslagen! Bedrijfsgegevens zijn direct actief.');
@@ -131,6 +134,35 @@ export default function BusinessInfo() {
               placeholder="bv. NL12RABO0123456789 (Bedrijfsnaam)" data-testid="bi-bank-nl"
               className="w-full h-10 px-3 border-2 border-slate-200 rounded-lg text-sm focus:border-slate-900 focus:outline-none" />
             <p className="text-[10px] text-slate-400 mt-0.5">IBAN + tenaamstelling</p>
+          </label>
+        </div>
+
+        {/* Verhuurder persoonsgegevens t.b.v. huurcontracten */}
+        <div className="bg-white border border-slate-200 rounded-2xl p-4">
+          <h3 className="text-sm font-extrabold text-slate-900 mb-1 flex items-center gap-2">
+            <Building2 className="w-4 h-4" /> Verhuurder (contract)
+          </h3>
+          <p className="text-[11px] text-slate-500 mb-3 leading-relaxed">
+            Deze persoonsgegevens worden automatisch ingevuld op elk huurcontract PDF. Laat leeg voor invulplekken.
+          </p>
+          <label className="block mb-3">
+            <span className="block text-xs font-bold text-slate-700 mb-1">Volledige naam</span>
+            <input type="text" value={b.landlord_name || ''} onChange={(e) => upd('landlord_name', e.target.value)}
+              placeholder="bv. Bharat Kewalbansing" data-testid="bi-landlord-name"
+              className="w-full h-10 px-3 border-2 border-slate-200 rounded-lg text-sm focus:border-slate-900 focus:outline-none" />
+            <p className="text-[10px] text-slate-400 mt-0.5">Standaard = bedrijfsnaam wanneer leeg</p>
+          </label>
+          <label className="block mb-3">
+            <span className="block text-xs font-bold text-slate-700 mb-1">Geboortedatum</span>
+            <input type="date" value={b.landlord_birth_date || ''} onChange={(e) => upd('landlord_birth_date', e.target.value)}
+              data-testid="bi-landlord-dob"
+              className="w-full h-10 px-3 border-2 border-slate-200 rounded-lg text-sm focus:border-slate-900 focus:outline-none" />
+          </label>
+          <label className="block">
+            <span className="block text-xs font-bold text-slate-700 mb-1">ID-nummer</span>
+            <input type="text" value={b.landlord_id_number || ''} onChange={(e) => upd('landlord_id_number', e.target.value.toUpperCase())}
+              placeholder="bv. FM008370" data-testid="bi-landlord-id"
+              className="w-full h-10 px-3 border-2 border-slate-200 rounded-lg text-sm focus:border-slate-900 focus:outline-none uppercase" />
           </label>
         </div>
 

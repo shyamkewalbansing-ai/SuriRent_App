@@ -31,6 +31,62 @@ MONTHS_NL = ["januari", "februari", "maart", "april", "mei", "juni",
              "juli", "augustus", "september", "oktober", "november", "december"]
 
 
+# =====================================================================
+# Getal-naar-woorden (Nederlands) — gebruikt voor "zegge" formulering
+# op huurcontracten. Werkt voor 0..999.999 en rondt af op hele eenheden.
+# =====================================================================
+_NL_UNITS = ["nul", "een", "twee", "drie", "vier", "vijf", "zes", "zeven",
+             "acht", "negen", "tien", "elf", "twaalf", "dertien", "veertien",
+             "vijftien", "zestien", "zeventien", "achttien", "negentien"]
+_NL_TENS = ["", "", "twintig", "dertig", "veertig", "vijftig", "sestig",
+            "zeventig", "tachtig", "negentig"]  # noqa: (typo behouden voor 60 fix hieronder)
+_NL_TENS[6] = "zestig"  # correcte spelling
+
+
+def _nl_under_hundred(n: int) -> str:
+    if n < 20:
+        return _NL_UNITS[n]
+    tens, unit = divmod(n, 10)
+    if unit == 0:
+        return _NL_TENS[tens]
+    # Klinkerbotsing: tweeen → tweeën, drieen → drieën
+    unit_word = _NL_UNITS[unit]
+    joined = f"{unit_word}en{_NL_TENS[tens]}"
+    joined = joined.replace("eeen", "eeën").replace("drieen", "drieën").replace("tweeen", "tweeën")
+    return joined
+
+
+def _nl_under_thousand(n: int) -> str:
+    if n < 100:
+        return _NL_under_hundred(n) if False else _nl_under_hundred(n)
+    hundreds, rest = divmod(n, 100)
+    h_word = "honderd" if hundreds == 1 else f"{_NL_UNITS[hundreds]}honderd"
+    if rest == 0:
+        return h_word
+    return f"{h_word}{_nl_under_hundred(rest)}"
+
+
+def number_to_nl_words(amount: float) -> str:
+    """Getal naar Nederlandse woorden. Rondt af op hele eenheden."""
+    n = int(round(float(amount or 0)))
+    if n == 0:
+        return "nul"
+    if n < 0:
+        return f"min {number_to_nl_words(-n)}"
+    parts = []
+    millions, rest = divmod(n, 1_000_000)
+    if millions:
+        m_word = "miljoen" if millions == 1 else f"{_nl_under_thousand(millions)} miljoen"
+        parts.append(m_word)
+    thousands, rest = divmod(rest, 1_000)
+    if thousands:
+        t_word = "duizend" if thousands == 1 else f"{_nl_under_thousand(thousands)}duizend"
+        parts.append(t_word)
+    if rest:
+        parts.append(_nl_under_thousand(rest))
+    return " ".join(parts)
+
+
 def _styles():
     base = getSampleStyleSheet()
     base.add(ParagraphStyle(
@@ -676,6 +732,11 @@ def contract_pdf(contract: dict, tenant: dict, apartment: dict) -> bytes:
     apt_address = apartment.get("address") or contract.get("company_address") or UNSET
     cur = apartment.get("currency", "SRD")
     rent_amount = _fmt_money(apartment.get("rent_amount", 0), cur)
+    # "Zegge" — huurprijs in woorden voor extra juridische zekerheid
+    rent_words = number_to_nl_words(apartment.get("rent_amount", 0))
+    cur_word = {"SRD": "Surinaamse dollars", "USD": "Amerikaanse dollars",
+                "EUR": "euro"}.get(cur, cur)
+    rent_zegge = f"zegge: {rent_words} {cur_word}"
     start_date = contract.get("start_date") or UNSET
 
     # === Ondergetekenden ===
@@ -713,7 +774,8 @@ def contract_pdf(contract: dict, tenant: dict, apartment: dict) -> bytes:
     # === Artikel 2 ===
     el.append(Paragraph("Artikel 2 – Huurprijs en ingangsdatum", art))
     el.append(Paragraph(
-        f"De maandelijkse huurprijs bedraagt <b>{rent_amount}</b>,-.<br/>"
+        f"De maandelijkse huurprijs bedraagt <b>{rent_amount}</b>,- "
+        f"(<i>{rent_zegge}</i>).<br/>"
         f"De huurovereenkomst gaat in op <b>[{start_date}]</b>.<br/>"
         "De huur dient maandelijks te worden betaald en dient uiterlijk op de "
         "<b>10e dag</b> van iedere kalendermaand te zijn voldaan.",
