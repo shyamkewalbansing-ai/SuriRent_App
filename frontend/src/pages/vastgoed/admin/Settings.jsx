@@ -251,7 +251,7 @@ Naam:   ${d.custom_domain || '@'}
 Waarde: ${exampleIp}
 TTL:    3600`}
         </pre>
-        <p className="text-slate-500">Na DNS-propagatie (max 24u): klik <b>Test verbinding</b> om te verifiëren, en voeg het domein als alias toe in CloudPanel met Let&apos;s Encrypt SSL.</p>
+        <p className="text-slate-500">Na DNS-propagatie (max 24u): klik <b>Test verbinding</b> om te verifiëren. Zodra DNS is geverifieerd: neem contact op met <b>Emergent Support</b> om dit domein als custom alias aan je deployment te koppelen — SSL wordt automatisch geregeld.</p>
         {d.dns_verified && (
           <p className="text-emerald-700 font-bold flex items-center gap-1.5"><Check className="w-3.5 h-3.5" /> DNS geverifieerd</p>
         )}

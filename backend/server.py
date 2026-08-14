@@ -11429,7 +11429,8 @@ async def test_settings_section(section: str, user=Depends(get_current_user)):
             )
             return {"section": section, "ok": True,
                     "detail": f"{custom} wijst correct naar {app_target} (IP {target_ip}). "
-                              "Voeg dit domein nu toe als alias-vhost in CloudPanel met Let's Encrypt SSL."}
+                              "DNS is geverifieerd — neem nu contact op met Emergent Support om dit "
+                              "domein als custom alias aan je deployment te koppelen (SSL wordt automatisch geregeld)."}
         return {"section": section, "ok": False,
                 "detail": f"{custom} resolveert naar {host_ip}, maar verwacht het IP van {app_target} ({target_ip}). "
                           f"Controleer je DNS record."}
