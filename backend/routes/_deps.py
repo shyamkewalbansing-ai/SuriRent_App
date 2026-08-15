@@ -12,6 +12,11 @@ Patroon:
     _deps.get_kiosk_session = get_kiosk_session
     _deps.company_id_of = company_id_of
     _deps.scope = scope
+    _deps.require_role = require_role
+    _deps.saas_email = _saas_email
+    _deps.iso = iso
+    _deps.now_utc = now_utc
+    _deps.new_id = new_id
 """
 
 # Worden vanuit server.py gezet — placeholder Nones zodat IDE's de
@@ -21,3 +26,8 @@ get_current_user = None
 get_kiosk_session = None
 company_id_of = None
 scope = None
+require_role = None       # server.require_role factory (role_or_roles -> Depends)
+saas_email = None          # async (to_email, subject, body_html) -> bool
+iso = None                 # datetime → ISO-string helper
+now_utc = None             # aware datetime.now(timezone.utc) helper
+new_id = None              # nieuwe UUID string

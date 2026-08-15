@@ -720,6 +720,16 @@ async def _daily_billing_checks_loop():
                 _log.info(f"[billing-cron] expired {len(expired)} companies @ {datetime.now(timezone.utc).isoformat()}")
             except Exception as e:
                 _log.warning(f"[billing-cron] cycle failed: {e}")
+            # Trial-warning cyclus: 1x per dag, verstuurt e-mail 3 dagen
+            # voor het einde van elke trial. Idempotent via
+            # `sent_trial_warnings` marker-collectie.
+            try:
+                from routes.saas_ops import check_trial_warnings as _ctw
+                sent = await _ctw()
+                if sent:
+                    _log.info(f"[trial-warn] emailed {len(sent)} companies @ {datetime.now(timezone.utc).isoformat()}")
+            except Exception as e:
+                _log.warning(f"[trial-warn] cycle failed: {e}")
         except _aio.CancelledError:
             return
         except Exception as e:
@@ -4477,11 +4487,13 @@ async def superadmin_overview(user=Depends(require_role("superadmin"))):
     overdue_invoices = await db.subscription_invoices.count_documents({"status": "overdue"})
 
     # Aggregeer ontvangen SaaS-inkomsten per valuta (Kas saldo hero).
+    # Bron: `subscription_payments` — bevat alle ontvangen bedragen én
+    # handmatige mutaties/refunds (positief = in, negatief = uit).
     total_received_by_currency: dict[str, float] = {}
     total_received_srd = 0.0
-    async for iv in db.subscription_invoices.find({"status": "paid"}, {"_id": 0, "amount": 1, "currency": 1}):
-        cur = (iv.get("currency") or "SRD").upper()
-        amt = float(iv.get("amount") or 0)
+    async for pmt in db.subscription_payments.find({}, {"_id": 0, "amount": 1, "currency": 1}):
+        cur = (pmt.get("currency") or "SRD").upper()
+        amt = float(pmt.get("amount") or 0)
         total_received_by_currency[cur] = total_received_by_currency.get(cur, 0.0) + amt
         if cur == "SRD":
             total_received_srd += amt
@@ -12356,13 +12368,20 @@ app.include_router(api)
 # =====================================================================
 from routes import _deps as _route_deps  # noqa: E402
 from routes import nfc as _nfc_routes    # noqa: E402
+from routes import saas_ops as _saas_ops_routes  # noqa: E402
 
 _route_deps.db = db
 _route_deps.get_current_user = get_current_user
 _route_deps.get_kiosk_session = get_kiosk_session
 _route_deps.company_id_of = company_id_of
 _route_deps.scope = scope
+_route_deps.require_role = require_role
+_route_deps.saas_email = _saas_email
+_route_deps.iso = iso
+_route_deps.now_utc = now_utc
+_route_deps.new_id = new_id
 app.include_router(_nfc_routes.router, prefix="/api")
+app.include_router(_saas_ops_routes.router, prefix="/api")
 
 async def _notify_tenant_installment_paid(plan_id: str, seq: int) -> None:
     """Stuur een korte WhatsApp/SMS bevestiging naar de huurder na een

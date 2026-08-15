@@ -227,6 +227,166 @@ function PaymentRegistrationModal({ companies, defaultCompanyId, onClose, onSave
   );
 }
 
+// =====================================================================
+// KasMutationModal — Handmatige +/- boeking op het SaaS Kasgeld.
+// Positief bedrag = ontvangst/correctie erbij, negatief = refund/uitbetaling.
+// Refund pre-selecteert "-" en toont een aparte hint.
+// =====================================================================
+function KasMutationModal({ companies, onClose, onSaved }) {
+  const [kind, setKind] = useState('adjustment');
+  const [direction, setDirection] = useState('in'); // in = positief, out = negatief
+  const [amount, setAmount] = useState('');
+  const [currency, setCurrency] = useState('SRD');
+  const [companyId, setCompanyId] = useState('');
+  const [reason, setReason] = useState('');
+  const [paidAt, setPaidAt] = useState(new Date().toISOString().slice(0, 10));
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState('');
+
+  const submit = async () => {
+    const amt = Math.abs(Number(amount) || 0);
+    if (!amt) { setErr('Voer een bedrag in.'); return; }
+    if (!reason.trim()) { setErr('Vul een reden in — verplicht voor audit-trail.'); return; }
+    setLoading(true); setErr('');
+    try {
+      await api.post('/superadmin/kas-mutations', {
+        company_id: companyId || null,
+        amount: direction === 'out' ? -amt : amt,
+        currency,
+        kind,
+        reason: reason.trim(),
+        paid_at: new Date(paidAt).toISOString(),
+      });
+      onSaved();
+    } catch (e) { setErr(formatError(e)); }
+    finally { setLoading(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-white/30 backdrop-blur-md flex items-center justify-center p-4">
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg p-6 sm:p-8 max-h-[90vh] overflow-y-auto" data-testid="kas-mutation-modal">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-orange-100 flex items-center justify-center">
+              <Pencil className="w-5 h-5 text-orange-600" />
+            </div>
+            <h3 className="text-xl font-extrabold text-slate-900">Handmatige kasmutatie</h3>
+          </div>
+          <button onClick={onClose} data-testid="kas-mut-close"
+            className="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="space-y-3">
+          {/* Type mutatie */}
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">Type</label>
+            <div className="grid grid-cols-3 gap-2">
+              {[
+                { v: 'adjustment', l: 'Correctie' },
+                { v: 'refund', l: 'Refund' },
+                { v: 'correction', l: 'Herboeking' },
+              ].map((k) => (
+                <button key={k.v} type="button" onClick={() => {
+                  setKind(k.v);
+                  if (k.v === 'refund') setDirection('out');
+                }} data-testid={`kas-mut-kind-${k.v}`}
+                  className={`h-10 rounded-xl border-2 text-sm font-bold transition ${
+                    kind === k.v ? 'border-orange-500 bg-orange-50 text-orange-700' : 'border-slate-200 hover:border-slate-300 text-slate-700'
+                  }`}>{k.l}</button>
+              ))}
+            </div>
+          </div>
+
+          {/* In / Uit */}
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">Richting</label>
+            <div className="grid grid-cols-2 gap-2">
+              <button type="button" onClick={() => setDirection('in')} data-testid="kas-mut-dir-in"
+                className={`h-11 rounded-xl border-2 text-sm font-bold transition ${
+                  direction === 'in' ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-slate-200 text-slate-700'
+                }`}>+ Erbij (in)</button>
+              <button type="button" onClick={() => setDirection('out')} data-testid="kas-mut-dir-out"
+                className={`h-11 rounded-xl border-2 text-sm font-bold transition ${
+                  direction === 'out' ? 'border-red-500 bg-red-50 text-red-700' : 'border-slate-200 text-slate-700'
+                }`}>− Eraf (uit)</button>
+            </div>
+          </div>
+
+          {/* Bedrag + valuta */}
+          <div className="grid grid-cols-3 gap-2">
+            <div className="col-span-2">
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">Bedrag</label>
+              <input type="number" step="0.01" min="0" value={amount}
+                onChange={(e) => setAmount(e.target.value)} data-testid="kas-mut-amount"
+                placeholder="0.00"
+                className="w-full h-11 px-3 rounded-xl border-2 border-slate-200 focus:border-orange-500 outline-none font-mono" />
+            </div>
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">Valuta</label>
+              <select value={currency} onChange={(e) => setCurrency(e.target.value)} data-testid="kas-mut-currency"
+                className="w-full h-11 px-3 rounded-xl border-2 border-slate-200 focus:border-orange-500 outline-none bg-white">
+                <option value="SRD">SRD</option>
+                <option value="USD">USD</option>
+                <option value="EUR">EUR</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Bedrijf (optioneel) */}
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
+              Bedrijf <span className="text-slate-400 font-medium normal-case">(optioneel — laat leeg voor algemene mutatie)</span>
+            </label>
+            <select value={companyId} onChange={(e) => setCompanyId(e.target.value)} data-testid="kas-mut-company"
+              className="w-full h-11 px-3 rounded-xl border-2 border-slate-200 focus:border-orange-500 outline-none bg-white">
+              <option value="">— Geen bedrijf gekoppeld —</option>
+              {companies.map((c) => (
+                <option key={c.id} value={c.id}>{c.name} · {c.plan}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Reden (verplicht) */}
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">Reden / Toelichting *</label>
+            <input type="text" value={reason} onChange={(e) => setReason(e.target.value)}
+              data-testid="kas-mut-reason" required
+              placeholder="bv. Refund overbetaling factuur INV-001"
+              className="w-full h-11 px-3 rounded-xl border-2 border-slate-200 focus:border-orange-500 outline-none text-sm" />
+          </div>
+
+          {/* Datum */}
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">Boekdatum</label>
+            <input type="date" value={paidAt} onChange={(e) => setPaidAt(e.target.value)} data-testid="kas-mut-date"
+              className="w-full h-11 px-3 rounded-xl border-2 border-slate-200 focus:border-orange-500 outline-none" />
+          </div>
+        </div>
+
+        {err && <p className="text-sm text-red-600 mt-3" data-testid="kas-mut-error">{err}</p>}
+
+        <div className="rounded-xl bg-slate-50 border border-slate-200 p-3 mt-4 text-xs text-slate-600">
+          Deze boeking verschijnt direct in het SaaS-kasboek en beïnvloedt het saldo per valuta. Alle mutaties zijn traceerbaar via uw superadmin-email.
+        </div>
+
+        <div className="flex gap-2 mt-5">
+          <button onClick={onClose} disabled={loading}
+            className="flex-1 h-11 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold">Annuleer</button>
+          <button onClick={submit} disabled={loading || !amount || !reason.trim()} data-testid="kas-mut-submit"
+            className={`flex-1 h-11 rounded-xl text-white font-extrabold flex items-center justify-center gap-2 disabled:opacity-50 ${
+              direction === 'out' ? 'bg-red-500 hover:bg-red-600' : 'bg-emerald-500 hover:bg-emerald-600'
+            }`}>
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+            Boek mutatie
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function CompanyDetailDrawer({ company, onClose, onChanged }) {
   const navigate = useNavigate();
   const { refresh } = useAuth();
@@ -391,6 +551,7 @@ export default function Subscriptions({ viewMode = 'all' } = {}) {
   const [kasFilter, setKasFilter] = useState('all'); // all | in (payments) | out (refunds/adjust)
   const [selected, setSelected] = useState(null);
   const [showPay, setShowPay] = useState(false);
+  const [showKasMut, setShowKasMut] = useState(false);
   const [loading, setLoading] = useState(true);
   const [previewStmt, setPreviewStmt] = useState(null);  // {url, contentType}
   const [busyRow, setBusyRow] = useState('');
@@ -705,7 +866,8 @@ export default function Subscriptions({ viewMode = 'all' } = {}) {
       )}
 
       {tab === 'kasgeld' && (
-        <SaasKasgeldView payments={payments} filter={kasFilter} onFilter={setKasFilter} />
+        <SaasKasgeldView payments={payments} filter={kasFilter} onFilter={setKasFilter}
+          onNewMutation={() => setShowKasMut(true)} />
       )}
 
       {selected && (
@@ -716,6 +878,11 @@ export default function Subscriptions({ viewMode = 'all' } = {}) {
       {showPay && (
         <PaymentRegistrationModal companies={companies} onClose={() => setShowPay(false)}
           onSaved={() => { setShowPay(false); load(); }} />
+      )}
+
+      {showKasMut && (
+        <KasMutationModal companies={companies} onClose={() => setShowKasMut(false)}
+          onSaved={() => { setShowKasMut(false); load(); }} />
       )}
 
       {previewStmt && (
@@ -880,8 +1047,10 @@ function SaasPaymentList({ payments }) {
                 {fmtDate(p.paid_at)}{p.reference ? ` · ${p.reference}` : ''}{p.note ? ` · ${p.note}` : ''}
               </p>
             </div>
-            <p className="text-base font-black text-slate-900 text-right shrink-0 whitespace-nowrap">
-              {fmt(p.amount, p.currency)}
+            <p className={`text-base font-black text-right shrink-0 whitespace-nowrap ${
+              Number(p.amount) < 0 ? 'text-red-600' : 'text-slate-900'
+            }`}>
+              {Number(p.amount) < 0 ? '− ' : ''}{fmt(Math.abs(p.amount), p.currency)}
             </p>
           </div>
         );
@@ -941,10 +1110,11 @@ function SaasPaymentPlansView({ invoices }) {
   );
 }
 
-function SaasKasgeldView({ payments, filter, onFilter }) {
+function SaasKasgeldView({ payments, filter, onFilter, onNewMutation }) {
   const filtered = filter === 'all' ? payments
     : filter === 'ocr' ? payments.filter((p) => p.source === 'ocr')
     : filter === 'contant' ? payments.filter((p) => (p.method || '').toLowerCase().includes('contant'))
+    : filter === 'manual' ? payments.filter((p) => p.is_manual || p.source === 'manual')
     : payments;
   const totals = {};
   for (const p of filtered) {
@@ -955,25 +1125,40 @@ function SaasKasgeldView({ payments, filter, onFilter }) {
     all: payments.length,
     contant: payments.filter((p) => (p.method || '').toLowerCase().includes('contant')).length,
     ocr: payments.filter((p) => p.source === 'ocr').length,
+    manual: payments.filter((p) => p.is_manual || p.source === 'manual').length,
   };
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-        {['SRD', 'USD', 'EUR'].map((c) => (
-          <div key={c} className="bg-gradient-to-br from-emerald-50 to-emerald-100 rounded-2xl p-4" data-testid={`saas-kas-saldo-${c}`}>
-            <p className="text-[10px] font-black uppercase tracking-widest text-emerald-700 mb-1">Saldo {c}</p>
-            <p className="text-2xl font-black text-emerald-800">{fmt(totals[c] || 0, c)}</p>
-          </div>
-        ))}
+        {['SRD', 'USD', 'EUR'].map((c) => {
+          const v = totals[c] || 0;
+          const negative = v < 0;
+          return (
+            <div key={c} className={`rounded-2xl p-4 ${negative ? 'bg-gradient-to-br from-red-50 to-red-100' : 'bg-gradient-to-br from-emerald-50 to-emerald-100'}`}
+              data-testid={`saas-kas-saldo-${c}`}>
+              <p className={`text-[10px] font-black uppercase tracking-widest mb-1 ${negative ? 'text-red-700' : 'text-emerald-700'}`}>Saldo {c}</p>
+              <p className={`text-2xl font-black ${negative ? 'text-red-800' : 'text-emerald-800'}`}>{fmt(v, c)}</p>
+            </div>
+          );
+        })}
       </div>
 
-      <FilterPills value={filter} onChange={onFilter}
-        options={[
-          { v: 'all', l: 'Alles', c: counts.all },
-          { v: 'contant', l: 'Contant', c: counts.contant },
-          { v: 'ocr', l: 'OCR', c: counts.ocr },
-        ]}
-        testidPrefix="saas-kas-filter" />
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <FilterPills value={filter} onChange={onFilter}
+          options={[
+            { v: 'all', l: 'Alles', c: counts.all },
+            { v: 'contant', l: 'Contant', c: counts.contant },
+            { v: 'ocr', l: 'OCR', c: counts.ocr },
+            { v: 'manual', l: 'Handmatig', c: counts.manual },
+          ]}
+          testidPrefix="saas-kas-filter" />
+        {onNewMutation && (
+          <button onClick={onNewMutation} data-testid="new-kas-mutation-btn"
+            className="h-10 px-4 rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-extrabold text-sm flex items-center gap-2 shadow-md shadow-orange-500/25">
+            <Plus className="w-4 h-4" /> Nieuwe mutatie
+          </button>
+        )}
+      </div>
 
       <SaasPaymentList payments={filtered} />
     </div>
