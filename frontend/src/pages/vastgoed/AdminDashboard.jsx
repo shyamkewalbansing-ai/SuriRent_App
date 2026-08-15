@@ -2081,7 +2081,9 @@ function ApartmentRow({ a, onOpen }) {
       role="button" tabIndex={0}
       onKeyDown={(e) => { if (e.key === 'Enter') onOpen(); }}
       className="w-full text-left bg-white hover:bg-slate-50 active:bg-slate-100 rounded-2xl shadow-sm p-4 flex items-center gap-3 border border-slate-100 cursor-pointer transition">
-      {/* Foto-thumb of nummer-tegel */}
+      {/* Foto-thumb of icoon-tegel — het volledige nummer/naam komt naast
+          de tegel te staan als hoofd-titel, zodat lange namen als "Penthouse"
+          of "HUIS 1A" niet meer in het vierkantje afgebroken worden. */}
       {a.photo_url ? (
         <div className="w-14 h-14 rounded-xl overflow-hidden shrink-0 bg-slate-100">
           <img
@@ -2091,13 +2093,13 @@ function ApartmentRow({ a, onOpen }) {
             onError={(e) => { e.currentTarget.parentElement.classList.add('bg-orange-50'); e.currentTarget.style.display = 'none'; }} />
         </div>
       ) : (
-        <div className="w-14 h-14 rounded-xl bg-orange-50 text-[#FF5C00] flex items-center justify-center shrink-0 font-black">
-          {a.number}
+        <div className="w-14 h-14 rounded-xl bg-orange-50 text-[#FF5C00] flex items-center justify-center shrink-0">
+          <Building2 className="w-6 h-6" />
         </div>
       )}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
-          <p className="font-black text-slate-900 truncate">Appt. {a.number}</p>
+          <p className="font-black text-slate-900 truncate">{a.number}</p>
           <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${
             occupied ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'
           }`}>
@@ -2151,8 +2153,9 @@ function ApartmentDetail({ apt, onBack, onEdit, onAssign, onRemoveTenant, onShel
         <div className="p-5">
           <div className="flex items-start justify-between gap-3 flex-wrap">
             <div className="min-w-0">
-              <p className="text-[10px] font-black uppercase tracking-widest text-[#FF5C00]">Appartement {a.number}</p>
-              <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight mt-1 truncate">{a.address || '—'}</h1>
+              <p className="text-[10px] font-black uppercase tracking-widest text-[#FF5C00]">Appartement</p>
+              <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight mt-1 truncate">{a.number}</h1>
+              <p className="text-sm text-slate-500 mt-1 truncate">{a.address || '—'}</p>
               {!a.photo_url && (
                 <span className={`inline-block mt-2 text-[10px] font-black uppercase tracking-wider px-2 py-1 rounded-full ${
                   occupied ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'
