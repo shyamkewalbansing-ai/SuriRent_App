@@ -28,6 +28,145 @@ import Kasgeld from './admin/Kasgeld';
 import Notifications from './admin/Notifications';
 import PaymentPlans from './admin/PaymentPlans';
 import Companies from './admin/Companies';
+
+// =====================================================================
+// SaasPlaceholder — tijdelijke pagina met beheerder-look voor SaaS tabs
+// die nog volledig gebouwd moeten worden. Toont een lege-state kaart met
+// icoon + titel + subtitel + "Binnenkort beschikbaar" badge.
+// =====================================================================
+function SaasPlaceholder({ title, subtitle, icon: Icon }) {
+  return (
+    <div className="space-y-4 pb-24 sm:pb-6">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">{title}</h1>
+          <p className="text-sm text-slate-500 mt-0.5">{subtitle}</p>
+        </div>
+        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-100 text-amber-800">
+          🚧 Binnenkort beschikbaar
+        </span>
+      </div>
+      <div className="bg-white rounded-2xl p-16 text-center shadow-sm border border-slate-100">
+        {Icon && <Icon className="w-16 h-16 mx-auto text-slate-300 mb-4" />}
+        <p className="text-slate-700 font-black text-lg">{title}</p>
+        <p className="text-sm text-slate-500 mt-2 max-w-md mx-auto">
+          Deze sectie wordt momenteel opgebouwd. In de volgende fase krijgt deze pagina
+          de volledige functionaliteit inclusief filter-pillen, card-lijst en acties —
+          zelfde look als de Beheerder omgeving.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// =====================================================================
+// SaasClients — alle admin-gebruikers van klanten op het platform.
+// Zelfde card-lijst design als Beheerder Huurders/Contracten.
+// =====================================================================
+function SaasClients() {
+  const [items, setItems] = useState([]);
+  const [q, setQ] = useState('');
+  const [filter, setFilter] = useState('all'); // all | active | inactive
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    let alive = true;
+    api.get('/superadmin/clients')
+      .then((r) => { if (alive) { setItems(r.data || []); setLoading(false); } })
+      .catch(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
+  }, []);
+  const bySearch = items.filter((c) =>
+    !q || (c.name || '').toLowerCase().includes(q.toLowerCase())
+      || (c.email || '').toLowerCase().includes(q.toLowerCase())
+      || (c.company_name || '').toLowerCase().includes(q.toLowerCase()));
+  const filtered = bySearch.filter((c) => {
+    if (filter === 'active') return c.is_active !== false;
+    if (filter === 'inactive') return c.is_active === false;
+    return true;
+  });
+  const counts = {
+    all: bySearch.length,
+    active: bySearch.filter((c) => c.is_active !== false).length,
+    inactive: bySearch.filter((c) => c.is_active === false).length,
+  };
+  return (
+    <div className="space-y-4 pb-24 sm:pb-6" data-testid="saas-clients-page">
+      <div>
+        <h1 className="text-2xl sm:text-3xl font-black text-slate-900">Klanten</h1>
+        <p className="text-sm text-slate-500 mt-0.5">{items.length} admin-gebruikers over alle bedrijven op het platform.</p>
+      </div>
+      <div className="relative max-w-md">
+        <Search className="w-4 h-4 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2" />
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Zoek op naam, e-mail of bedrijf" data-testid="saas-client-search"
+          className="w-full h-11 pl-11 pr-4 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] outline-none bg-white text-sm" />
+      </div>
+      <div className="flex items-center gap-2 flex-wrap">
+        {[
+          { v: 'all', l: 'Alles', c: counts.all },
+          { v: 'active', l: 'Actief', c: counts.active },
+          { v: 'inactive', l: 'Inactief', c: counts.inactive },
+        ].map((f) => (
+          <button key={f.v} onClick={() => setFilter(f.v)}
+            data-testid={`saas-client-filter-${f.v}`}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+              filter === f.v ? 'bg-[#FF5C00] text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+            }`}>
+            {f.l}
+            <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${filter === f.v ? 'bg-white/20 text-white' : 'bg-white text-slate-500'}`}>{f.c}</span>
+          </button>
+        ))}
+      </div>
+
+      {loading ? (
+        <div className="bg-white rounded-2xl p-10 text-center shadow-sm">
+          <Loader2 className="w-8 h-8 mx-auto text-slate-300 animate-spin" />
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="bg-white rounded-2xl p-10 text-center shadow-sm">
+          <Users className="w-12 h-12 mx-auto text-slate-300 mb-2" />
+          <p className="text-slate-500 font-semibold">Geen klanten gevonden.</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {filtered.map((c) => {
+            const initials = (c.name || c.email || '?').split(/[\s@]/).filter(Boolean).map((s) => s[0]).slice(0, 2).join('').toUpperCase();
+            const active = c.is_active !== false;
+            return (
+              <div key={c.id} data-testid={`saas-client-${c.id}`}
+                className="w-full bg-white hover:bg-slate-50 rounded-2xl shadow-sm p-4 flex items-center gap-3 border border-slate-100 transition">
+                <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 font-black text-sm ${
+                  active ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'
+                }`}>
+                  {initials}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="font-black text-slate-900 truncate">{c.name || c.email}</p>
+                    <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${
+                      active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'
+                    }`}>{active ? 'Actief' : 'Inactief'}</span>
+                    {c.role === 'admin' && (
+                      <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-orange-100 text-[#FF5C00]">Admin</span>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-500 mt-0.5 truncate">
+                    {c.email} · {c.company_name || 'Geen bedrijf'}{c.company_slug ? ` (/${c.company_slug})` : ''}
+                  </p>
+                </div>
+                <div className="text-right shrink-0">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Laatst ingelogd</p>
+                  <p className="text-xs text-slate-600 font-semibold">
+                    {c.last_login_at ? new Date(c.last_login_at).toLocaleDateString('nl-NL') : 'Nooit'}
+                  </p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
 import InstellingenHub from './admin/InstellingenHub';
 import Locations from './admin/Locations';
 import Subscriptions from './admin/Subscriptions';
@@ -66,16 +205,25 @@ const BASE_TABS = [
   { id: 'instellingen', label: 'Instellingen', icon: SettingsIcon },
 ];
 const SUPER_TABS = [
-  { id: 'saas_overview', label: 'SaaS Overzicht', icon: LayoutDashboard },
+  // Hoofd
+  { id: 'saas_overview', label: 'Overzicht', icon: LayoutDashboard },
   { id: 'companies', label: 'Bedrijven', icon: Briefcase },
-  { id: 'saas_pending', label: 'OCR-goedkeuring', icon: ScanLine },
-  { id: 'saas_invoices', label: 'SaaS Facturen', icon: Receipt },
-  { id: 'saas_payments', label: 'SaaS Betalingen', icon: Banknote },
-  { id: 'saas_payment_plans', label: 'SaaS Betalingsregelingen', icon: Calendar },
-  { id: 'saas_kasgeld', label: 'SaaS Kasgeld', icon: Wallet },
+  { id: 'saas_clients', label: 'Klanten', icon: Users },
+  { id: 'saas_contracts', label: 'Contracten', icon: FileSignature },
   { id: 'plans', label: 'Pakketten', icon: Package },
+  // Financieel
+  { id: 'saas_payments', label: 'Betalingen', icon: Banknote },
+  { id: 'saas_invoices', label: 'Facturen', icon: Receipt },
+  { id: 'saas_payment_plans', label: 'Betalingsregelingen', icon: Calendar },
+  { id: 'saas_kasgeld', label: 'Kasgeld', icon: Wallet },
+  // Operaties
+  { id: 'saas_kiosk', label: 'Kiosk', icon: Monitor },
+  { id: 'saas_employees', label: 'Werknemers', icon: Users },
+  { id: 'saas_notifications', label: 'Notificaties', icon: Bell },
   { id: 'landing_editor', label: 'Landing Editor', icon: Paintbrush },
-  { id: 'saas_settings', label: 'SaaS Instellingen', icon: KeySquare },
+  { id: 'saas_pending', label: 'OCR-goedkeuring', icon: ScanLine },
+  // Account
+  { id: 'saas_settings', label: 'Instellingen', icon: SettingsIcon },
 ];
 
 function getTabsFor(user) {
@@ -89,12 +237,12 @@ const SIDEBAR_GROUPS = {
   geld: { label: 'Financieel', ids: ['payments', 'invoices', 'payment_plans', 'deposits', 'kasgeld'] },
   ops: { label: 'Operaties', ids: ['maintenance', 'employees', 'notifications'] },
   account: { label: 'Account', ids: ['instellingen'] },
-  // SaaS Superadmin groep — split per functie. Volgorde: overzicht, klanten,
-  // dagelijkse acties (OCR + facturen/betalingen), instellingen.
-  saas: { label: 'SaaS Beheer', ids: [
-    'saas_overview', 'companies', 'saas_pending', 'saas_invoices', 'saas_payments',
-    'saas_payment_plans', 'saas_kasgeld', 'plans', 'landing_editor', 'saas_settings',
-  ] },
+  // SaaS Superadmin groep — nu ingedeeld in dezelfde categorieën als de
+  // Beheerder (Hoofd/Financieel/Operaties/Account) voor consistente UX.
+  saas_hoofd: { label: 'Hoofd', ids: ['saas_overview', 'companies', 'saas_clients', 'saas_contracts', 'plans'] },
+  saas_geld: { label: 'Financieel', ids: ['saas_payments', 'saas_invoices', 'saas_payment_plans', 'saas_kasgeld'] },
+  saas_ops: { label: 'Operaties', ids: ['saas_kiosk', 'saas_employees', 'saas_notifications', 'landing_editor', 'saas_pending'] },
+  saas_account: { label: 'Account', ids: ['saas_settings'] },
 };
 function groupTabs(tabs) {
   const byId = Object.fromEntries(tabs.map((t) => [t.id, t]));
@@ -2621,6 +2769,13 @@ export default function AdminDashboard() {
 
   // tab → URL sync (zonder rerender storm). Update browser URL bij tab wissel.
   const handleSetTab = (id) => {
+    // Speciale tab: `saas_kiosk` opent de SuriRent kiosk in een nieuw tabblad
+    // i.p.v. de admin-tab te wisselen (SaaS eigenaar heeft eigen kiosk).
+    if (id === 'saas_kiosk') {
+      const slug = activeCompany?.slug || 'surirent';
+      window.open(`/${slug}/kiosk`, '_blank', 'noopener');
+      return;
+    }
     setTab(id);
     const target = `/admin/${id}`;
     if (location.pathname !== target) {
@@ -2710,6 +2865,10 @@ export default function AdminDashboard() {
           {tab === 'saas_payments' && <Subscriptions viewMode="payments" />}
           {tab === 'saas_payment_plans' && <Subscriptions viewMode="payment_plans" />}
           {tab === 'saas_kasgeld' && <Subscriptions viewMode="kasgeld" />}
+          {tab === 'saas_clients' && <SaasClients />}
+          {tab === 'saas_contracts' && <SaasPlaceholder title="Contracten" subtitle="Abonnement-contracten met platform-klanten." icon={FileSignature} />}
+          {tab === 'saas_employees' && <SaasPlaceholder title="Werknemers" subtitle="Interne SuriRent medewerkers en rollen." icon={Users} />}
+          {tab === 'saas_notifications' && <SaasPlaceholder title="Notificaties" subtitle="Platform-brede notificaties en waarschuwingen." icon={Bell} />}
           {tab === 'plans' && <PlansAdmin />}
           {tab === 'saas_settings' && <SaasSettings />}
           {tab === 'landing_editor' && <LandingEditor />}

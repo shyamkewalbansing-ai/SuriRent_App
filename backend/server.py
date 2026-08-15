@@ -3303,6 +3303,33 @@ async def get_my_landing_apartments(user=Depends(get_current_user)):
 
 
 # Superadmin variants — edit any company's landing.
+@api.get("/superadmin/clients")
+async def superadmin_list_clients(user=Depends(get_current_user)):
+    """Lijst van alle admin-gebruikers van bedrijven op het platform.
+    Bevat naam/email/rol/bedrijf + last_login voor de superadmin Klanten pagina."""
+    if user.get("role") != "superadmin":
+        raise HTTPException(status_code=403, detail="Alleen superadmin")
+    # Alle users met een company_id (dus geen platform-superadmins zelf)
+    clients = []
+    async for u in db.users.find(
+        {"company_id": {"$ne": None}},
+        {"_id": 0, "id": 1, "email": 1, "name": 1, "role": 1, "company_id": 1,
+         "created_at": 1, "last_login_at": 1, "is_active": 1},
+    ):
+        co = await db.companies.find_one(
+            {"id": u.get("company_id")},
+            {"_id": 0, "name": 1, "slug": 1},
+        ) or {}
+        clients.append({
+            **u,
+            "company_name": co.get("name") or "",
+            "company_slug": co.get("slug") or "",
+        })
+    # Sorteer op laatst ingelogd (nieuwste eerst), fallback op created_at
+    clients.sort(key=lambda c: (c.get("last_login_at") or c.get("created_at") or ""), reverse=True)
+    return clients
+
+
 @api.get("/superadmin/companies/{cid}/landing")
 async def get_company_landing_super(cid: str, mode: Literal["draft", "published"] = "draft",
                                       user=Depends(require_role("superadmin"))):
