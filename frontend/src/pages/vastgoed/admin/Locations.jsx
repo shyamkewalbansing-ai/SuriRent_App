@@ -103,15 +103,25 @@ export default function Locations() {
     load();
   };
 
+  // Shared modals — ook in detail-view zichtbaar zodat Bewerk-actie meteen
+  // opent (i.p.v. pas na Terug).
+  const sharedModals = (creating || editing) ? (
+    <LocationForm initial={editing} onCancel={() => { setCreating(false); setEditing(null); }}
+      onSaved={() => { setCreating(false); setEditing(null); load(); }} />
+  ) : null;
+
   // Detail-view — dezelfde patroon als Appartementen/Huurders.
   if (detailId) {
     const loc = items.find((x) => x.id === detailId);
     if (!loc) { setDetailId(null); return null; }
     return (
-      <LocationDetail loc={loc}
-        onBack={() => setDetailId(null)}
-        onEdit={() => setEditing(loc)}
-        onDelete={() => del(loc)} />
+      <>
+        <LocationDetail loc={loc}
+          onBack={() => setDetailId(null)}
+          onEdit={() => setEditing(loc)}
+          onDelete={() => del(loc)} />
+        {sharedModals}
+      </>
     );
   }
 
@@ -184,10 +194,7 @@ export default function Locations() {
         </div>
       )}
 
-      {(creating || editing) && (
-        <LocationForm initial={editing} onCancel={() => { setCreating(false); setEditing(null); }}
-          onSaved={() => { setCreating(false); setEditing(null); load(); }} />
-      )}
+      {(creating || editing) && sharedModals}
     </div>
   );
 }

@@ -1939,6 +1939,49 @@ function Apartments() {
     load();
   };
 
+  // ==================== SHARED MODALS ====================
+  // Deze modals moeten óók zichtbaar zijn wanneer we in de detail-view
+  // zitten. Anders ontstaat de bug dat op "Bewerk" klikken pas iets doet
+  // NA het klikken op "Terug".
+  const sharedModals = (
+    <>
+      {(creating || editing) && (
+        <ApartmentForm initial={editing} onCancel={() => { setEditing(null); setCreating(false); }}
+          onSaved={() => { setEditing(null); setCreating(false); load(); }} />
+      )}
+      {assignFor && (
+        <div className="fixed inset-0 z-50 bg-white/30 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-6 sm:p-8 animate-slide-up">
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="text-xl font-black text-slate-900">Huurder toewijzen aan {assignFor.number}</h3>
+              <button onClick={() => setAssignFor(null)} className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center"><X className="w-4 h-4" /></button>
+            </div>
+            <div className="space-y-2 max-h-96 overflow-auto">
+              {tenants.length === 0 && <p className="text-sm text-slate-400">Geen huurders. Maak eerst een huurder aan.</p>}
+              {tenants.map((t) => (
+                <button key={t.id} onClick={() => assign(t.id)} data-testid={`assign-${t.id}`}
+                  className="w-full flex items-center justify-between p-3 rounded-xl border-2 border-slate-100 hover:border-[#FF5C00] hover:bg-orange-50">
+                  <div className="text-left">
+                    <p className="font-bold text-slate-900">{t.name}</p>
+                    <p className="text-xs text-slate-500">{t.apartment_number ? `Nu in ${t.apartment_number}` : 'Geen appartement'}</p>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-slate-400" />
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+      {shellyFor && (
+        <ShellyControlModal apt={shellyFor} onClose={() => setShellyFor(null)}
+          onChanged={() => { setShellyFor(null); load(); }} />
+      )}
+      {plateFor && (
+        <PlateSizeModal apt={plateFor} onClose={() => setPlateFor(null)} />
+      )}
+    </>
+  );
+
   // ==================== DETAIL PAGINA ====================
   // Wanneer een appartement is aangeklikt tonen we een aparte "pagina"
   // met alle info en acties. Terug-knop bovenaan zoals bij Betalingsregelingen.
@@ -1950,14 +1993,17 @@ function Apartments() {
       return null;
     }
     return (
-      <ApartmentDetail apt={a}
-        onBack={() => setDetailId(null)}
-        onEdit={() => setEditing(a)}
-        onAssign={() => setAssignFor(a)}
-        onRemoveTenant={() => removeT(a.id)}
-        onShelly={() => setShellyFor(a)}
-        onPlate={() => setPlateFor(a)}
-        onDelete={() => del(a.id)} />
+      <>
+        <ApartmentDetail apt={a}
+          onBack={() => setDetailId(null)}
+          onEdit={() => setEditing(a)}
+          onAssign={() => setAssignFor(a)}
+          onRemoveTenant={() => removeT(a.id)}
+          onShelly={() => setShellyFor(a)}
+          onPlate={() => setPlateFor(a)}
+          onDelete={() => del(a.id)} />
+        {sharedModals}
+      </>
     );
   }
 
@@ -2031,41 +2077,7 @@ function Apartments() {
         </div>
       )}
 
-      {(creating || editing) && (
-        <ApartmentForm initial={editing} onCancel={() => { setEditing(null); setCreating(false); }}
-          onSaved={() => { setEditing(null); setCreating(false); load(); }} />
-      )}
-
-      {assignFor && (
-        <div className="fixed inset-0 z-50 bg-white/30 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-6 sm:p-8 animate-slide-up">
-            <div className="flex items-center justify-between mb-5">
-              <h3 className="text-xl font-black text-slate-900">Huurder toewijzen aan {assignFor.number}</h3>
-              <button onClick={() => setAssignFor(null)} className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center"><X className="w-4 h-4" /></button>
-            </div>
-            <div className="space-y-2 max-h-96 overflow-auto">
-              {tenants.length === 0 && <p className="text-sm text-slate-400">Geen huurders. Maak eerst een huurder aan.</p>}
-              {tenants.map((t) => (
-                <button key={t.id} onClick={() => assign(t.id)} data-testid={`assign-${t.id}`}
-                  className="w-full flex items-center justify-between p-3 rounded-xl border-2 border-slate-100 hover:border-[#FF5C00] hover:bg-orange-50">
-                  <div className="text-left">
-                    <p className="font-bold text-slate-900">{t.name}</p>
-                    <p className="text-xs text-slate-500">{t.apartment_number ? `Nu in ${t.apartment_number}` : 'Geen appartement'}</p>
-                  </div>
-                  <ChevronRight className="w-4 h-4 text-slate-400" />
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-      {shellyFor && (
-        <ShellyControlModal apt={shellyFor} onClose={() => setShellyFor(null)}
-          onChanged={() => { setShellyFor(null); load(); }} />
-      )}
-      {plateFor && (
-        <PlateSizeModal apt={plateFor} onClose={() => setPlateFor(null)} />
-      )}
+      {sharedModals}
     </div>
   );
 }
@@ -2865,18 +2877,36 @@ function Tenants() {
     setDetailId(null); load();
   };
 
+  // Shared modals — moeten ook in de detail-view zichtbaar zijn, anders
+  // gebeurt er pas iets na "Terug" klikken.
+  const sharedModals = (
+    <>
+      {(creating || editing) && (
+        <TenantForm initial={editing} apartments={apts}
+          onCancel={() => { setEditing(null); setCreating(false); }}
+          onSaved={() => { setEditing(null); setCreating(false); load(); }} />
+      )}
+      {pinFor && <TenantPinModal tenant={pinFor}
+        onCancel={() => setPinFor(null)}
+        onSaved={() => setPinFor(null)} />}
+    </>
+  );
+
   // Detail-view — dezelfde patroon als Appartementen/PlanDetail.
   if (detailId) {
     const t = items.find((x) => x.id === detailId);
     if (!t) { setDetailId(null); return null; }
     return (
-      <TenantDetail tenant={t}
-        onBack={() => setDetailId(null)}
-        onEdit={() => setEditing(t)}
-        onPin={() => setPinFor(t)}
-        onPoster={() => openAuthedPdf(`/tenants/${t.id}/portal-poster.pdf`, { filename: `huurportaal-${t.name || t.id}.pdf` })}
-        onDelete={() => del(t.id)}
-        onReload={load} />
+      <>
+        <TenantDetail tenant={t}
+          onBack={() => setDetailId(null)}
+          onEdit={() => setEditing(t)}
+          onPin={() => setPinFor(t)}
+          onPoster={() => openAuthedPdf(`/tenants/${t.id}/portal-poster.pdf`, { filename: `huurportaal-${t.name || t.id}.pdf` })}
+          onDelete={() => del(t.id)}
+          onReload={load} />
+        {sharedModals}
+      </>
     );
   }
 
@@ -2950,13 +2980,7 @@ function Tenants() {
         </div>
       )}
 
-      {(editing || creating) && (
-        <TenantForm initial={editing} apartments={apts}
-          onCancel={() => { setEditing(null); setCreating(false); }}
-          onSaved={() => { setEditing(null); setCreating(false); load(); }} />
-      )}
-      {pinFor && <TenantPinModal tenant={pinFor}
-        onCancel={() => setPinFor(null)} onSaved={() => setPinFor(null)} />}
+      {sharedModals}
     </div>
   );
 }
