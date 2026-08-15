@@ -11,7 +11,7 @@ import {
   Gauge, Activity, Clock as ClockIcon, Monitor, QrCode, Printer,
   ReceiptText, UsersRound, Building, Calendar, ArrowLeft,
   AlertCircle, UserPlus, TrendingUp, ArrowUpRight, Package,
-  ScanLine, RefreshCw, Settings as SettingsIcon,
+  ScanLine, RefreshCw, Settings as SettingsIcon, Image as ImageIcon,
 } from 'lucide-react';
 import { api, formatError, fmtMoney, MONTHS_NL, openAuthedPdf } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
@@ -2618,6 +2618,66 @@ function TenantNfcField({ tenantId, value, onChange }) {
   );
 }
 
+// =====================================================================
+// IdScannerField — knop-groep om een ID-kaart foto toe te voegen tijdens
+// het aanmaken/bewerken van een huurder. Op mobiel opent `capture=environment`
+// direct de camera. Op desktop valt het terug op file-picker.
+// De foto wordt door TenantForm pas geüpload NA het opslaan van de huurder.
+// =====================================================================
+function IdScannerField({ pendingFile, onFile }) {
+  const [preview, setPreview] = useState('');
+  const previewUrl = pendingFile ? URL.createObjectURL(pendingFile) : '';
+  useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl); }, [previewUrl]);
+  return (
+    <div>
+      <label className="text-xs font-bold uppercase tracking-widest text-slate-500">ID-kaart</label>
+      <p className="text-[11px] text-slate-400 mt-0.5 mb-2">
+        Scan met de camera van uw telefoon of kies een foto vanaf uw apparaat.
+      </p>
+      <div className="grid grid-cols-2 gap-2">
+        <label htmlFor="tenant-id-scan"
+          className="h-11 rounded-xl bg-orange-50 hover:bg-orange-100 text-[#FF5C00] font-bold text-sm flex items-center justify-center gap-1.5 cursor-pointer border-2 border-orange-100"
+          data-testid="tenant-id-scan-btn">
+          <ScanLine className="w-4 h-4" /> Scan camera
+        </label>
+        <label htmlFor="tenant-id-pick"
+          className="h-11 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm flex items-center justify-center gap-1.5 cursor-pointer">
+          <ImageIcon className="w-4 h-4" /> Uit galerij
+        </label>
+        <input id="tenant-id-scan" type="file" accept="image/*" capture="environment"
+          className="hidden"
+          onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); }}
+          data-testid="tenant-id-scan-input" />
+        <input id="tenant-id-pick" type="file" accept="image/*"
+          className="hidden"
+          onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); }}
+          data-testid="tenant-id-pick-input" />
+      </div>
+      {pendingFile && (
+        <div className="mt-2 rounded-xl overflow-hidden border border-slate-200 relative">
+          <img src={previewUrl} alt="ID scan"
+            className="w-full max-h-40 object-contain bg-slate-50 cursor-pointer"
+            onClick={() => setPreview(true)} />
+          <button type="button" onClick={() => onFile(null)}
+            data-testid="tenant-id-scan-clear"
+            className="absolute top-2 right-2 w-7 h-7 rounded-full bg-white/95 shadow border border-slate-200 flex items-center justify-center">
+            <X className="w-3.5 h-3.5" />
+          </button>
+          <span className="absolute bottom-2 left-2 bg-white/90 backdrop-blur px-2 py-0.5 rounded-lg text-[10px] font-bold text-slate-700">
+            {pendingFile.name || 'Scan'} · {Math.round((pendingFile.size || 0) / 1024)} KB
+          </span>
+        </div>
+      )}
+      {preview && (
+        <div className="fixed inset-0 z-[60] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setPreview(false)}>
+          <img src={previewUrl} alt="ID scan groot" className="max-w-full max-h-full rounded-xl" />
+        </div>
+      )}
+    </div>
+  );
+}
+
 function TenantForm({ initial, apartments, onCancel, onSaved }) {
   const [data, setData] = useState(initial || {
     name: '', phone: '', email: '', apartment_id: '', internet_amount: 0,
@@ -2625,6 +2685,10 @@ function TenantForm({ initial, apartments, onCancel, onSaved }) {
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  // Gescande/gekozen ID-foto — nog niet geüpload. Wordt na tenant-save
+  // via `/tenants/{id}/id-photo` verstuurd zodat multer-error op create
+  // niet voor blocking wordt.
+  const [pendingIdPhoto, setPendingIdPhoto] = useState(null);
   // Onthoud wat de NFC-kaart was BIJ HET LADEN, zodat we alleen een extra
   // PUT doen wanneer de gebruiker de kaart daadwerkelijk heeft gewijzigd.
   const originalNfc = (initial?.nfc_card_id || '').toUpperCase();
@@ -2659,9 +2723,21 @@ function TenantForm({ initial, apartments, onCancel, onSaved }) {
           );
           saved = { ...saved, nfc_card_id: nfcRes?.nfc_card_id || null };
         } catch (e) {
-          // Kaart-conflict of validatie fout: toon aan gebruiker, hoofd-
-          // huurder is wel opgeslagen dus we sluiten NIET automatisch.
           setError(`Huurder opgeslagen, maar kaart niet gekoppeld: ${formatError(e)}`);
+          setLoading(false);
+          return;
+        }
+      }
+      // Pending ID-photo uploaden (na huurder-save zodat tenant-id bestaat).
+      if (pendingIdPhoto && saved?.id) {
+        try {
+          const fd = new FormData();
+          fd.append('file', pendingIdPhoto);
+          const { data: idr } = await api.post(`/tenants/${saved.id}/id-photo`, fd,
+            { headers: { 'Content-Type': 'multipart/form-data' } });
+          saved = { ...saved, id_photo_url: idr?.id_photo_url || saved.id_photo_url };
+        } catch (e) {
+          setError(`Huurder opgeslagen, maar ID-foto niet: ${formatError(e)}`);
           setLoading(false);
           return;
         }
@@ -2738,14 +2814,10 @@ function TenantForm({ initial, apartments, onCancel, onSaved }) {
                 className="w-full mt-1 h-12 px-4 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] outline-none uppercase" />
             </div>
           </div>
-          {/* NFC kaart koppelen — controlled input. Wordt bij de hoofd-
-              Opslaan meegeslagen. Voor nieuwe huurders: eerst tenant
-              aanmaken, dan NFC in dezelfde submit. */}
-          <TenantNfcField
-            tenantId={initial?.id || ''}
-            value={data.nfc_card_id || ''}
-            onChange={(uid) => setData((d) => ({ ...d, nfc_card_id: uid }))}
-          />
+          {/* ID-kaart scanner — opent camera op mobiel en fallback file-picker
+              op desktop. Foto wordt direct als `pending_id_photo` in state
+              gezet en pas geüpload NA het aanmaken/opslaan van de huurder. */}
+          <IdScannerField pendingFile={pendingIdPhoto} onFile={setPendingIdPhoto} />
         </div>
         <div className="flex gap-3 mt-6">
           <button onClick={onCancel} className="flex-1 h-12 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold">Annuleren</button>
@@ -3052,6 +3124,13 @@ function TenantRow({ t, onOpen, onPin, onPoster, onDelete }) {
 function TenantDetail({ tenant: t, onBack, onEdit, onPin, onPoster, onDelete, onReload }) {
   const [uploading, setUploading] = useState(false);
   const [preview, setPreview] = useState(false);   // full-screen preview van ID-kaart
+  const [nfcOpen, setNfcOpen] = useState(false);
+  // Scroll altijd naar boven bij openen — anders kan een verborgen file-
+  // input (met autofocus/keyboard trigger) de pagina naar beneden scrollen
+  // waardoor de gebruiker de naam niet direct ziet.
+  useEffect(() => {
+    try { window.scrollTo({ top: 0, behavior: 'auto' }); } catch { /* noop */ }
+  }, [t?.id]);
   const initials = (t.name || '?').split(' ').map((s) => s[0]).slice(0, 2).join('').toUpperCase();
   const base = process.env.REACT_APP_BACKEND_URL;
   const idPhotoSrc = t.id_photo_url
@@ -3206,7 +3285,7 @@ function TenantDetail({ tenant: t, onBack, onEdit, onPin, onPoster, onDelete, on
       {/* Acties */}
       <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
         <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Acties</p>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
           <button onClick={onEdit} data-testid="tenant-detail-edit"
             className="h-11 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm flex items-center justify-center gap-1.5">
             <Pencil className="w-3.5 h-3.5" /> Bewerk
@@ -3214,6 +3293,10 @@ function TenantDetail({ tenant: t, onBack, onEdit, onPin, onPoster, onDelete, on
           <button onClick={onPin} data-testid="tenant-detail-pin"
             className="h-11 rounded-xl bg-orange-50 hover:bg-orange-100 text-[#FF5C00] font-bold text-sm flex items-center justify-center gap-1.5">
             <KeySquare className="w-3.5 h-3.5" /> Portal PIN
+          </button>
+          <button onClick={() => setNfcOpen(true)} data-testid="tenant-detail-nfc"
+            className="h-11 rounded-xl bg-sky-50 hover:bg-sky-100 text-sky-700 font-bold text-sm flex items-center justify-center gap-1.5">
+            <Zap className="w-3.5 h-3.5" /> NFC-kaart
           </button>
           <button onClick={onPoster} data-testid="tenant-detail-poster"
             className="h-11 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold text-sm flex items-center justify-center gap-1.5">
@@ -3235,6 +3318,43 @@ function TenantDetail({ tenant: t, onBack, onEdit, onPin, onPoster, onDelete, on
             className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/90 text-slate-900 flex items-center justify-center">
             <X className="w-5 h-5" />
           </button>
+        </div>
+      )}
+
+      {/* NFC-kaart koppel-modal — geopend vanuit de Acties grid. */}
+      {nfcOpen && (
+        <div className="fixed inset-0 z-50 bg-white/30 backdrop-blur-md flex items-center justify-center p-4"
+          data-testid="tenant-nfc-modal">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-6 sm:p-8 animate-slide-up">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-black text-slate-900">NFC-kaart · {t.name}</h3>
+              <button onClick={() => setNfcOpen(false)} data-testid="tenant-nfc-close"
+                className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <p className="text-sm text-slate-500 mb-4">
+              Koppel een fysieke NFC-kaart aan deze huurder voor snelle kiosk-login.
+            </p>
+            <TenantNfcField
+              tenantId={t.id}
+              value={t.nfc_card_id || ''}
+              onChange={async (uid) => {
+                try {
+                  await api.put(`/admin/tenants/${t.id}/nfc-card`, { card_id: uid || null });
+                  if (onReload) await onReload();
+                } catch (e) {
+                  window.alert('NFC koppelen mislukt: ' + (e?.response?.data?.detail || e.message));
+                }
+              }}
+            />
+            <div className="mt-5 flex justify-end">
+              <button onClick={() => setNfcOpen(false)}
+                className="h-10 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm">
+                Sluiten
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
