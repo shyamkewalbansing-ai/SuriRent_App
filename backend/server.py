@@ -9359,8 +9359,26 @@ async def contract_pdf_admin(contract_id: str):
     t = await db.tenants.find_one({"id": c["tenant_id"]}, {"_id": 0}) or {}
     a = await db.apartments.find_one({"id": c["apartment_id"]}, {"_id": 0}) or {}
     c = {**c, **(await _company_brand_info(c.get("company_id")))}
-    pdf = contract_pdf(c, t, a)
+    id_photo_bytes = await _load_tenant_id_photo_bytes(t)
+    pdf = contract_pdf(c, t, a, id_photo_bytes=id_photo_bytes)
     return _pdf_response(pdf, f"contract-{c.get('contract_number') or contract_id}.pdf")
+
+
+async def _load_tenant_id_photo_bytes(tenant: dict) -> bytes | None:
+    """Haal de raw bytes op van de ID-kaart foto van een huurder als die is
+    geüpload. Bron: `landing_assets.data_b64` waar `tenant.id_photo_url`
+    naar wijst (`/api/landing/asset/{id}`)."""
+    url = (tenant or {}).get("id_photo_url") or ""
+    if not url or "/landing/asset/" not in url:
+        return None
+    asset_id = url.rstrip("/").split("/")[-1]
+    asset = await db.landing_assets.find_one({"id": asset_id}, {"_id": 0, "data_b64": 1})
+    if not asset or not asset.get("data_b64"):
+        return None
+    try:
+        return base64.b64decode(asset["data_b64"])
+    except Exception:
+        return None
 
 
 class ContractPreviewIn(BaseModel):
@@ -9404,7 +9422,8 @@ async def contract_pdf_preview(body: ContractPreviewIn, user=Depends(get_current
         "created_at": iso(now_utc()),
     }
     c = {**c, **(await _company_brand_info(cid))}
-    pdf = contract_pdf(c, t, a)
+    id_photo_bytes = await _load_tenant_id_photo_bytes(t)
+    pdf = contract_pdf(c, t, a, id_photo_bytes=id_photo_bytes)
     return _pdf_response(pdf, "contract-preview.pdf")
 
 
@@ -11784,7 +11803,8 @@ async def email_contract(contract_id: str, body: EmailSendIn, user=Depends(get_c
     if not to:
         raise HTTPException(status_code=400, detail="Geen ontvanger — vul een e-mailadres in of zet er een bij de huurder")
     c = {**c, **(await _company_brand_info(c.get("company_id")))}
-    pdf_bytes = contract_pdf(c, tenant, apt)
+    id_photo_bytes = await _load_tenant_id_photo_bytes(tenant)
+    pdf_bytes = contract_pdf(c, tenant, apt, id_photo_bytes=id_photo_bytes)
     extra_note = f"<p>{body.message}</p>" if body.message else ""
     # If contract is unsigned, include a signing link.
     sign_block = ""

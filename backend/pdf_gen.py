@@ -681,13 +681,16 @@ def receipt_pdf(payment: dict) -> bytes:
 
 
 # ============== Contract PDF ==============
-def contract_pdf(contract: dict, tenant: dict, apartment: dict) -> bytes:
+def contract_pdf(contract: dict, tenant: dict, apartment: dict, id_photo_bytes: bytes | None = None) -> bytes:
     """Officiële HUUROVEREENKOMST — Surinaams recht.
 
     Volgt de door de opdrachtgever vastgestelde structuur met 10 artikelen.
     Missende gegevens (geboortedatum, ID-nummers) worden als invulregel
     weergegeven zodat de PDF met pen kan worden aangevuld en dubbel worden
     ondertekend.
+
+    Als `id_photo_bytes` is meegegeven, wordt aan het eind een extra pagina
+    toegevoegd met de ID-kaart foto van de huurder als bewijs (bijlage).
     """
     s = _styles()
     el = []
@@ -997,6 +1000,49 @@ def contract_pdf(contract: dict, tenant: dict, apartment: dict) -> bytes:
         contract.get("company_address") or "",
         tenant.get("id", ""), apartment.get("id", ""),
     )
+
+    # === Bijlage 1 — ID-kaart foto van huurder (indien beschikbaar) ===
+    # Wordt op een aparte A4 pagina getoond met kader en toelichting. Dient
+    # als bewijs bij het contract en past binnen 170mm x 220mm bounding box.
+    if id_photo_bytes:
+        try:
+            # Valideer + normaliseer via PIL — voorkomt "broken data stream"
+            # errors bij reportlab wanneer de bron een niet-standaard PNG is.
+            from PIL import Image as PILImage
+            src = PILImage.open(io.BytesIO(id_photo_bytes))
+            if src.mode not in ("RGB", "L"):
+                src = src.convert("RGB")
+            buf = io.BytesIO()
+            src.save(buf, format="PNG")
+            safe_bytes = buf.getvalue()
+            iw, ih = src.size
+            max_w, max_h = 170 * mm, 220 * mm
+            ratio = min(max_w / iw, max_h / ih)
+            w, h = iw * ratio, ih * ratio
+            el.append(PageBreak())
+            el.append(Paragraph("BIJLAGE 1 — LEGITIMATIEBEWIJS HUURDER", title_style))
+            el.append(Spacer(1, 6))
+            el.append(Paragraph(
+                f"Naam huurder: <b>{tenant.get('name') or ''}</b><br/>"
+                f"ID-nummer: <b>{tenant.get('id_number') or ''}</b><br/>"
+                f"Geboortedatum: <b>{tenant.get('birth_date') or ''}</b>",
+                body,
+            ))
+            el.append(Spacer(1, 10))
+            id_img = Image(io.BytesIO(safe_bytes), width=w, height=h)
+            id_img.hAlign = "CENTER"
+            el.append(id_img)
+            el.append(Spacer(1, 8))
+            el.append(Paragraph(
+                "Deze afbeelding is bij het aangaan van de huurovereenkomst door de huurder "
+                "aangeleverd en dient uitsluitend als identificatiebewijs. Verhuurder bewaart "
+                "de afbeelding vertrouwelijk conform de geldende privacywetgeving.",
+                small,
+            ))
+        except Exception:
+            # Falen mag het contract niet blokkeren.
+            pass
+
     return _build(el)
 
 
