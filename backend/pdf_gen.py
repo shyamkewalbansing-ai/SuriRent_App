@@ -1068,6 +1068,98 @@ def invoice_pdf(invoice: dict, tenant: dict, apartment: dict, payments: list) ->
     return _build(el)
 
 
+# ============== SaaS subscription invoice PDF ==============
+def saas_invoice_pdf(invoice: dict, company: dict, saas_provider: dict | None = None) -> bytes:
+    """PDF factuur van de SaaS-eigenaar (SuriRent) naar een klant-bedrijf.
+    Gebruikt zelfde brand-stijl als andere PDFs. Optioneel `saas_provider`
+    dict {name, address, ...} voor de header; anders defaults.
+    """
+    s = _styles()
+    el = []
+    accent = _accent_color(invoice)
+    # Force brand-header met SaaS eigenaar (default SuriRent) als afzender.
+    header_doc = {
+        "company_name": (saas_provider or {}).get("name", "SuriRent N.V."),
+        "company_address": (saas_provider or {}).get("address", "Paramaribo, Suriname"),
+        "company_email": (saas_provider or {}).get("email", ""),
+        "company_phone": (saas_provider or {}).get("phone", ""),
+    }
+    _brand_header(el, header_doc)
+
+    inv_nr = invoice.get("id", "")[:8].upper()
+    _brand_title(el, "SaaS Factuur", f"INV-{inv_nr}")
+
+    cur = invoice.get("currency", "SRD")
+    plan_label = str(invoice.get("plan", "")).capitalize() or "Abonnement"
+    kind_label = "Termijnfactuur" if invoice.get("kind") == "installment" else "Abonnement"
+
+    _two_col_block(el, [
+        ("Factuurdatum", _fmt_date_nl(invoice.get("created_at"))),
+        ("Klant", company.get("name", "")),
+        ("Klant slug", f"/{company.get('slug', '')}"),
+        ("Plan", plan_label),
+    ], gap_after=10, accent=accent)
+
+    period_start = _fmt_date_nl(invoice.get("period_start"))
+    period_end = _fmt_date_nl(invoice.get("period_end"))
+    _two_col_block(el, [
+        ("Periode", f"{period_start} → {period_end}"),
+        ("Type", kind_label),
+        ("Termijn", (
+            f"{invoice.get('installment_seq')}/{invoice.get('installment_total')}"
+            if invoice.get("kind") == "installment" else "—"
+        )),
+    ], gap_after=14, accent=accent)
+
+    # Specificatie
+    el.append(Paragraph("SPECIFICATIE", s["SectionHead"]))
+    el.append(Spacer(1, 4))
+    desc = f"{kind_label} · {plan_label} · {period_start} – {period_end}"
+    spec_data = [[
+        Paragraph(desc, s["Body"]),
+        Paragraph(_fmt_money(invoice.get("amount", 0), cur), s["AmountValue"]),
+    ]]
+    t = Table(spec_data, colWidths=[120 * mm, 50 * mm])
+    t.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 0),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+        ("TOPPADDING", (0, 0), (-1, -1), 8),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+        ("LINEBELOW", (0, 0), (-1, -1), 0.4, _hairline_color(accent)),
+    ]))
+    el.append(t)
+    el.append(Spacer(1, 14))
+
+    total = float(invoice.get("amount", 0) or 0)
+    _amount_block(el, "Totaal", total, cur, accent=accent)
+    el.append(Spacer(1, 4))
+
+    if invoice.get("status") == "paid":
+        _status_row(el, "Status", "VOLDAAN", is_paid=True, accent=accent)
+        if invoice.get("paid_at"):
+            el.append(Spacer(1, 4))
+            el.append(Paragraph(
+                f"Ontvangen op {_fmt_date_nl(invoice.get('paid_at'))}.",
+                s["Small"]
+            ))
+    else:
+        _status_row(el, "Nog te betalen", _fmt_money(total, cur), is_paid=False, accent=accent)
+
+    el.append(Spacer(1, 16))
+    el.append(Paragraph(
+        "Gelieve dit bedrag binnen 14 dagen te voldoen via bankoverschrijving of "
+        "Uni5Pay. Vermeld de factuurreferentie bij uw betaling.",
+        s["Small"]
+    ))
+
+    _verification_footer(
+        el, f"INV-{inv_nr}", header_doc["company_name"], header_doc["company_address"],
+        total, cur, company.get("id", ""),
+    )
+    return _build(el)
+
+
 # ============== Deposit refund PDF ==============
 def deposit_refund_pdf(deposit: dict, tenant: dict, apartment: dict) -> bytes:
     el = []

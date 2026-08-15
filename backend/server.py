@@ -740,6 +740,15 @@ async def _daily_billing_checks_loop():
                     _log.info(f"[saas-invoice] created {len(new_invoices)} monthly invoices @ {datetime.now(timezone.utc).isoformat()}")
             except Exception as e:
                 _log.warning(f"[saas-invoice] cycle failed: {e}")
+            # Factuur-herinneringen: 3 dagen na vervaldatum een reminder
+            # (met PDF-bijlage) sturen. Idempotent via `sent_invoice_reminders`.
+            try:
+                from routes.superadmin import check_invoice_reminders as _cir
+                sent = await _cir()
+                if sent:
+                    _log.info(f"[invoice-reminders] emailed {len(sent)} companies @ {datetime.now(timezone.utc).isoformat()}")
+            except Exception as e:
+                _log.warning(f"[invoice-reminders] cycle failed: {e}")
         except _aio.CancelledError:
             return
         except Exception as e:
@@ -4271,9 +4280,11 @@ async def _do_self_cancel(cid: str, user: dict) -> dict:
 
 
 
-async def _saas_email(to_email: str, subject: str, body_html: str) -> bool:
+async def _saas_email(to_email: str, subject: str, body_html: str,
+                       attachments: list[tuple[str, bytes, str]] | None = None) -> bool:
     """Centrale helper om SaaS-platform mails te versturen via de SaaS SMTP
-    instellingen (db.saas_settings). Stilt fouten af — return False ipv raise."""
+    instellingen (db.saas_settings). Stilt fouten af — return False ipv raise.
+    `attachments` is een lijst van (filename, bytes, mime_type) tuples."""
     if not to_email:
         return False
     try:
@@ -4282,11 +4293,13 @@ async def _saas_email(to_email: str, subject: str, body_html: str) -> bool:
         smtp = saas.get("smtp") or {}
         wrapped = wrap_template(body_html, brand_name="SuriRent")
         if smtp.get("enabled") and smtp.get("host"):
-            await _smtp_send(smtp, to=to_email, subject=subject, body_html=wrapped)
+            await _smtp_send(smtp, to=to_email, subject=subject, body_html=wrapped,
+                              attachments=attachments)
             return True
         # Platform fallback (Resend) als die geconfigureerd is.
         try:
-            await send_platform_email(to=to_email, subject=subject, body_html=wrapped)
+            await send_platform_email(to=to_email, subject=subject, body_html=wrapped,
+                                       attachments=attachments)
             return True
         except Exception:
             return False

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Building2, Users, Loader2, TrendingUp, Clock, AlertCircle, CheckCircle, XCircle,
   Banknote, Receipt, Search, Mail, Phone, MoreVertical, Plus, X, Check, Calendar,
-  Pencil, ArrowRight, Crown, LogIn, Landmark, CreditCard, ScanLine, FileImage,
+  Pencil, ArrowRight, Crown, LogIn, Landmark, CreditCard, ScanLine, FileImage, Download,
 } from 'lucide-react';
 import { api, formatError } from '../../../lib/api';
 import { useAuth } from '../../../lib/auth';
@@ -818,6 +818,25 @@ export default function Subscriptions({ viewMode = 'all' } = {}) {
   }, []);
   useEffect(() => { load(); }, [load]);
 
+  // Prefill support — Kasregister stuurt bedrijf/factuur via URL query.
+  // Bij landing op /admin/saas_payments?prefill_company=xxx opent de betaling-
+  // modal automatisch met dat bedrijf en de eerst-openstaande factuur voorgevuld.
+  const [prefillCompany, setPrefillCompany] = useState('');
+  useEffect(() => {
+    if (loading) return;
+    if (companies.length === 0) return;
+    const params = new URLSearchParams(window.location.search);
+    const cid = params.get('prefill_company');
+    if (cid && companies.some((c) => c.id === cid)) {
+      setPrefillCompany(cid);
+      setShowPay(true);
+      // Clean URL zonder rerender-storm.
+      const url = new URL(window.location.href);
+      url.searchParams.delete('prefill_company');
+      window.history.replaceState({}, '', url.toString());
+    }
+  }, [loading, companies]);
+
   const markPaid = async (inv) => {
     if (!window.confirm(`Factuur ${inv.id.slice(-6)} voor ${inv.company_name} markeren als betaald?`)) return;
     await api.post(`/superadmin/subscription-invoices/${inv.id}/mark-paid`);
@@ -1127,8 +1146,9 @@ export default function Subscriptions({ viewMode = 'all' } = {}) {
       )}
 
       {showPay && (
-        <PaymentRegistrationModal companies={companies} onClose={() => setShowPay(false)}
-          onSaved={() => { setShowPay(false); load(); }} />
+        <PaymentRegistrationModal companies={companies} defaultCompanyId={prefillCompany}
+          onClose={() => { setShowPay(false); setPrefillCompany(''); }}
+          onSaved={() => { setShowPay(false); setPrefillCompany(''); load(); }} />
       )}
 
       {showNewInv && (
@@ -1223,6 +1243,35 @@ function FilterPills({ value, onChange, options, testidPrefix }) {
   );
 }
 
+// PDF-helpers voor SaaS-facturen — gebruikt door SaasInvoiceList en de
+// Kasregister-drawer. Openen in nieuw tabblad met blob-URL (authenticated).
+async function downloadInvoicePdf(inv) {
+  try {
+    const res = await api.get(`/superadmin/subscription-invoices/${inv.id}/pdf`, { responseType: 'blob' });
+    const blob = new Blob([res.data], { type: 'application/pdf' });
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank', 'noopener');
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  } catch (e) {
+    window.alert('Kon PDF niet ophalen: ' + formatError(e));
+  }
+}
+
+async function emailInvoicePdf(inv) {
+  const to = window.prompt(
+    `Verstuur factuur naar welk e-mailadres?\n(Enter = eigenaar van ${inv.company_name})`,
+    '',
+  );
+  if (to === null) return;
+  try {
+    await api.post(`/superadmin/subscription-invoices/${inv.id}/email`,
+      to.trim() ? { to_email: to.trim() } : {});
+    window.alert('✓ Factuur verstuurd.');
+  } catch (e) {
+    window.alert('E-mail versturen mislukt: ' + formatError(e));
+  }
+}
+
 function SaasInvoiceList({ invoices, onMarkPaid }) {
   if (invoices.length === 0) {
     return (
@@ -1262,12 +1311,24 @@ function SaasInvoiceList({ invoices, onMarkPaid }) {
             </div>
             <div className="text-right shrink-0 flex flex-col items-end gap-1.5">
               <p className="text-base font-black text-slate-900 whitespace-nowrap">{fmt(inv.amount, inv.currency)}</p>
-              {!paid && (
-                <button onClick={() => onMarkPaid(inv)} data-testid={`mark-paid-${inv.id}`}
-                  className="text-[10px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2 py-1 rounded">
-                  Markeer betaald
+              <div className="flex gap-1.5">
+                <button onClick={() => downloadInvoicePdf(inv)} data-testid={`inv-pdf-${inv.id}`}
+                  title="Download PDF"
+                  className="text-[10px] font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded inline-flex items-center gap-1">
+                  <Download className="w-3 h-3" /> PDF
                 </button>
-              )}
+                <button onClick={() => emailInvoicePdf(inv)} data-testid={`inv-email-${inv.id}`}
+                  title="Verstuur per e-mail"
+                  className="text-[10px] font-bold text-sky-700 bg-sky-50 hover:bg-sky-100 px-2 py-1 rounded inline-flex items-center gap-1">
+                  <Mail className="w-3 h-3" /> Mail
+                </button>
+                {!paid && (
+                  <button onClick={() => onMarkPaid(inv)} data-testid={`mark-paid-${inv.id}`}
+                    className="text-[10px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2 py-1 rounded">
+                    ✓ Betaald
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         );

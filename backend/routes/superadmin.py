@@ -16,8 +16,10 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from typing import Literal, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
+import io
 
 from . import _deps
 
@@ -515,3 +517,218 @@ async def list_saas_payment_plans(user: dict = Depends(_superadmin)):
 
 # Silence unused-import warnings (timedelta reserved voor toekomstige endpoints).
 _ = timedelta
+_ = Response
+_ = io
+
+
+# =====================================================================
+# Kasregister — Detail per bedrijf (facturen + betaalhistorie)
+# =====================================================================
+
+
+@router.get("/superadmin/kasregister/{company_id}")
+async def kasregister_detail(company_id: str, user: dict = Depends(_superadmin)):
+    db = _deps.db
+    c = await db.companies.find_one({"id": company_id}, {"_id": 0})
+    if not c:
+        raise HTTPException(status_code=404, detail="Bedrijf niet gevonden")
+    invoices = await db.subscription_invoices.find(
+        {"company_id": company_id}, {"_id": 0},
+    ).sort("created_at", -1).to_list(500)
+    payments = await db.subscription_payments.find(
+        {"company_id": company_id}, {"_id": 0},
+    ).sort("paid_at", -1).to_list(500)
+    plans = await db.saas_payment_plans.find(
+        {"company_id": company_id}, {"_id": 0},
+    ).sort("created_at", -1).to_list(100)
+    summary = _deps.billing_summary(c)
+
+    outstanding: dict[str, float] = {}
+    for iv in invoices:
+        if iv.get("status") == "paid" or iv.get("status") == "superseded":
+            continue
+        cur = (iv.get("currency") or "SRD").upper()
+        outstanding[cur] = outstanding.get(cur, 0.0) + float(iv.get("amount") or 0)
+    return {
+        "company": {
+            "id": c["id"], "name": c.get("name"), "slug": c.get("slug"),
+            "plan": c.get("plan"), "owner_email": c.get("owner_email"),
+            "owner_name": c.get("owner_name"), "country": c.get("country"),
+            "billing_status": summary["billing_status"],
+            "monthly_amount": summary.get("monthly_amount"),
+            "currency": summary.get("currency") or "SRD",
+            "trial_ends_at": c.get("trial_ends_at"),
+            "subscription_renews_at": c.get("subscription_renews_at"),
+        },
+        "invoices": invoices,
+        "payments": payments,
+        "plans": plans,
+        "outstanding_by_currency": outstanding,
+    }
+
+
+# =====================================================================
+# PDF factuur — download + versturen per e-mail
+# =====================================================================
+
+
+@router.get("/superadmin/subscription-invoices/{inv_id}/pdf")
+async def download_invoice_pdf(inv_id: str, user: dict = Depends(_superadmin)):
+    db = _deps.db
+    inv = await db.subscription_invoices.find_one({"id": inv_id}, {"_id": 0})
+    if not inv:
+        raise HTTPException(status_code=404, detail="Factuur niet gevonden")
+    c = await db.companies.find_one({"id": inv["company_id"]}, {"_id": 0}) or {}
+    saas = await db.saas_settings.find_one({"id": "_saas_settings"}, {"_id": 0}) or {}
+    from pdf_gen import saas_invoice_pdf
+    pdf_bytes = saas_invoice_pdf(inv, c, saas.get("company_info") if saas else None)
+    filename = f"factuur-{inv['id'][:8].upper()}.pdf"
+    return StreamingResponse(
+        io.BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"inline; filename={filename}"},
+    )
+
+
+class EmailInvoiceIn(BaseModel):
+    to_email: Optional[str] = None    # override; default = company.owner_email
+    subject: Optional[str] = None
+    body_html: Optional[str] = None
+
+
+@router.post("/superadmin/subscription-invoices/{inv_id}/email")
+async def email_invoice(inv_id: str, body: EmailInvoiceIn,
+                         user: dict = Depends(_superadmin)):
+    db = _deps.db
+    inv = await db.subscription_invoices.find_one({"id": inv_id}, {"_id": 0})
+    if not inv:
+        raise HTTPException(status_code=404, detail="Factuur niet gevonden")
+    c = await db.companies.find_one({"id": inv["company_id"]}, {"_id": 0}) or {}
+    to = body.to_email or c.get("owner_email")
+    if not to:
+        raise HTTPException(status_code=400, detail="Geen e-mailadres beschikbaar voor dit bedrijf")
+
+    saas = await db.saas_settings.find_one({"id": "_saas_settings"}, {"_id": 0}) or {}
+    from pdf_gen import saas_invoice_pdf
+    pdf_bytes = saas_invoice_pdf(inv, c, saas.get("company_info") if saas else None)
+    filename = f"factuur-{inv['id'][:8].upper()}.pdf"
+
+    subject = body.subject or f"SaaS Factuur {inv['id'][:8].upper()} — {c.get('name', '')}"
+    body_html = body.body_html or (
+        f"<p>Beste {c.get('owner_name') or 'beheerder'},</p>"
+        f"<p>Bijgevoegd vindt u de factuur voor uw abonnement "
+        f"<strong>{inv.get('plan', '')}</strong> ({inv.get('currency', 'SRD')} "
+        f"{float(inv.get('amount') or 0):.2f}).</p>"
+        f"<p>Gelieve dit bedrag binnen 14 dagen te voldoen.</p>"
+        f"<p>Met vriendelijke groet,<br/>Het SuriRent team</p>"
+    )
+
+    ok = await _deps.saas_email(
+        to_email=to, subject=subject, body_html=body_html,
+        attachments=[(filename, pdf_bytes, "application/pdf")],
+    )
+    # Registreer in email-log op de factuur
+    await db.subscription_invoices.update_one(
+        {"id": inv_id},
+        {"$push": {"email_log": {
+            "sent_to": to, "sent_at": _deps.iso(_deps.now_utc()),
+            "ok": bool(ok), "sent_by": user.get("email", "superadmin"),
+        }}},
+    )
+    if not ok:
+        raise HTTPException(status_code=502, detail="E-mail kon niet verstuurd worden (SMTP faalde)")
+    return {"ok": True, "sent_to": to}
+
+
+# =====================================================================
+# Betaal-herinneringen — 3 dagen na vervaldatum
+# =====================================================================
+
+
+async def check_invoice_reminders() -> list[dict]:
+    """Stuur herinnering naar bedrijven van wie een factuur >=3 dagen
+    vervallen is. Idempotent via `sent_invoice_reminders` collectie (dedup
+    per (invoice_id, days_bucket) — één herinnering per drempel-passage)."""
+    db = _deps.db
+    if db is None or _deps.saas_email is None:
+        return []
+    now = _deps.now_utc()
+    threshold = now - timedelta(days=3)
+    sent: list[dict] = []
+
+    cursor = db.subscription_invoices.find({
+        "status": {"$in": ["open", "overdue"]},
+    }, {"_id": 0})
+    async for inv in cursor:
+        pe_raw = inv.get("period_end")
+        if not pe_raw:
+            continue
+        try:
+            pe = datetime.fromisoformat(str(pe_raw).replace("Z", "+00:00"))
+        except Exception:
+            continue
+        if pe > threshold:
+            continue  # nog niet vervallen genoeg
+
+        # Alleen 1 herinnering per factuur (voor nu)
+        marker = await db.sent_invoice_reminders.find_one({"invoice_id": inv["id"]}, {"_id": 0})
+        if marker:
+            continue
+
+        c = await db.companies.find_one({"id": inv["company_id"]}, {"_id": 0})
+        if not c or not c.get("owner_email"):
+            continue
+
+        days_overdue = max(1, int((now - pe).total_seconds() // 86400))
+        subject = f"Herinnering: factuur {days_overdue} dagen vervallen"
+        body_html = (
+            f"<p>Beste {c.get('owner_name') or 'beheerder'},</p>"
+            f"<p>Uw SaaS-factuur voor <strong>{c.get('name', '')}</strong> is "
+            f"<strong>{days_overdue} dagen vervallen</strong>.</p>"
+            f"<p>Bedrag: <strong>{inv.get('currency', 'SRD')} "
+            f"{float(inv.get('amount') or 0):.2f}</strong><br/>"
+            f"Vervaldatum: {pe.strftime('%d-%m-%Y')}</p>"
+            f"<p>Gelieve dit bedrag zo spoedig mogelijk te voldoen om onderbreking "
+            f"te voorkomen.</p>"
+            f"<p>Met vriendelijke groet,<br/>Het SuriRent team</p>"
+        )
+        # Attach PDF factuur automatisch mee.
+        try:
+            saas = await db.saas_settings.find_one({"id": "_saas_settings"}, {"_id": 0}) or {}
+            from pdf_gen import saas_invoice_pdf
+            pdf_bytes = saas_invoice_pdf(inv, c, saas.get("company_info") if saas else None)
+            attachments = [(f"factuur-{inv['id'][:8].upper()}.pdf", pdf_bytes, "application/pdf")]
+        except Exception:
+            attachments = None
+
+        ok = await _deps.saas_email(
+            to_email=c["owner_email"], subject=subject, body_html=body_html,
+            attachments=attachments,
+        )
+        await db.sent_invoice_reminders.insert_one({
+            "invoice_id": inv["id"],
+            "company_id": c["id"],
+            "company_name": c.get("name", ""),
+            "owner_email": c["owner_email"],
+            "days_overdue": days_overdue,
+            "sent_at": _deps.iso(now),
+            "sent_ok": bool(ok),
+        })
+        # Markeer factuur als overdue (voor UI)
+        if inv.get("status") == "open":
+            await db.subscription_invoices.update_one(
+                {"id": inv["id"]},
+                {"$set": {"status": "overdue"}},
+            )
+        sent.append({
+            "invoice_id": inv["id"], "company_name": c.get("name", ""),
+            "owner_email": c["owner_email"], "days_overdue": days_overdue,
+            "sent_ok": bool(ok),
+        })
+    return sent
+
+
+@router.post("/superadmin/invoice-reminders/run")
+async def run_invoice_reminders(user: dict = Depends(_superadmin)):
+    sent = await check_invoice_reminders()
+    return {"ok": True, "count": len(sent), "sent": sent}
