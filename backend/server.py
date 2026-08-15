@@ -361,6 +361,7 @@ class TenantIn(BaseModel):
     # Persoonsgegevens — komen automatisch in het huurcontract PDF
     birth_date: Optional[str] = ""   # YYYY-MM-DD
     id_number: Optional[str] = ""    # bv. FM008370
+    id_photo_url: Optional[str] = ""  # ID-kaart foto, /api/landing/asset/{id}
 
 
 class TenantOut(TenantIn):
@@ -6734,6 +6735,46 @@ async def delete_tenant(tenant_id: str, user=Depends(get_current_user)):
             {"id": t["apartment_id"]}, {"$set": {"tenant_id": None, "status": "vacant"}}
         )
     await db.tenants.delete_one({"id": tenant_id})
+    return {"ok": True}
+
+
+@api.post("/tenants/{tenant_id}/id-photo")
+async def upload_tenant_id_photo(tenant_id: str, file: UploadFile = File(...),
+                                   user=Depends(get_current_user)):
+    """Upload ID-kaart foto voor een huurder. Slaat op als landing_asset en
+    bewaart de URL op `tenant.id_photo_url` (multi-tenant safe via scope)."""
+    t = await db.tenants.find_one({"id": tenant_id, **scope(user)}, {"_id": 0})
+    if not t:
+        raise HTTPException(status_code=404, detail="Huurder niet gevonden")
+    raw = await file.read()
+    if len(raw) > MAX_LANDING_ASSET_BYTES:
+        raise HTTPException(status_code=413, detail="Bestand groter dan 5 MB.")
+    ctype = (file.content_type or "").lower()
+    if not ctype.startswith("image/"):
+        raise HTTPException(status_code=400, detail="Alleen afbeeldingen toegestaan.")
+    asset_id = new_id()
+    await db.landing_assets.insert_one({
+        "id": asset_id,
+        "filename": file.filename or f"idcard-{tenant_id[:8]}",
+        "content_type": ctype,
+        "data_b64": base64.b64encode(raw).decode("ascii"),
+        "size": len(raw),
+        "uploaded_by": user.get("email"),
+        "uploaded_at": iso(now_utc()),
+    })
+    url = f"/api/landing/asset/{asset_id}"
+    await db.tenants.update_one({"id": tenant_id}, {"$set": {"id_photo_url": url}})
+    return {"id_photo_url": url}
+
+
+@api.delete("/tenants/{tenant_id}/id-photo")
+async def delete_tenant_id_photo(tenant_id: str, user=Depends(get_current_user)):
+    """Verwijdert alleen de URL-referentie op de huurder (de landing_asset
+    zelf blijft — kan later door retentie-cyclus opgeruimd worden)."""
+    t = await db.tenants.find_one({"id": tenant_id, **scope(user)}, {"_id": 0})
+    if not t:
+        raise HTTPException(status_code=404, detail="Huurder niet gevonden")
+    await db.tenants.update_one({"id": tenant_id}, {"$unset": {"id_photo_url": ""}})
     return {"ok": True}
 
 
