@@ -9,7 +9,7 @@ import {
   FileText, ShieldCheck, Wrench, FileSignature, Bell, Briefcase, Mail,
   Zap, Power, Menu, MoreHorizontal, MapPin, Paintbrush,
   Gauge, Activity, Clock as ClockIcon, Monitor, QrCode, Printer,
-  ReceiptText, UsersRound, Building, Calendar,
+  ReceiptText, UsersRound, Building, Calendar, ArrowLeft,
   AlertCircle, UserPlus, TrendingUp, ArrowUpRight, Package,
   ScanLine, RefreshCw, Settings as SettingsIcon,
 } from 'lucide-react';
@@ -1909,20 +1909,25 @@ function Apartments() {
   const [assignFor, setAssignFor] = useState(null);
   const [shellyFor, setShellyFor] = useState(null);
   const [plateFor, setPlateFor] = useState(null);
+  const [detailId, setDetailId] = useState(null);  // welk appartement is in detail-view
   const [q, setQ] = useState('');
+  const [filter, setFilter] = useState('all');  // all | occupied | vacant
 
   const load = useCallback(async () => {
     const [a, t] = await Promise.all([api.get('/apartments'), api.get('/tenants')]);
     setItems(a.data); setTenants(t.data);
   }, []);
   useEffect(() => { load(); }, [load]);
-  // Stille polling — lijst wordt in place vervangen, geen scroll-reset.
-  useAutoRefresh(load, { interval: 15000, enabled: !creating && !editing && !assignFor && !shellyFor && !plateFor });
+  // Stille polling — pauzeer wanneer een modal open is óf we in detail-view zitten.
+  useAutoRefresh(load, {
+    interval: 15000,
+    enabled: !creating && !editing && !assignFor && !shellyFor && !plateFor && !detailId,
+  });
 
   const del = async (id) => {
     if (!window.confirm('Appartement verwijderen?')) return;
     await api.delete(`/apartments/${id}`);
-    load();
+    setDetailId(null); load();
   };
   const assign = async (tid) => {
     await api.post(`/apartments/${assignFor.id}/assign-tenant`, { tenant_id: tid });
@@ -1934,125 +1939,97 @@ function Apartments() {
     load();
   };
 
-  const filtered = items.filter((a) => !q || a.number.toLowerCase().includes(q.toLowerCase()) || (a.tenant_name || '').toLowerCase().includes(q.toLowerCase()));
+  // ==================== DETAIL PAGINA ====================
+  // Wanneer een appartement is aangeklikt tonen we een aparte "pagina"
+  // met alle info en acties. Terug-knop bovenaan zoals bij Betalingsregelingen.
+  if (detailId) {
+    const a = items.find((x) => x.id === detailId);
+    if (!a) {
+      // Kan gebeuren als het appartement inmiddels verwijderd is.
+      setDetailId(null);
+      return null;
+    }
+    return (
+      <ApartmentDetail apt={a}
+        onBack={() => setDetailId(null)}
+        onEdit={() => setEditing(a)}
+        onAssign={() => setAssignFor(a)}
+        onRemoveTenant={() => removeT(a.id)}
+        onShelly={() => setShellyFor(a)}
+        onPlate={() => setPlateFor(a)}
+        onDelete={() => del(a.id)} />
+    );
+  }
+
+  const bySearch = items.filter((a) => !q
+    || a.number.toLowerCase().includes(q.toLowerCase())
+    || (a.tenant_name || '').toLowerCase().includes(q.toLowerCase())
+    || (a.address || '').toLowerCase().includes(q.toLowerCase()));
+  const filtered = bySearch.filter((a) => {
+    if (filter === 'all') return true;
+    if (filter === 'occupied') return a.status === 'occupied';
+    return a.status !== 'occupied';
+  });
+  const counts = {
+    all: bySearch.length,
+    occupied: bySearch.filter((a) => a.status === 'occupied').length,
+    vacant: bySearch.filter((a) => a.status !== 'occupied').length,
+  };
 
   return (
-    <div>
-      <PageHeader
-        title="Appartementen"
-        subtitle={`${items.length} appartementen, ${items.filter((a) => a.status === 'occupied').length} bezet`}
-        action={
-          <button onClick={() => setCreating(true)} data-testid="apt-new-btn"
-            className="inline-flex items-center gap-2 px-5 py-3 bg-[#FF5C00] hover:bg-[#E05200] text-white font-bold rounded-xl shadow-[0_10px_25px_-5px_rgba(255,92,0,0.5)]">
-            <Plus className="w-4 h-4" /> Nieuw appartement
-          </button>
-        }
-      />
-      <div className="mb-4 relative max-w-md">
-        <Search className="w-4 h-4 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2" />
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Zoek op nummer of huurder"
-          data-testid="apt-search"
-          className="w-full h-12 pl-11 pr-4 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] outline-none bg-white" />
+    <div className="space-y-4 pb-24 sm:pb-6" data-testid="apartments-page">
+      {/* Header — inline titel + subtitel + oranje "Nieuw" knop. Zelfde
+          patroon als Huurders/Betalingsregelingen. */}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-black text-slate-900">Appartementen</h1>
+          <p className="text-sm text-slate-500 mt-0.5">
+            {items.length} appartementen · {counts.occupied} bezet
+          </p>
+        </div>
+        <button onClick={() => setCreating(true)} data-testid="apt-new-btn"
+          className="inline-flex items-center justify-center gap-2 px-5 py-3 bg-[#FF5C00] hover:bg-[#E05200] text-white font-bold rounded-2xl text-sm shadow-[0_10px_25px_-5px_rgba(255,92,0,0.5)]">
+          <Plus className="w-4 h-4" /> Nieuw appartement
+        </button>
       </div>
 
-      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        {filtered.length === 0 && (
-          <div className="col-span-full bg-white rounded-2xl border border-dashed border-slate-200 p-10 text-center">
-            <Building2 className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-            <p className="text-slate-500 font-semibold">Nog geen appartementen.</p>
-            <p className="text-sm text-slate-400 mt-1">Voeg uw eerste appartement toe.</p>
-          </div>
-        )}
-        {filtered.map((a) => (
-          <div key={a.id} data-testid={`apt-card-${a.id}`}
-            className="bg-white rounded-2xl border border-slate-100 shadow-[0_1px_4px_-2px_rgba(15,23,42,0.06)] overflow-hidden hover:border-slate-200 transition-colors flex flex-col">
-            {a.photo_url && (
-              <div className="relative w-full h-32 bg-slate-100 shrink-0">
-                <img
-                  src={a.photo_url.includes('/api/landing/asset/') ? `${a.photo_url}${a.photo_url.includes('?') ? '&' : '?'}thumb=1` : a.photo_url}
-                  alt={a.number}
-                  loading="lazy"
-                  decoding="async"
-                  className="w-full h-full object-cover"
-                  onError={(e) => { e.currentTarget.parentElement.style.display = 'none'; }} />
-                <span className={`absolute top-2 right-2 text-[10px] font-black uppercase tracking-wider px-2 py-1 rounded-full ring-2 ring-white ${
-                  a.status === 'occupied' ? 'bg-emerald-500 text-white' : 'bg-slate-700 text-white'
-                }`}>
-                  {a.status === 'occupied' ? 'Bezet' : 'Vacant'}
-                </span>
-              </div>
-            )}
-            <div className="p-4 flex-1 flex flex-col">
-            <div className="flex items-start justify-between mb-3">
-              <div className="min-w-0">
-                <p className="text-[10px] font-black uppercase tracking-widest text-[#FF5C00]">Appt. {a.number}</p>
-                <p className="text-sm font-semibold text-slate-900 mt-0.5 truncate">{a.address || '—'}</p>
-              </div>
-              {!a.photo_url && (
-                <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-1 rounded-full ${
-                  a.status === 'occupied' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'
-                }`}>
-                  {a.status === 'occupied' ? 'Bezet' : 'Vacant'}
-                </span>
-              )}
-            </div>
-            <div className="bg-slate-50 border border-slate-100 rounded-xl p-3 mb-3">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Maandhuur</p>
-              <p className="text-xl font-black text-slate-900 tracking-tight mt-0.5">{fmtMoney(a.rent_amount, a.currency)}</p>
-            </div>
-            {a.tenant_name ? (
-              <div className="flex items-center justify-between bg-slate-50 rounded-xl p-3 mb-3 border border-slate-100">
-                <div className="min-w-0">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Huurder</p>
-                  <p className="text-sm font-bold text-slate-900 truncate">{a.tenant_name}</p>
-                </div>
-                <button onClick={() => removeT(a.id)} data-testid={`apt-remove-tenant-${a.id}`}
-                  className="text-xs font-bold text-red-500 hover:text-red-700">Loskoppelen</button>
-              </div>
-            ) : (
-              <button onClick={() => setAssignFor(a)} data-testid={`apt-assign-${a.id}`}
-                className="w-full mb-3 py-2.5 rounded-xl bg-orange-50 hover:bg-orange-100 text-[#FF5C00] font-bold text-sm">
-                Huurder toewijzen
-              </button>
-            )}
-            <div className="flex gap-2">
-              <button onClick={() => setEditing(a)} data-testid={`apt-edit-${a.id}`}
-                className="flex-1 h-10 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm flex items-center justify-center gap-1.5">
-                <Pencil className="w-3.5 h-3.5" /> Bewerk
-              </button>
-              <a href={`${process.env.REACT_APP_BACKEND_URL}/api/apartments/${a.id}/kiosk-sticker.pdf`}
-                target="_blank" rel="noreferrer"
-                data-testid={`apt-qr-${a.id}`}
-                title="Standaard QR-sticker (oranje) voor naast de voordeur"
-                className="w-10 h-10 rounded-xl bg-orange-50 hover:bg-orange-100 text-[#FF5C00] flex items-center justify-center">
-                <QrCode className="w-4 h-4" />
-              </a>
-              {a.tenant_id && (
-                <button type="button" onClick={() => setPlateFor(a)}
-                  data-testid={`apt-plate-${a.id}`}
-                  title="Luxe gouden plaat per huurder (kies formaat)"
-                  className="w-10 h-10 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-700 flex items-center justify-center">
-                  <span className="text-base font-black">★</span>
-                </button>
-              )}
-              <button onClick={() => setShellyFor(a)} data-testid={`apt-shelly-${a.id}`}
-                title={a.shelly?.device_id ? `Stroom: ${a.shelly.label || a.shelly.device_id}` : 'Stroom koppelen'}
-                className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-                  a.shelly?.device_id
-                    ? 'bg-orange-50 text-[#FF5C00] hover:bg-orange-100'
-                    : 'bg-slate-100 hover:bg-slate-200 text-slate-500'
-                }`}>
-                <Zap className="w-4 h-4" />
-              </button>
-              <button onClick={() => del(a.id)} data-testid={`apt-delete-${a.id}`}
-                className="w-10 h-10 rounded-xl bg-red-50 hover:bg-red-100 text-red-500 flex items-center justify-center">
-                <Trash2 className="w-4 h-4" />
-              </button>
-            </div>
-            </div>
-          </div>
+      {/* Zoek + filter pillen */}
+      <div className="relative max-w-md">
+        <Search className="w-4 h-4 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2" />
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Zoek op nummer, adres of huurder"
+          data-testid="apt-search"
+          className="w-full h-11 pl-11 pr-4 rounded-xl border-2 border-slate-200 focus:border-[#FF5C00] outline-none bg-white text-sm" />
+      </div>
+      <div className="flex items-center gap-2 flex-wrap" data-testid="apt-filter-bar">
+        {[
+          { v: 'all', l: 'Alles', c: counts.all },
+          { v: 'occupied', l: 'Bezet', c: counts.occupied },
+          { v: 'vacant', l: 'Vacant', c: counts.vacant },
+        ].map((f) => (
+          <button key={f.v} onClick={() => setFilter(f.v)} data-testid={`apt-filter-${f.v}`}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+              filter === f.v ? 'bg-[#FF5C00] text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+            }`}>
+            {f.l}
+            <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${
+              filter === f.v ? 'bg-white/20 text-white' : 'bg-white text-slate-500'
+            }`}>{f.c}</span>
+          </button>
         ))}
       </div>
+
+      {filtered.length === 0 ? (
+        <div className="bg-white rounded-2xl p-10 text-center shadow-sm" data-testid="apts-empty">
+          <Building2 className="w-12 h-12 mx-auto text-slate-300 mb-2" />
+          <p className="text-slate-500 font-semibold">Geen appartementen gevonden.</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {filtered.map((a) => (
+            <ApartmentRow key={a.id} a={a} onOpen={() => setDetailId(a.id)} />
+          ))}
+        </div>
+      )}
 
       {(creating || editing) && (
         <ApartmentForm initial={editing} onCancel={() => { setEditing(null); setCreating(false); }}
@@ -2089,6 +2066,182 @@ function Apartments() {
       {plateFor && (
         <PlateSizeModal apt={plateFor} onClose={() => setPlateFor(null)} />
       )}
+    </div>
+  );
+}
+
+// =====================================================================
+// ApartmentRow — compacte lijst-kaart in de stijl van TenantRow.
+// Klik op de kaart opent de detail-pagina.
+// =====================================================================
+function ApartmentRow({ a, onOpen }) {
+  const occupied = a.status === 'occupied';
+  return (
+    <div onClick={onOpen} data-testid={`apt-row-${a.id}`}
+      role="button" tabIndex={0}
+      onKeyDown={(e) => { if (e.key === 'Enter') onOpen(); }}
+      className="w-full text-left bg-white hover:bg-slate-50 active:bg-slate-100 rounded-2xl shadow-sm p-4 flex items-center gap-3 border border-slate-100 cursor-pointer transition">
+      {/* Foto-thumb of nummer-tegel */}
+      {a.photo_url ? (
+        <div className="w-14 h-14 rounded-xl overflow-hidden shrink-0 bg-slate-100">
+          <img
+            src={a.photo_url.includes('/api/landing/asset/') ? `${a.photo_url}${a.photo_url.includes('?') ? '&' : '?'}thumb=1` : a.photo_url}
+            alt={a.number} loading="lazy" decoding="async"
+            className="w-full h-full object-cover"
+            onError={(e) => { e.currentTarget.parentElement.classList.add('bg-orange-50'); e.currentTarget.style.display = 'none'; }} />
+        </div>
+      ) : (
+        <div className="w-14 h-14 rounded-xl bg-orange-50 text-[#FF5C00] flex items-center justify-center shrink-0 font-black">
+          {a.number}
+        </div>
+      )}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <p className="font-black text-slate-900 truncate">Appt. {a.number}</p>
+          <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${
+            occupied ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'
+          }`}>
+            {occupied ? 'Bezet' : 'Vacant'}
+          </span>
+        </div>
+        <p className="text-xs text-slate-500 mt-0.5 truncate">
+          {a.address || '—'}{a.tenant_name ? ` · ${a.tenant_name}` : ''}
+        </p>
+      </div>
+      <div className="text-right shrink-0 flex flex-col items-end gap-0.5">
+        <p className="text-base font-black text-slate-900 tracking-tight whitespace-nowrap">{fmtMoney(a.rent_amount, a.currency)}</p>
+        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">/ maand</p>
+      </div>
+      <ChevronRight className="w-4 h-4 text-slate-300 shrink-0" />
+    </div>
+  );
+}
+
+// =====================================================================
+// ApartmentDetail — volledige info + acties. Terug-knop zoals PlanDetail.
+// =====================================================================
+function ApartmentDetail({ apt, onBack, onEdit, onAssign, onRemoveTenant, onShelly, onPlate, onDelete }) {
+  const a = apt;
+  const occupied = a.status === 'occupied';
+  const base = process.env.REACT_APP_BACKEND_URL;
+  return (
+    <div className="space-y-4 pb-24 sm:pb-6" data-testid="apt-detail-page">
+      {/* Terug-knop — exact patroon van PlanDetail */}
+      <div className="flex items-center gap-2">
+        <button onClick={onBack} data-testid="apt-detail-back"
+          className="flex items-center gap-1.5 text-slate-700 font-bold bg-white hover:bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm">
+          <ArrowLeft className="w-4 h-4" /> Terug
+        </button>
+      </div>
+
+      {/* Hero card */}
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+        {a.photo_url && (
+          <div className="relative w-full h-48 sm:h-64 bg-slate-100">
+            <img src={a.photo_url} alt={a.number}
+              className="w-full h-full object-cover" loading="lazy"
+              onError={(e) => { e.currentTarget.parentElement.style.display = 'none'; }} />
+            <span className={`absolute top-3 right-3 text-[10px] font-black uppercase tracking-wider px-2 py-1 rounded-full ring-2 ring-white ${
+              occupied ? 'bg-emerald-500 text-white' : 'bg-slate-700 text-white'
+            }`}>
+              {occupied ? 'Bezet' : 'Vacant'}
+            </span>
+          </div>
+        )}
+        <div className="p-5">
+          <div className="flex items-start justify-between gap-3 flex-wrap">
+            <div className="min-w-0">
+              <p className="text-[10px] font-black uppercase tracking-widest text-[#FF5C00]">Appartement {a.number}</p>
+              <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight mt-1 truncate">{a.address || '—'}</h1>
+              {!a.photo_url && (
+                <span className={`inline-block mt-2 text-[10px] font-black uppercase tracking-wider px-2 py-1 rounded-full ${
+                  occupied ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'
+                }`}>
+                  {occupied ? 'Bezet' : 'Vacant'}
+                </span>
+              )}
+            </div>
+            <div className="text-right shrink-0">
+              <p className="text-xs font-black uppercase tracking-widest text-slate-400">Maandhuur</p>
+              <p className="text-3xl font-black text-slate-900 tracking-tight">{fmtMoney(a.rent_amount, a.currency)}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Huurder */}
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
+        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Huurder</p>
+        {a.tenant_name ? (
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 rounded-xl bg-orange-50 text-[#FF5C00] flex items-center justify-center shrink-0 font-black">
+              {(a.tenant_name || '?').split(' ').map((s) => s[0]).slice(0, 2).join('').toUpperCase()}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-black text-slate-900 truncate">{a.tenant_name}</p>
+              <p className="text-xs text-slate-500 truncate">{a.tenant_phone || a.tenant_email || 'Geen contact'}</p>
+            </div>
+            <button onClick={onRemoveTenant} data-testid={`apt-detail-remove-tenant`}
+              className="h-9 px-3 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 font-bold text-xs">
+              Loskoppelen
+            </button>
+          </div>
+        ) : (
+          <button onClick={onAssign} data-testid="apt-detail-assign"
+            className="w-full py-3 rounded-xl bg-orange-50 hover:bg-orange-100 text-[#FF5C00] font-bold text-sm">
+            + Huurder toewijzen
+          </button>
+        )}
+      </div>
+
+      {/* Stroom (Shelly) */}
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Stroom</p>
+          <button onClick={onShelly} data-testid="apt-detail-shelly"
+            className={`h-9 px-3 rounded-lg font-bold text-xs flex items-center gap-1.5 ${
+              a.shelly?.device_id
+                ? 'bg-orange-50 hover:bg-orange-100 text-[#FF5C00]'
+                : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+            }`}>
+            <Zap className="w-3.5 h-3.5" /> {a.shelly?.device_id ? 'Bewerk' : 'Koppel'}
+          </button>
+        </div>
+        {a.shelly?.device_id ? (
+          <div>
+            <p className="text-sm font-bold text-slate-900">{a.shelly.label || a.shelly.device_id}</p>
+            <p className="text-xs text-slate-500 font-mono mt-0.5">{a.shelly.device_id}</p>
+          </div>
+        ) : (
+          <p className="text-sm text-slate-400">Nog geen slim relais gekoppeld.</p>
+        )}
+      </div>
+
+      {/* Acties */}
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
+        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Documenten & acties</p>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <button onClick={onEdit} data-testid="apt-detail-edit"
+            className="h-11 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm flex items-center justify-center gap-1.5">
+            <Pencil className="w-3.5 h-3.5" /> Bewerk
+          </button>
+          <a href={`${base}/api/apartments/${a.id}/kiosk-sticker.pdf`}
+            target="_blank" rel="noreferrer" data-testid="apt-detail-qr"
+            className="h-11 rounded-xl bg-orange-50 hover:bg-orange-100 text-[#FF5C00] font-bold text-sm flex items-center justify-center gap-1.5">
+            <QrCode className="w-3.5 h-3.5" /> QR-sticker
+          </a>
+          {a.tenant_id && (
+            <button onClick={onPlate} data-testid="apt-detail-plate"
+              className="h-11 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-700 font-bold text-sm flex items-center justify-center gap-1.5">
+              <span className="text-base font-black">★</span> Plaat
+            </button>
+          )}
+          <button onClick={onDelete} data-testid="apt-detail-delete"
+            className="h-11 rounded-xl bg-red-50 hover:bg-red-100 text-red-600 font-bold text-sm flex items-center justify-center gap-1.5">
+            <Trash2 className="w-3.5 h-3.5" /> Verwijder
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
