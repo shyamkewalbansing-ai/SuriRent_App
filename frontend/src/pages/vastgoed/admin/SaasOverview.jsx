@@ -6,6 +6,7 @@ import { useEffect, useState, useCallback } from 'react';
 import {
   Crown, TrendingUp, Building2, Clock, AlertCircle, Wifi, WifiOff,
   ScanLine, Receipt, RefreshCw, Loader2, ArrowRight, Banknote, CheckCircle2, Trash2,
+  Wallet, Briefcase, Users,
 } from 'lucide-react';
 import { api, formatError } from '../../../lib/api';
 
@@ -154,6 +155,34 @@ export default function SaasOverview() {
           color={overview.open_invoices > 0 ? 'orange' : 'emerald'} testid="kpi-open-invoices" />
         <Kpi icon={CheckCircle2} label="Betaalde facturen" value={overview.paid_invoices}
           sub="omgezette inkomsten" color="emerald" testid="kpi-paid-invoices" />
+      </div>
+
+      {/* Kas saldo card + Snelle acties — beheerder-stijl widgets */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mb-6">
+        {/* Kas saldo — totaal ontvangen SaaS-betalingen in SRD */}
+        <div className="bg-gradient-to-br from-emerald-500 to-emerald-600 text-white rounded-2xl p-5 shadow-lg" data-testid="saas-kas-saldo-card">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-[11px] font-black uppercase tracking-widest opacity-80">Kas saldo (SRD)</p>
+            <Wallet className="w-5 h-5 opacity-80" />
+          </div>
+          <p className="text-3xl font-black">{fmt(overview.total_received_srd || 0, 'SRD')}</p>
+          <p className="text-xs opacity-80 mt-1">
+            {overview.paid_invoices || 0} betaalde facturen totaal
+          </p>
+        </div>
+
+        {/* Snelle acties — direct springen naar veelgebruikte SaaS-taken */}
+        <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-100 p-5" data-testid="saas-quick-actions">
+          <p className="text-[11px] font-black uppercase tracking-widest text-slate-500 mb-3">Snelle acties</p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <QuickAction icon={Briefcase} label="Bedrijven" onClick={() => window.dispatchEvent(new CustomEvent('saas-nav', { detail: 'companies' }))} />
+            <QuickAction icon={Users} label="Klanten" onClick={() => window.dispatchEvent(new CustomEvent('saas-nav', { detail: 'saas_clients' }))} />
+            <QuickAction icon={Receipt} label="Facturen" onClick={() => window.dispatchEvent(new CustomEvent('saas-nav', { detail: 'saas_invoices' }))} />
+            <QuickAction icon={ScanLine} label={`OCR (${overview.pending_ocr || 0})`}
+              onClick={() => window.dispatchEvent(new CustomEvent('saas-nav', { detail: 'saas_pending' }))}
+              urgent={overview.pending_ocr > 0} />
+          </div>
+        </div>
       </div>
 
       {/* Online bedrijven — live presence */}
@@ -374,3 +403,18 @@ function DangerZone({ onDone }) {
     </section>
   );
 }
+
+function QuickAction({ icon: Icon, label, onClick, urgent }) {
+  return (
+    <button onClick={onClick} data-testid={`quick-${label.toLowerCase().replace(/[^a-z]/g, '-')}`}
+      className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border transition active:scale-95 ${
+        urgent
+          ? 'bg-amber-50 border-amber-200 hover:bg-amber-100'
+          : 'bg-slate-50 border-slate-200 hover:bg-slate-100 hover:border-orange-200'
+      }`}>
+      <Icon className={`w-5 h-5 ${urgent ? 'text-amber-700' : 'text-slate-700'}`} />
+      <span className={`text-[11px] font-black uppercase tracking-wider ${urgent ? 'text-amber-800' : 'text-slate-700'}`}>{label}</span>
+    </button>
+  );
+}
+

@@ -167,6 +167,192 @@ function SaasClients() {
     </div>
   );
 }
+
+// =====================================================================
+// SaasContracts — abonnement-contracten met platform-klanten. Toont voor
+// elk bedrijf status van hun SaaS-abonnement (actief/trial/verlopen).
+// =====================================================================
+function SaasContracts() {
+  const [items, setItems] = useState([]);
+  const [filter, setFilter] = useState('all');
+  useEffect(() => { api.get('/superadmin/companies').then((r) => setItems(r.data || [])).catch(() => {}); }, []);
+  const bs = (c) => (c.billing_status || 'trial').toLowerCase();
+  const filtered = items.filter((c) => filter === 'all' ? true : bs(c) === filter);
+  const counts = {
+    all: items.length,
+    active: items.filter((c) => bs(c) === 'active').length,
+    trial: items.filter((c) => bs(c) === 'trial').length,
+    expired: items.filter((c) => bs(c) === 'expired' || bs(c) === 'cancelled').length,
+  };
+  return (
+    <div className="space-y-4 pb-24 sm:pb-6" data-testid="saas-contracts-page">
+      <div>
+        <h1 className="text-2xl sm:text-3xl font-black text-slate-900">Contracten</h1>
+        <p className="text-sm text-slate-500 mt-0.5">{items.length} abonnement-contracten op het platform.</p>
+      </div>
+      <div className="flex items-center gap-2 flex-wrap">
+        {[['all', 'Alles'], ['active', 'Actief'], ['trial', 'Proefperiode'], ['expired', 'Verlopen']].map(([v, l]) => (
+          <button key={v} onClick={() => setFilter(v)}
+            data-testid={`saas-contract-filter-${v}`}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold ${
+              filter === v ? 'bg-[#FF5C00] text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+            }`}>
+            {l} <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${filter === v ? 'bg-white/20 text-white' : 'bg-white text-slate-500'}`}>{counts[v]}</span>
+          </button>
+        ))}
+      </div>
+      {filtered.length === 0 ? (
+        <div className="bg-white rounded-2xl p-10 text-center shadow-sm">
+          <FileSignature className="w-12 h-12 mx-auto text-slate-300 mb-2" />
+          <p className="text-slate-500 font-semibold">Geen contracten in deze filter.</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {filtered.map((c) => {
+            const s = bs(c);
+            const colorMap = { active: 'emerald', trial: 'amber', expired: 'red', cancelled: 'slate' };
+            const color = colorMap[s] || 'slate';
+            return (
+              <div key={c.id} data-testid={`saas-contract-${c.id}`}
+                className="w-full bg-white hover:bg-slate-50 rounded-2xl shadow-sm p-4 flex items-center gap-3 border border-slate-100">
+                <div className={`w-11 h-11 rounded-xl bg-${color}-50 text-${color}-700 flex items-center justify-center shrink-0`}>
+                  <FileSignature className="w-5 h-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="font-black text-slate-900 truncate">{c.name}</p>
+                    <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-${color}-100 text-${color}-700`}>{s}</span>
+                    {c.plan_name && <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-slate-200 text-slate-700">{c.plan_name}</span>}
+                  </div>
+                  <p className="text-xs text-slate-500 mt-0.5 truncate">
+                    /{c.slug} · {c.contact_email || 'geen e-mail'}
+                    {c.next_billing_at ? ` · volgende factuur ${new Date(c.next_billing_at).toLocaleDateString('nl-NL')}` : ''}
+                  </p>
+                </div>
+                <p className="text-sm font-black text-slate-900 text-right shrink-0">
+                  {c.tenants_count ?? 0} huurders
+                </p>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// =====================================================================
+// SaasEmployees — interne SuriRent medewerkers (superadmins).
+// =====================================================================
+function SaasEmployees() {
+  const [items, setItems] = useState([]);
+  useEffect(() => {
+    // Zelfde endpoint als klanten maar filter op superadmin role
+    api.get('/superadmin/clients').then((r) => {
+      const staff = (r.data || []).filter((u) => u.role === 'superadmin' || !u.company_id);
+      setItems(staff);
+    }).catch(() => {});
+  }, []);
+  return (
+    <div className="space-y-4 pb-24 sm:pb-6" data-testid="saas-employees-page">
+      <div>
+        <h1 className="text-2xl sm:text-3xl font-black text-slate-900">Werknemers</h1>
+        <p className="text-sm text-slate-500 mt-0.5">Interne SuriRent staff met platform-toegang.</p>
+      </div>
+      {items.length === 0 ? (
+        <div className="bg-white rounded-2xl p-10 text-center shadow-sm">
+          <Users className="w-12 h-12 mx-auto text-slate-300 mb-2" />
+          <p className="text-slate-500 font-semibold">Nog geen interne staff toegevoegd.</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {items.map((u) => {
+            const initials = (u.name || u.email || '?').split(/[\s@]/).filter(Boolean).map((s) => s[0]).slice(0, 2).join('').toUpperCase();
+            return (
+              <div key={u.id} data-testid={`saas-emp-${u.id}`}
+                className="w-full bg-white rounded-2xl shadow-sm p-4 flex items-center gap-3 border border-slate-100">
+                <div className="w-11 h-11 rounded-xl bg-orange-50 text-[#FF5C00] flex items-center justify-center shrink-0 font-black text-sm">
+                  {initials}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="font-black text-slate-900 truncate">{u.name || u.email}</p>
+                    <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-orange-100 text-[#FF5C00]">Superadmin</span>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-0.5 truncate">{u.email}</p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// =====================================================================
+// SaasNotifications — platform-brede waarschuwingen. Aggregeert OCR-queue,
+// verlopen trials en openstaande facturen tot een actie-lijst.
+// =====================================================================
+function SaasNotifications() {
+  const [alerts, setAlerts] = useState([]);
+  useEffect(() => {
+    (async () => {
+      const list = [];
+      try {
+        const ov = await api.get('/superadmin/overview');
+        const o = ov.data || {};
+        if (o.pending_ocr > 0) {
+          list.push({ severity: 'amber', icon: 'ocr', title: `${o.pending_ocr} OCR-mismatches wachten op goedkeuring`, tab: 'saas_pending' });
+        }
+        if (o.overdue_invoices > 0) {
+          list.push({ severity: 'red', icon: 'invoice', title: `${o.overdue_invoices} vervallen facturen`, tab: 'saas_invoices' });
+        }
+        if (o.expiring_trials > 0) {
+          list.push({ severity: 'amber', icon: 'trial', title: `${o.expiring_trials} proefperiodes verlopen binnenkort`, tab: 'companies' });
+        }
+      } catch { /* stil */ }
+      setAlerts(list);
+    })();
+  }, []);
+  const nav = (t) => window.dispatchEvent(new CustomEvent('saas-nav', { detail: t }));
+  return (
+    <div className="space-y-4 pb-24 sm:pb-6" data-testid="saas-notifications-page">
+      <div>
+        <h1 className="text-2xl sm:text-3xl font-black text-slate-900">Notificaties</h1>
+        <p className="text-sm text-slate-500 mt-0.5">{alerts.length} openstaande platform-waarschuwingen.</p>
+      </div>
+      {alerts.length === 0 ? (
+        <div className="bg-white rounded-2xl p-10 text-center shadow-sm">
+          <Bell className="w-12 h-12 mx-auto text-emerald-300 mb-2" />
+          <p className="text-slate-500 font-semibold">Alles onder controle — geen openstaande meldingen.</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {alerts.map((a, i) => {
+            const c = a.severity === 'red' ? 'red' : 'amber';
+            return (
+              <button key={i} onClick={() => nav(a.tab)}
+                data-testid={`saas-alert-${i}`}
+                className={`w-full text-left bg-white hover:bg-slate-50 rounded-2xl shadow-sm p-4 flex items-center gap-3 border-l-4 border-${c}-500 border-t border-r border-b border-slate-100`}>
+                <div className={`w-11 h-11 rounded-xl bg-${c}-50 text-${c}-700 flex items-center justify-center shrink-0`}>
+                  <AlertCircle className="w-5 h-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-black text-slate-900">{a.title}</p>
+                  <p className="text-xs text-slate-500 mt-0.5">Klik om naar de pagina te gaan</p>
+                </div>
+                <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
 import InstellingenHub from './admin/InstellingenHub';
 import Locations from './admin/Locations';
 import Subscriptions from './admin/Subscriptions';
@@ -2791,7 +2977,14 @@ export default function AdminDashboard() {
       if (window.location.pathname !== target) navigate(target);
     };
     window.addEventListener('go-tab', handler);
-    return () => window.removeEventListener('go-tab', handler);
+    // Alias event zodat Snelle acties in SaasOverview kunnen navigeren
+    // zonder handleSetTab prop-drilling.
+    const saasHandler = (e) => handler(e);
+    window.addEventListener('saas-nav', saasHandler);
+    return () => {
+      window.removeEventListener('go-tab', handler);
+      window.removeEventListener('saas-nav', saasHandler);
+    };
   }, [navigate]);
   // Android PWA: zorg dat de status-bar wit is (matcht de witte admin
   // mobile-header). Op iOS doet status-bar-style `black-translucent` zijn
@@ -2866,9 +3059,9 @@ export default function AdminDashboard() {
           {tab === 'saas_payment_plans' && <Subscriptions viewMode="payment_plans" />}
           {tab === 'saas_kasgeld' && <Subscriptions viewMode="kasgeld" />}
           {tab === 'saas_clients' && <SaasClients />}
-          {tab === 'saas_contracts' && <SaasPlaceholder title="Contracten" subtitle="Abonnement-contracten met platform-klanten." icon={FileSignature} />}
-          {tab === 'saas_employees' && <SaasPlaceholder title="Werknemers" subtitle="Interne SuriRent medewerkers en rollen." icon={Users} />}
-          {tab === 'saas_notifications' && <SaasPlaceholder title="Notificaties" subtitle="Platform-brede notificaties en waarschuwingen." icon={Bell} />}
+          {tab === 'saas_contracts' && <SaasContracts />}
+          {tab === 'saas_employees' && <SaasEmployees />}
+          {tab === 'saas_notifications' && <SaasNotifications />}
           {tab === 'plans' && <PlansAdmin />}
           {tab === 'saas_settings' && <SaasSettings />}
           {tab === 'landing_editor' && <LandingEditor />}
