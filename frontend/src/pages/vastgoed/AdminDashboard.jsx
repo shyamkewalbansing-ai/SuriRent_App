@@ -3131,6 +3131,19 @@ function TenantDetail({ tenant: t, onBack, onEdit, onPin, onPoster, onDelete, on
         </div>
       </div>
 
+      {/* Contact & Persoonsgegevens */}
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
+        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Gegevens</p>
+        <div className="grid sm:grid-cols-2 gap-3">
+          <InfoRow label="Telefoon" value={t.phone || '—'} />
+          <InfoRow label="E-mail" value={t.email || '—'} />
+          <InfoRow label="Geboortedatum" value={t.birth_date || '—'} />
+          <InfoRow label="ID-nummer" value={t.id_number || '—'} mono />
+          <InfoRow label="Internet" value={t.internet_amount ? fmtMoney(t.internet_amount, 'SRD') : '—'} />
+          <InfoRow label="Portal PIN" value={t.pin ? '••••' : 'Niet ingesteld'} />
+        </div>
+      </div>
+
       {/* ID-kaart sectie */}
       <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
         <div className="flex items-center justify-between mb-3 gap-3">
@@ -3188,19 +3201,6 @@ function TenantDetail({ tenant: t, onBack, onEdit, onPin, onPoster, onDelete, on
               onChange={(e) => upload(e.target.files?.[0])} data-testid="tenant-id-replace-input" />
           </label>
         )}
-      </div>
-
-      {/* Contact & Persoonsgegevens */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
-        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Gegevens</p>
-        <div className="grid sm:grid-cols-2 gap-3">
-          <InfoRow label="Telefoon" value={t.phone || '—'} />
-          <InfoRow label="E-mail" value={t.email || '—'} />
-          <InfoRow label="Geboortedatum" value={t.birth_date || '—'} />
-          <InfoRow label="ID-nummer" value={t.id_number || '—'} mono />
-          <InfoRow label="Internet" value={t.internet_amount ? fmtMoney(t.internet_amount, 'SRD') : '—'} />
-          <InfoRow label="Portal PIN" value={t.pin ? '••••' : 'Niet ingesteld'} />
-        </div>
       </div>
 
       {/* Acties */}
