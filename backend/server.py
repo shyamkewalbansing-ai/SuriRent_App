@@ -4474,6 +4474,36 @@ async def superadmin_overview(user=Depends(require_role("superadmin"))):
     paid_invoices = await db.subscription_invoices.count_documents({"status": "paid"})
     pending_ocr = await db.saas_payment_requests.count_documents({"status": "pending_approval"})
     open_invoices = await db.subscription_invoices.count_documents({"status": {"$in": ["open", "overdue"]}})
+    overdue_invoices = await db.subscription_invoices.count_documents({"status": "overdue"})
+
+    # Aggregeer ontvangen SaaS-inkomsten per valuta (Kas saldo hero).
+    total_received_by_currency: dict[str, float] = {}
+    total_received_srd = 0.0
+    async for iv in db.subscription_invoices.find({"status": "paid"}, {"_id": 0, "amount": 1, "currency": 1}):
+        cur = (iv.get("currency") or "SRD").upper()
+        amt = float(iv.get("amount") or 0)
+        total_received_by_currency[cur] = total_received_by_currency.get(cur, 0.0) + amt
+        if cur == "SRD":
+            total_received_srd += amt
+
+    # Open facturen in de lopende maand — per valuta + telling.
+    now = now_utc()
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    if month_start.month == 12:
+        month_end = month_start.replace(year=month_start.year + 1, month=1)
+    else:
+        month_end = month_start.replace(month=month_start.month + 1)
+    current_month_open_by_currency: dict[str, float] = {}
+    current_month_open_count = 0
+    async for iv in db.subscription_invoices.find({
+        "status": {"$in": ["open", "overdue"]},
+        "created_at": {"$gte": iso(month_start), "$lt": iso(month_end)},
+    }, {"_id": 0, "amount": 1, "currency": 1}):
+        cur = (iv.get("currency") or "SRD").upper()
+        amt = float(iv.get("amount") or 0)
+        current_month_open_by_currency[cur] = current_month_open_by_currency.get(cur, 0.0) + amt
+        current_month_open_count += 1
+
     return {
         "companies_total": total,
         "trial": trial, "active": active, "expired": expired, "cancelled": cancelled,
@@ -4481,7 +4511,12 @@ async def superadmin_overview(user=Depends(require_role("superadmin"))):
         "mrr": mrr, "currency": "SRD",
         "paid_invoices": paid_invoices,
         "open_invoices": open_invoices,
+        "overdue_invoices": overdue_invoices,
         "pending_ocr": pending_ocr,
+        "total_received_srd": total_received_srd,
+        "total_received_by_currency": total_received_by_currency,
+        "current_month_open_count": current_month_open_count,
+        "current_month_open_by_currency": current_month_open_by_currency,
     }
 
 

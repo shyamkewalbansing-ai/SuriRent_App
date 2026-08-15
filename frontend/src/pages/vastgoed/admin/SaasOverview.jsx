@@ -1,16 +1,22 @@
 // Superadmin · SaaS Overzicht
-// Live dashboard met MRR, online bedrijven, proefperiodes en openstaande facturen.
-// Refreshet elke 15 sec om presence-data actueel te houden.
+// -----------------------------------------------------------------------------
+// 1:1 spiegel van de beheerder-`Overview()` in AdminDashboard.jsx:
+//   • Luxe goud/oranje hero met Kas saldo (3 valuta-tegels · SRD/EUR/USD)
+//   • 4 KPI-tegels (Bedrijven · Klanten · Open lopende maand · Achterstand)
+//   • 4 Snelle acties-knoppen
+// Daaronder blijven de SaaS-specifieke live-widgets staan: Online bedrijven,
+// Trial verloopt bijna, Recent gezien, Danger Zone.
+// Refresht elke 15s zodat presence + KPI's actueel blijven.
+// -----------------------------------------------------------------------------
 
 import { useEffect, useState, useCallback } from 'react';
 import {
   Crown, TrendingUp, Building2, Clock, AlertCircle, Wifi, WifiOff,
-  ScanLine, Receipt, RefreshCw, Loader2, ArrowRight, Banknote, CheckCircle2, Trash2,
-  Wallet, Briefcase, Users,
+  ScanLine, Receipt, RefreshCw, Loader2, ArrowRight, ArrowUpRight,
+  Trash2, Wallet, Users, UserPlus, FileText, Briefcase,
 } from 'lucide-react';
-import { api, formatError } from '../../../lib/api';
+import { api, formatError, fmtMoney } from '../../../lib/api';
 
-const fmt = (n, c = 'SRD') => `${c} ${Number(n || 0).toLocaleString('nl-NL')}`;
 const fmtRelative = (iso) => {
   if (!iso) return 'nooit ingelogd';
   try {
@@ -36,23 +42,15 @@ const STATUS_LABEL = {
   trial: 'Proef', active: 'Actief', expired: 'Verlopen', cancelled: 'Opgezegd', past_due: 'Open',
 };
 
-function Kpi({ icon: Icon, label, value, sub, color = 'orange', testid }) {
-  const tones = {
-    orange: 'from-orange-50 to-orange-100 text-orange-700',
-    emerald: 'from-emerald-50 to-emerald-100 text-emerald-700',
-    red: 'from-red-50 to-red-100 text-red-700',
-    slate: 'from-slate-50 to-slate-100 text-slate-700',
-    blue: 'from-sky-50 to-sky-100 text-sky-700',
-    amber: 'from-amber-50 to-amber-100 text-amber-700',
-  };
+// PageHeader — identieke opmaak als in AdminDashboard.jsx (regel 850).
+function PageHeader({ title, subtitle, action }) {
   return (
-    <div className={`bg-gradient-to-br ${tones[color]} rounded-2xl p-4`} data-testid={testid}>
-      <div className="flex items-center justify-between mb-2">
-        <Icon className="w-5 h-5 opacity-80" />
-        <span className="text-[10px] font-extrabold uppercase tracking-widest opacity-70">{label}</span>
+    <div className="flex flex-wrap items-end justify-between gap-3 mb-6">
+      <div>
+        <h1 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">{title}</h1>
+        {subtitle && <p className="text-sm text-slate-500 mt-1">{subtitle}</p>}
       </div>
-      <p className="text-2xl font-extrabold">{value}</p>
-      {sub && <p className="text-[11px] opacity-70 mt-0.5">{sub}</p>}
+      {action}
     </div>
   );
 }
@@ -84,7 +82,7 @@ export default function SaasOverview() {
 
   useEffect(() => {
     load();
-    const t = setInterval(load, 15000); // auto-refresh elke 15s
+    const t = setInterval(load, 15000);
     return () => clearInterval(t);
   }, [load]);
 
@@ -107,86 +105,348 @@ export default function SaasOverview() {
     return days >= 0 && days <= 3;
   });
 
+  // ===== Afgeleide metrics — spiegelen 1:1 de beheerder-Overzicht =====
+  const receivedByCur = overview.total_received_by_currency || {};
+  const openByCur = overview.current_month_open_by_currency || {};
+  const primaryCur = Object.keys(openByCur)[0] || Object.keys(receivedByCur)[0] || 'SRD';
+  const currentMonthOpenCount = overview.current_month_open_count || 0;
+  const currentOpenTotal = openByCur[primaryCur] || 0;
+
+  const companiesTotal = overview.companies_total || 0;
+  const activeCount = overview.active || 0;
+  const trialCount = overview.trial || 0;
+  const overdueCount = overview.overdue_invoices || 0;
+  const clientsTotal = companies.length; // 1 admin ≈ 1 klant per bedrijf
+  const activePct = companiesTotal === 0 ? 0 : Math.round((activeCount / companiesTotal) * 100);
+
   return (
     <div data-testid="saas-overview-page">
-      {/* Header */}
-      <div className="flex items-center justify-between gap-2 flex-wrap mb-5">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <Crown className="w-6 h-6 text-orange-500" />
-            <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900 tracking-tight">SaaS Overzicht</h1>
-          </div>
-          <p className="text-sm text-slate-500">Live status van alle bedrijven, proefperiodes en betalingen.</p>
-        </div>
-        <button onClick={load} disabled={refreshing} data-testid="saas-overview-refresh"
-          className="h-10 px-4 rounded-xl bg-white border border-slate-200 hover:border-orange-300 text-sm font-bold text-slate-700 flex items-center gap-2 disabled:opacity-50">
-          <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-          Vernieuwen
-        </button>
-      </div>
+      <PageHeader
+        title="SaaS Overzicht"
+        subtitle="Snelle blik op uw platform · bedrijven, abonnementen en inkomsten"
+        action={
+          <button onClick={load} disabled={refreshing} data-testid="saas-overview-refresh"
+            className="h-10 px-4 rounded-xl bg-white border border-slate-200 hover:border-orange-300 text-sm font-bold text-slate-700 flex items-center gap-2 disabled:opacity-50">
+            <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+            Vernieuwen
+          </button>
+        }
+      />
 
       {err && (
         <div className="mb-4 px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-sm text-red-700">{err}</div>
       )}
 
-      {/* KPI Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
-        <Kpi icon={TrendingUp} label="MRR" value={fmt(overview.mrr, overview.currency)}
-          sub={`${overview.active} actieve abonnement${overview.active === 1 ? '' : 'en'}`}
-          color="emerald" testid="kpi-mrr" />
-        <Kpi icon={Wifi} label="Online nu" value={overview.online_now}
-          sub={`${overview.companies_total} bedrijven totaal`}
-          color="blue" testid="kpi-online" />
-        <Kpi icon={Clock} label="Proefperiode" value={overview.trial}
-          sub={trialExpiring.length > 0 ? `${trialExpiring.length} verlopen binnen 3 dagen` : 'bedrijven testen nu'}
-          color={trialExpiring.length > 0 ? 'amber' : 'orange'} testid="kpi-trial" />
-        <Kpi icon={AlertCircle} label="Verlopen / Opgezegd" value={overview.expired + overview.cancelled}
-          sub={`${overview.expired} verlopen · ${overview.cancelled} opgezegd`}
-          color={overview.expired > 0 ? 'red' : 'slate'} testid="kpi-churn" />
-      </div>
-
-      {/* Action KPIs */}
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
-        <Kpi icon={ScanLine} label="Wacht op OCR-keuring" value={overview.pending_ocr}
-          sub={overview.pending_ocr > 0 ? 'Vereist jouw actie' : 'Alles goedgekeurd'}
-          color={overview.pending_ocr > 0 ? 'amber' : 'emerald'} testid="kpi-ocr" />
-        <Kpi icon={Receipt} label="Open facturen" value={overview.open_invoices}
-          sub={`${overview.paid_invoices} betaalde facturen totaal`}
-          color={overview.open_invoices > 0 ? 'orange' : 'emerald'} testid="kpi-open-invoices" />
-        <Kpi icon={CheckCircle2} label="Betaalde facturen" value={overview.paid_invoices}
-          sub="omgezette inkomsten" color="emerald" testid="kpi-paid-invoices" />
-      </div>
-
-      {/* Kas saldo card + Snelle acties — beheerder-stijl widgets */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mb-6">
-        {/* Kas saldo — totaal ontvangen SaaS-betalingen in SRD */}
-        <div className="bg-gradient-to-br from-emerald-500 to-emerald-600 text-white rounded-2xl p-5 shadow-lg" data-testid="saas-kas-saldo-card">
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-[11px] font-black uppercase tracking-widest opacity-80">Kas saldo (SRD)</p>
-            <Wallet className="w-5 h-5 opacity-80" />
-          </div>
-          <p className="text-3xl font-black">{fmt(overview.total_received_srd || 0, 'SRD')}</p>
-          <p className="text-xs opacity-80 mt-1">
-            {overview.paid_invoices || 0} betaalde facturen totaal
-          </p>
-        </div>
-
-        {/* Snelle acties — direct springen naar veelgebruikte SaaS-taken */}
-        <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-100 p-5" data-testid="saas-quick-actions">
-          <p className="text-[11px] font-black uppercase tracking-widest text-slate-500 mb-3">Snelle acties</p>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            <QuickAction icon={Briefcase} label="Bedrijven" onClick={() => window.dispatchEvent(new CustomEvent('saas-nav', { detail: 'companies' }))} />
-            <QuickAction icon={Users} label="Klanten" onClick={() => window.dispatchEvent(new CustomEvent('saas-nav', { detail: 'saas_clients' }))} />
-            <QuickAction icon={Receipt} label="Facturen" onClick={() => window.dispatchEvent(new CustomEvent('saas-nav', { detail: 'saas_invoices' }))} />
-            <QuickAction icon={ScanLine} label={`OCR (${overview.pending_ocr || 0})`}
-              onClick={() => window.dispatchEvent(new CustomEvent('saas-nav', { detail: 'saas_pending' }))}
-              urgent={overview.pending_ocr > 0} />
-          </div>
+      {/* ===================================================================
+          MOBIEL/TABLET — 4 mini-stats card (spiegel van beheerder mobiel)
+          =================================================================== */}
+      <div className="lg:hidden bg-white rounded-2xl border border-slate-100 shadow-[0_1px_4px_-2px_rgba(15,23,42,0.06)] p-4 mb-4" data-testid="saas-portfolio-card-mobile">
+        <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3">Platform in één oogopslag</p>
+        <div className="grid grid-cols-4 divide-x divide-slate-100">
+          {[
+            { label: 'Bedrijven', value: companiesTotal, icon: Building2, accent: 'bg-orange-50 text-[#FF5C00]' },
+            { label: 'Actief', value: activeCount, icon: TrendingUp, accent: 'bg-emerald-50 text-emerald-600' },
+            { label: 'Proef', value: trialCount, icon: Clock, accent: 'bg-amber-50 text-amber-600' },
+            { label: 'Online', value: overview.online_now, icon: Wifi, accent: 'bg-sky-50 text-sky-600' },
+          ].map((c) => {
+            const Icon = c.icon;
+            return (
+              <div key={c.label} className="px-1.5 first:pl-0 last:pr-0 text-center">
+                <div className={`w-10 h-10 rounded-full ${c.accent} flex items-center justify-center mx-auto mb-2`}>
+                  <Icon className="w-4 h-4" />
+                </div>
+                <p className="text-xl font-black text-slate-900 tracking-tight" data-testid={`saas-stat-m-${c.label.toLowerCase()}`}>{c.value}</p>
+                <p className="text-[10px] text-slate-500 font-semibold mt-0.5">{c.label}</p>
+              </div>
+            );
+          })}
         </div>
       </div>
+
+      {/* ===================================================================
+          DESKTOP — Luxe hero + 4 KPI's + 4 Snelle acties
+          Structuur identiek aan beheerder-Overzicht in AdminDashboard.jsx
+          =================================================================== */}
+      <div className="hidden lg:block">
+        {/* ============ HERO · SaaS Kas Saldo Banking-stijl ============ */}
+        <div
+          className="relative overflow-hidden rounded-3xl mb-5 p-7 text-white shadow-[0_24px_60px_-24px_rgba(15,23,42,0.55)]"
+          style={{
+            background:
+              'radial-gradient(circle at 0% 0%, #2A1A0A 0%, #1A1208 35%, #0B0805 100%)',
+          }}
+          data-testid="saas-hero-cash-balance"
+        >
+          {/* Luxe achtergrondaccenten — goud glow */}
+          <div className="pointer-events-none absolute -top-32 -right-24 w-[28rem] h-[28rem] rounded-full"
+            style={{ background: 'radial-gradient(circle, rgba(255,176,99,0.32) 0%, rgba(255,92,0,0.08) 40%, transparent 70%)' }} />
+          <div className="pointer-events-none absolute -bottom-24 -left-24 w-[22rem] h-[22rem] rounded-full"
+            style={{ background: 'radial-gradient(circle, rgba(212,160,55,0.18) 0%, transparent 65%)' }} />
+          {/* Subtiele grid noise overlay */}
+          <div className="pointer-events-none absolute inset-0 opacity-[0.04]"
+            style={{
+              backgroundImage:
+                'linear-gradient(rgba(255,255,255,0.6) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.6) 1px, transparent 1px)',
+              backgroundSize: '32px 32px',
+            }} />
+
+          <div className="relative flex items-start justify-between gap-6 mb-6">
+            <div>
+              <div className="flex items-center gap-2.5 mb-1.5">
+                <span className="w-9 h-9 rounded-xl flex items-center justify-center"
+                  style={{ background: 'linear-gradient(135deg, #F8C260 0%, #D4A037 60%, #8B6914 100%)' }}>
+                  <Crown className="w-4.5 h-4.5 text-[#1A1208]" />
+                </span>
+                <p className="text-[10px] font-black uppercase tracking-[0.22em]"
+                  style={{ color: '#F0C97A' }}>
+                  SaaS Kas saldo
+                </p>
+              </div>
+              <h2 className="text-3xl font-black tracking-tight leading-tight"
+                style={{
+                  background: 'linear-gradient(90deg, #FFF6D6 0%, #F8C260 60%, #D4A037 100%)',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  backgroundClip: 'text',
+                }}>
+                Totaal ontvangen
+              </h2>
+              <p className="text-xs text-white/50 font-semibold mt-1">
+                Alle betaalde abonnementen · Bron: Subscription facturen
+              </p>
+            </div>
+            <button onClick={() => window.dispatchEvent(new CustomEvent('saas-nav', { detail: 'saas_invoices' }))}
+              data-testid="saas-hero-cash-cta"
+              className="group inline-flex items-center gap-2 px-4 h-10 rounded-full text-xs font-black tracking-wider uppercase transition-all border"
+              style={{
+                background: 'linear-gradient(135deg, rgba(248,194,96,0.18) 0%, rgba(212,160,55,0.08) 100%)',
+                borderColor: 'rgba(248,194,96,0.35)',
+                color: '#F8C260',
+              }}>
+              Bekijk facturen
+              <ArrowUpRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+            </button>
+          </div>
+
+          {/* 3 Currency tiles — banking style */}
+          <div className="relative grid grid-cols-3 gap-4">
+            {[
+              { cur: 'SRD', label: 'Surinaamse Dollar', symbol: 'SRD' },
+              { cur: 'EUR', label: 'Euro', symbol: '€' },
+              { cur: 'USD', label: 'US Dollar', symbol: '$' },
+            ].map(({ cur, label, symbol }) => {
+              const v = receivedByCur[cur] || 0;
+              const positive = v >= 0;
+              return (
+                <div key={cur}
+                  className="relative rounded-2xl p-4 overflow-hidden backdrop-blur-sm"
+                  style={{
+                    background: 'linear-gradient(160deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.015) 100%)',
+                    border: '1px solid rgba(248,194,96,0.18)',
+                  }}
+                  data-testid={`saas-hero-cash-tile-${cur.toLowerCase()}`}>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-black tracking-[0.18em] uppercase"
+                        style={{ color: '#F0C97A' }}>{cur}</span>
+                      <span className="text-[10px] text-white/40 font-semibold">{label}</span>
+                    </div>
+                    <span className="inline-flex w-6 h-6 rounded-full items-center justify-center"
+                      style={{ background: 'rgba(248,194,96,0.12)' }}>
+                      <TrendingUp className="w-3 h-3" style={{ color: positive ? '#86EFAC' : '#FCA5A5' }} />
+                    </span>
+                  </div>
+                  <p className="text-3xl font-black tracking-tight leading-none text-white"
+                    data-testid={`saas-kpi-cash-${cur.toLowerCase()}`}>
+                    <span className="text-base font-bold opacity-60 mr-1">{symbol === 'SRD' ? '' : symbol}</span>
+                    {Math.round(v).toLocaleString('nl-NL')}
+                  </p>
+                  <div className="mt-3 h-px w-full"
+                    style={{ background: 'linear-gradient(90deg, transparent 0%, rgba(248,194,96,0.4) 50%, transparent 100%)' }} />
+                  <p className="text-[10px] text-white/40 font-semibold mt-1.5">Ontvangen totaal</p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* ============ KPI rij — 4 tegels ============ */}
+        <div className="grid grid-cols-4 gap-4 mb-5">
+          {/* Bedrijven */}
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-[0_1px_4px_-2px_rgba(15,23,42,0.06)] p-5 relative overflow-hidden hover:border-orange-200 transition-colors">
+            <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-orange-100/40 to-transparent rounded-full -translate-y-6 translate-x-6 pointer-events-none" />
+            <div className="flex items-start gap-3 relative">
+              <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-orange-100 to-orange-50 flex items-center justify-center shrink-0 shadow-inner">
+                <Building2 className="w-5 h-5 text-[#FF5C00]" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Bedrijven</p>
+                <p className="text-3xl font-black text-slate-900 tracking-tight leading-none mt-1" data-testid="saas-kpi-companies">
+                  {companiesTotal}
+                </p>
+                <p className="text-[11px] text-slate-500 font-semibold mt-1.5">
+                  <span className="text-emerald-600">{activeCount} actief</span>
+                  {trialCount > 0 && <span className="text-slate-400"> · {trialCount} proef</span>}
+                </p>
+              </div>
+            </div>
+            <div className="mt-3 h-1.5 w-full rounded-full bg-slate-100 overflow-hidden">
+              <div className="h-full bg-gradient-to-r from-[#F8C260] to-[#FF5C00] transition-all" style={{ width: `${activePct}%` }} />
+            </div>
+            <p className="text-[10px] text-slate-400 font-bold mt-1.5">{activePct}% actieve abonnementen</p>
+          </div>
+
+          {/* Klanten */}
+          <button onClick={() => window.dispatchEvent(new CustomEvent('saas-nav', { detail: 'saas_clients' }))}
+            data-testid="saas-kpi-clients-cta"
+            className="text-left bg-white rounded-2xl border border-slate-100 shadow-[0_1px_4px_-2px_rgba(15,23,42,0.06)] p-5 relative overflow-hidden hover:border-amber-200 transition-colors">
+            <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-amber-100/40 to-transparent rounded-full -translate-y-6 translate-x-6 pointer-events-none" />
+            <div className="flex items-start gap-3 relative">
+              <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-amber-100 to-amber-50 flex items-center justify-center shrink-0 shadow-inner">
+                <Users className="w-5 h-5 text-amber-600" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Klanten</p>
+                <p className="text-3xl font-black text-slate-900 tracking-tight leading-none mt-1" data-testid="saas-kpi-clients">
+                  {clientsTotal}
+                </p>
+                <p className="text-[11px] text-slate-500 font-semibold mt-1.5">
+                  {overview.online_now} nu online
+                </p>
+              </div>
+            </div>
+            <p className="mt-3 text-[11px] text-[#FF5C00] font-bold">Bekijk alle klanten →</p>
+          </button>
+
+          {/* Open · lopende maand */}
+          <button onClick={() => window.dispatchEvent(new CustomEvent('saas-nav', { detail: 'saas_invoices' }))}
+            data-testid="saas-kpi-current-open"
+            className="text-left bg-white rounded-2xl border border-slate-100 shadow-[0_1px_4px_-2px_rgba(15,23,42,0.06)] p-5 relative overflow-hidden hover:border-orange-200 transition-colors">
+            <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-orange-100/40 to-transparent rounded-full -translate-y-6 translate-x-6 pointer-events-none" />
+            <div className="flex items-start gap-3 relative">
+              <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-orange-100 to-orange-50 flex items-center justify-center shrink-0 shadow-inner">
+                <Receipt className="w-5 h-5 text-[#FF5C00]" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Open · lopende maand</p>
+                <p className="text-3xl font-black text-[#FF5C00] tracking-tight leading-none mt-1">
+                  {currentMonthOpenCount}
+                </p>
+                <p className="text-[11px] text-slate-500 font-semibold mt-1.5 truncate">
+                  {currentOpenTotal > 0 ? fmtMoney(currentOpenTotal, primaryCur) : 'Nog te innen'}
+                </p>
+              </div>
+            </div>
+            <p className="mt-3 text-[11px] text-[#FF5C00] font-bold">Bekijk facturen →</p>
+          </button>
+
+          {/* Achterstand */}
+          <button onClick={() => window.dispatchEvent(new CustomEvent('saas-nav', { detail: 'saas_invoices' }))}
+            data-testid="saas-kpi-overdue"
+            className={`text-left rounded-2xl p-5 relative overflow-hidden transition-shadow ${
+              overdueCount > 0
+                ? 'bg-gradient-to-br from-red-500 via-red-600 to-red-700 text-white border border-red-700 hover:shadow-[0_12px_28px_-8px_rgba(220,38,38,0.5)]'
+                : 'bg-white border border-slate-100 shadow-[0_1px_4px_-2px_rgba(15,23,42,0.06)] hover:border-emerald-200'
+            }`}>
+            <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-white/10 to-transparent rounded-full -translate-y-6 translate-x-6 pointer-events-none" />
+            <div className="flex items-start gap-3 relative">
+              <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 shadow-inner ${
+                overdueCount > 0 ? 'bg-white/20' : 'bg-gradient-to-br from-emerald-100 to-emerald-50'
+              }`}>
+                <AlertCircle className={`w-5 h-5 ${overdueCount > 0 ? 'text-white' : 'text-emerald-600'}`} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className={`text-[10px] font-black uppercase tracking-widest ${overdueCount > 0 ? 'text-white/80' : 'text-slate-400'}`}>
+                  Achterstand
+                </p>
+                <p className={`text-3xl font-black tracking-tight leading-none mt-1 ${overdueCount > 0 ? 'text-white' : 'text-slate-900'}`}>
+                  {overdueCount}
+                </p>
+                <p className={`text-[11px] font-semibold mt-1.5 ${overdueCount > 0 ? 'text-white/90' : 'text-emerald-600'}`}>
+                  {overdueCount > 0
+                    ? `Facturen te laat`
+                    : 'Alles op tijd ✓'}
+                </p>
+              </div>
+            </div>
+            <p className={`mt-3 text-[11px] font-bold ${overdueCount > 0 ? 'text-white' : 'text-emerald-600'}`}>
+              {overdueCount > 0 ? 'Direct opvolgen →' : 'Geen actie nodig'}
+            </p>
+          </button>
+        </div>
+
+        {/* ============ Snelle acties — 4 knoppen ============ */}
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-[0_1px_4px_-2px_rgba(15,23,42,0.06)] p-3.5 mb-5">
+          <div className="flex items-center justify-between mb-2.5 px-1.5">
+            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Snelle acties</p>
+            <span className="text-[10px] text-slate-400 font-semibold">Klik om naar de sectie te springen</span>
+          </div>
+          <div className="grid grid-cols-4 gap-2.5">
+            <button onClick={() => window.dispatchEvent(new CustomEvent('saas-nav', { detail: 'saas_invoices' }))}
+              data-testid="saas-quick-new-invoice"
+              className="group flex items-center gap-3 p-3 rounded-xl bg-gradient-to-br from-orange-50 to-orange-100/40 hover:from-orange-100 hover:to-orange-200/60 border border-orange-100 hover:border-orange-300 transition-all">
+              <div className="w-10 h-10 rounded-lg bg-white/80 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                <FileText className="w-5 h-5 text-[#FF5C00]" />
+              </div>
+              <div className="text-left">
+                <p className="text-sm font-black text-slate-900">Facturen</p>
+                <p className="text-[10px] text-slate-500 font-semibold">Abonnementen beheren</p>
+              </div>
+            </button>
+            <button onClick={() => window.dispatchEvent(new CustomEvent('saas-nav', { detail: 'companies' }))}
+              data-testid="saas-quick-new-company"
+              className="group flex items-center gap-3 p-3 rounded-xl bg-gradient-to-br from-amber-50 to-amber-100/40 hover:from-amber-100 hover:to-amber-200/60 border border-amber-100 hover:border-amber-300 transition-all">
+              <div className="w-10 h-10 rounded-lg bg-white/80 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                <Briefcase className="w-5 h-5 text-amber-600" />
+              </div>
+              <div className="text-left">
+                <p className="text-sm font-black text-slate-900">Bedrijven</p>
+                <p className="text-[10px] text-slate-500 font-semibold">Nieuw bedrijf toevoegen</p>
+              </div>
+            </button>
+            <button onClick={() => window.dispatchEvent(new CustomEvent('saas-nav', { detail: 'saas_clients' }))}
+              data-testid="saas-quick-new-client"
+              className="group flex items-center gap-3 p-3 rounded-xl bg-gradient-to-br from-emerald-50 to-emerald-100/40 hover:from-emerald-100 hover:to-emerald-200/60 border border-emerald-100 hover:border-emerald-300 transition-all">
+              <div className="w-10 h-10 rounded-lg bg-white/80 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                <UserPlus className="w-5 h-5 text-emerald-600" />
+              </div>
+              <div className="text-left">
+                <p className="text-sm font-black text-slate-900">Klanten</p>
+                <p className="text-[10px] text-slate-500 font-semibold">Klantenbeheer openen</p>
+              </div>
+            </button>
+            <button onClick={() => window.dispatchEvent(new CustomEvent('saas-nav', { detail: 'saas_pending' }))}
+              data-testid="saas-quick-ocr"
+              className={`group flex items-center gap-3 p-3 rounded-xl transition-shadow border ${
+                overview.pending_ocr > 0
+                  ? 'text-white hover:shadow-[0_10px_24px_-8px_rgba(255,92,0,0.5)] border-orange-600'
+                  : 'bg-gradient-to-br from-slate-50 to-slate-100/40 hover:from-slate-100 hover:to-slate-200/60 border-slate-100 hover:border-slate-300'
+              }`}
+              style={overview.pending_ocr > 0 ? { background: 'linear-gradient(135deg, #FF8A3D 0%, #FF5C00 55%, #C74600 100%)' } : {}}>
+              <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform ${
+                overview.pending_ocr > 0 ? 'bg-white/20' : 'bg-white/80'
+              }`}>
+                <ScanLine className={`w-5 h-5 ${overview.pending_ocr > 0 ? 'text-white' : 'text-slate-700'}`} />
+              </div>
+              <div className="text-left">
+                <p className={`text-sm font-black ${overview.pending_ocr > 0 ? 'text-white' : 'text-slate-900'}`}>
+                  OCR ({overview.pending_ocr || 0})
+                </p>
+                <p className={`text-[10px] font-semibold ${overview.pending_ocr > 0 ? 'text-white/80' : 'text-slate-500'}`}>
+                  {overview.pending_ocr > 0 ? 'Wacht op keuring' : 'Alles goedgekeurd'}
+                </p>
+              </div>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* ===================================================================
+          SaaS-specifieke live-widgets (blijven onder de KPI-rij staan)
+          =================================================================== */}
 
       {/* Online bedrijven — live presence */}
-      <section className="bg-white rounded-2xl border border-slate-100 mb-6" data-testid="online-section">
+      <section className="bg-white rounded-2xl border border-slate-100 shadow-[0_1px_4px_-2px_rgba(15,23,42,0.06)] mb-6" data-testid="online-section">
         <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="relative flex h-3 w-3">
@@ -254,7 +514,7 @@ export default function SaasOverview() {
       )}
 
       {/* Recent gezien (offline) */}
-      <section className="bg-white rounded-2xl border border-slate-100" data-testid="offline-section">
+      <section className="bg-white rounded-2xl border border-slate-100 shadow-[0_1px_4px_-2px_rgba(15,23,42,0.06)]" data-testid="offline-section">
         <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
           <h2 className="font-extrabold text-slate-900">Recent gezien · {offlineCompanies.length}</h2>
           <p className="text-[11px] text-slate-400">gesorteerd op laatst actief</p>
@@ -279,7 +539,7 @@ export default function SaasOverview() {
           {offlineCompanies.length > 10 && (
             <div className="px-5 py-3 text-center">
               <button
-                onClick={() => window.dispatchEvent(new CustomEvent('go-tab', { detail: 'companies' }))}
+                onClick={() => window.dispatchEvent(new CustomEvent('saas-nav', { detail: 'companies' }))}
                 className="text-sm font-bold text-orange-600 hover:text-orange-700 inline-flex items-center gap-1"
                 data-testid="see-all-companies">
                 Bekijk alle {companies.length} bedrijven <ArrowRight className="w-4 h-4" />
@@ -403,18 +663,3 @@ function DangerZone({ onDone }) {
     </section>
   );
 }
-
-function QuickAction({ icon: Icon, label, onClick, urgent }) {
-  return (
-    <button onClick={onClick} data-testid={`quick-${label.toLowerCase().replace(/[^a-z]/g, '-')}`}
-      className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border transition active:scale-95 ${
-        urgent
-          ? 'bg-amber-50 border-amber-200 hover:bg-amber-100'
-          : 'bg-slate-50 border-slate-200 hover:bg-slate-100 hover:border-orange-200'
-      }`}>
-      <Icon className={`w-5 h-5 ${urgent ? 'text-amber-700' : 'text-slate-700'}`} />
-      <span className={`text-[11px] font-black uppercase tracking-wider ${urgent ? 'text-amber-800' : 'text-slate-700'}`}>{label}</span>
-    </button>
-  );
-}
-
