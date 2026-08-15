@@ -3098,12 +3098,24 @@ async def public_company_landing(request: Request, host: Optional[str] = None):
     if not target or any(target == s or target.endswith("." + s) for s in SYSTEM_HOSTS_SUFFIXES):
         return {"found": False}
 
+    # Zoek eerst op companies.custom_domain (legacy), dan op company_settings.domain.custom_domain.
     company = await db.companies.find_one(
         {"custom_domain": target},
         {"_id": 0, "id": 1, "name": 1, "slug": 1, "branding": 1, "address": 1,
          "contact_email": 1, "contact_phone": 1, "whatsapp_phone": 1,
          "kkf_number": 1},
     )
+    if not company:
+        settings_doc = await db.company_settings.find_one(
+            {"domain.custom_domain": target, "domain.enabled": True},
+            {"_id": 0, "company_id": 1},
+        )
+        if settings_doc:
+            company = await db.companies.find_one(
+                {"id": settings_doc["company_id"]},
+                {"_id": 0, "id": 1, "name": 1, "slug": 1, "branding": 1, "address": 1,
+                 "contact_email": 1, "contact_phone": 1, "whatsapp_phone": 1, "kkf_number": 1},
+            )
     if not company:
         return {"found": False}
 
@@ -3540,16 +3552,40 @@ async def public_branding_default():
 
 @api.get("/public/branding-by-host")
 async def public_branding_by_host(request: Request):
-    """Resolve company branding using the HTTP Host header.
-    Used when the app is deployed with wildcard DNS *.app.<root>
-    (e.g. klantnaam.app.surirent.sr → slug=klantnaam).
-    Returns {slug, ...branding} or {slug: null} if the host has no usable subdomain.
+    """Resolve company branding via de HTTP Host header. Ondersteunt:
+      1. Wildcard DNS: `<slug>.app.<root>` → slug = subdomein
+      2. Custom domain via companies.custom_domain (legacy)
+      3. Custom domain via company_settings.domain.custom_domain (nieuw)
+    Returns {slug, ...branding} of {slug: null} als geen match.
     """
     host = (request.headers.get("x-forwarded-host") or request.headers.get("host") or "").lower()
-    # Strip optional port
     host = host.split(":")[0].split(",")[0].strip()
+
+    # === Strategie 1: check custom domain (voorrang boven subdomein) ===
+    # System hosts uitsluiten zodat surirent.sr / *.emergentagent.com nooit
+    # per ongeluk als custom domain worden geïnterpreteerd.
+    SYSTEM_HOSTS = ("surirent.sr", "emergentagent.com", "localhost", "127.0.0.1")
+    is_system = not host or any(host == s or host.endswith("." + s) for s in SYSTEM_HOSTS)
+    if not is_system:
+        # a) Legacy companies.custom_domain
+        c = await db.companies.find_one({"custom_domain": host}, {"_id": 0})
+        # b) Nieuwe company_settings.domain.custom_domain + enabled
+        if not c:
+            s = await db.company_settings.find_one(
+                {"domain.custom_domain": host, "domain.enabled": True},
+                {"_id": 0, "company_id": 1},
+            )
+            if s:
+                c = await db.companies.find_one({"id": s["company_id"]}, {"_id": 0})
+        if c:
+            out = _company_branding_response(c)
+            out["host"] = host
+            out["found"] = True
+            out["match"] = "custom_domain"
+            return out
+
+    # === Strategie 2: wildcard subdomein <slug>.app.<root> ===
     parts = [p for p in host.split(".") if p]
-    # Need at least 3 segments (slug.app.<root>) and first part may not be 'app'/'www'.
     if len(parts) < 3:
         return {"slug": None, "host": host}
     first = parts[0]
@@ -3561,6 +3597,7 @@ async def public_branding_by_host(request: Request):
     out = _company_branding_response(c)
     out["host"] = host
     out["found"] = True
+    out["match"] = "subdomain"
     return out
 
 
@@ -11467,6 +11504,52 @@ async def test_settings_section(section: str, user=Depends(get_current_user)):
         "section": section,
         "ok": False,
         "detail": "Test endpoint nog niet geïmplementeerd voor deze sectie. Wordt in een volgende fase toegevoegd.",
+    }
+
+
+# ============== Domain target info (voor DNS instructies) ==============
+@api.get("/public/domain-resolve")
+async def public_domain_resolve(host: str = ""):
+    """Publieke lichtgewicht resolver — geeft tenant slug + branding terug
+    voor een gegeven hostname. De frontend roept dit aan bij page-load
+    wanneer de huidige hostname geen platform-host is, om te bepalen
+    voor welke tenant we routen. Geen auth vereist — response is bewust
+    beperkt tot niet-gevoelige branding info.
+    """
+    import re
+    target = (host or "").strip().lower()
+    # Strip poortnummer indien aanwezig
+    target = re.sub(r":\d+$", "", target)
+    SYSTEM_HOSTS = ("surirent.sr", "emergentagent.com", "localhost", "127.0.0.1")
+    if not target or any(target == s or target.endswith("." + s) for s in SYSTEM_HOSTS):
+        return {"found": False, "reason": "system_host"}
+
+    # 1) legacy: companies.custom_domain
+    co = await db.companies.find_one(
+        {"custom_domain": target},
+        {"_id": 0, "id": 1, "slug": 1, "name": 1, "branding": 1},
+    )
+    # 2) nieuwe locatie: company_settings.domain.custom_domain + enabled
+    if not co:
+        s = await db.company_settings.find_one(
+            {"domain.custom_domain": target, "domain.enabled": True},
+            {"_id": 0, "company_id": 1},
+        )
+        if s:
+            co = await db.companies.find_one(
+                {"id": s["company_id"]},
+                {"_id": 0, "id": 1, "slug": 1, "name": 1, "branding": 1},
+            )
+    if not co:
+        return {"found": False}
+    b = co.get("branding") or {}
+    return {
+        "found": True,
+        "slug": co.get("slug"),
+        "name": co.get("name"),
+        "app_name": b.get("app_name") or co.get("name"),
+        "primary_color": _hex_color(b.get("primary_color")),
+        "logo_url": b.get("logo_url") or "",
     }
 
 

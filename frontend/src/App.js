@@ -138,11 +138,26 @@ function useTenantLandingResolver() {
     (async () => {
       try {
         const backend = process.env.REACT_APP_BACKEND_URL || '';
-        const res = await fetch(`${backend}/api/public/company-landing`, {
+        // Prefer /company-landing (heeft ook apartments + landing content).
+        // Als backend nog niet is uitgerold met custom_domain fallback,
+        // val terug op /domain-resolve om ten minste de slug te vinden.
+        let res = await fetch(`${backend}/api/public/company-landing`, {
           headers: { 'X-Forwarded-Host': host },
         });
-        if (!res.ok) throw new Error('bad status');
-        const data = await res.json();
+        let data = res.ok ? await res.json() : { found: false };
+        if (!data.found) {
+          // Fallback: pak alleen de slug via de lichtgewicht resolver.
+          const r2 = await fetch(`${backend}/api/public/domain-resolve?host=${encodeURIComponent(host)}`);
+          const d2 = r2.ok ? await r2.json() : { found: false };
+          if (d2.found && d2.slug) {
+            data = {
+              found: true,
+              company: { slug: d2.slug, name: d2.name, branding: { primary_color: d2.primary_color, logo_url: d2.logo_url, app_name: d2.app_name } },
+              apartments: [],
+              content: null,
+            };
+          }
+        }
         if (cancel) return;
         if (data.found) {
           setState({ status: 'tenant', ...data });
@@ -251,11 +266,42 @@ export default function App() {
     return <RouteFallback />;
   }
   if (tenant.status === 'tenant') {
+    // Bij een custom-domain visit renderen we de volledige branded app zoals
+    // wanneer je via `/{slug}/...` zou binnenkomen — landing, login, kiosk,
+    // huurder-portal en admin werken allemaal onder het custom domein.
+    // De resolved slug wordt uit `tenant.company.slug` gehaald.
+    const slug = tenant.company?.slug || '';
     return (
       <AuthProvider>
         <Suspense fallback={<RouteFallback />}>
-          <TenantPublicLanding company={tenant.company} apartments={tenant.apartments} content={tenant.content} editMode={false} />
+          <Routes>
+            {/* Root op custom domain = tenant landing page */}
+            <Route path="/" element={
+              <TenantPublicLanding
+                company={tenant.company}
+                apartments={tenant.apartments}
+                content={tenant.content}
+                editMode={false} />
+            } />
+            {/* Alle overige app-paden gaan door BrandedRouteTree met de
+                pre-resolved slug — die zit in de path zodat useParams() nog
+                gewoon werkt in BrandedShell. We prefix intern zonder URL wijziging. */}
+            <Route path="/login" element={<Navigate to={`/${slug}/login`} replace />} />
+            <Route path="/admin/*" element={<Navigate to={`/${slug}/admin`} replace />} />
+            <Route path="/kiosk" element={<Navigate to={`/${slug}/kiosk`} replace />} />
+            <Route path="/kiosk/huurder" element={<Navigate to={`/${slug}/kiosk/huurder`} replace />} />
+            <Route path="/kiosk/klant" element={<Navigate to={`/${slug}/kiosk/klant`} replace />} />
+            <Route path="/huurder" element={<Navigate to={`/${slug}/kiosk/huurder`} replace />} />
+            <Route path="/onderteken/:token" element={<ContractSignPage />} />
+            <Route path="/qr-link" element={<QrLinkPage />} />
+            {/* Branded routes matchen door — zelfde als HybridRoutes */}
+            <Route path="/:slug/*" element={<BrandedRouteTree />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
         </Suspense>
+        <InstallPrompt />
+        <PersonalPinSetup />
+        <RotateNotice />
       </AuthProvider>
     );
   }
