@@ -31,3 +31,5 @@ saas_email = None          # async (to_email, subject, body_html) -> bool
 iso = None                 # datetime → ISO-string helper
 now_utc = None             # aware datetime.now(timezone.utc) helper
 new_id = None              # nieuwe UUID string
+billing_summary = None     # (company_doc) -> {billing_status, monthly_amount, currency, ...}
+is_online = None           # (last_seen_iso, threshold_seconds=300) -> bool

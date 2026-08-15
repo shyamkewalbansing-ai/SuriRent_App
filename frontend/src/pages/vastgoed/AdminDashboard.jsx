@@ -2954,12 +2954,27 @@ export default function AdminDashboard() {
   }, [location.pathname, tabs, tab, navigate]);
 
   // tab → URL sync (zonder rerender storm). Update browser URL bij tab wissel.
-  const handleSetTab = (id) => {
-    // Speciale tab: `saas_kiosk` opent de SuriRent kiosk in een nieuw tabblad
-    // i.p.v. de admin-tab te wisselen (SaaS eigenaar heeft eigen kiosk).
+  const handleSetTab = async (id) => {
+    // Speciale tab: `saas_kiosk` opent de SuriRent kiosk. Voor superadmin
+    // moet eerst een kiosk-token opgehaald worden via /auth/admin-to-kiosk
+    // (zelfde flow als de "Open Kiosk" knop). Zonder dit token toont de
+    // kiosk-pagina de PIN-login of blijft leeg.
     if (id === 'saas_kiosk') {
-      const slug = activeCompany?.slug || 'surirent';
-      window.open(`/${slug}/kiosk`, '_blank', 'noopener');
+      try { localStorage.setItem('pwa_preferred_role', 'kiosk'); } catch { /* noop */ }
+      try {
+        const activeCid = localStorage.getItem('active_company_id') || undefined;
+        const { data } = await api.post('/auth/admin-to-kiosk',
+          activeCid ? { company_id: activeCid } : {});
+        if (data?.token) localStorage.setItem('kiosk_token', data.token);
+        if (data?.company) localStorage.setItem('kiosk_company', JSON.stringify(data.company));
+      } catch (e) {
+        alert('Kon kiosk niet openen: ' + (e?.response?.data?.detail || e.message));
+        return;
+      }
+      // Same-tab navigatie (nieuwe tab wordt door popup blockers geblokkeerd
+      // omdat de window.open na een await komt). Superadmin kan via de
+      // browser back knop terug naar het SaaS dashboard.
+      navigate('/kiosk');
       return;
     }
     setTab(id);

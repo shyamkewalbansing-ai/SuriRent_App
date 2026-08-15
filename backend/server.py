@@ -4460,149 +4460,6 @@ def _is_online(last_seen_iso: str | None, threshold_seconds: int = 300) -> bool:
         return False
 
 
-@api.get("/superadmin/overview")
-async def superadmin_overview(user=Depends(require_role("superadmin"))):
-    """Aggregate metrics for the superadmin dashboard, incl. online count."""
-    companies = await db.companies.find({}, {"_id": 0}).to_list(1000)
-    total = len(companies)
-    trial = active = expired = cancelled = online_now = 0
-    mrr = 0.0
-    for c in companies:
-        s = _billing_summary(c)
-        st = s["billing_status"]
-        if st == "trial":
-            trial += 1
-        elif st == "active":
-            active += 1
-            mrr += (s.get("monthly_amount") or 0)
-        elif st == "expired":
-            expired += 1
-        elif st == "cancelled":
-            cancelled += 1
-        if _is_online(c.get("last_seen_at")):
-            online_now += 1
-    paid_invoices = await db.subscription_invoices.count_documents({"status": "paid"})
-    pending_ocr = await db.saas_payment_requests.count_documents({"status": "pending_approval"})
-    open_invoices = await db.subscription_invoices.count_documents({"status": {"$in": ["open", "overdue"]}})
-    overdue_invoices = await db.subscription_invoices.count_documents({"status": "overdue"})
-
-    # Aggregeer ontvangen SaaS-inkomsten per valuta (Kas saldo hero).
-    # Bron: `subscription_payments` — bevat alle ontvangen bedragen én
-    # handmatige mutaties/refunds (positief = in, negatief = uit).
-    total_received_by_currency: dict[str, float] = {}
-    total_received_srd = 0.0
-    async for pmt in db.subscription_payments.find({}, {"_id": 0, "amount": 1, "currency": 1}):
-        cur = (pmt.get("currency") or "SRD").upper()
-        amt = float(pmt.get("amount") or 0)
-        total_received_by_currency[cur] = total_received_by_currency.get(cur, 0.0) + amt
-        if cur == "SRD":
-            total_received_srd += amt
-
-    # Open facturen in de lopende maand — per valuta + telling.
-    now = now_utc()
-    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    if month_start.month == 12:
-        month_end = month_start.replace(year=month_start.year + 1, month=1)
-    else:
-        month_end = month_start.replace(month=month_start.month + 1)
-    current_month_open_by_currency: dict[str, float] = {}
-    current_month_open_count = 0
-    async for iv in db.subscription_invoices.find({
-        "status": {"$in": ["open", "overdue"]},
-        "created_at": {"$gte": iso(month_start), "$lt": iso(month_end)},
-    }, {"_id": 0, "amount": 1, "currency": 1}):
-        cur = (iv.get("currency") or "SRD").upper()
-        amt = float(iv.get("amount") or 0)
-        current_month_open_by_currency[cur] = current_month_open_by_currency.get(cur, 0.0) + amt
-        current_month_open_count += 1
-
-    return {
-        "companies_total": total,
-        "trial": trial, "active": active, "expired": expired, "cancelled": cancelled,
-        "online_now": online_now,
-        "mrr": mrr, "currency": "SRD",
-        "paid_invoices": paid_invoices,
-        "open_invoices": open_invoices,
-        "overdue_invoices": overdue_invoices,
-        "pending_ocr": pending_ocr,
-        "total_received_srd": total_received_srd,
-        "total_received_by_currency": total_received_by_currency,
-        "current_month_open_count": current_month_open_count,
-        "current_month_open_by_currency": current_month_open_by_currency,
-    }
-
-
-@api.get("/superadmin/online-status")
-async def superadmin_online_status(user=Depends(require_role("superadmin"))):
-    """Returns per-company online status: last_seen, online (bool), billing_status,
-    plus a count of users seen in the last 5 min. Voor de SaaS Overzicht widget."""
-    companies = await db.companies.find({}, {"_id": 0}).to_list(1000)
-    # Bouw mapping user.company_id -> aantal recent gezien (<= 5 min).
-    threshold = now_utc().timestamp() - 300
-    recent_user_counts: dict[str, int] = {}
-    async for u in db.users.find(
-        {"last_seen_at": {"$exists": True}, "company_id": {"$ne": None}},
-        {"_id": 0, "company_id": 1, "last_seen_at": 1},
-    ):
-        try:
-            ts = datetime.fromisoformat(str(u["last_seen_at"]).replace("Z", "+00:00")).timestamp()
-            if ts >= threshold:
-                cid = u.get("company_id")
-                if cid:
-                    recent_user_counts[cid] = recent_user_counts.get(cid, 0) + 1
-        except Exception:
-            continue
-
-    rows = []
-    for c in companies:
-        last_seen = c.get("last_seen_at")
-        s = _billing_summary(c)
-        rows.append({
-            "id": c.get("id"),
-            "name": c.get("name"),
-            "slug": c.get("slug"),
-            "last_seen_at": last_seen,
-            "online": _is_online(last_seen),
-            "active_users": recent_user_counts.get(c.get("id"), 0),
-            "billing_status": s["billing_status"],
-            "plan": c.get("plan"),
-            "trial_ends_at": c.get("trial_ends_at"),
-            "monthly_amount": s.get("monthly_amount"),
-            "currency": s.get("currency") or "SRD",
-        })
-    # Sort: online first, then most recent last_seen_at desc.
-    rows.sort(key=lambda r: (
-        0 if r["online"] else 1,
-        -(datetime.fromisoformat(str(r["last_seen_at"]).replace("Z", "+00:00")).timestamp()
-           if r["last_seen_at"] else 0),
-    ))
-    return {
-        "companies": rows,
-        "total_online": sum(1 for r in rows if r["online"]),
-        "threshold_seconds": 300,
-        "checked_at": iso(now_utc()),
-    }
-
-
-@api.get("/superadmin/subscription-invoices")
-async def list_subscription_invoices(user=Depends(require_role("superadmin"))):
-    docs = await db.subscription_invoices.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
-    return docs
-
-
-@api.post("/superadmin/subscription-invoices/{inv_id}/mark-paid")
-async def mark_invoice_paid(inv_id: str, user=Depends(require_role("superadmin"))):
-    from pymongo import ReturnDocument
-    res = await db.subscription_invoices.find_one_and_update(
-        {"id": inv_id},
-        {"$set": {"status": "paid", "paid_at": iso(now_utc())}},
-        projection={"_id": 0}, return_document=ReturnDocument.AFTER,
-    )
-    if not res:
-        raise HTTPException(status_code=404, detail="Factuur niet gevonden")
-    return res
-
-
 class SubscriptionPaymentIn(BaseModel):
     company_id: str
     amount: float
@@ -4611,12 +4468,6 @@ class SubscriptionPaymentIn(BaseModel):
     reference: Optional[str] = ""
     note: Optional[str] = ""
     paid_at: Optional[str] = None  # ISO date; defaults to now
-
-
-@api.get("/superadmin/subscription-payments")
-async def list_subscription_payments(user=Depends(require_role("superadmin"))):
-    docs = await db.subscription_payments.find({}, {"_id": 0}).sort("paid_at", -1).to_list(500)
-    return docs
 
 
 @api.get("/superadmin/saas-pending-approvals")
@@ -12369,6 +12220,7 @@ app.include_router(api)
 from routes import _deps as _route_deps  # noqa: E402
 from routes import nfc as _nfc_routes    # noqa: E402
 from routes import saas_ops as _saas_ops_routes  # noqa: E402
+from routes import superadmin as _superadmin_routes  # noqa: E402
 
 _route_deps.db = db
 _route_deps.get_current_user = get_current_user
@@ -12380,8 +12232,11 @@ _route_deps.saas_email = _saas_email
 _route_deps.iso = iso
 _route_deps.now_utc = now_utc
 _route_deps.new_id = new_id
+_route_deps.billing_summary = _billing_summary
+_route_deps.is_online = _is_online
 app.include_router(_nfc_routes.router, prefix="/api")
 app.include_router(_saas_ops_routes.router, prefix="/api")
+app.include_router(_superadmin_routes.router, prefix="/api")
 
 async def _notify_tenant_installment_paid(plan_id: str, seq: int) -> None:
     """Stuur een korte WhatsApp/SMS bevestiging naar de huurder na een
