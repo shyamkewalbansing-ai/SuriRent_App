@@ -14,8 +14,10 @@ routes uit server.py verplaatsen naar deze module.
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel, Field
 
 from . import _deps
 
@@ -201,6 +203,314 @@ async def mark_invoice_paid(inv_id: str, user: dict = Depends(_superadmin)):
 async def list_subscription_payments(user: dict = Depends(_superadmin)):
     docs = await _deps.db.subscription_payments.find({}, {"_id": 0}).sort("paid_at", -1).to_list(500)
     return docs
+
+
+# =====================================================================
+# Handmatige factuur aanmaken (POST /superadmin/subscription-invoices)
+# =====================================================================
+
+
+class NewInvoiceIn(BaseModel):
+    company_id: str
+    amount: float = Field(..., gt=0)
+    currency: Literal["SRD", "USD", "EUR"] = "SRD"
+    plan: Optional[str] = None                     # bv "starter", "pro"
+    period_start: Optional[str] = None             # ISO; default = now
+    period_end: Optional[str] = None               # ISO; default = +30 dagen
+    note: Optional[str] = ""
+
+
+@router.post("/superadmin/subscription-invoices")
+async def create_subscription_invoice(body: NewInvoiceIn,
+                                       user: dict = Depends(_superadmin)):
+    db = _deps.db
+    c = await db.companies.find_one({"id": body.company_id}, {"_id": 0})
+    if not c:
+        raise HTTPException(status_code=404, detail="Bedrijf niet gevonden")
+    now = _deps.now_utc()
+    period_start = body.period_start or _deps.iso(now)
+    period_end = body.period_end or _deps.iso(now + timedelta(days=30))
+    inv = {
+        "id": _deps.new_id(),
+        "company_id": body.company_id,
+        "company_name": c.get("name", ""),
+        "plan": body.plan or c.get("plan", "starter"),
+        "amount": float(body.amount),
+        "currency": body.currency,
+        "status": "open",
+        "kind": "subscription",
+        "period_start": period_start,
+        "period_end": period_end,
+        "created_at": _deps.iso(now),
+        "created_by": user.get("email", "superadmin"),
+        "note": body.note or "",
+        "manual": True,                             # zichtbaar in UI als 'Handmatig'
+    }
+    await db.subscription_invoices.insert_one(inv)
+    inv.pop("_id", None)
+    return inv
+
+
+# =====================================================================
+# SaaS auto-invoice tick (aangeroepen vanuit daily-billing loop in server.py)
+# =====================================================================
+
+
+async def saas_auto_invoice_tick() -> list[dict]:
+    """Voor elk actief bedrijf: als `subscription_renews_at` verlopen is en er
+    is nog geen open factuur voor de nieuwe periode → genereer factuur. Deze
+    fungeert als de maandelijkse SaaS-abonnementsfactuur."""
+    db = _deps.db
+    now = _deps.now_utc()
+    created: list[dict] = []
+    cursor = db.companies.find({"billing_status": "active"}, {"_id": 0})
+    async for c in cursor:
+        renews_at_raw = c.get("subscription_renews_at")
+        if not renews_at_raw:
+            continue
+        try:
+            renews_at = datetime.fromisoformat(str(renews_at_raw).replace("Z", "+00:00"))
+        except Exception:
+            continue
+        if renews_at > now:
+            continue  # nog niet verlopen — wachten
+        # Bestaat er al een factuur voor deze nieuwe periode?
+        existing = await db.subscription_invoices.find_one({
+            "company_id": c["id"],
+            "period_start": {"$gte": _deps.iso(renews_at - timedelta(hours=1))},
+        }, {"_id": 0, "id": 1})
+        if existing:
+            continue
+        # Bepaal bedrag/valuta via het huidige plan
+        plan_id = c.get("plan") or "starter"
+        plan = await db.plans.find_one({"id": plan_id}, {"_id": 0})
+        amount = 0.0
+        currency = "SRD"
+        if plan:
+            currency = (c.get("country") == "NL" and plan.get("amount_eur")) and "EUR" or "SRD"
+            amount = float(plan.get("amount_eur") if currency == "EUR" else plan.get("amount_srd") or 0)
+        if amount <= 0:
+            continue
+        period_start = renews_at
+        period_end = period_start + timedelta(days=30)
+        inv = {
+            "id": _deps.new_id(),
+            "company_id": c["id"],
+            "company_name": c.get("name", ""),
+            "plan": plan_id,
+            "amount": amount,
+            "currency": currency,
+            "status": "open",
+            "kind": "subscription",
+            "period_start": _deps.iso(period_start),
+            "period_end": _deps.iso(period_end),
+            "created_at": _deps.iso(now),
+            "created_by": "auto_saas_invoice",
+            "auto_generated": True,
+        }
+        await db.subscription_invoices.insert_one(inv)
+        # Update bedrijf: volgende renewal 30 dagen na deze factuur
+        await db.companies.update_one(
+            {"id": c["id"]},
+            {"$set": {"subscription_renews_at": _deps.iso(period_end)}},
+        )
+        inv.pop("_id", None)
+        created.append({
+            "invoice_id": inv["id"],
+            "company_id": c["id"],
+            "company_name": c.get("name", ""),
+            "amount": amount,
+            "currency": currency,
+        })
+    return created
+
+
+@router.post("/superadmin/saas-auto-invoice/run")
+async def run_saas_auto_invoice(user: dict = Depends(_superadmin)):
+    """Handmatige trigger voor de SaaS auto-invoice cyclus."""
+    created = await saas_auto_invoice_tick()
+    return {"ok": True, "created": len(created), "invoices": created}
+
+
+# =====================================================================
+# SaaS Kasregister — companies overview voor de superadmin-kiosk
+# =====================================================================
+
+
+@router.get("/superadmin/kasregister")
+async def superadmin_kasregister(user: dict = Depends(_superadmin)):
+    """Kasregister view: per bedrijf de totale schuld, openstaande facturen,
+    laatste betaling en betaalstatus. Optimaal voor het SaaS-kasregister
+    (superadmin kiosk) waar de eigenaar snel per bedrijf kan zien wie moet
+    betalen."""
+    db = _deps.db
+    companies = await db.companies.find({}, {"_id": 0}).to_list(1000)
+    # Aggregeer facturen per company
+    invoices_by_cid: dict[str, list[dict]] = {}
+    async for inv in db.subscription_invoices.find({}, {"_id": 0}).sort("created_at", -1):
+        invoices_by_cid.setdefault(inv["company_id"], []).append(inv)
+    payments_by_cid: dict[str, list[dict]] = {}
+    async for pmt in db.subscription_payments.find({}, {"_id": 0}).sort("paid_at", -1):
+        if pmt.get("company_id"):
+            payments_by_cid.setdefault(pmt["company_id"], []).append(pmt)
+
+    now = _deps.now_utc()
+    rows = []
+    for c in companies:
+        cid = c["id"]
+        invs = invoices_by_cid.get(cid, [])
+        pmts = payments_by_cid.get(cid, [])
+        open_invs = [i for i in invs if i.get("status") != "paid"]
+        overdue = 0
+        outstanding_by_cur: dict[str, float] = {}
+        for i in open_invs:
+            cur = (i.get("currency") or "SRD").upper()
+            outstanding_by_cur[cur] = outstanding_by_cur.get(cur, 0.0) + float(i.get("amount") or 0)
+            try:
+                pe = datetime.fromisoformat(str(i.get("period_end") or "").replace("Z", "+00:00"))
+                if pe < now:
+                    overdue += 1
+            except Exception:
+                pass
+        last_pmt = pmts[0] if pmts else None
+        summary = _deps.billing_summary(c)
+        # Bepaal status voor kasregister
+        if overdue > 0:
+            status = "overdue"
+        elif len(open_invs) > 0:
+            status = "open"
+        else:
+            status = "paid"
+        rows.append({
+            "id": cid,
+            "name": c.get("name", ""),
+            "slug": c.get("slug"),
+            "plan": c.get("plan"),
+            "billing_status": summary["billing_status"],
+            "monthly_amount": summary.get("monthly_amount"),
+            "currency": summary.get("currency") or "SRD",
+            "open_count": len(open_invs),
+            "overdue_count": overdue,
+            "outstanding_by_currency": outstanding_by_cur,
+            "paid_count": sum(1 for i in invs if i.get("status") == "paid"),
+            "total_invoices": len(invs),
+            "last_payment": last_pmt,
+            "status": status,
+            "subscription_renews_at": c.get("subscription_renews_at"),
+        })
+    # Sorteer: achterstand > open > betaald
+    order = {"overdue": 0, "open": 1, "paid": 2}
+    rows.sort(key=lambda r: (order.get(r["status"], 3), r["name"].lower()))
+    return {
+        "companies": rows,
+        "checked_at": _deps.iso(now),
+        "totals": {
+            "overdue": sum(1 for r in rows if r["status"] == "overdue"),
+            "open": sum(1 for r in rows if r["status"] == "open"),
+            "paid": sum(1 for r in rows if r["status"] == "paid"),
+        },
+    }
+
+
+# =====================================================================
+# SaaS Betalingsregelingen (Payment Plans op SaaS-invoice niveau)
+# =====================================================================
+
+
+class SaasPlanIn(BaseModel):
+    company_id: str
+    invoice_id: Optional[str] = None    # optionele bron-factuur; zo niet -> vrij
+    total_amount: float = Field(..., gt=0)
+    currency: Literal["SRD", "USD", "EUR"] = "SRD"
+    installments: int = Field(..., ge=2, le=24)
+    interval_days: int = Field(30, ge=1, le=90)
+    start_date: Optional[str] = None    # ISO; default = today
+    note: Optional[str] = ""
+
+
+@router.post("/superadmin/saas-payment-plans")
+async def create_saas_payment_plan(body: SaasPlanIn,
+                                    user: dict = Depends(_superadmin)):
+    """Maakt een SaaS-betalingsregeling: splitst het totaalbedrag in N
+    termijnen (elk als aparte `subscription_invoices` rij) en tagt ze met
+    `plan_id` + `installment_seq`. Als bron-factuur is opgegeven wordt
+    die factuur op `superseded` gezet."""
+    db = _deps.db
+    c = await db.companies.find_one({"id": body.company_id}, {"_id": 0})
+    if not c:
+        raise HTTPException(status_code=404, detail="Bedrijf niet gevonden")
+    now = _deps.now_utc()
+    start = datetime.fromisoformat(body.start_date) if body.start_date else now
+    plan_id = _deps.new_id()
+    per_amount = round(body.total_amount / body.installments, 2)
+    # Correctie op laatste termijn zodat som = totaal
+    amounts = [per_amount] * (body.installments - 1)
+    amounts.append(round(body.total_amount - per_amount * (body.installments - 1), 2))
+
+    invoices = []
+    for i, amt in enumerate(amounts):
+        due = start + timedelta(days=body.interval_days * i)
+        inv = {
+            "id": _deps.new_id(),
+            "company_id": body.company_id,
+            "company_name": c.get("name", ""),
+            "plan": c.get("plan"),
+            "amount": amt,
+            "currency": body.currency,
+            "status": "open",
+            "kind": "installment",
+            "saas_plan_id": plan_id,
+            "installment_seq": i + 1,
+            "installment_total": body.installments,
+            "period_start": _deps.iso(due),
+            "period_end": _deps.iso(due + timedelta(days=body.interval_days)),
+            "created_at": _deps.iso(now),
+            "created_by": user.get("email", "superadmin"),
+            "note": body.note or "",
+        }
+        await db.subscription_invoices.insert_one(inv)
+        inv.pop("_id", None)
+        invoices.append(inv)
+
+    if body.invoice_id:
+        await db.subscription_invoices.update_one(
+            {"id": body.invoice_id},
+            {"$set": {"status": "superseded", "superseded_by_plan": plan_id}},
+        )
+
+    plan_doc = {
+        "id": plan_id,
+        "company_id": body.company_id,
+        "company_name": c.get("name", ""),
+        "total_amount": body.total_amount,
+        "currency": body.currency,
+        "installments": body.installments,
+        "interval_days": body.interval_days,
+        "start_date": _deps.iso(start),
+        "created_at": _deps.iso(now),
+        "created_by": user.get("email", "superadmin"),
+        "note": body.note or "",
+        "source_invoice_id": body.invoice_id,
+    }
+    await db.saas_payment_plans.insert_one(plan_doc)
+    plan_doc.pop("_id", None)
+    return {"plan": plan_doc, "invoices": invoices}
+
+
+@router.get("/superadmin/saas-payment-plans")
+async def list_saas_payment_plans(user: dict = Depends(_superadmin)):
+    """Combineert echte plans + bedrijven met 2+ open facturen (implicit plans)."""
+    db = _deps.db
+    plans = await db.saas_payment_plans.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    plan_ids = [p["id"] for p in plans]
+    # Load termijn-facturen per plan
+    plan_map: dict[str, dict] = {p["id"]: {**p, "invoices": [], "paid": 0} for p in plans}
+    async for inv in db.subscription_invoices.find({"saas_plan_id": {"$in": plan_ids}}, {"_id": 0}):
+        pid = inv["saas_plan_id"]
+        plan_map[pid]["invoices"].append(inv)
+        if inv.get("status") == "paid":
+            plan_map[pid]["paid"] += float(inv.get("amount") or 0)
+    return list(plan_map.values())
 
 
 # Silence unused-import warnings (timedelta reserved voor toekomstige endpoints).

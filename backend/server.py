@@ -730,6 +730,16 @@ async def _daily_billing_checks_loop():
                     _log.info(f"[trial-warn] emailed {len(sent)} companies @ {datetime.now(timezone.utc).isoformat()}")
             except Exception as e:
                 _log.warning(f"[trial-warn] cycle failed: {e}")
+            # SaaS auto-invoice cyclus: 1x per dag, genereert nieuwe
+            # maand-factuur voor elk actief bedrijf waar `subscription_renews_at`
+            # verlopen is en er nog geen open factuur bestaat.
+            try:
+                from routes.superadmin import saas_auto_invoice_tick as _saas_inv
+                new_invoices = await _saas_inv()
+                if new_invoices:
+                    _log.info(f"[saas-invoice] created {len(new_invoices)} monthly invoices @ {datetime.now(timezone.utc).isoformat()}")
+            except Exception as e:
+                _log.warning(f"[saas-invoice] cycle failed: {e}")
         except _aio.CancelledError:
             return
         except Exception as e:

@@ -228,6 +228,247 @@ function PaymentRegistrationModal({ companies, defaultCompanyId, onClose, onSave
 }
 
 // =====================================================================
+// NewInvoiceModal — Handmatig een SaaS-factuur aanmaken voor een bedrijf
+// =====================================================================
+function NewInvoiceModal({ companies, defaultCompanyId, onClose, onSaved }) {
+  const [companyId, setCompanyId] = useState(defaultCompanyId || (companies[0]?.id || ''));
+  const selected = companies.find((c) => c.id === companyId);
+  const [amount, setAmount] = useState(selected?.monthly_amount || 0);
+  const [currency, setCurrency] = useState(selected?.currency || 'SRD');
+  const [plan, setPlan] = useState(selected?.plan || 'starter');
+  const [periodStart, setPeriodStart] = useState(new Date().toISOString().slice(0, 10));
+  const [periodEnd, setPeriodEnd] = useState(new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10));
+  const [note, setNote] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState('');
+
+  useEffect(() => {
+    if (selected) {
+      setAmount(selected.monthly_amount || 0);
+      setCurrency(selected.currency || 'SRD');
+      setPlan(selected.plan || 'starter');
+    }
+  }, [selected]);
+
+  const submit = async () => {
+    if (!(Number(amount) > 0)) { setErr('Bedrag moet groter dan 0 zijn.'); return; }
+    setLoading(true); setErr('');
+    try {
+      await api.post('/superadmin/subscription-invoices', {
+        company_id: companyId,
+        amount: Number(amount), currency, plan,
+        period_start: new Date(periodStart).toISOString(),
+        period_end: new Date(periodEnd).toISOString(),
+        note: note.trim(),
+      });
+      onSaved();
+    } catch (e) { setErr(formatError(e)); }
+    finally { setLoading(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-white/30 backdrop-blur-md flex items-center justify-center p-4">
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg p-6 sm:p-8 max-h-[90vh] overflow-y-auto" data-testid="new-invoice-modal">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-orange-100 flex items-center justify-center">
+              <Receipt className="w-5 h-5 text-orange-600" />
+            </div>
+            <h3 className="text-xl font-extrabold text-slate-900">Nieuwe factuur</h3>
+          </div>
+          <button onClick={onClose} data-testid="new-inv-close"
+            className="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center"><X className="w-4 h-4" /></button>
+        </div>
+
+        <div className="space-y-3">
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">Bedrijf</label>
+            <select value={companyId} onChange={(e) => setCompanyId(e.target.value)} data-testid="new-inv-company"
+              className="w-full h-11 px-3 rounded-xl border-2 border-slate-200 focus:border-orange-500 outline-none bg-white">
+              {companies.map((c) => (<option key={c.id} value={c.id}>{c.name} · {c.plan}</option>))}
+            </select>
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            <div className="col-span-2">
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">Bedrag</label>
+              <input type="number" step="0.01" min="0" value={amount} onChange={(e) => setAmount(e.target.value)}
+                data-testid="new-inv-amount"
+                className="w-full h-11 px-3 rounded-xl border-2 border-slate-200 focus:border-orange-500 outline-none font-mono" />
+            </div>
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">Valuta</label>
+              <select value={currency} onChange={(e) => setCurrency(e.target.value)}
+                className="w-full h-11 px-3 rounded-xl border-2 border-slate-200 focus:border-orange-500 outline-none bg-white">
+                <option value="SRD">SRD</option><option value="USD">USD</option><option value="EUR">EUR</option>
+              </select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">Periode van</label>
+              <input type="date" value={periodStart} onChange={(e) => setPeriodStart(e.target.value)}
+                className="w-full h-11 px-3 rounded-xl border-2 border-slate-200 focus:border-orange-500 outline-none" />
+            </div>
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">tot</label>
+              <input type="date" value={periodEnd} onChange={(e) => setPeriodEnd(e.target.value)}
+                className="w-full h-11 px-3 rounded-xl border-2 border-slate-200 focus:border-orange-500 outline-none" />
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">Notitie (optioneel)</label>
+            <input type="text" value={note} onChange={(e) => setNote(e.target.value)}
+              placeholder="Bv. Setup kosten, extra module, ..."
+              className="w-full h-11 px-3 rounded-xl border-2 border-slate-200 focus:border-orange-500 outline-none text-sm" />
+          </div>
+        </div>
+
+        {err && <p className="text-sm text-red-600 mt-3">{err}</p>}
+        <div className="flex gap-2 mt-5">
+          <button onClick={onClose} disabled={loading} className="flex-1 h-11 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold">Annuleer</button>
+          <button onClick={submit} disabled={loading || !amount} data-testid="new-inv-submit"
+            className="flex-1 h-11 rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-extrabold flex items-center justify-center gap-1.5 disabled:opacity-50">
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+            Aanmaken
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// =====================================================================
+// NewPaymentPlanModal — Splits factuur / totaalbedrag in N termijnen
+// =====================================================================
+function NewPaymentPlanModal({ companies, invoices, prefillInvoiceId, onClose, onSaved }) {
+  const openInvoices = invoices.filter((i) => i.status !== 'paid');
+  const [invoiceId, setInvoiceId] = useState(prefillInvoiceId || (openInvoices[0]?.id || ''));
+  const sourceInv = openInvoices.find((i) => i.id === invoiceId);
+  const [companyId, setCompanyId] = useState(sourceInv?.company_id || companies[0]?.id || '');
+  const [totalAmount, setTotalAmount] = useState(sourceInv?.amount || 0);
+  const [currency, setCurrency] = useState(sourceInv?.currency || 'SRD');
+  const [installments, setInstallments] = useState(3);
+  const [intervalDays, setIntervalDays] = useState(30);
+  const [note, setNote] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState('');
+
+  useEffect(() => {
+    if (sourceInv) {
+      setCompanyId(sourceInv.company_id);
+      setTotalAmount(sourceInv.amount);
+      setCurrency(sourceInv.currency);
+    }
+  }, [sourceInv]);
+
+  const perAmount = totalAmount > 0 && installments >= 2 ? (Number(totalAmount) / installments).toFixed(2) : '0.00';
+
+  const submit = async () => {
+    if (!(Number(totalAmount) > 0)) { setErr('Bedrag moet groter dan 0 zijn.'); return; }
+    if (Number(installments) < 2) { setErr('Minimaal 2 termijnen.'); return; }
+    setLoading(true); setErr('');
+    try {
+      await api.post('/superadmin/saas-payment-plans', {
+        company_id: companyId,
+        invoice_id: invoiceId || null,
+        total_amount: Number(totalAmount),
+        currency,
+        installments: Number(installments),
+        interval_days: Number(intervalDays),
+        note: note.trim(),
+      });
+      onSaved();
+    } catch (e) { setErr(formatError(e)); }
+    finally { setLoading(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-white/30 backdrop-blur-md flex items-center justify-center p-4">
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg p-6 sm:p-8 max-h-[90vh] overflow-y-auto" data-testid="new-plan-modal">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-orange-100 flex items-center justify-center">
+              <Calendar className="w-5 h-5 text-orange-600" />
+            </div>
+            <h3 className="text-xl font-extrabold text-slate-900">Nieuwe betalingsregeling</h3>
+          </div>
+          <button onClick={onClose} className="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center"><X className="w-4 h-4" /></button>
+        </div>
+
+        <div className="space-y-3">
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">Bron-factuur (optioneel)</label>
+            <select value={invoiceId} onChange={(e) => setInvoiceId(e.target.value)}
+              className="w-full h-11 px-3 rounded-xl border-2 border-slate-200 focus:border-orange-500 outline-none bg-white text-sm">
+              <option value="">— Geen bron, vrije regeling —</option>
+              {openInvoices.map((i) => (
+                <option key={i.id} value={i.id}>{i.company_name} · {fmt(i.amount, i.currency)} · {(i.created_at || '').slice(0, 10)}</option>
+              ))}
+            </select>
+            {invoiceId && <p className="text-xs text-slate-500 mt-1">De bron-factuur wordt vervangen door de N termijnen.</p>}
+          </div>
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">Bedrijf</label>
+            <select value={companyId} onChange={(e) => setCompanyId(e.target.value)} disabled={!!invoiceId}
+              className="w-full h-11 px-3 rounded-xl border-2 border-slate-200 focus:border-orange-500 outline-none bg-white disabled:bg-slate-50">
+              {companies.map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}
+            </select>
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            <div className="col-span-2">
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">Totaal bedrag</label>
+              <input type="number" step="0.01" min="0" value={totalAmount} onChange={(e) => setTotalAmount(e.target.value)}
+                disabled={!!invoiceId}
+                className="w-full h-11 px-3 rounded-xl border-2 border-slate-200 focus:border-orange-500 outline-none font-mono disabled:bg-slate-50" />
+            </div>
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">Valuta</label>
+              <select value={currency} onChange={(e) => setCurrency(e.target.value)} disabled={!!invoiceId}
+                className="w-full h-11 px-3 rounded-xl border-2 border-slate-200 focus:border-orange-500 outline-none bg-white disabled:bg-slate-50">
+                <option value="SRD">SRD</option><option value="USD">USD</option><option value="EUR">EUR</option>
+              </select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">Aantal termijnen</label>
+              <input type="number" min="2" max="24" value={installments} onChange={(e) => setInstallments(e.target.value)}
+                className="w-full h-11 px-3 rounded-xl border-2 border-slate-200 focus:border-orange-500 outline-none font-mono" />
+            </div>
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">Interval (dagen)</label>
+              <input type="number" min="1" max="90" value={intervalDays} onChange={(e) => setIntervalDays(e.target.value)}
+                className="w-full h-11 px-3 rounded-xl border-2 border-slate-200 focus:border-orange-500 outline-none font-mono" />
+            </div>
+          </div>
+          <div className="rounded-xl bg-orange-50 border border-orange-200 p-3">
+            <p className="text-xs text-orange-800 font-semibold">
+              → {installments} termijnen van ± {fmt(Number(perAmount), currency)} per {intervalDays} dagen
+            </p>
+          </div>
+          <div>
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">Notitie (optioneel)</label>
+            <input type="text" value={note} onChange={(e) => setNote(e.target.value)}
+              placeholder="Reden of afspraak..."
+              className="w-full h-11 px-3 rounded-xl border-2 border-slate-200 focus:border-orange-500 outline-none text-sm" />
+          </div>
+        </div>
+
+        {err && <p className="text-sm text-red-600 mt-3">{err}</p>}
+        <div className="flex gap-2 mt-5">
+          <button onClick={onClose} disabled={loading} className="flex-1 h-11 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold">Annuleer</button>
+          <button onClick={submit} disabled={loading || !totalAmount} data-testid="new-plan-submit"
+            className="flex-1 h-11 rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-extrabold flex items-center justify-center gap-1.5 disabled:opacity-50">
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+            Maak regeling
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// =====================================================================
 // KasMutationModal — Handmatige +/- boeking op het SaaS Kasgeld.
 // Positief bedrag = ontvangst/correctie erbij, negatief = refund/uitbetaling.
 // Refund pre-selecteert "-" en toont een aparte hint.
@@ -552,6 +793,9 @@ export default function Subscriptions({ viewMode = 'all' } = {}) {
   const [selected, setSelected] = useState(null);
   const [showPay, setShowPay] = useState(false);
   const [showKasMut, setShowKasMut] = useState(false);
+  const [showNewInv, setShowNewInv] = useState(false);
+  const [showNewPlan, setShowNewPlan] = useState(false);
+  const [planPrefillInvId, setPlanPrefillInvId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [previewStmt, setPreviewStmt] = useState(null);  // {url, contentType}
   const [busyRow, setBusyRow] = useState('');
@@ -762,14 +1006,20 @@ export default function Subscriptions({ viewMode = 'all' } = {}) {
 
       {tab === 'invoices' && (
         <div className="space-y-3">
-          <FilterPills value={invFilter} onChange={setInvFilter}
-            options={[
-              { v: 'all', l: 'Alles', c: invoices.length },
-              { v: 'open', l: 'Open', c: invoices.filter((x) => x.status !== 'paid' && !isOverdue(x)).length },
-              { v: 'paid', l: 'Betaald', c: invoices.filter((x) => x.status === 'paid').length },
-              { v: 'overdue', l: 'Vervallen', c: invoices.filter(isOverdue).length },
-            ]}
-            testidPrefix="saas-inv-filter" />
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <FilterPills value={invFilter} onChange={setInvFilter}
+              options={[
+                { v: 'all', l: 'Alles', c: invoices.length },
+                { v: 'open', l: 'Open', c: invoices.filter((x) => x.status !== 'paid' && !isOverdue(x)).length },
+                { v: 'paid', l: 'Betaald', c: invoices.filter((x) => x.status === 'paid').length },
+                { v: 'overdue', l: 'Vervallen', c: invoices.filter(isOverdue).length },
+              ]}
+              testidPrefix="saas-inv-filter" />
+            <button onClick={() => setShowNewInv(true)} data-testid="new-invoice-btn"
+              className="h-10 px-4 rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-extrabold text-sm flex items-center gap-2 shadow-md shadow-orange-500/25">
+              <Plus className="w-4 h-4" /> Nieuwe factuur
+            </button>
+          </div>
           <SaasInvoiceList invoices={filterInvoices(invoices, invFilter)} onMarkPaid={markPaid} />
         </div>
       )}
@@ -862,7 +1112,8 @@ export default function Subscriptions({ viewMode = 'all' } = {}) {
       )}
 
       {tab === 'payment_plans' && (
-        <SaasPaymentPlansView invoices={invoices} companies={companies} />
+        <SaasPaymentPlansView invoices={invoices} companies={companies}
+          onNewPlan={(invId) => { setPlanPrefillInvId(invId || null); setShowNewPlan(true); }} />
       )}
 
       {tab === 'kasgeld' && (
@@ -878,6 +1129,17 @@ export default function Subscriptions({ viewMode = 'all' } = {}) {
       {showPay && (
         <PaymentRegistrationModal companies={companies} onClose={() => setShowPay(false)}
           onSaved={() => { setShowPay(false); load(); }} />
+      )}
+
+      {showNewInv && (
+        <NewInvoiceModal companies={companies} onClose={() => setShowNewInv(false)}
+          onSaved={() => { setShowNewInv(false); load(); }} />
+      )}
+
+      {showNewPlan && (
+        <NewPaymentPlanModal companies={companies} invoices={invoices} prefillInvoiceId={planPrefillInvId}
+          onClose={() => { setShowNewPlan(false); setPlanPrefillInvId(null); }}
+          onSaved={() => { setShowNewPlan(false); setPlanPrefillInvId(null); load(); }} />
       )}
 
       {showKasMut && (
@@ -1059,53 +1321,141 @@ function SaasPaymentList({ payments }) {
   );
 }
 
-function SaasPaymentPlansView({ invoices }) {
-  const byCompany = {};
-  for (const inv of invoices) {
-    const cid = inv.company_id;
-    if (!byCompany[cid]) byCompany[cid] = { company_name: inv.company_name, invoices: [], total: 0, paid: 0 };
-    byCompany[cid].invoices.push(inv);
-    byCompany[cid].total += Number(inv.amount || 0);
-    if (inv.status === 'paid') byCompany[cid].paid += Number(inv.amount || 0);
-  }
-  const plans = Object.entries(byCompany)
-    .filter(([, x]) => x.invoices.length >= 2)
-    .map(([cid, x]) => ({ cid, ...x, open: x.invoices.filter((i) => i.status !== 'paid').length }));
+function SaasPaymentPlansView({ invoices, companies, onNewPlan }) {
+  const [realPlans, setRealPlans] = useState([]);
+  const [loadingPlans, setLoadingPlans] = useState(true);
 
-  if (plans.length === 0) {
-    return (
-      <div className="bg-white rounded-2xl p-10 text-center shadow-sm">
-        <Calendar className="w-12 h-12 mx-auto text-slate-300 mb-2" />
-        <p className="text-slate-500 font-semibold">Nog geen actieve betalingsregelingen.</p>
-        <p className="text-xs text-slate-400 mt-1">Zodra een bedrijf zijn abonnement in termijnen betaalt verschijnt hier de regeling.</p>
-      </div>
-    );
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const { data } = await api.get('/superadmin/saas-payment-plans');
+        if (alive) setRealPlans(data || []);
+      } catch { /* leeg */ }
+      finally { if (alive) setLoadingPlans(false); }
+    })();
+  }, [invoices]);
+
+  // Bedrijven met minimaal 1 open factuur → mogelijk om te zetten naar regeling
+  const openByCompany = {};
+  for (const inv of invoices) {
+    if (inv.status === 'paid') continue;
+    if (inv.saas_plan_id) continue; // al onderdeel van een regeling
+    const cid = inv.company_id;
+    if (!openByCompany[cid]) {
+      openByCompany[cid] = { company_id: cid, company_name: inv.company_name, invoices: [], total: 0, currency: inv.currency };
+    }
+    openByCompany[cid].invoices.push(inv);
+    openByCompany[cid].total += Number(inv.amount || 0);
   }
+  const openList = Object.values(openByCompany);
+
   return (
-    <div className="space-y-2">
-      {plans.map((p) => {
-        const progress = p.total > 0 ? Math.round((p.paid / p.total) * 100) : 0;
-        return (
-          <div key={p.cid} data-testid={`saas-plan-${p.cid}`}
-            className="w-full bg-white rounded-2xl shadow-sm p-4 border border-slate-100">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-11 h-11 rounded-xl bg-orange-50 text-[#FF5C00] flex items-center justify-center shrink-0">
-                <Calendar className="w-5 h-5" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-black text-slate-900 truncate">{p.company_name}</p>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  {p.invoices.length} termijnen · {p.open} open · {fmt(p.paid, 'SRD')} betaald van {fmt(p.total, 'SRD')}
-                </p>
-              </div>
-              <span className="text-lg font-black text-emerald-600">{progress}%</span>
-            </div>
-            <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
-              <div className="h-full bg-emerald-500 transition-all" style={{ width: `${progress}%` }} />
-            </div>
+    <div className="space-y-6">
+      {/* Actie: nieuwe regeling knop */}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <p className="text-xs font-black uppercase tracking-widest text-slate-500">Betalingsregelingen</p>
+          <p className="text-sm text-slate-500 mt-0.5">Splits een groot bedrag in maandelijkse termijnen</p>
+        </div>
+        <button onClick={() => onNewPlan && onNewPlan(null)} data-testid="new-plan-btn"
+          className="h-10 px-4 rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-extrabold text-sm flex items-center gap-2 shadow-md shadow-orange-500/25">
+          <Plus className="w-4 h-4" /> Nieuwe regeling
+        </button>
+      </div>
+
+      {/* Sectie 1 · Actieve regelingen (formeel via API) */}
+      <div>
+        <p className="text-[11px] font-black uppercase tracking-widest text-slate-500 mb-2">
+          Actieve regelingen ({realPlans.length})
+        </p>
+        {loadingPlans && (
+          <div className="py-6 text-center text-slate-400 text-sm">
+            <Loader2 className="w-5 h-5 animate-spin mx-auto mb-1" />
+            Laden…
           </div>
-        );
-      })}
+        )}
+        {!loadingPlans && realPlans.length === 0 && (
+          <div className="bg-white rounded-2xl p-8 text-center shadow-sm border border-dashed border-slate-200">
+            <Calendar className="w-10 h-10 mx-auto text-slate-300 mb-2" />
+            <p className="text-slate-500 font-semibold">Nog geen actieve regelingen.</p>
+            <p className="text-xs text-slate-400 mt-1">Klik op &quot;Nieuwe regeling&quot; hierboven om een factuur in termijnen te splitsen.</p>
+          </div>
+        )}
+        <div className="space-y-2">
+          {realPlans.map((p) => {
+            const paid = p.paid || 0;
+            const progress = p.total_amount > 0 ? Math.round((paid / p.total_amount) * 100) : 0;
+            const openCount = (p.invoices || []).filter((i) => i.status !== 'paid').length;
+            return (
+              <div key={p.id} data-testid={`saas-plan-${p.id}`}
+                className="bg-white rounded-2xl shadow-sm p-4 border border-slate-100">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-11 h-11 rounded-xl bg-orange-50 text-[#FF5C00] flex items-center justify-center shrink-0">
+                    <Calendar className="w-5 h-5" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-black text-slate-900 truncate">{p.company_name}</p>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      {p.installments} termijnen · {openCount} open · {fmt(paid, p.currency)} betaald van {fmt(p.total_amount, p.currency)}
+                    </p>
+                  </div>
+                  <span className={`text-lg font-black ${progress >= 100 ? 'text-emerald-600' : 'text-orange-600'}`}>{progress}%</span>
+                </div>
+                <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
+                  <div className={`h-full ${progress >= 100 ? 'bg-emerald-500' : 'bg-orange-500'} transition-all`} style={{ width: `${progress}%` }} />
+                </div>
+                {/* Termijnen tijdlijn */}
+                <div className="grid grid-cols-6 md:grid-cols-12 gap-1 mt-3">
+                  {(p.invoices || []).map((iv) => (
+                    <div key={iv.id} title={`T${iv.installment_seq}: ${fmt(iv.amount, iv.currency)}`}
+                      className={`h-6 rounded-md flex items-center justify-center text-[10px] font-black ${
+                        iv.status === 'paid' ? 'bg-emerald-500 text-white'
+                          : new Date(iv.period_end || 0) < new Date() ? 'bg-red-100 text-red-700'
+                          : 'bg-slate-100 text-slate-500'
+                      }`}>
+                      T{iv.installment_seq}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Sectie 2 · Bedrijven met open facturen — kandidaat voor regeling */}
+      {openList.length > 0 && (
+        <div>
+          <p className="text-[11px] font-black uppercase tracking-widest text-slate-500 mb-2">
+            Kandidaten ({openList.length}) — bedrijven met openstaande facturen
+          </p>
+          <div className="space-y-2">
+            {openList.map((c) => (
+              <div key={c.company_id} data-testid={`open-candidate-${c.company_id}`}
+                className="bg-white rounded-2xl p-4 border border-slate-100 flex items-center gap-3">
+                <div className="w-11 h-11 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+                  <AlertCircle className="w-5 h-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-black text-slate-900 truncate">{c.company_name}</p>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    {c.invoices.length} open · totaal <span className="font-mono">{fmt(c.total, c.currency)}</span>
+                  </p>
+                </div>
+                <button onClick={() => onNewPlan && onNewPlan(c.invoices[0]?.id)}
+                  data-testid={`make-plan-${c.company_id}`}
+                  className="h-9 px-3 rounded-lg bg-orange-500 hover:bg-orange-600 text-white font-bold text-xs flex items-center gap-1.5">
+                  <Calendar className="w-3.5 h-3.5" /> Maak regeling
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Silence unused-var warning: companies is prop met bedrijfslijst voor toekomstige filters */}
+      {companies && companies.length === 0 && null}
     </div>
   );
 }

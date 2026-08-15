@@ -357,6 +357,7 @@ import InstellingenHub from './admin/InstellingenHub';
 import Locations from './admin/Locations';
 import Subscriptions from './admin/Subscriptions';
 import SaasOverview from './admin/SaasOverview';
+import SaasKasregister from './admin/SaasKasregister';
 import SaasSettings from './admin/SaasSettings';
 import LandingEditor from './admin/LiveLandingEditor';
 import PlansAdmin from './admin/PlansAdmin';
@@ -403,7 +404,7 @@ const SUPER_TABS = [
   { id: 'saas_payment_plans', label: 'Betalingsregelingen', icon: Calendar },
   { id: 'saas_kasgeld', label: 'Kasgeld', icon: Wallet },
   // Operaties
-  { id: 'saas_kiosk', label: 'Kiosk', icon: Monitor },
+  { id: 'saas_kiosk', label: 'Kasregister', icon: Monitor },
   { id: 'saas_employees', label: 'Werknemers', icon: Users },
   { id: 'saas_notifications', label: 'Notificaties', icon: Bell },
   { id: 'landing_editor', label: 'Landing Editor', icon: Paintbrush },
@@ -2960,21 +2961,13 @@ export default function AdminDashboard() {
     // (zelfde flow als de "Open Kiosk" knop). Zonder dit token toont de
     // kiosk-pagina de PIN-login of blijft leeg.
     if (id === 'saas_kiosk') {
-      try { localStorage.setItem('pwa_preferred_role', 'kiosk'); } catch { /* noop */ }
-      try {
-        const activeCid = localStorage.getItem('active_company_id') || undefined;
-        const { data } = await api.post('/auth/admin-to-kiosk',
-          activeCid ? { company_id: activeCid } : {});
-        if (data?.token) localStorage.setItem('kiosk_token', data.token);
-        if (data?.company) localStorage.setItem('kiosk_company', JSON.stringify(data.company));
-      } catch (e) {
-        alert('Kon kiosk niet openen: ' + (e?.response?.data?.detail || e.message));
-        return;
+      // Superadmin-kiosk = SaaS Kasregister: bedrijven-overzicht met betaalstatus,
+      // NIET de huurder-kiosk (die is voor tenants die huur betalen).
+      setTab(id);
+      const target = `/admin/${id}`;
+      if (location.pathname !== target) {
+        navigate(target, { replace: false });
       }
-      // Same-tab navigatie (nieuwe tab wordt door popup blockers geblokkeerd
-      // omdat de window.open na een await komt). Superadmin kan via de
-      // browser back knop terug naar het SaaS dashboard.
-      navigate('/kiosk');
       return;
     }
     setTab(id);
@@ -3073,6 +3066,7 @@ export default function AdminDashboard() {
           {tab === 'saas_payments' && <Subscriptions viewMode="payments" />}
           {tab === 'saas_payment_plans' && <Subscriptions viewMode="payment_plans" />}
           {tab === 'saas_kasgeld' && <Subscriptions viewMode="kasgeld" />}
+          {tab === 'saas_kiosk' && <SaasKasregister />}
           {tab === 'saas_clients' && <SaasClients />}
           {tab === 'saas_contracts' && <SaasContracts />}
           {tab === 'saas_employees' && <SaasEmployees />}
