@@ -274,15 +274,18 @@ function ContractRow({ c, apiBase, onEmail, onCopyLink, onDelete }) {
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
-          <p className="font-black text-slate-900 truncate">{c.tenant_name || 'Onbekende huurder'}</p>
+          <p className="font-black text-slate-900 truncate">
+            Appt. {c.apartment_number || '—'}
+          </p>
           <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${
             isSigned ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
           }`}>
             {isSigned ? 'Ondertekend' : 'Concept'}
           </span>
         </div>
-        <p className="text-xs text-slate-500 mt-0.5 font-mono truncate">
-          {c.contract_number} · Appt. {c.apartment_number || '—'}
+        <p className="text-sm font-bold text-slate-700 mt-0.5 truncate">{c.tenant_name || 'Onbekende huurder'}</p>
+        <p className="text-xs text-slate-500 font-mono truncate">
+          {c.contract_number}
           {c.start_date ? ` · ${c.start_date}` : ''}{c.end_date ? ` → ${c.end_date}` : ''}
         </p>
       </div>

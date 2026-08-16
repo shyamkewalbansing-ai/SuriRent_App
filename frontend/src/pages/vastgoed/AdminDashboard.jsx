@@ -3033,7 +3033,14 @@ function Tenants() {
     );
   }
 
-  const bySearch = items.filter((t) => !q || (t.name || '').toLowerCase().includes(q.toLowerCase()));
+  const bySearch = items.filter((t) => !q || (t.name || '').toLowerCase().includes(q.toLowerCase())
+    || (t.apartment_number || '').toLowerCase().includes(q.toLowerCase()));
+  // Sorteer alfabetisch op appartement-nummer (huurders zonder appartement onderaan).
+  bySearch.sort((a, b) => {
+    const aa = (a.apartment_number || '\uFFFF').toLowerCase();
+    const bb = (b.apartment_number || '\uFFFF').toLowerCase();
+    return aa.localeCompare(bb, 'nl', { numeric: true }) || (a.name || '').localeCompare(b.name || '', 'nl');
+  });
   const filtered = bySearch.filter((t) => {
     if (filter === 'all') return true;
     if (filter === 'with_apt') return !!t.apartment_number;
@@ -3126,18 +3133,17 @@ function TenantRow({ t, onOpen, onPin, onPoster, onDelete }) {
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
-          <p className="font-black text-slate-900 truncate">{t.name}</p>
-          {t.apartment_number ? (
-            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-emerald-100 text-emerald-700">
-              Appt. {t.apartment_number}
-            </span>
-          ) : (
+          <p className="font-black text-slate-900 truncate">
+            {t.apartment_number ? `Appt. ${t.apartment_number}` : 'Geen appartement'}
+          </p>
+          {!t.apartment_number && (
             <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-slate-200 text-slate-600">
-              Geen appartement
+              Vacant
             </span>
           )}
         </div>
-        <p className="text-xs text-slate-500 mt-0.5 truncate">
+        <p className="text-sm font-bold text-slate-700 mt-0.5 truncate">{t.name}</p>
+        <p className="text-xs text-slate-500 truncate">
           {t.phone || '—'}{t.email ? ` · ${t.email}` : ''}
         </p>
       </div>
