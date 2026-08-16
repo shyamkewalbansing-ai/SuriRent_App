@@ -361,7 +361,10 @@ class TenantIn(BaseModel):
     # Persoonsgegevens — komen automatisch in het huurcontract PDF
     birth_date: Optional[str] = ""   # YYYY-MM-DD
     id_number: Optional[str] = ""    # bv. FM008370
-    id_photo_url: Optional[str] = ""  # ID-kaart foto, /api/landing/asset/{id}
+    id_photo_url: Optional[str] = ""  # ID-kaart voorkant, /api/landing/asset/{id}
+    id_photo_back_url: Optional[str] = ""  # ID-kaart achterkant
+    signature_url: Optional[str] = ""  # Digitale handtekening (PNG)
+    signature_signed_at: Optional[str] = ""
 
 
 class TenantOut(TenantIn):
@@ -6778,6 +6781,156 @@ async def delete_tenant_id_photo(tenant_id: str, user=Depends(get_current_user))
     return {"ok": True}
 
 
+@api.post("/tenants/{tenant_id}/id-photo-back")
+async def upload_tenant_id_photo_back(tenant_id: str, file: UploadFile = File(...),
+                                        user=Depends(get_current_user)):
+    """Upload achterkant van ID-kaart (zelfde patroon als voorkant)."""
+    t = await db.tenants.find_one({"id": tenant_id, **scope(user)}, {"_id": 0})
+    if not t:
+        raise HTTPException(status_code=404, detail="Huurder niet gevonden")
+    raw = await file.read()
+    if len(raw) > MAX_LANDING_ASSET_BYTES:
+        raise HTTPException(status_code=413, detail="Bestand groter dan 5 MB.")
+    ctype = (file.content_type or "").lower()
+    if not ctype.startswith("image/"):
+        raise HTTPException(status_code=400, detail="Alleen afbeeldingen toegestaan.")
+    asset_id = new_id()
+    await db.landing_assets.insert_one({
+        "id": asset_id,
+        "filename": file.filename or f"idcard-back-{tenant_id[:8]}",
+        "content_type": ctype,
+        "data_b64": base64.b64encode(raw).decode("ascii"),
+        "size": len(raw),
+        "uploaded_by": user.get("email"),
+        "uploaded_at": iso(now_utc()),
+    })
+    url = f"/api/landing/asset/{asset_id}"
+    await db.tenants.update_one({"id": tenant_id}, {"$set": {"id_photo_back_url": url}})
+    return {"id_photo_back_url": url}
+
+
+@api.delete("/tenants/{tenant_id}/id-photo-back")
+async def delete_tenant_id_photo_back(tenant_id: str, user=Depends(get_current_user)):
+    t = await db.tenants.find_one({"id": tenant_id, **scope(user)}, {"_id": 0})
+    if not t:
+        raise HTTPException(status_code=404, detail="Huurder niet gevonden")
+    await db.tenants.update_one({"id": tenant_id}, {"$unset": {"id_photo_back_url": ""}})
+    return {"ok": True}
+
+
+@api.post("/tenants/{tenant_id}/signature")
+async def upload_tenant_signature(tenant_id: str, file: UploadFile = File(...),
+                                    user=Depends(get_current_user)):
+    """Sla digitale handtekening op als PNG asset (van HTML canvas)."""
+    t = await db.tenants.find_one({"id": tenant_id, **scope(user)}, {"_id": 0})
+    if not t:
+        raise HTTPException(status_code=404, detail="Huurder niet gevonden")
+    raw = await file.read()
+    if len(raw) > 2 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Handtekening te groot (>2 MB).")
+    asset_id = new_id()
+    await db.landing_assets.insert_one({
+        "id": asset_id,
+        "filename": f"signature-{tenant_id[:8]}.png",
+        "content_type": "image/png",
+        "data_b64": base64.b64encode(raw).decode("ascii"),
+        "size": len(raw),
+        "uploaded_by": user.get("email"),
+        "uploaded_at": iso(now_utc()),
+    })
+    url = f"/api/landing/asset/{asset_id}"
+    await db.tenants.update_one({"id": tenant_id}, {
+        "$set": {"signature_url": url, "signature_signed_at": iso(now_utc())},
+    })
+    return {"signature_url": url}
+
+
+@api.delete("/tenants/{tenant_id}/signature")
+async def delete_tenant_signature(tenant_id: str, user=Depends(get_current_user)):
+    t = await db.tenants.find_one({"id": tenant_id, **scope(user)}, {"_id": 0})
+    if not t:
+        raise HTTPException(status_code=404, detail="Huurder niet gevonden")
+    await db.tenants.update_one({"id": tenant_id}, {
+        "$unset": {"signature_url": "", "signature_signed_at": ""},
+    })
+    return {"ok": True}
+
+
+@api.post("/tenants/ocr-id-card")
+async def ocr_id_card(file: UploadFile = File(...),
+                       user=Depends(get_current_user)):
+    """OCR van een ID-kaart via Gemini 2.5. Retourneert de gevonden velden
+    zodat het huurder-formulier automatisch ingevuld kan worden. Werkt met
+    Surinaamse ID's, paspoorten en NL rijbewijzen."""
+    import os
+    import json as _json
+    import tempfile
+    try:
+        from emergentintegrations.llm.chat import LlmChat, UserMessage, FileContentWithMimeType
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"OCR module niet geladen: {e}")
+    api_key = os.getenv("EMERGENT_LLM_KEY")
+    if not api_key:
+        raise HTTPException(status_code=500, detail="EMERGENT_LLM_KEY ontbreekt")
+
+    raw = await file.read()
+    if len(raw) > MAX_LANDING_ASSET_BYTES:
+        raise HTTPException(status_code=413, detail="Bestand groter dan 5 MB")
+    ctype = (file.content_type or "image/jpeg").lower()
+    suffix = ".png" if "png" in ctype else (".webp" if "webp" in ctype else ".jpg")
+    mime = "image/png" if "png" in ctype else ("image/webp" if "webp" in ctype else "image/jpeg")
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as f:
+        f.write(raw)
+        tmp_path = f.name
+
+    prompt = (
+        "Extract identity data from this ID card / passport image. "
+        "Return ONLY valid JSON (no markdown, no code fence) in this schema:\n"
+        '{\n'
+        '  "name": "<voornaam achternaam>" of null,\n'
+        '  "id_number": "<document nummer>" of null,\n'
+        '  "birth_date": "YYYY-MM-DD" of null,\n'
+        '  "confidence": <0..1>\n'
+        '}\n'
+        "Regels: names in Title Case. Datum altijd ISO YYYY-MM-DD. "
+        "Als het document GEEN ID/paspoort/rijbewijs is, zet confidence=0. "
+        "Als een veld onduidelijk is: null."
+    )
+    chat = LlmChat(
+        api_key=api_key,
+        session_id=f"idocr-{new_id()[:8]}",
+        system_message="Je bent een OCR-engine die uitsluitend geldig JSON terug geeft.",
+    ).with_model("gemini", "gemini-2.5-flash")
+
+    try:
+        msg = UserMessage(text=prompt,
+                            file_contents=[FileContentWithMimeType(file_path=tmp_path, mime_type=mime)])
+        raw_text = await chat.send_message(msg)
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except Exception:
+            pass
+
+    txt = (raw_text or "").strip()
+    # Strip markdown fences als aanwezig.
+    if txt.startswith("```"):
+        txt = txt.split("```")[1] if len(txt.split("```")) > 1 else txt
+        if txt.startswith("json"):
+            txt = txt[4:]
+    try:
+        data = _json.loads(txt.strip())
+    except Exception:
+        raise HTTPException(status_code=502, detail="OCR gaf ongeldig JSON terug")
+    return {
+        "name": data.get("name") or "",
+        "id_number": (data.get("id_number") or "").upper(),
+        "birth_date": data.get("birth_date") or "",
+        "confidence": float(data.get("confidence") or 0),
+    }
+
+
 # =====================================================================
 # Payments (admin)
 # =====================================================================
@@ -9359,8 +9512,8 @@ async def contract_pdf_admin(contract_id: str):
     t = await db.tenants.find_one({"id": c["tenant_id"]}, {"_id": 0}) or {}
     a = await db.apartments.find_one({"id": c["apartment_id"]}, {"_id": 0}) or {}
     c = {**c, **(await _company_brand_info(c.get("company_id")))}
-    id_photo_bytes = await _load_tenant_id_photo_bytes(t)
-    pdf = contract_pdf(c, t, a, id_photo_bytes=id_photo_bytes)
+    ev = await _load_tenant_evidence_bundle(t)
+    pdf = contract_pdf(c, t, a, **ev)
     return _pdf_response(pdf, f"contract-{c.get('contract_number') or contract_id}.pdf")
 
 
@@ -9368,7 +9521,10 @@ async def _load_tenant_id_photo_bytes(tenant: dict) -> bytes | None:
     """Haal de raw bytes op van de ID-kaart foto van een huurder als die is
     geüpload. Bron: `landing_assets.data_b64` waar `tenant.id_photo_url`
     naar wijst (`/api/landing/asset/{id}`)."""
-    url = (tenant or {}).get("id_photo_url") or ""
+    return await _load_landing_asset_bytes((tenant or {}).get("id_photo_url"))
+
+
+async def _load_landing_asset_bytes(url: str | None) -> bytes | None:
     if not url or "/landing/asset/" not in url:
         return None
     asset_id = url.rstrip("/").split("/")[-1]
@@ -9379,6 +9535,17 @@ async def _load_tenant_id_photo_bytes(tenant: dict) -> bytes | None:
         return base64.b64decode(asset["data_b64"])
     except Exception:
         return None
+
+
+async def _load_tenant_evidence_bundle(tenant: dict) -> dict:
+    """Voeg alle beschikbare bewijsstukken van een huurder samen tot één
+    dict die door `contract_pdf` gebruikt kan worden (voorkant/achterkant
+    ID + handtekening)."""
+    return {
+        "id_photo_bytes": await _load_landing_asset_bytes((tenant or {}).get("id_photo_url")),
+        "id_photo_back_bytes": await _load_landing_asset_bytes((tenant or {}).get("id_photo_back_url")),
+        "signature_bytes": await _load_landing_asset_bytes((tenant or {}).get("signature_url")),
+    }
 
 
 class ContractPreviewIn(BaseModel):
@@ -9423,7 +9590,8 @@ async def contract_pdf_preview(body: ContractPreviewIn, user=Depends(get_current
     }
     c = {**c, **(await _company_brand_info(cid))}
     id_photo_bytes = await _load_tenant_id_photo_bytes(t)
-    pdf = contract_pdf(c, t, a, id_photo_bytes=id_photo_bytes)
+    ev = await _load_tenant_evidence_bundle(t)
+    pdf = contract_pdf(c, t, a, **ev)
     return _pdf_response(pdf, "contract-preview.pdf")
 
 
@@ -11804,7 +11972,8 @@ async def email_contract(contract_id: str, body: EmailSendIn, user=Depends(get_c
         raise HTTPException(status_code=400, detail="Geen ontvanger — vul een e-mailadres in of zet er een bij de huurder")
     c = {**c, **(await _company_brand_info(c.get("company_id")))}
     id_photo_bytes = await _load_tenant_id_photo_bytes(tenant)
-    pdf_bytes = contract_pdf(c, tenant, apt, id_photo_bytes=id_photo_bytes)
+    ev = await _load_tenant_evidence_bundle(tenant)
+    pdf_bytes = contract_pdf(c, tenant, apt, **ev)
     extra_note = f"<p>{body.message}</p>" if body.message else ""
     # If contract is unsigned, include a signing link.
     sign_block = ""

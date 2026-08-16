@@ -681,7 +681,10 @@ def receipt_pdf(payment: dict) -> bytes:
 
 
 # ============== Contract PDF ==============
-def contract_pdf(contract: dict, tenant: dict, apartment: dict, id_photo_bytes: bytes | None = None) -> bytes:
+def contract_pdf(contract: dict, tenant: dict, apartment: dict,
+                 id_photo_bytes: bytes | None = None,
+                 id_photo_back_bytes: bytes | None = None,
+                 signature_bytes: bytes | None = None) -> bytes:
     """Officiële HUUROVEREENKOMST — Surinaams recht.
 
     Volgt de door de opdrachtgever vastgestelde structuur met 10 artikelen.
@@ -1004,44 +1007,52 @@ def contract_pdf(contract: dict, tenant: dict, apartment: dict, id_photo_bytes: 
     # === Bijlage 1 — ID-kaart foto van huurder (indien beschikbaar) ===
     # Wordt op een aparte A4 pagina getoond met kader en toelichting. Dient
     # als bewijs bij het contract en past binnen 170mm x 220mm bounding box.
-    if id_photo_bytes:
+    def _safe_image(el_list, raw_bytes, title, subtitle=""):
         try:
-            # Valideer + normaliseer via PIL — voorkomt "broken data stream"
-            # errors bij reportlab wanneer de bron een niet-standaard PNG is.
             from PIL import Image as PILImage
-            src = PILImage.open(io.BytesIO(id_photo_bytes))
+            src = PILImage.open(io.BytesIO(raw_bytes))
             if src.mode not in ("RGB", "L"):
                 src = src.convert("RGB")
             buf = io.BytesIO()
             src.save(buf, format="PNG")
-            safe_bytes = buf.getvalue()
+            safe = buf.getvalue()
             iw, ih = src.size
-            max_w, max_h = 170 * mm, 220 * mm
+            max_w, max_h = 170 * mm, 200 * mm
             ratio = min(max_w / iw, max_h / ih)
             w, h = iw * ratio, ih * ratio
-            el.append(PageBreak())
-            el.append(Paragraph("BIJLAGE 1 — LEGITIMATIEBEWIJS HUURDER", title_style))
-            el.append(Spacer(1, 6))
-            el.append(Paragraph(
-                f"Naam huurder: <b>{tenant.get('name') or ''}</b><br/>"
-                f"ID-nummer: <b>{tenant.get('id_number') or ''}</b><br/>"
-                f"Geboortedatum: <b>{tenant.get('birth_date') or ''}</b>",
-                body,
-            ))
-            el.append(Spacer(1, 10))
-            id_img = Image(io.BytesIO(safe_bytes), width=w, height=h)
-            id_img.hAlign = "CENTER"
-            el.append(id_img)
-            el.append(Spacer(1, 8))
-            el.append(Paragraph(
-                "Deze afbeelding is bij het aangaan van de huurovereenkomst door de huurder "
-                "aangeleverd en dient uitsluitend als identificatiebewijs. Verhuurder bewaart "
-                "de afbeelding vertrouwelijk conform de geldende privacywetgeving.",
-                small,
-            ))
+            el_list.append(PageBreak())
+            el_list.append(Paragraph(title, title_style))
+            if subtitle:
+                el_list.append(Spacer(1, 6))
+                el_list.append(Paragraph(subtitle, body))
+            el_list.append(Spacer(1, 10))
+            img = Image(io.BytesIO(safe), width=w, height=h)
+            img.hAlign = "CENTER"
+            el_list.append(img)
+            return True
         except Exception:
-            # Falen mag het contract niet blokkeren.
-            pass
+            return False
+
+    if id_photo_bytes:
+        _safe_image(
+            el, id_photo_bytes,
+            "BIJLAGE 1 — LEGITIMATIEBEWIJS HUURDER (VOORKANT)",
+            f"Naam: <b>{tenant.get('name') or ''}</b> · ID-nr: <b>{tenant.get('id_number') or ''}</b> · "
+            f"Geboortedatum: <b>{tenant.get('birth_date') or ''}</b>",
+        )
+    if id_photo_back_bytes:
+        _safe_image(
+            el, id_photo_back_bytes,
+            "BIJLAGE 2 — LEGITIMATIEBEWIJS HUURDER (ACHTERKANT)",
+            f"Naam: <b>{tenant.get('name') or ''}</b>",
+        )
+    if signature_bytes:
+        _safe_image(
+            el, signature_bytes,
+            "BIJLAGE 3 — DIGITALE HANDTEKENING HUURDER",
+            f"Ondertekend door <b>{tenant.get('name') or ''}</b>"
+            + (f" op <b>{tenant.get('signature_signed_at', '')[:10]}</b>." if tenant.get('signature_signed_at') else "."),
+        )
 
     return _build(el)
 

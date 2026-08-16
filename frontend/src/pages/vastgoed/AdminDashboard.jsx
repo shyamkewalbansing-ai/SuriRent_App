@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useBrandedNavigate } from '../../lib/branded-nav';
 import { useBadge } from '../../lib/pwa';
@@ -2623,16 +2623,41 @@ function TenantNfcField({ tenantId, value, onChange }) {
 // het aanmaken/bewerken van een huurder. Op mobiel opent `capture=environment`
 // direct de camera. Op desktop valt het terug op file-picker.
 // De foto wordt door TenantForm pas geüpload NA het opslaan van de huurder.
+// Na kiezen loopt de foto door de OCR-endpoint zodat name/id_number/birth_date
+// automatisch ingevuld kunnen worden (call onOcr callback).
 // =====================================================================
-function IdScannerField({ pendingFile, onFile }) {
+function IdScannerField({ pendingFile, onFile, onOcr }) {
   const [preview, setPreview] = useState('');
+  const [ocring, setOcring] = useState(false);
+  const [ocrResult, setOcrResult] = useState(null);
   const previewUrl = pendingFile ? URL.createObjectURL(pendingFile) : '';
   useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl); }, [previewUrl]);
+
+  const runOcr = async (file) => {
+    if (!file || !onOcr) return;
+    setOcring(true); setOcrResult(null);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const { data } = await api.post('/tenants/ocr-id-card', fd,
+        { headers: { 'Content-Type': 'multipart/form-data' } });
+      setOcrResult(data);
+      onOcr(data);
+    } catch (e) {
+      setOcrResult({ error: e?.response?.data?.detail || 'OCR mislukt' });
+    } finally { setOcring(false); }
+  };
+
+  const handleFile = (f) => {
+    onFile(f);
+    if (f) runOcr(f);
+  };
+
   return (
     <div>
       <label className="text-xs font-bold uppercase tracking-widest text-slate-500">ID-kaart</label>
       <p className="text-[11px] text-slate-400 mt-0.5 mb-2">
-        Scan met de camera van uw telefoon of kies een foto vanaf uw apparaat.
+        Scan met de camera of kies een foto. Naam / ID-nummer / geboortedatum worden automatisch gelezen.
       </p>
       <div className="grid grid-cols-2 gap-2">
         <label htmlFor="tenant-id-scan"
@@ -2646,11 +2671,11 @@ function IdScannerField({ pendingFile, onFile }) {
         </label>
         <input id="tenant-id-scan" type="file" accept="image/*" capture="environment"
           className="hidden"
-          onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); }}
+          onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
           data-testid="tenant-id-scan-input" />
         <input id="tenant-id-pick" type="file" accept="image/*"
           className="hidden"
-          onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); }}
+          onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
           data-testid="tenant-id-pick-input" />
       </div>
       {pendingFile && (
@@ -2658,7 +2683,7 @@ function IdScannerField({ pendingFile, onFile }) {
           <img src={previewUrl} alt="ID scan"
             className="w-full max-h-40 object-contain bg-slate-50 cursor-pointer"
             onClick={() => setPreview(true)} />
-          <button type="button" onClick={() => onFile(null)}
+          <button type="button" onClick={() => { onFile(null); setOcrResult(null); }}
             data-testid="tenant-id-scan-clear"
             className="absolute top-2 right-2 w-7 h-7 rounded-full bg-white/95 shadow border border-slate-200 flex items-center justify-center">
             <X className="w-3.5 h-3.5" />
@@ -2666,6 +2691,25 @@ function IdScannerField({ pendingFile, onFile }) {
           <span className="absolute bottom-2 left-2 bg-white/90 backdrop-blur px-2 py-0.5 rounded-lg text-[10px] font-bold text-slate-700">
             {pendingFile.name || 'Scan'} · {Math.round((pendingFile.size || 0) / 1024)} KB
           </span>
+        </div>
+      )}
+      {ocring && (
+        <div className="mt-2 rounded-lg bg-sky-50 border border-sky-200 p-2 flex items-center gap-2 text-xs font-bold text-sky-700"
+          data-testid="tenant-ocr-loading">
+          <Loader2 className="w-4 h-4 animate-spin" />
+          ID-kaart wordt gelezen via Gemini…
+        </div>
+      )}
+      {ocrResult && !ocrResult.error && ocrResult.confidence > 0 && (
+        <div className="mt-2 rounded-lg bg-emerald-50 border border-emerald-200 p-2 text-xs text-emerald-800"
+          data-testid="tenant-ocr-result">
+          ✓ Ingevuld: <b>{ocrResult.name || '?'}</b> · {ocrResult.id_number || '?'} · {ocrResult.birth_date || '?'}
+          <span className="opacity-60 ml-1">({Math.round(ocrResult.confidence * 100)}%)</span>
+        </div>
+      )}
+      {ocrResult?.error && (
+        <div className="mt-2 rounded-lg bg-amber-50 border border-amber-200 p-2 text-xs text-amber-800">
+          Automatisch lezen mislukt — vul de velden handmatig in. ({ocrResult.error})
         </div>
       )}
       {preview && (
@@ -2816,8 +2860,15 @@ function TenantForm({ initial, apartments, onCancel, onSaved }) {
           </div>
           {/* ID-kaart scanner — opent camera op mobiel en fallback file-picker
               op desktop. Foto wordt direct als `pending_id_photo` in state
-              gezet en pas geüpload NA het aanmaken/opslaan van de huurder. */}
-          <IdScannerField pendingFile={pendingIdPhoto} onFile={setPendingIdPhoto} />
+              gezet en pas geüpload NA het aanmaken/opslaan van de huurder.
+              onOcr vult automatisch naam/ID-nr/geboortedatum in via Gemini. */}
+          <IdScannerField pendingFile={pendingIdPhoto} onFile={setPendingIdPhoto}
+            onOcr={(ocr) => setData((d) => ({
+              ...d,
+              name: (!d.name && ocr.name) ? ocr.name : d.name,
+              id_number: (!d.id_number && ocr.id_number) ? ocr.id_number : d.id_number,
+              birth_date: (!d.birth_date && ocr.birth_date) ? ocr.birth_date : d.birth_date,
+            }))} />
         </div>
         <div className="flex gap-3 mt-6">
           <button onClick={onCancel} className="flex-1 h-12 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold">Annuleren</button>
@@ -3282,6 +3333,12 @@ function TenantDetail({ tenant: t, onBack, onEdit, onPin, onPoster, onDelete, on
         )}
       </div>
 
+      {/* ID-kaart ACHTERKANT sectie */}
+      <IdPhotoSection tenant={t} which="back" onReload={onReload} />
+
+      {/* Digitale handtekening sectie */}
+      <SignaturePadSection tenant={t} onReload={onReload} />
+
       {/* Acties */}
       <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
         <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Acties</p>
@@ -3366,6 +3423,185 @@ function InfoRow({ label, value, mono }) {
     <div className="rounded-xl bg-slate-50 border border-slate-100 p-3">
       <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{label}</p>
       <p className={`text-sm font-bold text-slate-900 mt-0.5 truncate ${mono ? 'font-mono' : ''}`}>{value}</p>
+    </div>
+  );
+}
+
+// =====================================================================
+// IdPhotoSection — Achterkant ID-kaart (front is inline in TenantDetail).
+// =====================================================================
+function IdPhotoSection({ tenant: t, which = 'back', onReload }) {
+  const [uploading, setUploading] = useState(false);
+  const [preview, setPreview] = useState(false);
+  const base = process.env.REACT_APP_BACKEND_URL;
+  const url = t.id_photo_back_url || '';
+  const src = url ? (url.startsWith('http') ? url : `${base}${url}`) : '';
+
+  const doUpload = async (file) => {
+    if (!file || !file.type.startsWith('image/')) return;
+    setUploading(true);
+    try {
+      const fd = new FormData(); fd.append('file', file);
+      await api.post(`/tenants/${t.id}/id-photo-${which}`, fd,
+        { headers: { 'Content-Type': 'multipart/form-data' } });
+      if (onReload) await onReload();
+    } catch (e) {
+      window.alert('Upload mislukt: ' + (e?.response?.data?.detail || e.message));
+    } finally { setUploading(false); }
+  };
+
+  const remove = async () => {
+    if (!window.confirm('Achterkant verwijderen?')) return;
+    await api.delete(`/tenants/${t.id}/id-photo-${which}`);
+    if (onReload) await onReload();
+  };
+
+  return (
+    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5" data-testid="tenant-id-back-section">
+      <div className="flex items-center justify-between mb-3 gap-3">
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">ID-kaart achterkant</p>
+          <p className="text-sm text-slate-500 mt-0.5">Optioneel · komt als extra bijlage in het contract</p>
+        </div>
+        {src && (
+          <button onClick={remove} data-testid="tenant-id-back-remove"
+            className="h-9 px-3 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 font-bold text-xs flex items-center gap-1.5">
+            <Trash2 className="w-3.5 h-3.5" /> Verwijderen
+          </button>
+        )}
+      </div>
+      {src ? (
+        <div className="relative rounded-xl overflow-hidden bg-slate-100 cursor-pointer" onClick={() => setPreview(true)}>
+          <img src={src} alt="ID achterkant" className="w-full max-h-64 object-contain bg-slate-100" />
+        </div>
+      ) : (
+        <label htmlFor="tenant-id-back-upload"
+          className="block w-full py-6 rounded-xl border-2 border-dashed border-slate-200 hover:border-[#FF5C00] hover:bg-orange-50 text-center cursor-pointer transition">
+          {uploading ? (
+            <div><Loader2 className="w-5 h-5 animate-spin mx-auto text-[#FF5C00]" /></div>
+          ) : (
+            <div>
+              <div className="w-10 h-10 rounded-xl bg-orange-50 text-[#FF5C00] flex items-center justify-center mx-auto mb-1"><Plus className="w-5 h-5" /></div>
+              <p className="text-sm font-bold text-slate-700">Upload achterkant</p>
+            </div>
+          )}
+          <input id="tenant-id-back-upload" type="file" accept="image/*" className="hidden"
+            onChange={(e) => doUpload(e.target.files?.[0])} data-testid="tenant-id-back-input" />
+        </label>
+      )}
+      {preview && src && (
+        <div className="fixed inset-0 z-[60] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setPreview(false)}>
+          <img src={src} alt="ID achterkant" className="max-w-full max-h-full rounded-xl" />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// =====================================================================
+// SignaturePadSection — HTML canvas met muis/touch tekenen. Slaat op als
+// PNG via `POST /api/tenants/{id}/signature`. Verschijnt als Bijlage 3
+// in het contract PDF.
+// =====================================================================
+function SignaturePadSection({ tenant: t, onReload }) {
+  const canvasRef = useRef(null);
+  const [drawing, setDrawing] = useState(false);
+  const [hasInk, setHasInk] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const base = process.env.REACT_APP_BACKEND_URL;
+  const src = t.signature_url ? (t.signature_url.startsWith('http') ? t.signature_url : `${base}${t.signature_url}`) : '';
+
+  useEffect(() => {
+    const c = canvasRef.current;
+    if (!c) return;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, c.width, c.height);
+    ctx.strokeStyle = '#0f172a';
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+  }, [src]);
+
+  const pos = (e) => {
+    const c = canvasRef.current;
+    const r = c.getBoundingClientRect();
+    const evt = e.touches?.[0] || e;
+    return { x: (evt.clientX - r.left) * (c.width / r.width), y: (evt.clientY - r.top) * (c.height / r.height) };
+  };
+  const start = (e) => { e.preventDefault(); const { x, y } = pos(e); const ctx = canvasRef.current.getContext('2d'); ctx.beginPath(); ctx.moveTo(x, y); setDrawing(true); };
+  const move = (e) => { if (!drawing) return; e.preventDefault(); const { x, y } = pos(e); const ctx = canvasRef.current.getContext('2d'); ctx.lineTo(x, y); ctx.stroke(); setHasInk(true); };
+  const end = () => setDrawing(false);
+  const clear = () => {
+    const c = canvasRef.current;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, c.width, c.height);
+    setHasInk(false);
+  };
+  const save = async () => {
+    if (!hasInk) return;
+    setSaving(true);
+    try {
+      const c = canvasRef.current;
+      const blob = await new Promise((res) => c.toBlob(res, 'image/png'));
+      const fd = new FormData(); fd.append('file', blob, 'signature.png');
+      await api.post(`/tenants/${t.id}/signature`, fd,
+        { headers: { 'Content-Type': 'multipart/form-data' } });
+      setHasInk(false);
+      if (onReload) await onReload();
+    } catch (e) {
+      window.alert('Handtekening opslaan mislukt: ' + (e?.response?.data?.detail || e.message));
+    } finally { setSaving(false); }
+  };
+  const removeSig = async () => {
+    if (!window.confirm('Handtekening verwijderen?')) return;
+    await api.delete(`/tenants/${t.id}/signature`);
+    if (onReload) await onReload();
+  };
+
+  return (
+    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5" data-testid="tenant-signature-section">
+      <div className="flex items-center justify-between mb-3">
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Digitale handtekening</p>
+          <p className="text-sm text-slate-500 mt-0.5">
+            {src ? `Ondertekend op ${(t.signature_signed_at || '').slice(0, 10)}` : 'Laat de huurder hier tekenen'}
+          </p>
+        </div>
+        {src && (
+          <button onClick={removeSig} data-testid="tenant-signature-remove"
+            className="h-9 px-3 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 font-bold text-xs flex items-center gap-1.5">
+            <Trash2 className="w-3.5 h-3.5" /> Wissen
+          </button>
+        )}
+      </div>
+
+      {src ? (
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+          <img src={src} alt="Handtekening" className="w-full max-h-32 object-contain" data-testid="tenant-signature-image" />
+        </div>
+      ) : (
+        <>
+          <div className="rounded-xl border-2 border-dashed border-slate-300 overflow-hidden bg-white">
+            <canvas ref={canvasRef} width={600} height={200}
+              className="w-full h-40 touch-none"
+              onMouseDown={start} onMouseMove={move} onMouseUp={end} onMouseLeave={end}
+              onTouchStart={start} onTouchMove={move} onTouchEnd={end}
+              data-testid="tenant-signature-canvas" />
+          </div>
+          <div className="flex gap-2 mt-3">
+            <button onClick={clear} disabled={!hasInk}
+              className="flex-1 h-10 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm disabled:opacity-50"
+              data-testid="tenant-signature-clear">Wis</button>
+            <button onClick={save} disabled={!hasInk || saving} data-testid="tenant-signature-save"
+              className="flex-1 h-10 rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-black text-sm disabled:opacity-50 flex items-center justify-center gap-1.5">
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+              Ondertekenen
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }
