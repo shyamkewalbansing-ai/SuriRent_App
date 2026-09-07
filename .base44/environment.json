@@ -1,0 +1,12 @@
+{
+  "previewPort": 3000,
+  "healthPath": "/",
+  "startCommand": "docker compose -f docker-compose.base44.yml up -d",
+  "secrets": [
+    {
+      "name": "EMERGENT_LLM_KEY",
+      "description": "Emergent LLM API key (for OCR bank-statement scanning and AI QR-plate generation). Optional — the app boots and works without it. Obtain from the Emergent Integrations dashboard.",
+      "requiredAtBoot": false
+    }
+  ]
+}

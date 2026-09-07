@@ -1,0 +1,62 @@
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    image: python:3.11
+    working_dir: /app/backend
+    volumes:
+      - ./backend:/app/backend
+    env_file:
+      - ./.env.base44-defaults
+      - /run/base44/app.env
+    environment:
+      - MONGO_URL=mongodb://mongo:27017
+      - DB_NAME=vastgoed_kiosk
+      - JWT_SECRET=base44-dev-jwt-secret-9f3a7c2e1b8d4a6f
+      - COOKIE_SECURE=0
+      - CORS_ORIGINS=*
+      - PYTHONUNBUFFERED=1
+      # Disable background cron loops that are noisy / unnecessary in dev
+      - DISABLE_TRIAL_REMINDERS=1
+      - DISABLE_OVERDUE_PUSH=1
+      - DISABLE_AUTO_INVOICE=1
+      - DISABLE_DEMO_RESET=1
+      - DISABLE_BILLING_CRON=1
+    command: ["sh", "-c", "pip install --upgrade pip && pip install -r requirements.txt --extra-index-url https://d33sy5i8bnduwe.cloudfront.net/simple/ && cd /app/backend && uvicorn server:app --host 0.0.0.0 --port 8001 --reload"]
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+  frontend:
+    image: node:22
+    working_dir: /app/frontend
+    volumes:
+      - ./frontend:/app/frontend
+      - frontend_node_modules:/app/frontend/node_modules
+    environment:
+      # Empty → all API calls become relative ("/api/…") and are proxied
+      # to the backend via src/setupProxy.js (single-origin, cookies work)
+      - REACT_APP_BACKEND_URL=
+      - PORT=3000
+      - HOST=0.0.0.0
+      - DANGEROUSLY_DISABLE_HOST_CHECK=true
+      - CHOKIDAR_USEPOLLING=true
+      - WATCHPACK_POLLING=true
+    command: sh -c "npm install && npx craco start"
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+
+volumes:
+  mongo_data:
+  frontend_node_modules:
